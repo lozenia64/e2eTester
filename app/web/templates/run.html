@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Run Dashboard{% endblock %}
+
+{% block content %}
+<section class="run-header panel">
+    <div>
+        <p class="eyebrow">Run Dashboard</p>
+        <h1>{{ run.system_name }}</h1>
+        <p class="hero-copy">{{ run.run_id }}</p>
+    </div>
+    <div class="run-header-meta">
+        <div>
+            <span class="meta-label">시스템</span>
+            <strong>{{ run.system_code|upper }}</strong>
+        </div>
+        <div>
+            <span class="meta-label">상태</span>
+            <strong id="run-status" class="status-badge status-{{ run.status|lower }}">{{ run.status }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel otp-panel{% if not run.awaiting_input_module_id %} is-hidden{% endif %}" id="otp-panel" data-run-id="{{ run.run_id }}" data-awaiting-module-id="{{ run.awaiting_input_module_id or '' }}">
+    <div class="panel-heading">
+        <h2>OTP 입력</h2>
+        <p id="otp-prompt">{{ run.awaiting_input_prompt or '인증문자 발송 후 OTP 입력이 필요하면 이 영역이 활성화됩니다.' }}</p>
+    </div>
+    <form id="otp-form" class="otp-form">
+        <label class="form-field">
+            <span>OTP 코드</span>
+            <input type="password" name="otp_code" placeholder="SMS 인증번호" inputmode="numeric">
+        </label>
+        <button type="submit" class="run-button">OTP 제출</button>
+    </form>
+</section>
+
+<section class="panel">
+    <div class="panel-heading">
+        <h2>모듈 노드</h2>
+        <p>실시간으로 상태가 변경됩니다.</p>
+    </div>
+    <div class="node-grid" id="node-grid" data-run-id="{{ run.run_id }}">
+        {% for module in run.modules|sort(attribute='order') %}
+        <article class="node-card status-{{ module.status|lower }}" data-module-id="{{ module.module_id }}">
+            <div class="node-topline">
+                <span class="node-group">Step {{ loop.index }}</span>
+                <span class="status-badge status-{{ module.status|lower }}" data-role="module-status">{{ module.status }}</span>
+            </div>
+            <h3>{{ module.name }}</h3>
+            <p class="node-id">{{ module.module_id }} · {{ module.group }}</p>
+            <p class="node-message" data-role="module-message">{{ module.message }}</p>
+            <dl class="node-metrics">
+                <div>
+                    <dt>Duration</dt>
+                    <dd data-role="module-duration">{{ module.duration_ms or 0 }} ms</dd>
+                </div>
+                <div>
+                    <dt>Artifacts</dt>
+                    <dd data-role="module-artifacts">{{ module.artifact_count }}</dd>
+                </div>
+            </dl>
+            <div class="artifact-list" data-role="module-artifacts-list">
+                {% for artifact in module.artifacts %}
+                <a href="{{ artifact }}" target="_blank" rel="noreferrer">{{ artifact.split('/')[-1] }}</a>
+                {% endfor %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    <div class="flow-caption">메인화면 접속 -> 로그인 이동 -> 휴대폰 로그인 -> 계약목록 조회</div>
+</section>
+
+<section class="panel">
+    <div class="panel-heading">
+        <h2>실행 로그</h2>
+        <p>실시간 subprocess 출력</p>
+    </div>
+    <div class="log-console" id="log-console"></div>
+</section>
+{% endblock %}

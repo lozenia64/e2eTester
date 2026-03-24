@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}E2E Systems{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="eyebrow">System Trigger</p>
+        <h1>시스템 단위 E2E 실행</h1>
+        <p class="hero-copy">시스템 버튼을 누르면 Run이 생성되고, 각 기능 모듈 상태가 실시간 노드 대시보드로 전개됩니다.</p>
+    </div>
+    <div class="hero-metrics">
+        <div class="metric-card">
+            <span class="metric-label">등록 시스템</span>
+            <strong class="metric-value">{{ systems|length }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="section-grid">
+    <div class="panel">
+        <div class="panel-heading">
+            <h2>시스템</h2>
+            <p>아키텍처 문서 기준 시스템 목록</p>
+        </div>
+        <div class="system-grid">
+            {% for system in systems %}
+            <article class="system-card">
+                <div>
+                    <p class="system-code">{{ system.system_code|upper }}</p>
+                    <h3>{{ system.name }}</h3>
+                    <p class="system-description">{{ system.description }}</p>
+                </div>
+                <form class="system-form" data-system-code="{{ system.system_code }}">
+                    {% for field in system.run_form %}
+                    <label
+                        class="form-field{% if field.show_when %} conditional-field{% endif %}"
+                        {% if field.show_when %}
+                        data-show-when-key="{{ field.show_when.keys()|list|first }}"
+                        data-show-when-value="{{ field.show_when.values()|list|first }}"
+                        data-required="{{ 'true' if field.required else 'false' }}"
+                        {% endif %}
+                    >
+                        <span>{{ field.label }}{% if field.required %} *{% endif %}</span>
+                        {% if field.type == "select" %}
+                        <select name="{{ field.key }}" {% if field.required %}required{% endif %}>
+                            {% for option in field.options %}
+                            <option value="{{ option.value }}" {% if option.value == field.default %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input
+                            type="{{ field.type }}"
+                            name="{{ field.key }}"
+                            value="{{ field.default }}"
+                            placeholder="{{ field.placeholder }}"
+                            {% if field.required %}required{% endif %}
+                        >
+                        {% endif %}
+                        {% if field.help_text %}
+                        <small>{{ field.help_text }}</small>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                    <span class="pill">모듈 {{ system.modules|length }}개</span>
+                    <div class="system-footer">
+                        <span class="form-note">현재 HOM 샘플은 휴대폰인증만 실제 실행되며, 다른 인증수단은 아직 연결되지 않았습니다.</span>
+                        <button type="submit" class="run-button" data-system-code="{{ system.system_code }}">실행</button>
+                    </div>
+                </form>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}
