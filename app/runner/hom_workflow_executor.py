@@ -31,6 +31,36 @@ class HomWorkflowRuntime:
     closed: bool = False
 
 
+@dataclass(frozen=True)
+class StepExecutionResult:
+    status: ModuleStatus
+    message: str
+    artifacts: list[str]
+    current_url: str | None
+    dialog_messages: list[str]
+    last_error: str | None = None
+    screenshot_path: Path | None = None
+
+    @classmethod
+    def failure(
+        cls,
+        message: str,
+        current_url: str | None,
+        dialog_messages: list[str],
+        last_error: str | None,
+        screenshot_path: Path | None = None,
+    ) -> "StepExecutionResult":
+        return cls(
+            status=ModuleStatus.FAILED,
+            message=message,
+            artifacts=[],
+            current_url=current_url,
+            dialog_messages=dialog_messages,
+            last_error=last_error,
+            screenshot_path=screenshot_path,
+        )
+
+
 class _LineWriter(io.TextIOBase):
     def __init__(self, emit: Callable[[str], None]) -> None:
         self._emit = emit
@@ -110,11 +140,12 @@ class HomWorkflowExecutor:
         run_id: str,
         module: ModuleDefinition,
         emit_log: Callable[[str], None],
-    ) -> tuple[ModuleStatus, str, list[str]]:
+    ) -> StepExecutionResult:
         log_path = self._artifact_manager.log_path(run_id, module.module_id)
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
         artifacts: list[str] = []
         writer = _LineWriter(emit_log)
+        dialog_index = len(runtime.dialog_messages)
 
         try:
             with log_path.open("w", encoding="utf-8") as log_file:
@@ -125,11 +156,25 @@ class HomWorkflowExecutor:
                 artifacts.append(self._artifact_manager.relative_path(log_path))
                 if screenshot_path.exists():
                     artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-                return ModuleStatus.WAITING_INPUT, message.split("::", 1)[1], artifacts
+                return StepExecutionResult(
+                    status=ModuleStatus.WAITING_INPUT,
+                    message=message.split("::", 1)[1],
+                    artifacts=artifacts,
+                    current_url=self._safe_page_url(runtime),
+                    dialog_messages=runtime.dialog_messages[dialog_index:],
+                    screenshot_path=screenshot_path if screenshot_path.exists() else None,
+                )
             artifacts.append(self._artifact_manager.relative_path(log_path))
             if screenshot_path.exists():
                 artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return ModuleStatus.PASSED, message, artifacts
+            return StepExecutionResult(
+                status=ModuleStatus.PASSED,
+                message=message,
+                artifacts=artifacts,
+                current_url=self._safe_page_url(runtime),
+                dialog_messages=runtime.dialog_messages[dialog_index:],
+                screenshot_path=screenshot_path if screenshot_path.exists() else None,
+            )
         except Exception as exc:
             writer.flush()
             if not log_path.exists():
@@ -140,7 +185,15 @@ class HomWorkflowExecutor:
             artifacts.append(self._artifact_manager.relative_path(log_path))
             if screenshot_path.exists():
                 artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return ModuleStatus.FAILED, str(exc), artifacts
+            return StepExecutionResult(
+                status=ModuleStatus.FAILED,
+                message=str(exc),
+                artifacts=artifacts,
+                current_url=self._safe_page_url(runtime),
+                dialog_messages=runtime.dialog_messages[dialog_index:],
+                last_error=str(exc),
+                screenshot_path=screenshot_path if screenshot_path.exists() else None,
+            )
 
     def close_runtime(self, runtime: HomWorkflowRuntime) -> None:
         if runtime.closed:
@@ -188,3 +241,10 @@ class HomWorkflowExecutor:
     @staticmethod
     def update_otp_code(runtime: HomWorkflowRuntime, otp_code: str) -> None:
         runtime.config = replace(runtime.config, otp_code=otp_code)
+
+    @staticmethod
+    def _safe_page_url(runtime: HomWorkflowRuntime) -> str | None:
+        try:
+            return str(runtime.page.url)
+        except Exception:
+            return None

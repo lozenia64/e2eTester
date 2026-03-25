@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import DashboardEvent, Run, RunModule
+from app.core.models import DashboardEvent, FailureAnalysisRequest, Run, RunModule
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime
+from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime, StepExecutionResult
 from app.storage.run_repository import InMemoryRunRepository
 
 
@@ -22,12 +23,13 @@ class PendingOtpState:
 
 
 class RunService:
-    def __init__(self, registry: ModuleRegistry, repository: InMemoryRunRepository) -> None:
+    def __init__(self, registry: ModuleRegistry, repository: InMemoryRunRepository, failure_analyzer=None) -> None:
         self._registry = registry
         self._repository = repository
         self._artifact_manager = ArtifactManager()
         self._hom_executor = HomWorkflowExecutor(self._artifact_manager)
         self._pending_otp: dict[str, PendingOtpState] = {}
+        self._failure_analyzer = failure_analyzer
 
     def list_systems(self):
         return self._registry.list_systems()
@@ -138,6 +140,7 @@ class RunService:
 
                 module.status = ModuleStatus.QUEUED
                 module.message = "실행 대기열에 등록됨"
+                module.failure_analysis = None
                 await self._repository.save_run(run)
                 await self._publish_module_event("module_queued", run, module)
 
@@ -146,6 +149,7 @@ class RunService:
                 module.status = ModuleStatus.RUNNING
                 module.started_at = datetime.now(UTC)
                 module.message = "실행 준비 중"
+                module.failure_analysis = None
                 await self._repository.save_run(run)
                 await self._publish_module_event("module_started", run, module)
 
@@ -164,6 +168,17 @@ class RunService:
                             module.status = ModuleStatus.FAILED
                             module.message = str(exc)
                             module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
+                            module.failure_analysis = await self._analyze_module_failure(
+                                run=run,
+                                module=module,
+                                definition=definition,
+                                execution_result=StepExecutionResult.failure(
+                                    message=str(exc),
+                                    current_url=None,
+                                    dialog_messages=[],
+                                    last_error=str(exc),
+                                ),
+                            )
                             module.ended_at = datetime.now(UTC)
                             module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
                             await self._repository.save_run(run)
@@ -177,19 +192,23 @@ class RunService:
                         )
                         future.result()
 
-                    status, message, artifacts = await asyncio.to_thread(
+                    execution_result = await asyncio.to_thread(
                         self._hom_executor.execute_step,
                         hom_runtime,
                         run.run_id,
                         definition,
                         emit_from_thread,
                     )
+                    status = execution_result.status
+                    message = execution_result.message
+                    artifacts = execution_result.artifacts
                     if status == ModuleStatus.WAITING_INPUT:
                         module.status = ModuleStatus.WAITING_INPUT
                         module.message = f"{message}. 웹 화면에서 OTP를 입력해 제출하세요."
                         module.artifacts = artifacts
                         module.artifact_count = len(artifacts)
                         module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
+                        module.failure_analysis = None
                         run.status = RunStatus.WAITING_INPUT
                         run.awaiting_input_module_id = module.module_id
                         run.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
@@ -208,6 +227,12 @@ class RunService:
                     module.artifacts = artifacts
                     module.artifact_count = len(artifacts)
                     module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
+                    module.failure_analysis = await self._analyze_module_failure(
+                        run=run,
+                        module=module,
+                        definition=definition,
+                        execution_result=execution_result,
+                    )
                 else:
                     await asyncio.sleep(definition.simulated_duration_ms / 1000)
                     if definition.simulated_outcome.upper() == ModuleStatus.FAILED.value:
@@ -277,3 +302,51 @@ class RunService:
                 },
             )
         )
+
+    async def _analyze_module_failure(self, run: Run, module: RunModule, definition, execution_result: StepExecutionResult):
+        if module.status != ModuleStatus.FAILED:
+            return None
+        if self._failure_analyzer is None or not getattr(self._failure_analyzer, "enabled", False):
+            return None
+
+        request = FailureAnalysisRequest(
+            run_id=run.run_id,
+            system_code=run.system_code,
+            system_name=run.system_name,
+            module_id=module.module_id,
+            module_name=module.name,
+            module_group=module.group,
+            execution_mode=definition.execution_mode,
+            workflow_name=definition.workflow_name,
+            workflow_step=definition.workflow_step,
+            current_url=execution_result.current_url,
+            last_error=execution_result.last_error or module.message,
+            recent_logs=module.logs[-30:],
+            dialog_messages=execution_result.dialog_messages[-10:],
+            screenshot_path=self._resolve_screenshot_path(execution_result),
+            system_definition={
+                "system_code": definition.system_code,
+                "module_id": definition.module_id,
+                "name": definition.name,
+                "description": definition.description,
+                "group": definition.group,
+                "depends_on": definition.depends_on,
+                "execution_mode": definition.execution_mode,
+                "workflow_name": definition.workflow_name,
+                "workflow_step": definition.workflow_step,
+                "timeout_seconds": definition.timeout_seconds,
+            },
+        )
+        try:
+            return await asyncio.to_thread(self._failure_analyzer.analyze, request)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _resolve_screenshot_path(execution_result: StepExecutionResult) -> str | None:
+        if execution_result.screenshot_path is not None:
+            return str(execution_result.screenshot_path)
+        for artifact in execution_result.artifacts:
+            if artifact.lower().endswith(".png"):
+                return str(Path(artifact.lstrip("/")))
+        return None

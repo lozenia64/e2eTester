@@ -235,6 +235,72 @@ h1 {
     margin-top: 16px;
 }
 
+.analysis-panel {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(12, 107, 88, 0.08);
+    border: 1px solid rgba(12, 107, 88, 0.12);
+}
+
+.analysis-panel.is-hidden {
+    display: none;
+}
+
+.analysis-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.analysis-label,
+.analysis-category {
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.analysis-label {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.analysis-category {
+    color: #114c84;
+}
+
+.analysis-summary,
+.analysis-action,
+.analysis-details p,
+.analysis-details summary {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.analysis-action {
+    margin-top: 8px;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.analysis-details {
+    margin-top: 10px;
+}
+
+.analysis-details summary {
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.analysis-details p {
+    margin-top: 8px;
+    color: var(--muted);
+    white-space: pre-wrap;
+}
+
 .artifact-list a {
     color: var(--accent);
     font-size: 0.85rem;

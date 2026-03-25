@@ -50,6 +50,18 @@
             <h3>{{ module.name }}</h3>
             <p class="node-id">{{ module.module_id }} · {{ module.group }}</p>
             <p class="node-message" data-role="module-message">{{ module.message }}</p>
+            <section class="analysis-panel{% if not module.failure_analysis %} is-hidden{% endif %}" data-role="failure-analysis">
+                <div class="analysis-topline">
+                    <span class="analysis-label">AI 분석</span>
+                    <span class="analysis-category" data-role="analysis-category">{{ module.failure_analysis.category if module.failure_analysis else '' }}</span>
+                </div>
+                <p class="analysis-summary" data-role="analysis-summary">{{ module.failure_analysis.user_summary if module.failure_analysis else '' }}</p>
+                <p class="analysis-action" data-role="analysis-action">{{ module.failure_analysis.recommended_action if module.failure_analysis else '' }}</p>
+                <details class="analysis-details">
+                    <summary>개발자용 상세</summary>
+                    <p data-role="analysis-details">{{ module.failure_analysis.developer_details if module.failure_analysis else '' }}</p>
+                </details>
+            </section>
             <dl class="node-metrics">
                 <div>
                     <dt>Duration</dt>

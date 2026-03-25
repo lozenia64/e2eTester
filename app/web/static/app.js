@@ -113,6 +113,16 @@ function updateModuleCard(module) {
     card.querySelector('[data-role="module-duration"]').textContent = `${module.duration_ms ?? 0} ms`;
     card.querySelector('[data-role="module-artifacts"]').textContent = `${module.artifact_count}`;
 
+    const analysisPanel = card.querySelector('[data-role="failure-analysis"]');
+    const analysis = module.failure_analysis;
+    if (analysisPanel) {
+        analysisPanel.classList.toggle("is-hidden", !analysis);
+        card.querySelector('[data-role="analysis-category"]').textContent = analysis?.category ?? "";
+        card.querySelector('[data-role="analysis-summary"]').textContent = analysis?.user_summary ?? "";
+        card.querySelector('[data-role="analysis-action"]').textContent = analysis?.recommended_action ?? "";
+        card.querySelector('[data-role="analysis-details"]').textContent = analysis?.developer_details ?? "";
+    }
+
     const artifactList = card.querySelector('[data-role="module-artifacts-list"]');
     artifactList.innerHTML = "";
     for (const artifact of module.artifacts ?? []) {

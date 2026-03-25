@@ -2,3 +2,4 @@ __pycache__/
 artifacts/
 .DS_Store
 .vscode/
+.env

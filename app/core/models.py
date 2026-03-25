@@ -49,6 +49,17 @@ class SystemDefinition(BaseModel):
     run_form: list[RunFormField] = Field(default_factory=list)
 
 
+class FailureAnalysis(BaseModel):
+    category: str
+    probable_cause: str
+    retryable: bool
+    user_summary: str
+    developer_details: str
+    recommended_action: str
+    provider: str | None = None
+    model: str | None = None
+
+
 class RunModule(BaseModel):
     module_id: str
     name: str
@@ -64,6 +75,25 @@ class RunModule(BaseModel):
     artifact_count: int = 0
     artifacts: list[str] = Field(default_factory=list)
     logs: list[str] = Field(default_factory=list)
+    failure_analysis: FailureAnalysis | None = None
+
+
+class FailureAnalysisRequest(BaseModel):
+    run_id: str
+    system_code: str
+    system_name: str
+    module_id: str
+    module_name: str
+    module_group: str
+    execution_mode: str
+    workflow_name: str | None = None
+    workflow_step: str | None = None
+    current_url: str | None = None
+    last_error: str | None = None
+    recent_logs: list[str] = Field(default_factory=list)
+    dialog_messages: list[str] = Field(default_factory=list)
+    screenshot_path: str | None = None
+    system_definition: dict = Field(default_factory=dict)
 
 
 class Run(BaseModel):

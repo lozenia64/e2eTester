@@ -105,3 +105,89 @@ http://127.0.0.1:8000
 - 이 프로젝트는 사내 내부용 도구입니다.
 - 반드시 회사 정책과 허가된 테스트 환경에서만 사용해야 합니다.
 - 테스트 대상 사이트 구조가 바뀌면 일부 자동화 동작이 실패할 수 있습니다.
+
+## 선택 기능: 실패 원인 AI 분석
+
+실패한 모듈에 대해 원인과 다음 조치를 자동 요약하는 선택 기능을 사용할 수 있습니다.
+
+- 기본값은 비활성화이며, 설정하지 않으면 기존 실행 흐름은 그대로 유지됩니다.
+- 현재 구현은 Gemini 계열 모델 호출을 전제로 하며, 실패 시에도 테스트 실행 자체는 계속 종료 처리됩니다.
+
+이 기능은 아래 우선순위로 설정값을 읽습니다.
+
+1. 터미널에서 직접 입력한 환경 변수
+2. 프로젝트 폴더의 `.env` 파일
+
+즉, 터미널에서 값을 입력하면 그 값을 먼저 사용하고, 터미널에 없으면 `.env` 파일 값을 사용합니다.
+
+가장 쉬운 방법은 `.env.example` 파일을 복사해서 `.env` 파일을 만든 뒤 값을 채우는 것입니다.
+
+```bash
+cd e2eTester
+cp .env.example .env
+```
+
+그다음 `.env` 파일을 열어서 아래 값을 실제 값으로 바꿉니다.
+
+```bash
+E2E_FAILURE_ANALYZER_ENABLED=true
+GEMINI_API_KEY="실제_발급받은_API_KEY"
+GEMINI_MODEL="gemini-3.1-flash-lite-preview"
+```
+
+설정이 끝나면 아래처럼 바로 서버를 실행하면 됩니다.
+
+```bash
+cd e2eTester
+python3 -m uvicorn app.main:app --reload
+```
+
+터미널에서 일회성으로 값을 덮어쓰고 싶다면 아래처럼 입력할 수 있습니다.
+
+```bash
+cd e2eTester
+
+export E2E_FAILURE_ANALYZER_ENABLED=true
+export GEMINI_API_KEY="실제_발급받은_API_KEY"
+export GEMINI_MODEL="gemini-3.1-flash-lite-preview"
+
+python3 -m uvicorn app.main:app --reload
+```
+
+한 줄로 실행하고 싶다면 아래처럼 입력할 수도 있습니다.
+
+```bash
+cd e2eTester
+
+E2E_FAILURE_ANALYZER_ENABLED=true \
+GEMINI_API_KEY="실제_발급받은_API_KEY" \
+GEMINI_MODEL="gemini-3.1-flash-lite-preview" \
+python3 -m uvicorn app.main:app --reload
+```
+
+브라우저에서 아래 주소로 접속하면 됩니다.
+
+```text
+http://127.0.0.1:8000
+```
+
+참고:
+
+- `.env` 파일을 사용하면 터미널을 새로 열어도 다시 입력할 필요가 없습니다.
+- `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
+- 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
+- AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload`만 실행하면 됩니다.
+
+환경에 따라 `python3` 대신 회사 PC에 설치된 Python 실행 경로를 사용해야 할 수 있습니다.
+
+예:
+
+```bash
+/usr/local/bin/python3 -m uvicorn app.main:app --reload
+```
+
+옵션 설명:
+
+- `E2E_FAILURE_ANALYZER_ENABLED`: `true`일 때만 실패 분석 기능을 활성화합니다.
+- `GEMINI_API_KEY`: Gemini API 호출 키입니다.
+- `GEMINI_MODEL`: 사용할 모델 이름입니다. 비우면 기본 모델 값을 사용합니다.

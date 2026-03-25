@@ -9,6 +9,7 @@ from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_systems import router as systems_router
 from app.api.ws_runs import router as ws_runs_router
+from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.run_repository import InMemoryRunRepository
@@ -18,7 +19,12 @@ from app.storage.run_repository import InMemoryRunRepository
 async def lifespan(app: FastAPI):
     registry = ModuleRegistry()
     repository = InMemoryRunRepository()
-    app.state.run_service = RunService(registry=registry, repository=repository)
+    failure_analyzer = GeminiFailureAnalyzer.from_env()
+    app.state.run_service = RunService(
+        registry=registry,
+        repository=repository,
+        failure_analyzer=failure_analyzer,
+    )
     yield
 
 
