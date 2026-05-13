@@ -34,9 +34,6 @@ class RunService:
     def list_systems(self):
         return self._registry.list_systems()
 
-    async def list_runs(self) -> list[Run]:
-        return await self._repository.list_runs()
-
     async def get_run(self, run_id: str) -> Run:
         return await self._repository.get_run(run_id)
 

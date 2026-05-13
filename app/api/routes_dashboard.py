@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.ai.failure_analyzer import GeminiFailureAnalyzer
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -13,13 +14,13 @@ templates = Jinja2Templates(directory="app/web/templates")
 async def dashboard_home(request: Request):
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
-    runs = await run_service.list_runs()
+    analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "systems": systems,
-            "runs": runs[:8],
+            "analyzer_status": analyzer_status,
         },
     )
 

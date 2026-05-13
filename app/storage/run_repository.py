@@ -35,10 +35,6 @@ class InMemoryRunRepository:
         async with self._lock:
             return self._runs[run_id]
 
-    async def list_runs(self) -> list[Run]:
-        async with self._lock:
-            return sorted(self._runs.values(), key=lambda item: item.requested_at, reverse=True)
-
     async def publish(self, event: DashboardEvent) -> None:
         listeners = list(self._listeners.get(event.run_id, []))
         for queue in listeners:

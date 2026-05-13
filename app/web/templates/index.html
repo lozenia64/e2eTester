@@ -14,6 +14,17 @@
             <span class="metric-label">등록 시스템</span>
             <strong class="metric-value">{{ systems|length }}</strong>
         </div>
+        <div class="metric-card analyzer-card analyzer-{{ analyzer_status.color }}">
+            <div class="analyzer-card-topline">
+                <span class="metric-label">AI 분석 상태</span>
+                <span class="analyzer-pill analyzer-{{ analyzer_status.color }}">{{ analyzer_status.title }}</span>
+            </div>
+            <strong class="analyzer-message">{{ analyzer_status.message }}</strong>
+            <p class="analyzer-detail">{{ analyzer_status.detail }}</p>
+            {% if analyzer_status.model_value %}
+            <p class="analyzer-meta">모델: {{ analyzer_status.model_value }}</p>
+            {% endif %}
+        </div>
     </div>
 </section>
 

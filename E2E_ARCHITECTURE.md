@@ -53,6 +53,8 @@ FastAPI app
 ```text
 e2eTester/
   app/
+    ai/
+      failure_analyzer.py
     api/
       routes_dashboard.py
       routes_runs.py
@@ -114,6 +116,7 @@ e2eTester/
 
 - 홈 화면은 “시스템 실행” 중심이다.
 - 최근 Run 패널은 제거되어 있다.
+- 홈 화면에는 AI 분석 설정 상태 카드가 표시된다.
 - 실행하면 곧바로 Run 상세 화면으로 이동한다.
 - 인증 수단 셀렉트는 존재하지만 현재 실제 실행은 휴대폰인증만 허용된다.
 
@@ -200,6 +203,11 @@ Module:
 - 모듈 순서와 의존성
 - `workflow_step`
 
+실행 규칙:
+
+- 모듈은 `order` 오름차순으로 순차 실행된다.
+- `depends_on` 은 추가 실행 제약이며, 선행 모듈이 모두 `PASSED` 여야 다음 모듈이 실행된다.
+
 현재 HOM 모듈 목록:
 
 1. `hom.main.access`
@@ -244,6 +252,23 @@ Module:
 
 - 메모리 기반 저장소다.
 - 서버 재시작 시 Run, 로그, OTP 대기 상태가 모두 사라진다.
+
+### 5.7 AI 실패 분석 계층
+
+현재 구현:
+
+- `app/ai/failure_analyzer.py`
+
+역할:
+
+- 환경 변수와 `.env` 기준으로 Gemini 설정을 읽는다.
+- 실패한 모듈의 최근 로그, 다이얼로그, 현재 URL, 스크린샷을 바탕으로 원인 요약을 시도한다.
+- 홈 화면에 현재 AI 분석 설정 상태를 표시한다.
+
+제약:
+
+- 기본값은 비활성화다.
+- 설정이 잘못되어도 앱은 계속 실행되며, 실패 분석만 생략될 수 있다.
 
 ## 6. 현재 HOM 샘플 워크플로우
 
@@ -343,9 +368,15 @@ artifacts/
 
 현재 구현 내용:
 
-- 로그는 모듈별 `execution.log`
-- 스크린샷은 모듈별 `final.png`
+- 현재 HOM manifest의 `hom_workflow_step` 모듈은 로그를 `execution.log` 로 남긴다.
+- 현재 HOM manifest의 `hom_workflow_step` 모듈은 스크린샷을 `final.png` 로 남긴다.
 - Run 화면에서 아티팩트 링크 노출
+- 링크 경로는 `/artifacts/{run_id}/{module_id}/{filename}` 형식이다.
+
+주의:
+
+- 초기 단계에서 실패하면 스크린샷이 없을 수 있다.
+- `simulated` 실행 모드는 현재 HOM 샘플에서 쓰이지 않으며, 이 경우 아티팩트가 생성되지 않을 수 있다.
 
 아직 없는 것:
 

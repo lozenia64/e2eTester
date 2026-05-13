@@ -100,6 +100,11 @@ http://127.0.0.1:8000
 
 테스트 실행 후 로그와 스크린샷은 로컬 프로젝트 폴더 아래 `artifacts/`에 저장됩니다.
 
+추가로 아래 사항을 알아두면 됩니다.
+
+- Run 화면의 상태, 실시간 로그, OTP 대기 정보는 메모리 기반이라 서버를 재시작하면 사라집니다.
+- 이미 생성된 아티팩트 파일은 로컬 `artifacts/` 폴더에 남아 있습니다.
+
 ## 주의 사항
 
 - 이 프로젝트는 사내 내부용 도구입니다.
@@ -132,7 +137,7 @@ cp .env.example .env
 ```bash
 E2E_FAILURE_ANALYZER_ENABLED=true
 GEMINI_API_KEY="실제_발급받은_API_KEY"
-GEMINI_MODEL="gemini-3.1-flash-lite-preview"
+GEMINI_MODEL="gemini-3.1-flash-lite"
 ```
 
 설정이 끝나면 아래처럼 바로 서버를 실행하면 됩니다.
@@ -149,7 +154,7 @@ cd e2eTester
 
 export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
-export GEMINI_MODEL="gemini-3.1-flash-lite-preview"
+export GEMINI_MODEL="gemini-3.1-flash-lite"
 
 python3 -m uvicorn app.main:app --reload
 ```
@@ -161,7 +166,7 @@ cd e2eTester
 
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
-GEMINI_MODEL="gemini-3.1-flash-lite-preview" \
+GEMINI_MODEL="gemini-3.1-flash-lite" \
 python3 -m uvicorn app.main:app --reload
 ```
 
@@ -177,6 +182,8 @@ http://127.0.0.1:8000
 - `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
 - 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
 - AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload`만 실행하면 됩니다.
+- 홈 화면에는 AI 분석 상태 카드가 표시되며, 현재 설정값이 유효한지 바로 확인할 수 있습니다.
+- AI 분석 설정이 잘못되어도 앱은 실행되지만, 실패 분석 결과는 생성되지 않을 수 있습니다.
 
 환경에 따라 `python3` 대신 회사 PC에 설치된 Python 실행 경로를 사용해야 할 수 있습니다.
 
