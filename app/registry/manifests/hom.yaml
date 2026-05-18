@@ -148,3 +148,15 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: contract_list
+  - module_id: hom.contract.detail
+    system_code: hom
+    name: 계약상세 조회
+    description: 계약목록 화면에서 첫 번째 선택 가능한 계약으로 이동하고 계약상세 주요 정보영역을 확인합니다.
+    group: inquiry
+    order: 50
+    depends_on:
+      - hom.contract.list
+    timeout_seconds: 180
+    execution_mode: hom_workflow_step
+    workflow_name: hom_login
+    workflow_step: contract_detail

@@ -306,6 +306,8 @@ class RunService:
         if self._failure_analyzer is None or not getattr(self._failure_analyzer, "enabled", False):
             return None
 
+        is_contract_detail = definition.workflow_step == "contract_detail"
+
         request = FailureAnalysisRequest(
             run_id=run.run_id,
             system_code=run.system_code,
@@ -316,11 +318,11 @@ class RunService:
             execution_mode=definition.execution_mode,
             workflow_name=definition.workflow_name,
             workflow_step=definition.workflow_step,
-            current_url=execution_result.current_url,
+            current_url=None if is_contract_detail else execution_result.current_url,
             last_error=execution_result.last_error or module.message,
-            recent_logs=module.logs[-30:],
-            dialog_messages=execution_result.dialog_messages[-10:],
-            screenshot_path=self._resolve_screenshot_path(execution_result),
+            recent_logs=[] if is_contract_detail else module.logs[-30:],
+            dialog_messages=[] if is_contract_detail else execution_result.dialog_messages[-10:],
+            screenshot_path=None if is_contract_detail else self._resolve_screenshot_path(execution_result),
             system_definition={
                 "system_code": definition.system_code,
                 "module_id": definition.module_id,

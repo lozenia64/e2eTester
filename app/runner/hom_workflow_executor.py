@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 import hom_login_common as common
+import hom_contract_detail
 import hom_contract_list
 import hom_login_move
 import hom_main_access
@@ -226,6 +227,9 @@ class HomWorkflowExecutor:
 
         if module.workflow_step == "contract_list":
             return hom_contract_list.run(runtime.page, runtime.config, screenshot_path)
+
+        if module.workflow_step == "contract_detail":
+            return hom_contract_detail.run(runtime.page, runtime.config, screenshot_path)
 
         raise RuntimeError(f"Unsupported HOM workflow step: {module.workflow_step}")
 

@@ -335,6 +335,19 @@ Module:
 - 목록 건수 확인
 - 스크린샷 저장
 
+### Step 5. 계약상세 조회
+
+파일:
+
+- `hom_contract_detail.py`
+
+역할:
+
+- `/fplaza/inquiry/contract01.do` 화면에서 증권번호 중 하나로 이동
+- `/fplaza/inquiry/contract02.do` 포함 URL 확인
+- 계약일반정보,수익자정보,자동이체현황,우편물 수령지/연락처,담당자정보,계약자정보 확인
+- 스크린샷 저장
+
 ## 7. 현재 UI 입력 모델
 
 홈 화면의 `HOM` 실행 카드에는 아래 입력이 있다.
