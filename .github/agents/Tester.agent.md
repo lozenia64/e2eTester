@@ -1,6 +1,6 @@
 ---
 name: 'Tester'
-description: 'Use when: 로컬 E2E 실행기의 API smoke, OTP 재개, WebSocket 이벤트, artifact/log 확인, 실브라우저 흐름 재현으로 구현 결과를 검증해야 할 때.'
+description: 'Use when: 로컬 E2E 실행기의 API smoke, (HOM 휴대폰인증 시) OTP 재개, WebSocket 이벤트, artifact/log 확인, 실브라우저 흐름 재현으로 구현 결과를 검증해야 할 때.'
 tools: ['read', 'search', 'execute', 'browser', 'web']
 user-invocable: false
 ---
@@ -11,7 +11,7 @@ user-invocable: false
 ## 1. 검증 우선순위
 
 1. 변경과 직접 연결된 API smoke 또는 가장 좁은 실행 경로
-2. Run 생성, OTP 재개, WebSocket 이벤트, artifact 노출 같은 계약 확인
+2. Run 생성, (해당 Run이 OTP 대기에 진입할 때만) OTP 재개, WebSocket 이벤트, artifact 노출 같은 계약 확인
 3. 로그와 아티팩트 생성 여부 확인
 4. 필요 시 실브라우저 또는 수동 흐름 재현
 
@@ -19,7 +19,7 @@ user-invocable: false
 
 - 현재 저장소에서 실제로 유지되는 실행 명령과 최소 범위 검증 경로
 - `POST /api/runs/...`, `POST /api/runs/{run_id}/otp`, `GET /api/runs/{run_id}`, `WS /ws/runs/{run_id}` 같은 직접 계약 표면
-- Run 상태 전이, module 로그, artifact 링크, OTP 패널 활성화 같은 UI 소비 표면
+- Run 상태 전이, module 로그, artifact 링크, OTP 패널 활성화(휴대폰 본인인증) 같은 UI 소비 표면
 - 기존 자동화 테스트가 있으면 사용하되, 없으면 API 및 브라우저 smoke를 우선한다.
 
 ## 3. 절대 금지 사항

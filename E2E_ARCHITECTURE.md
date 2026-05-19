@@ -17,7 +17,7 @@
 - HOM 시스템은 manifest 기반으로 로드된다.
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
-- OTP는 Run 도중 `WAITING_INPUT` 상태로 전환한 뒤 웹 화면에서 제출한다.
+- OTP는 **휴대폰인증**에서만 Run 도중 `WAITING_INPUT`으로 전환한 뒤 웹에서 제출한다. **카카오인증**은 OTP 없이 자동화 스크립트가 `인증요청` → 60초 대기 → `인증완료`까지 처리한다.
 
 현재는 완성형 플랫폼이 아니라, “운영 가능한 작은 샘플 플랫폼” 단계다.
 
@@ -83,13 +83,14 @@ e2eTester/
         app.js
     main.py
   artifacts/
-  hom_login_common.py
-  hom_main_access.py
-  hom_login_move.py
-  hom_phone_login.py
-  hom_kakao_login.py
+  hom_contract_detail.py
   hom_contract_list.py
+  hom_kakao_login.py
+  hom_login_common.py
+  hom_login_move.py
   hom_login_phone.py
+  hom_main_access.py
+  hom_phone_login.py
   README.md
   E2E_ARCHITECTURE.md
 ```
@@ -139,8 +140,10 @@ e2eTester/
 - 시스템 목록 조회
 - Run 생성
 - Run 조회
-- OTP 재개
+- OTP 재개 (`POST /api/runs/{run_id}/otp`)
 - 실시간 상태 이벤트 스트리밍
+
+**참고:** OTP API는 **휴대폰인증** Run에서 본인인증 단계가 `WAITING_INPUT`일 때만 의미가 있다. 카카오인증 Run에서는 해당 단계가 이 상태로 멈추지 않는다.
 
 ### 5.3 Orchestrator 계층
 
@@ -148,7 +151,7 @@ e2eTester/
 
 역할:
 
-- Run ID 발급
+- Run 생성 시 `system_code`가 `hom`이면 `auth_method`는 `phone` 또는 `kakao`만 허용한다. 그 외 값은 요청 단계에서 거절된다.
 - manifest 기준 모듈 리스트 생성
 - 모듈 상태 전이 관리
 - 의존성 실패 시 `BLOCKED` 처리
@@ -203,18 +206,20 @@ Module:
 - `show_when` 기반 조건부 노출 규칙
 - 모듈 순서와 의존성
 - `workflow_step`
+- 모듈별 `timeout_seconds`(본인인증 로그인 단계는 300초, 그 외 HOM 단계는 주로 180초)
 
 실행 규칙:
 
 - 모듈은 `order` 오름차순으로 순차 실행된다.
 - `depends_on` 은 추가 실행 제약이며, 선행 모듈이 모두 `PASSED` 여야 다음 모듈이 실행된다.
 
-현재 HOM 모듈 목록:
+현재 HOM 모듈 목록 (`hom.yaml` `order` 기준):
 
 1. `hom.main.access`
 2. `hom.login.move`
-3. `hom.login.phone_login`
+3. `hom.login.phone_login` — `auth_method`에 따라 `hom_phone_login`(휴대폰·OTP) 또는 `hom_kakao_login`(카카오·60초·`인증완료`) 실행
 4. `hom.contract.list`
+5. `hom.contract.detail`
 
 ### 5.5 Runtime / Runner 계층
 
@@ -234,8 +239,8 @@ Module:
 이 구조를 택한 이유:
 
 - 로그인 이후 세션을 다음 모듈에 전달해야 함
-- OTP 이후 인증 상태를 유지해야 함
-- 계약목록 조회 같은 후속 모듈은 동일 세션이 필요함
+- 휴대폰 본인인증에서는 OTP 제출 이후에도 동일 세션으로 로그인 완료까지 이어져야 함
+- 계약목록·계약상세 조회 등 후속 모듈은 동일 세션이 필요함
 
 ### 5.6 Storage 계층
 
@@ -282,6 +287,7 @@ Module:
           -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
               -> 로그인 성공 후 팝업 정리
                   -> 계약목록 조회
+                      -> 계약상세 조회
 ```
 
 ### Step 1. 메인화면 접속
@@ -462,10 +468,10 @@ WebSocket으로 흐르는 주요 이벤트:
 
 ### Phase 1. 현재 샘플 안정화
 
-- 로그인 후 팝업 종료 안정성 보강
-- 계약목록 조회 selector 보강
-- 실패 시 디버그 아티팩트 확장
-- `계약 상세 조회` 모듈 추가
+- 로그인 후 팝업 종료 안정성 보강 (휴대폰·카카오 공통)
+- 카카오 인증 팝업·동의 UI 변경에 대한 selector·대기 조건 보강
+- 계약목록·계약상세 조회 selector 보강
+- 실패 시 디버그 아티팩트 확장 (`trace.zip`, `dom.html` 등)
 
 ### Phase 2. 저장소와 실행 모델 개선
 
@@ -522,7 +528,7 @@ Backend
 
 - 웹에서 시스템 실행 가능
 - 실시간 모듈 노드 대시보드 존재
-- OTP pause/resume 존재
+- 휴대폰 본인인증에서 OTP pause/resume 존재 (카카오 경로는 해당 없음)
 - 로그인 이후 후속 모듈 실행 구조 존재
 - manifest 기반 확장 포인트 존재
 
