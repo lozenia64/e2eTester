@@ -38,7 +38,7 @@ class RunFormField(BaseModel):
     default: str = ""
     help_text: str = ""
     options: list[RunFormOption] = Field(default_factory=list)
-    show_when: dict[str, str] = Field(default_factory=dict)
+    show_when: dict[str, str | list[str]] = Field(default_factory=dict)
 
 
 class SystemDefinition(BaseModel):

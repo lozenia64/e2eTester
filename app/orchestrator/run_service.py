@@ -70,9 +70,10 @@ class RunService:
         system = self.get_system(system_code)
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
-        auth_method = sanitized_input.get("auth_method", "phone")
-        if auth_method != "phone":
-            raise ValueError("현재는 휴대폰인증만 실행할 수 있습니다.")
+        if system_code == "hom":
+            auth_method = sanitized_input.get("auth_method", "phone")
+            if auth_method not in {"phone", "kakao"}:
+                raise ValueError("HOM에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
         run = Run(
             run_id=run_id,
             system_code=system.system_code,

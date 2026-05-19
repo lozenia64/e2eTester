@@ -87,6 +87,7 @@ e2eTester/
   hom_main_access.py
   hom_login_move.py
   hom_phone_login.py
+  hom_kakao_login.py
   hom_contract_list.py
   hom_login_phone.py
   README.md
@@ -118,7 +119,7 @@ e2eTester/
 - 최근 Run 패널은 제거되어 있다.
 - 홈 화면에는 AI 분석 설정 상태 카드가 표시된다.
 - 실행하면 곧바로 Run 상세 화면으로 이동한다.
-- 인증 수단 셀렉트는 존재하지만 현재 실제 실행은 휴대폰인증만 허용된다.
+- 인증 수단 셀렉트에서 **휴대폰인증**과 **카카오인증**을 실행할 수 있다. (금융·공동인증서는 API에서 거부)
 
 ### 5.2 API 계층
 
@@ -277,8 +278,8 @@ Module:
 ```text
 메인화면 접속
   -> 로그인 이동
-      -> 휴대폰 로그인
-          -> OTP 대기/재개
+      -> 본인인증 로그인
+          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
               -> 로그인 성공 후 팝업 정리
                   -> 계약목록 조회
 ```
@@ -305,19 +306,19 @@ Module:
 - 상단 로그인 링크 탐색
 - 로그인 페이지 이동
 
-### Step 3. 휴대폰 로그인
+### Step 3. 본인인증 로그인
 
 파일:
 
-- `hom_phone_login.py`
+- `hom_phone_login.py` — 휴대폰 인증 (SMS + OTP)
+- `hom_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
 - `hom_login_common.py`
 
 역할:
 
-- 휴대폰 인증 페이지 이동
-- 사용자 정보 입력
-- SMS 요청
-- OTP 제출
+- 인증 수단에 따라 분기
+- **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
+- **카카오**: [`/util/login/login.do`](https://www.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
 - `/my/main.do` 포함 URL 진입 확인
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
@@ -364,8 +365,9 @@ Module:
 
 조건부 규칙:
 
-- 인증 수단이 `휴대폰인증`일 때만 개인정보 입력 필드 노출
-- 다른 인증 수단은 아직 placeholder이며 API에서 실행을 거부
+- 성별·내외국인·통신사는 **휴대폰인증**에서만 폼에 노출 (`show_when`)
+- 고객명·생년월일·휴대폰 번호는 **휴대폰인증·카카오인증**에서 노출 (`manifest`의 `show_when.auth_method`에 `phone`·`kakao` 나열)
+- 금융인증서·공동인증서는 UI placeholder이며 API에서 실행을 거부
 
 ## 8. 현재 아티팩트 전략
 

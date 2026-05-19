@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
 
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
@@ -116,6 +116,7 @@ FAILURE_DIALOG_KEYWORDS: Final[tuple[str, ...]] = (
 
 @dataclass(frozen=True)
 class LoginConfig:
+    auth_method: str
     base_url: str
     name: str
     birthdate: str
@@ -224,6 +225,13 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
     dotenv_path = Path(args.env_file).expanduser()
     dotenv_values = load_dotenv_file(dotenv_path)
 
+    raw_auth = getattr(args, "auth_method", None)
+    auth_method = (
+        (env_or_arg(raw_auth, "HW_AUTH_METHOD", dotenv_values) or "phone").strip().lower()
+    )
+    if auth_method not in {"phone", "kakao"}:
+        raise ValueError(f"Unsupported auth_method for automation: {auth_method}")
+
     name = env_or_arg(args.name, "HW_NAME", dotenv_values)
     birthdate = env_or_arg(args.birthdate, "HW_BIRTHDATE", dotenv_values)
     gender = env_or_arg(args.gender, "HW_GENDER", dotenv_values)
@@ -233,18 +241,32 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
     phone_prefix = env_or_arg(args.phone_prefix, "HW_PHONE_PREFIX", dotenv_values)
     otp_code = env_or_arg(args.otp_code, "HW_OTP_CODE", dotenv_values)
 
-    missing = [
-        env_name
-        for env_name, value in (
-            ("HW_NAME", name),
-            ("HW_BIRTHDATE", birthdate),
-            ("HW_GENDER", gender),
-            ("HW_RESIDENCY", residency),
-            ("HW_CARRIER", carrier),
-            ("HW_PHONE_NUMBER", phone_number),
-        )
-        if not value
-    ]
+    if auth_method == "kakao":
+        missing = [
+            env_name
+            for env_name, value in (
+                ("HW_NAME", name),
+                ("HW_BIRTHDATE", birthdate),
+                ("HW_PHONE_NUMBER", phone_number),
+            )
+            if not value
+        ]
+        gender = gender or "male"
+        residency = residency or "domestic"
+        carrier = carrier or "skt"
+    else:
+        missing = [
+            env_name
+            for env_name, value in (
+                ("HW_NAME", name),
+                ("HW_BIRTHDATE", birthdate),
+                ("HW_GENDER", gender),
+                ("HW_RESIDENCY", residency),
+                ("HW_CARRIER", carrier),
+                ("HW_PHONE_NUMBER", phone_number),
+            )
+            if not value
+        ]
     if missing:
         joined = ", ".join(missing)
         raise ValueError(f"Missing required values: {joined}")
@@ -261,6 +283,7 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
     success_stabilization_ms = clamp_timeout_ms(args.success_stabilization_ms)
 
     return LoginConfig(
+        auth_method=auth_method,
         base_url=normalize_base_url(env_or_arg(args.base_url, "HW_BASE_URL", dotenv_values)),
         name=name or "",
         birthdate=birthdate,
@@ -407,13 +430,46 @@ def click_label(page: Page, field_id: str) -> None:
     click_with_log(page.locator(f'label[for="{field_id}"]'), f"Click label for {field_id}")
 
 
-def select_dropdown_option(page: Page, headline: str, button_name: str) -> None:
-    anchor = page.locator(f'a.headline[title="{headline}"]').first
-    root = anchor.locator("xpath=ancestor::div[contains(@class, 'select_list')][1]")
+def select_dropdown_option(root: Page | Locator, headline: str, button_name: str) -> None:
+    anchor = root.locator(f'a.headline[title="{headline}"]').first
+    sel_root = anchor.locator("xpath=ancestor::div[contains(@class, 'select_list')][1]")
     click_with_log(anchor, f"Open dropdown: {headline}")
-    option = root.locator(f'ul >> button[name="{button_name}"]')
+    option = sel_root.locator(f'ul >> button[name="{button_name}"]')
     wait_locator_visible_with_log(option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}")
     click_with_log(option, f"Select dropdown option {button_name} from {headline}")
+
+
+def select_dropdown_option_first_visible(root: Page | Locator, headline: str, button_name: str) -> None:
+    """같은 title의 드롭다운이 페이지에 여러 개(숨김 템플릿 등)일 때, 보이는 앵커만 연다."""
+    anchors = root.locator(f'a.headline[title="{headline}"]')
+    anchor = None
+    for i in range(anchors.count()):
+        cand = anchors.nth(i)
+        try:
+            if cand.is_visible(timeout=800):
+                anchor = cand
+                break
+        except Exception:
+            continue
+    if anchor is None:
+        select_dropdown_option(root, headline, button_name)
+        return
+    sel_root = anchor.locator("xpath=ancestor::div[contains(@class, 'select_list')][1]")
+    click_with_log(anchor, f"Open dropdown (visible): {headline}")
+    option = sel_root.locator(f'ul >> button[name="{button_name}"]')
+    wait_locator_visible_with_log(option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}")
+    click_with_log(option, f"Select dropdown option {button_name} from {headline}")
+
+
+def first_visible_locator(locator: Locator, description: str) -> Locator:
+    for i in range(locator.count()):
+        candidate = locator.nth(i)
+        try:
+            if candidate.is_visible(timeout=800):
+                return candidate
+        except Exception:
+            continue
+    raise RuntimeError(f"표시 중인 요소를 찾지 못했습니다: {description}")
 
 
 def ensure_terms_agreed(page: Page, carrier_code: str) -> None:
@@ -437,6 +493,34 @@ def fill_phone_fields(page: Page, config: LoginConfig) -> None:
     page.locator("#hndphTltno").fill(config.phone_middle)
     click_with_log(page.locator("#hndphTlsno"), "Focus phone last digits input")
     page.locator("#hndphTlsno").fill(config.phone_last)
+
+
+def fill_kakao_phone_segments(page: Page, config: LoginConfig, *, scope: Locator | None = None) -> None:
+    """Kakao 본인인증: 통신사 없이 앞자리·중간·끝 전화번호만 입력.
+
+    팝업/숨김 마크업이 겹칠 수 있어 드롭다운은 **보이는** 앵커만 사용하고,
+    휴대폰 칸은 접근성 이름(한화손보 카카오 팝업과 동일)으로 찾는다.
+    """
+    root: Page | Locator = scope if scope is not None else page
+    select_dropdown_option_first_visible(root, "휴대폰번호(앞자리) 선택", config.phone_prefix)
+    try:
+        mid = first_visible_locator(
+            root.get_by_role("textbox", name="휴대폰번호(중간 자리)"),
+            "휴대폰번호(중간 자리)",
+        )
+        last = first_visible_locator(
+            root.get_by_role("textbox", name="휴대폰번호(뒷자리)"),
+            "휴대폰번호(뒷자리)",
+        )
+    except RuntimeError:
+        mid = page.locator("#hndphTltno")
+        last = page.locator("#hndphTlsno")
+        wait_locator_visible_with_log(mid, MAX_TIMEOUT_MS, "Kakao #hndphTltno fallback")
+        wait_locator_visible_with_log(last, MAX_TIMEOUT_MS, "Kakao #hndphTlsno fallback")
+    click_with_log(mid, "Focus phone middle (Kakao)")
+    mid.fill(config.phone_middle)
+    click_with_log(last, "Focus phone last (Kakao)")
+    last.fill(config.phone_last)
 
 
 def fill_identity(page: Page, config: LoginConfig) -> None:

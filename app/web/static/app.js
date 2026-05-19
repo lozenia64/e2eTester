@@ -11,10 +11,12 @@ function syncConditionalFields(form) {
     const conditionalFields = form.querySelectorAll(".conditional-field");
     for (const field of conditionalFields) {
         const controllingKey = field.dataset.showWhenKey;
-        const expectedValue = field.dataset.showWhenValue;
+        const expectedRaw = field.dataset.showWhenValue || "";
+        const expectedValues = expectedRaw.split(",").map((s) => s.trim()).filter(Boolean);
         const controllingInput = form.querySelector(`[name="${controllingKey}"]`);
         const input = field.querySelector("input, select, textarea");
-        const isVisible = controllingInput && input && controllingInput.value === expectedValue;
+        const isVisible =
+            controllingInput && input && expectedValues.includes(controllingInput.value);
 
         field.classList.toggle("is-hidden", !isVisible);
         if (!input) {
@@ -38,7 +40,9 @@ function bindConditionalFields(form) {
         if (!input) {
             continue;
         }
-        input.addEventListener("change", () => syncConditionalFields(form));
+        const sync = () => syncConditionalFields(form);
+        input.addEventListener("change", sync);
+        input.addEventListener("input", sync);
     }
 
     syncConditionalFields(form);
@@ -59,8 +63,10 @@ function updateOtpPanel(runOrMessage) {
 
 async function startSystemRun(systemCode, button, form) {
     const authMethod = form.querySelector('[name="auth_method"]')?.value;
-    if (authMethod && authMethod !== "phone") {
-        window.alert("현재는 휴대폰인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.");
+    if (authMethod && authMethod !== "phone" && authMethod !== "kakao") {
+        window.alert(
+            "HOM에서는 휴대폰인증·카카오인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.",
+        );
         return;
     }
 

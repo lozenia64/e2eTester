@@ -5,7 +5,7 @@ import argparse
 from playwright.sync_api import sync_playwright
 
 import hom_login_common as common
-import hom_login_move
+import hom_kakao_login
 import hom_main_access
 import hom_phone_login
 
@@ -19,7 +19,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default=str(common.DEFAULT_ENV_FILE_PATH),
         help="Path to a dotenv file. Defaults to .env in the current working directory",
     )
-    parser.add_argument("--base-url", default=None, help="Base URL. Defaults to https://www.hwgeneralins.com")
+    parser.add_argument(
+        "--auth-method",
+        default="phone",
+        choices=["phone", "kakao"],
+        help="본인인증 수단. kakao는 인증요청 후 60초 대기(카카오톡 인증) 뒤 인증완료 클릭까지 자동화합니다.",
+    )
     parser.add_argument("--name", default=None, help="Customer name")
     parser.add_argument("--birthdate", default=None, help="Birthdate in YYYYMMDD")
     parser.add_argument("--gender", default=None, help="male/female or 남성/여성")
@@ -78,8 +83,11 @@ def main() -> int:
         try:
             hom_main_access.run(page, config)
             hom_login_move.run(page)
-            hom_phone_login.request_sms(page, config, dialog_messages)
-            hom_phone_login.submit_otp_and_login(page, config, dialog_messages, config.screenshot_path)
+            if config.auth_method == "kakao":
+                hom_kakao_login.run(page, config, dialog_messages, config.screenshot_path)
+            else:
+                hom_phone_login.request_sms(page, config, dialog_messages)
+                hom_phone_login.submit_otp_and_login(page, config, dialog_messages, config.screenshot_path)
             print(f"[result] Login successful. Current URL: {page.url}")
             if dialog_messages:
                 print(f"[result] Dialogs seen: {dialog_messages}")

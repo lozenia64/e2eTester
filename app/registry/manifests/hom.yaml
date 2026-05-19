@@ -1,6 +1,6 @@
 system_code: hom
 name: Hanwha General Insurance
-description: 휴대폰 본인인증 로그인 흐름을 기준으로 구성한 HOM 샘플 시스템
+description: 휴대폰·카카오 본인인증 로그인 흐름을 기준으로 구성한 HOM 샘플 시스템
 run_form:
   - key: browser_mode
     label: 브라우저 실행 모드
@@ -25,7 +25,7 @@ run_form:
     type: select
     required: true
     default: phone
-    help_text: 현재는 휴대폰인증만 실행 가능하며, 카카오인증/금융인증서인증/공동인증서인증은 준비 중입니다.
+    help_text: 휴대폰인증과 카카오인증을 실행할 수 있습니다. 금융인증서·공동인증서는 준비 중입니다.
     options:
       - label: 휴대폰인증
         value: phone
@@ -41,14 +41,18 @@ run_form:
     required: true
     placeholder: 홍길동
     show_when:
-      auth_method: phone
+      auth_method:
+        - phone
+        - kakao
   - key: birthdate
     label: 생년월일
     type: text
     required: true
     placeholder: YYYYMMDD
     show_when:
-      auth_method: phone
+      auth_method:
+        - phone
+        - kakao
   - key: gender
     label: 성별
     type: select
@@ -99,7 +103,9 @@ run_form:
     required: true
     placeholder: 01012345678
     show_when:
-      auth_method: phone
+      auth_method:
+        - phone
+        - kakao
 modules:
   - module_id: hom.main.access
     system_code: hom
@@ -126,13 +132,13 @@ modules:
     workflow_step: login_move
   - module_id: hom.login.phone_login
     system_code: hom
-    name: 휴대폰 로그인
-    description: 휴대폰인증 버튼 클릭 후 입력값 작성, 인증문자 발송, OTP 검증, 확인 버튼 클릭으로 로그인을 완료합니다.
+    name: 본인인증 로그인
+    description: 선택한 인증수단(휴대폰 OTP 또는 카카오 60초 대기)으로 로그인을 완료합니다.
     group: auth
     order: 30
     depends_on:
       - hom.login.move
-    timeout_seconds: 180
+    timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: phone_login

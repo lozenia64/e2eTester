@@ -11,6 +11,7 @@ from typing import Callable
 import hom_login_common as common
 import hom_contract_detail
 import hom_contract_list
+import hom_kakao_login
 import hom_login_move
 import hom_main_access
 import hom_phone_login
@@ -96,6 +97,7 @@ class HomWorkflowExecutor:
         headless = self._resolve_headless(input_data)
         args = argparse.Namespace(
             env_file=str(common.DEFAULT_ENV_FILE_PATH),
+            auth_method=(input_data.get("auth_method") or "phone").strip().lower(),
             base_url=input_data.get("base_url") or common.DEFAULT_BASE_URL,
             name=input_data.get("name"),
             birthdate=input_data.get("birthdate"),
@@ -213,6 +215,13 @@ class HomWorkflowExecutor:
             return hom_login_move.run(runtime.page)
 
         if module.workflow_step == "phone_login":
+            if runtime.config.auth_method == "kakao":
+                return hom_kakao_login.run(
+                    runtime.page,
+                    runtime.config,
+                    runtime.dialog_messages,
+                    screenshot_path,
+                )
             if not runtime.phone_login_sms_requested:
                 message = hom_phone_login.request_sms(runtime.page, runtime.config, runtime.dialog_messages)
                 runtime.phone_login_sms_requested = True
