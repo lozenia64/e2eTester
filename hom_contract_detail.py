@@ -21,56 +21,6 @@ DETAIL_LINK_SELECTORS: tuple[str, ...] = (
     'a[href*="contract02"]',
 )
 POLICY_NUMBER_PATTERN = re.compile(r"\d[\d-]{5,}")
-REDACTION_STYLE_ID = "__e2e_contract_detail_redaction__"
-
-
-def _save_redacted_screenshot_best_effort(page, screenshot_path: Path) -> None:
-    try:
-        page.evaluate(
-            """styleId => {
-                if (document.getElementById(styleId)) {
-                    return;
-                }
-                const style = document.createElement('style');
-                style.id = styleId;
-                style.textContent = `
-                    html, body {
-                        background: #ffffff !important;
-                    }
-                    body * {
-                        visibility: hidden !important;
-                    }
-                    body::before {
-                        content: '계약상세 조회 도달 확인';
-                        visibility: visible !important;
-                        display: block;
-                        position: fixed;
-                        top: 40px;
-                        left: 40px;
-                        padding: 24px 28px;
-                        background: #ffffff;
-                        border: 2px solid #111111;
-                        color: #111111;
-                        font-size: 28px;
-                        font-weight: 700;
-                        z-index: 2147483647;
-                    }
-                `;
-                document.head.appendChild(style);
-            }""",
-            REDACTION_STYLE_ID,
-        )
-        common.save_screenshot(page, screenshot_path)
-    except Exception as exc:
-        print(f"[warn] Failed to save screenshot: {exc}")
-    finally:
-        try:
-            page.evaluate(
-                "styleId => document.getElementById(styleId)?.remove()",
-                REDACTION_STYLE_ID,
-            )
-        except Exception:
-            pass
 
 
 def _ensure_contract_list_context(page, timeout_ms: int) -> None:
@@ -179,8 +129,8 @@ def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
             joined = ", ".join(missing_sections)
             raise RuntimeError(f"계약상세 화면의 필수 정보영역을 확인하지 못했습니다: {joined}")
 
-        _save_redacted_screenshot_best_effort(page, screenshot_path)
+        common.save_screenshot(page, screenshot_path)
         return "계약상세 조회 성공"
     except Exception:
-        _save_redacted_screenshot_best_effort(page, screenshot_path)
+        common.save_screenshot(page, screenshot_path)
         raise

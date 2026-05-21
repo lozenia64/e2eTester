@@ -83,6 +83,7 @@ e2eTester/
         app.js
     main.py
   artifacts/
+  hom_compensation_charge.py
   hom_contract_detail.py
   hom_contract_list.py
   hom_kakao_login.py
@@ -206,7 +207,7 @@ Module:
 - `show_when` 기반 조건부 노출 규칙
 - 모듈 순서와 의존성
 - `workflow_step`
-- 모듈별 `timeout_seconds`(본인인증 로그인 단계는 300초, 그 외 HOM 단계는 주로 180초)
+- 모듈별 `timeout_seconds`(본인인증 로그인 300초, 보험금청구 접수 240초, 그 외 HOM 단계는 주로 180초)
 
 실행 규칙:
 
@@ -220,6 +221,7 @@ Module:
 3. `hom.login.phone_login` — `auth_method`에 따라 `hom_phone_login`(휴대폰·OTP) 또는 `hom_kakao_login`(카카오·60초·`인증완료`) 실행
 4. `hom.contract.list`
 5. `hom.contract.detail`
+6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
 
 ### 5.5 Runtime / Runner 계층
 
@@ -240,7 +242,7 @@ Module:
 
 - 로그인 이후 세션을 다음 모듈에 전달해야 함
 - 휴대폰 본인인증에서는 OTP 제출 이후에도 동일 세션으로 로그인 완료까지 이어져야 함
-- 계약목록·계약상세 조회 등 후속 모듈은 동일 세션이 필요함
+- 계약목록·계약상세·보험금청구 등 후속 모듈은 동일 세션이 필요함
 
 ### 5.6 Storage 계층
 
@@ -288,6 +290,7 @@ Module:
               -> 로그인 성공 후 팝업 정리
                   -> 계약목록 조회
                       -> 계약상세 조회
+                      -> 보험금청구 접수(charge00~02)
 ```
 
 ### Step 1. 메인화면 접속
@@ -353,7 +356,23 @@ Module:
 - `/fplaza/inquiry/contract01.do` 화면에서 증권번호 중 하나로 이동
 - `/fplaza/inquiry/contract02.do` 포함 URL 확인
 - 계약일반정보,수익자정보,자동이체현황,우편물 수령지/연락처,담당자정보,계약자정보 확인
-- 스크린샷 저장
+- `final.png`: 실제 계약상세 웹 화면 전체 스크린샷(데이터 표시 검증용; `artifacts/`에 그대로 저장)
+
+### Step 6. 보험금청구 접수
+
+파일:
+
+- `hom_compensation_charge.py`
+
+역할:
+
+- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/charge00.do"]`** 가시 링크 클릭(실패 시 `charge00.do` 직접 이동).
+- `charge00`에서 **`a[href*="charge01.do"]`** 가시 링크로 `charge01` 이동(안내 화면의 보험금청구 신청 단계).
+- `charge01`에서 **`get_by_role("link", name=/보험금청구\s*신청/)`** 가시 항목 클릭 → 레이어 **`보험금청구를 위한 필요서류는 확인하셨나요?`** 표시.
+- 팝업에서 **`get_by_role("link", name=/준비가 된 상태/)`**(접근성 트리상 문구: *필요 서류를 확인하여 스캔 파일, 이미지 파일 등으로 준비가 된 상태입니다.*) 클릭 → `charge02` 로딩.
+- `charge02`에서 URL·본문(`청구대상자 선택` 등) 확인 후 스크린샷 저장.
+
+
 
 ## 7. 현재 UI 입력 모델
 
