@@ -169,12 +169,12 @@ modules:
   - module_id: hom.compensation.charge
     system_code: hom
     name: 보험금청구 접수(질병/상해)
-    description: 보상 GNB에서 질병/상해 보험금청구 접수(charge00~02) 화면까지 진행하고 청구대상자 선택 단계를 확인합니다.
+    description: 보상 GNB·charge01~charge04까지 진행해 요약 동의 후 정보입력(charge04) 단계까지 도달하는지 확인합니다.
     group: inquiry
     order: 60
     depends_on:
       - hom.contract.detail
-    timeout_seconds: 240
+    timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_charge
