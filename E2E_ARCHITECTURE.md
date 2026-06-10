@@ -84,6 +84,7 @@ e2eTester/
     main.py
   artifacts/
   hom_compensation_charge.py
+  hom_compensation_result_cancel.py
   hom_contract_detail.py
   hom_contract_list.py
   hom_kakao_login.py
@@ -222,6 +223,7 @@ Module:
 4. `hom.contract.list`
 5. `hom.contract.detail`
 6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
+7. `hom.compensation.result_cancel` — `hom_compensation_result_cancel.py` (`compensation_result_cancel` 단계)
 
 ### 5.5 Runtime / Runner 계층
 
@@ -242,7 +244,7 @@ Module:
 
 - 로그인 이후 세션을 다음 모듈에 전달해야 함
 - 휴대폰 본인인증에서는 OTP 제출 이후에도 동일 세션으로 로그인 완료까지 이어져야 함
-- 계약목록·계약상세·보험금청구 등 후속 모듈은 동일 세션이 필요함
+- 계약목록·계약상세·보험금청구·보험금청구 결과 조회/취소 등 후속 모듈은 동일 세션이 필요함
 
 ### 5.6 Storage 계층
 
@@ -290,7 +292,8 @@ Module:
               -> 로그인 성공 후 팝업 정리
                   -> 계약목록 조회
                       -> 계약상세 조회
-                      -> 보험금청구 접수(charge00~charge04)
+                          -> 보험금청구 접수(charge00~charge06)
+                              -> 보험금청구 결과 조회 및 취소(result01~result02 → pop-result04 → result01)
 ```
 
 ### Step 1. 메인화면 접속
@@ -301,7 +304,8 @@ Module:
 
 역할:
 
-- 브라우저 클릭 기반 메인 URL 진입
+- 메인 URL 직접 진입 (`page.goto`)
+- 메인화면 전용 `20000ms` timeout 적용
 - 랜딩 팝업 정리
 
 ### Step 2. 로그인 이동
@@ -322,6 +326,7 @@ Module:
 - `hom_phone_login.py` — 휴대폰 인증 (SMS + OTP)
 - `hom_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
 - `hom_login_common.py`
+- `hom_login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
 
 역할:
 
@@ -366,7 +371,7 @@ Module:
 
 역할:
 
-- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/charge00.do"]`** 가시 링크 클릭(실패 시 `charge00.do` 직접 이동).
+- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/charge00.do"]`** 가시 링크 클릭.
 - `charge00`에서 **`a[href*="charge01.do"]`** 가시 링크로 `charge01` 이동(안내 화면의 보험금청구 신청 단계).
 - `charge01`에서 **`get_by_role("link", name=/보험금청구\s*신청/)`** 가시 항목 클릭 → 레이어 **`보험금청구를 위한 필요서류는 확인하셨나요?`** 표시.
 - 팝업에서 **`get_by_role("link", name=/준비가 된 상태/)`**(접근성 트리상 문구: *필요 서류를 확인하여 스캔 파일, 이미지 파일 등으로 준비가 된 상태입니다.*) 클릭 → `charge02` 로딩.
@@ -378,6 +383,65 @@ Module:
 - [필수]보험금 청구를 위한 요약 동의서 우측의 전체동의 버튼 클릭. 하단의 보험금청구신청 버튼 클릭
 - `/fplaza/compensation/charge04.do` 포함 URL 확인
 - 청구 상세내용 표에서 청구유형 우측의 라디오버튼 기타 클릭. 
+- 청구 상세내용 표에서 사고일 우측의 캘린더를 클릭하여 현재 날짜 1달전의 날짜 선택.
+- 하단 조회 버튼 클릭.
+- 청구유형 선택 안내 팝업이 나오는 경우 확인 버튼 클릭.
+- 상세내용 입력 표에서 청구내용 우측의 텍스트박스에 'IT직원 테스트입니다. 바로 취소할 예정입니다.' 입력
+- 하단 다음 버튼 클릭.
+- 청구내용 팝업이 나오는 경우 서류등록진행 버튼 클릭
+- `/fplaza/compensation/charge05.do` 포함 URL 확인
+- 서류제출 시 유의사항 팝업이 나오는 경우 우측 상단의 X 버튼 클릭.
+- 진료비영수증, 진단서, 수술확인서 등 파일 첨부 영역의 파일 추가 버튼을 클릭한 뒤 데스크탑의 스크린샷*.PNG 이미지 중 하나를 랜덤 선택 업로드
+- 진료비 세부(산정) 내역서 파일 첨부 영역의 파일 추가 버튼을 클릭한 뒤 데스크탑의 스크린샷*.PNG 이미지 중 하나를 랜덤 선택 업로드
+- 하단 서류등록/청구완료 버튼 클릭
+- 계속 진행하시겠습니까? 컨펌이 나오는 경우 확인 버튼 클릭.
+- 정상적으로 등록되었습니다. 알럿이 나오는 경우 닫기 버튼 클릭
+- `/fplaza/compensation/charge06.do` 포함 URL 확인
+
+### Step 7. 보험금청구 결과 조회 및 취소
+
+파일:
+
+- `hom_compensation_result_cancel.py`
+
+역할:
+
+- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/result01.do"]`** 가시 링크 클릭.
+- `/fplaza/compensation/result01.do` 포함 URL 확인
+- 결과 목록 상단 탭에서 진행중 탭 앵커 **`#ing`** 이 활성 상태인지 확인하고, 비활성 상태면 `#ing` 클릭.
+- **`table` 「상해/질병/화재보험금 청구내역 목록」** 의 `tbody tr` 중 아래 조건을 모두 만족하는 행을 찾음:
+- 접수일자 셀에 **오늘 날짜(`YYYY.MM.DD`)** 포함
+- 청구내용 셀에 **`IT직원 테스트입니다. 바로 취소할`** 포함(목록에서는 말줄임표로 잘릴 수 있음)
+- 진행상태 셀 값이 **`처리중`**
+- 이용가능 서비스 셀에 **`제출서류확인`**, **`접수취소`** 버튼 노출
+- 여러 건이면 목록 상단 첫 번째 행 선택
+- 선택한 행의 접수번호 링크 클릭(목록 DOM 기준 `onclick="return goView(...)"`) → 상세 화면 이동
+- `/fplaza/compensation/result02.do` 포함 URL 확인
+- 상세 화면의 **`table` 「사고접수내용 상세」** 에서 아래 값 확인:
+- 접수번호
+- 보험청구일자 = 오늘 날짜
+- 사고(진단)일자
+- 청구유형
+- 청구내용 = **`IT직원 테스트입니다. 바로 취소할 예정입니다.`**
+- 상세 화면 서비스 버튼 확인:
+- **`#btn3`** `제출서류확인` (`onclick="return previewDocu();"`)
+- **`#btn4`** `접수취소` (`onclick="return cancelReceipt();"`)
+- **`#btn3`** 제출서류확인 클릭 → 새 탭/팝업 **`/fplaza/compensation/pop-result04.do?conRcpNo={접수번호}`** 열림 확인
+- 팝업에서 heading **`제출서류확인`** 확인
+- 팝업의 제출 파일 목록에서 **최소 2건** 의 `등록파일` 항목과 각 파일의 등록일 표시, 이미지 파일 미리보기가 제대로 되는지 확인
+- 각 `등록파일` 링크 클릭 시 파일 다운로드가 시작되는지 확인
+- 팝업에서 **`전체 다운로드`** 버튼(`onclick="return zipDown();"`) 가시 확인
+- 원래 상세 탭(`/result02.do`)으로 복귀
+- 상세 화면에서 **`#btn4`** 접수취소 클릭
+- 브라우저 `confirm` **`접수를 취소하시겠습니까?`** 표시 확인 후 확인
+- 브라우저 `alert` **`정상적으로 처리 되었습니다.`** 표시 확인 후 확인
+- `/fplaza/compensation/result01.do` 포함 URL로 복귀 확인
+- 진행중 탭(**`#ing`**)에서 방금 취소한 접수번호가 더 이상 조회되지 않는지 확인
+- 완료 탭 앵커 **`#fin`** 클릭
+- 완료 탭 목록에서 동일 접수번호/청구내용 행 조회
+- 해당 행의 진행상태 셀 값이 **`취소`** 인지 확인
+- 완료 탭의 동일 행에서 이용가능 서비스가 **`제출서류확인`만 노출** 되는지 확인
+
 
 ## 7. 현재 UI 입력 모델
 

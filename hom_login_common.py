@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import re
 import sys
@@ -16,7 +17,9 @@ DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("hwgeneralins-login-result.png")
 DEFAULT_ENV_FILE_PATH: Final[Path] = Path(".env")
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
-MAX_TIMEOUT_MS: Final[int] = 10000
+MAX_TIMEOUT_MS: Final[int] = 15000
+SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
+SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
 POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do")
 STEALTH_INIT_SCRIPT: Final[str] = """
 Object.defineProperty(navigator, 'webdriver', {
@@ -677,11 +680,67 @@ def wait_for_login_success(page: Page, config: LoginConfig, dialog_messages: lis
     print("[wait] End login success wait via main page URL")
 
 
+def _apply_screenshot_font_fallback(page: Page) -> None:
+    page.evaluate(
+        """
+        () => {
+            if (document.getElementById('e2e-screenshot-font-fallback')) {
+                return;
+            }
+            const style = document.createElement('style');
+            style.id = 'e2e-screenshot-font-fallback';
+            style.textContent = `
+                *, *::before, *::after {
+                    font-family: Arial, sans-serif !important;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        """
+    )
+    page.wait_for_timeout(150)
+
+
+def _capture_screenshot_with_playwright(page: Page, output_path: Path, timeout_ms: int) -> None:
+    page.screenshot(path=str(output_path), full_page=False, timeout=timeout_ms)
+
+
+def _capture_screenshot_with_cdp(page: Page, output_path: Path) -> None:
+    session = page.context.new_cdp_session(page)
+    result = session.send("Page.captureScreenshot", {"format": "png", "fromSurface": True})
+    output_path.write_bytes(base64.b64decode(result["data"]))
+
+
 def save_screenshot(page: Page, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    scroll_to_page_top(page)
-    page.screenshot(path=str(output_path), full_page=False)
-    print(f"[artifact] Screenshot saved to {output_path}")
+    try:
+        scroll_to_page_top(page)
+    except Exception as exc:
+        print(f"[warn] Failed to scroll before screenshot: {exc}")
+
+    try:
+        _capture_screenshot_with_playwright(page, output_path, SCREENSHOT_TIMEOUT_MS)
+        print(f"[artifact] Screenshot saved to {output_path}")
+        return
+    except PlaywrightTimeoutError as exc:
+        print(f"[warn] Standard screenshot timed out, retry with font fallback: {exc}")
+    except Exception as exc:
+        print(f"[warn] Standard screenshot failed, retry with fallbacks: {exc}")
+
+    try:
+        _apply_screenshot_font_fallback(page)
+        _capture_screenshot_with_playwright(page, output_path, SCREENSHOT_RETRY_TIMEOUT_MS)
+        print(f"[artifact] Screenshot saved to {output_path} (font fallback)")
+        return
+    except Exception as exc:
+        print(f"[warn] Font-fallback screenshot failed, trying CDP capture: {exc}")
+
+    try:
+        _capture_screenshot_with_cdp(page, output_path)
+        print(f"[artifact] Screenshot saved to {output_path} (CDP fallback)")
+        return
+    except Exception as exc:
+        print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
 
 
 def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> None:

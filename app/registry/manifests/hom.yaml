@@ -169,7 +169,7 @@ modules:
   - module_id: hom.compensation.charge
     system_code: hom
     name: 보험금청구 접수(질병/상해)
-    description: 보상 GNB·charge01~charge04까지 진행해 요약 동의 후 정보입력(charge04) 단계까지 도달하는지 확인합니다.
+    description: 보상 GNB 진입부터 신규접수·정보입력·서류등록을 거쳐 보험금청구 완료(charge06)까지 진행되는지 확인합니다.
     group: inquiry
     order: 60
     depends_on:
@@ -178,3 +178,15 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_charge
+  - module_id: hom.compensation.result_cancel
+    system_code: hom
+    name: 보험금청구 결과 조회 및 취소
+    description: 보험금청구 결과조회에서 오늘 접수한 테스트 청구를 찾아 상세·제출서류를 확인한 뒤 접수취소되고 완료 탭에 취소 상태로 반영되는지 확인합니다.
+    group: inquiry
+    order: 70
+    depends_on:
+      - hom.compensation.charge
+    timeout_seconds: 300
+    execution_mode: hom_workflow_step
+    workflow_name: hom_login
+    workflow_step: compensation_result_cancel
