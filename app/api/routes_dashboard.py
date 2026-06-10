@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.notifications.run_completion_email import RunCompletionEmailNotifier
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -14,13 +15,16 @@ templates = Jinja2Templates(directory="app/web/templates")
 async def dashboard_home(request: Request):
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
+    system_codes = [system.system_code for system in systems]
     analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
+    email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "systems": systems,
             "analyzer_status": analyzer_status,
+            "email_status": email_status,
         },
     )
 

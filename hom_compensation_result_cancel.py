@@ -25,6 +25,7 @@ RESULT_DATE_PATTERN = re.compile(r"\d{4}\.\d{2}\.\d{2}")
 RESULT_TABLE_CAPTION = "상해/질병/화재보험금 청구내역 목록"
 DETAIL_TABLE_CAPTION = "사고접수내용 상세"
 RESULT02_DETAIL_STABILIZE_MS = 2000
+PREVIEW_POPUP_TIMEOUT_MS = 20000
 
 
 def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
@@ -257,17 +258,19 @@ def _attach_dialog_recorder(page) -> list[tuple[str, str]]:
 
 
 def _verify_preview_popup(page, receipt_number: str, timeout_ms: int) -> None:
+    popup_timeout_ms = max(timeout_ms, PREVIEW_POPUP_TIMEOUT_MS)
     preview_button = common.first_visible_locator(page.locator(DETAIL_PREVIEW_SELECTOR), "상세 화면 제출서류확인(#btn3)")
-    with page.context.expect_page(timeout=timeout_ms) as popup_info:
+    with page.context.expect_page(timeout=popup_timeout_ms) as popup_info:
         common.click_with_log(preview_button, "상세 화면 제출서류확인 클릭")
     popup = popup_info.value
-    popup.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+    popup.wait_for_load_state("domcontentloaded", timeout=popup_timeout_ms)
+    _wait_url_contains(popup, PREVIEW_POPUP_FRAGMENT, popup_timeout_ms)
 
     if PREVIEW_POPUP_FRAGMENT not in popup.url or f"conRcpNo={receipt_number}" not in popup.url:
         raise RuntimeError(f"제출서류확인 팝업 URL이 예상과 다릅니다: {popup.url}")
 
     heading = popup.get_by_role("heading", name=PREVIEW_HEADING_PATTERN).first
-    common.wait_locator_visible_with_log(heading, timeout_ms, "제출서류확인 팝업 heading")
+    common.wait_locator_visible_with_log(heading, popup_timeout_ms, "제출서류확인 팝업 heading")
 
     items = popup.locator(PREVIEW_LIST_ITEM_SELECTOR)
     item_count = items.count()
@@ -300,7 +303,7 @@ def _verify_preview_popup(page, receipt_number: str, timeout_ms: int) -> None:
                 f"이미지 미리보기를 확인하지 못했습니다: {file_name} ({preview_meta['naturalWidth']}x{preview_meta['naturalHeight']})"
             )
 
-        with popup.expect_download(timeout=timeout_ms) as download_info:
+        with popup.expect_download(timeout=popup_timeout_ms) as download_info:
             common.click_with_log(item.locator("a").first, f"제출서류 다운로드 확인: {file_name}")
         download = download_info.value
         if not download.suggested_filename:
@@ -308,7 +311,7 @@ def _verify_preview_popup(page, receipt_number: str, timeout_ms: int) -> None:
 
     common.wait_locator_visible_with_log(
         popup.locator(PREVIEW_ZIP_DOWNLOAD_SELECTOR),
-        timeout_ms,
+        popup_timeout_ms,
         "제출서류확인 팝업 전체 다운로드 버튼",
     )
     print("[step] 제출서류확인 팝업 검증 완료")

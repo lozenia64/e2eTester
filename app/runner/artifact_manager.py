@@ -7,6 +7,9 @@ class ArtifactManager:
     def __init__(self, root_dir: Path | None = None) -> None:
         self._root_dir = root_dir or Path("artifacts")
 
+    def run_dir(self, run_id: str) -> Path:
+        return self._root_dir / run_id
+
     def module_dir(self, run_id: str, module_id: str) -> Path:
         path = self._root_dir / run_id / module_id
         path.mkdir(parents=True, exist_ok=True)
@@ -20,3 +23,7 @@ class ArtifactManager:
 
     def relative_path(self, path: Path) -> str:
         return "/" + path.as_posix()
+
+    @staticmethod
+    def path_from_relative(relative_path: str) -> Path:
+        return Path(relative_path.lstrip("/"))

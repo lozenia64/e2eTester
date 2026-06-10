@@ -25,6 +25,20 @@
             <p class="analyzer-meta">모델: {{ analyzer_status.model_value }}</p>
             {% endif %}
         </div>
+        <div class="metric-card analyzer-card analyzer-{{ email_status.color }}">
+            <div class="analyzer-card-topline">
+                <span class="metric-label">종료 메일 상태</span>
+                <span class="analyzer-pill analyzer-{{ email_status.color }}">{{ email_status.title }}</span>
+            </div>
+            <strong class="analyzer-message">{{ email_status.message }}</strong>
+            <p class="analyzer-detail">{{ email_status.detail }}</p>
+            {% if email_status.model_value %}
+            <p class="analyzer-meta">Gemini 모델: {{ email_status.model_value }}</p>
+            {% endif %}
+            {% if email_status.recipient_summary %}
+            <p class="analyzer-meta">수신자: {{ email_status.recipient_summary }}</p>
+            {% endif %}
+        </div>
     </div>
 </section>
 

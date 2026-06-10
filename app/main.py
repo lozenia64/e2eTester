@@ -10,6 +10,7 @@ from app.api.routes_runs import router as runs_router
 from app.api.routes_systems import router as systems_router
 from app.api.ws_runs import router as ws_runs_router
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.run_repository import InMemoryRunRepository
@@ -20,10 +21,13 @@ async def lifespan(app: FastAPI):
     registry = ModuleRegistry()
     repository = InMemoryRunRepository()
     failure_analyzer = GeminiFailureAnalyzer.from_env()
+    system_codes = [system.system_code for system in registry.list_systems()]
+    email_notifier = RunCompletionEmailNotifier.from_env(system_codes)
     app.state.run_service = RunService(
         registry=registry,
         repository=repository,
         failure_analyzer=failure_analyzer,
+        run_completion_notifier=email_notifier,
     )
     yield
 

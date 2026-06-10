@@ -3,15 +3,20 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from urllib import error, request
 
+from app.ai.gemini_http import gemini_ssl_mode_detail, load_gemini_transport_settings, post_gemini_generate_content
+from app.core.env_utils import (
+    DEFAULT_ENV_FILE_PATH,
+    env_flag,
+    load_dotenv_file,
+    resolve_env_value,
+    resolve_env_with_source,
+)
 from app.core.models import FailureAnalysis, FailureAnalysisRequest
 
 
-DEFAULT_ENV_FILE_PATH = Path(".env")
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 
@@ -26,52 +31,6 @@ class GeminiFailureAnalyzerStatus:
     model_value: str | None = None
     api_key_source: str | None = None
     model_source: str | None = None
-
-
-def _load_dotenv_file(env_path: Path) -> dict[str, str]:
-    if not env_path.exists():
-        return {}
-
-    values: dict[str, str] = {}
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-        if value and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[key] = value
-    return values
-
-
-def _resolve_env_value(name: str, dotenv_values: dict[str, str]) -> str | None:
-    raw = os.getenv(name)
-    if raw is not None:
-        return raw
-    return dotenv_values.get(name)
-
-
-def _resolve_env_with_source(name: str, dotenv_values: dict[str, str]) -> tuple[str | None, str | None]:
-    raw = os.getenv(name)
-    if raw is not None:
-        return raw, "terminal"
-    fallback = dotenv_values.get(name)
-    if fallback is not None:
-        return fallback, ".env"
-    return None, None
-
-
-def _env_flag(name: str, dotenv_values: dict[str, str], default: bool = False) -> bool:
-    raw = _resolve_env_value(name, dotenv_values)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
 
 def _api_key_looks_valid(api_key: str) -> bool:
     candidate = api_key.strip()
@@ -99,28 +58,34 @@ class GeminiFailureAnalyzer:
     enabled: bool = True
     timeout_seconds: int = 12
     max_inline_image_bytes: int = 2_500_000
+    verify_ssl: bool = True
 
     @classmethod
     def from_env(cls) -> "GeminiFailureAnalyzer | None":
-        dotenv_values = _load_dotenv_file(DEFAULT_ENV_FILE_PATH)
-        enabled = _env_flag("E2E_FAILURE_ANALYZER_ENABLED", dotenv_values, default=False)
-        api_key = (_resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
-        model = (_resolve_env_value("GEMINI_MODEL", dotenv_values) or DEFAULT_GEMINI_MODEL).strip()
+        dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
+        enabled = env_flag("E2E_FAILURE_ANALYZER_ENABLED", dotenv_values, default=False)
+        api_key = (resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
+        model = (resolve_env_value("GEMINI_MODEL", dotenv_values) or DEFAULT_GEMINI_MODEL).strip()
+        transport_settings = load_gemini_transport_settings(dotenv_values)
         if not enabled or not api_key:
             return None
-        return cls(api_key=api_key, model=model, enabled=True)
+        return cls(api_key=api_key, model=model, enabled=True, verify_ssl=transport_settings.verify_ssl)
 
     @classmethod
     def inspect_env_status(cls) -> GeminiFailureAnalyzerStatus:
-        dotenv_values = _load_dotenv_file(DEFAULT_ENV_FILE_PATH)
-        enabled_raw, enabled_source = _resolve_env_with_source("E2E_FAILURE_ANALYZER_ENABLED", dotenv_values)
+        dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
+        transport_settings = load_gemini_transport_settings(dotenv_values)
+        enabled_raw, enabled_source = resolve_env_with_source("E2E_FAILURE_ANALYZER_ENABLED", dotenv_values)
         if enabled_raw is None:
             return GeminiFailureAnalyzerStatus(
                 state="missing",
                 color="red",
                 title="AI 분석 꺼짐",
                 message="E2E_FAILURE_ANALYZER_ENABLED 값이 없습니다.",
-                detail="터미널 환경 변수나 .env 파일에 E2E_FAILURE_ANALYZER_ENABLED=true 를 설정해야 합니다.",
+                detail=(
+                    "터미널 환경 변수나 .env 파일에 E2E_FAILURE_ANALYZER_ENABLED=true 를 설정해야 합니다. "
+                    f"{gemini_ssl_mode_detail(transport_settings)}"
+                ),
             )
 
         enabled = enabled_raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -130,12 +95,15 @@ class GeminiFailureAnalyzer:
                 color="orange",
                 title="AI 분석 비활성",
                 message=f"E2E_FAILURE_ANALYZER_ENABLED={enabled_raw} 으로 설정되어 있습니다.",
-                detail=f"현재 값은 {enabled_source or 'unknown'} 에서 읽혔습니다. AI 분석을 쓰려면 true 로 바꿔야 합니다.",
+                detail=(
+                    f"현재 값은 {enabled_source or 'unknown'} 에서 읽혔습니다. AI 분석을 쓰려면 true 로 바꿔야 합니다. "
+                    f"{gemini_ssl_mode_detail(transport_settings)}"
+                ),
                 enabled_value=enabled_raw,
             )
 
-        api_key, api_key_source = _resolve_env_with_source("GEMINI_API_KEY", dotenv_values)
-        model, model_source = _resolve_env_with_source("GEMINI_MODEL", dotenv_values)
+        api_key, api_key_source = resolve_env_with_source("GEMINI_API_KEY", dotenv_values)
+        model, model_source = resolve_env_with_source("GEMINI_MODEL", dotenv_values)
         model = (model or DEFAULT_GEMINI_MODEL).strip()
         api_key_valid = _api_key_looks_valid(api_key or "")
         model_valid = _model_looks_valid(model)
@@ -150,7 +118,7 @@ class GeminiFailureAnalyzer:
                 color="yellow",
                 title="AI 분석 설정 필요",
                 message="AI 분석은 활성화되어 있지만 Gemini 설정이 유효하지 않습니다.",
-                detail=" ".join(problems),
+                detail=" ".join(problems + [gemini_ssl_mode_detail(transport_settings)]),
                 enabled_value=enabled_raw,
                 model_value=model,
                 api_key_source=api_key_source,
@@ -162,7 +130,10 @@ class GeminiFailureAnalyzer:
             color="blue",
             title="AI 분석 활성",
             message="AI 분석 기능이 활성화되어 있고 Gemini 설정도 유효합니다.",
-            detail=f"API 키는 {api_key_source or 'unknown'}, 모델은 {model_source or 'default'} 에서 읽혔습니다.",
+            detail=(
+                f"API 키는 {api_key_source or 'unknown'}, 모델은 {model_source or 'default'} 에서 읽혔습니다. "
+                f"{gemini_ssl_mode_detail(transport_settings)}"
+            ),
             enabled_value=enabled_raw,
             model_value=model,
             api_key_source=api_key_source,
@@ -256,21 +227,14 @@ class GeminiFailureAnalyzer:
         }
 
     def _post_generate_content(self, payload: dict) -> dict:
-        api_url = f"{self.endpoint}/models/{self.model}:generateContent?key={self.api_key}"
-        http_request = request.Request(
-            api_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        return post_gemini_generate_content(
+            api_key=self.api_key,
+            model=self.model,
+            payload=payload,
+            timeout_seconds=self.timeout_seconds,
+            verify_ssl=self.verify_ssl,
+            endpoint=self.endpoint,
         )
-        try:
-            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"Gemini API HTTP {exc.code}: {detail}") from exc
-        except error.URLError as exc:
-            raise RuntimeError(f"Gemini API request failed: {exc.reason}") from exc
 
     @staticmethod
     def _extract_response_json(response_json: dict) -> dict | None:

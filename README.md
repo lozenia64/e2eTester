@@ -172,6 +172,7 @@ cp .env.example .env
 E2E_FAILURE_ANALYZER_ENABLED=true
 GEMINI_API_KEY="실제_발급받은_API_KEY"
 GEMINI_MODEL="gemini-3.1-flash-lite"
+E2E_GEMINI_SSL_VERIFY=true
 ```
 
 설정이 끝나면 아래처럼 바로 서버를 실행하면 됩니다.
@@ -215,6 +216,7 @@ http://127.0.0.1:8000
 - `.env` 파일을 사용하면 터미널을 새로 열어도 다시 입력할 필요가 없습니다.
 - `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
 - 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
+- 회사망 프록시나 사설 인증서 때문에 Gemini API 에서 `CERTIFICATE_VERIFY_FAILED` 가 발생하면 `E2E_GEMINI_SSL_VERIFY=false` 로 SSL 인증서 검증을 우회할 수 있습니다.
 - AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload`만 실행하면 됩니다.
 - 홈 화면에는 AI 분석 상태 카드가 표시되며, 현재 설정값이 유효한지 바로 확인할 수 있습니다.
 - AI 분석 설정이 잘못되어도 앱은 실행되지만, 실패 분석 결과는 생성되지 않을 수 있습니다.
@@ -232,3 +234,49 @@ http://127.0.0.1:8000
 - `E2E_FAILURE_ANALYZER_ENABLED`: `true`일 때만 실패 분석 기능을 활성화합니다.
 - `GEMINI_API_KEY`: Gemini API 호출 키입니다.
 - `GEMINI_MODEL`: 사용할 모델 이름입니다. 비우면 기본 모델 값을 사용합니다.
+- `E2E_GEMINI_SSL_VERIFY`: 기본값은 `true` 입니다. 회사망 SSL 검사 환경에서 Gemini API 인증서 검증 오류가 날 때만 `false` 로 바꿉니다.
+
+## 선택 기능: 종료 메일 알림
+
+테스트가 최종 종료되면 담당자에게 Gmail로 메일을 보낼 수 있습니다.
+
+- 성공 종료(`PASSED`)와 실패 종료(`FAILED`) 모두 메일을 보냅니다.
+- `WAITING_INPUT` 처럼 중간 대기 상태에서는 메일을 보내지 않습니다.
+- 메일 본문의 Gmail용 HTML은 Gemini API로 생성하고, Gemini 호출이 실패하면 기본 HTML 템플릿으로 자동 fallback 합니다.
+- 수신자 메일은 채널별 환경 변수로 구분합니다. 현재 기본 포함 시스템은 `HOM` 이므로 `E2E_EMAIL_RECIPIENTS_HOM` 을 사용합니다.
+- 한 채널에 여러 수신자를 넣고 싶다면 `|` 로 구분하면 됩니다.
+
+예:
+
+```bash
+E2E_EMAIL_ENABLED=true
+E2E_EMAIL_GMAIL_ACCOUNT="sender@gmail.com"
+E2E_EMAIL_GMAIL_APP_PASSWORD="실제_앱비밀번호"
+E2E_EMAIL_GEMINI_MODEL="gemini-3.1-flash-lite"
+E2E_GEMINI_SSL_VERIFY=true
+E2E_EMAIL_RECIPIENTS_HOM="user1@company.com|user2@company.com|user3@company.com"
+```
+
+이 기능도 아래 우선순위로 값을 읽습니다.
+
+1. 터미널에서 직접 입력한 환경 변수
+2. 프로젝트 폴더의 `.env` 파일
+
+즉, 터미널에 같은 항목을 넣으면 그 값이 우선이고, 없으면 `.env` 값을 사용합니다.
+
+메일 동작 규칙:
+
+- 성공 종료 메일:
+  - 해당 Run 의 모든 스크린샷(`final.png`)을 첨부 대상으로 수집
+  - 같은 스크린샷들을 Gemini HTML 생성 입력에도 함께 사용
+- 실패 종료 메일:
+  - 해당 Run 의 모든 스크린샷과 로그(`execution.log`)를 첨부 대상으로 수집
+  - 같은 스크린샷/로그를 Gemini HTML 생성 입력에도 함께 사용
+- 첨부 용량이나 Gemini 입력 한도를 넘으면 가능한 만큼만 포함하고, 제외된 파일 목록을 메일 본문에 함께 표시
+
+주의:
+
+- 스크린샷과 로그에는 실제 테스트 데이터가 포함될 수 있으므로, 반드시 내부 담당자 메일 주소만 수신자로 사용해야 합니다.
+- 첨부 파일과 일부 로그/스크린샷은 Gemini HTML 생성을 위해 Gemini API로도 전달될 수 있습니다.
+- 홈 화면에는 메일 알림 상태 카드가 표시되어 현재 설정이 유효한지 바로 확인할 수 있습니다.
+- 회사망 SSL 검사로 Gemini API 인증서 오류가 나면 `E2E_GEMINI_SSL_VERIFY=false` 로 설정해 Gemini 호출의 SSL 검증만 우회할 수 있습니다.

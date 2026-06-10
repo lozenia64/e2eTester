@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import DashboardEvent, FailureAnalysisRequest, Run, RunModule
+from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime, StepExecutionResult
@@ -23,13 +24,20 @@ class PendingOtpState:
 
 
 class RunService:
-    def __init__(self, registry: ModuleRegistry, repository: InMemoryRunRepository, failure_analyzer=None) -> None:
+    def __init__(
+        self,
+        registry: ModuleRegistry,
+        repository: InMemoryRunRepository,
+        failure_analyzer=None,
+        run_completion_notifier: RunCompletionEmailNotifier | None = None,
+    ) -> None:
         self._registry = registry
         self._repository = repository
         self._artifact_manager = ArtifactManager()
         self._hom_executor = HomWorkflowExecutor(self._artifact_manager)
         self._pending_otp: dict[str, PendingOtpState] = {}
         self._failure_analyzer = failure_analyzer
+        self._run_completion_notifier = run_completion_notifier
 
     def list_systems(self):
         return self._registry.list_systems()
@@ -112,6 +120,8 @@ class RunService:
         hom_runtime: HomWorkflowRuntime | None = None,
     ) -> None:
         run = await self._repository.get_run(run_id)
+        should_finalize = True
+        current_module: RunModule | None = None
         if start_index == 0:
             run.status = RunStatus.RUNNING
             run.started_at = datetime.now(UTC)
@@ -127,8 +137,10 @@ class RunService:
         modules_by_id = {module.module_id: module for module in run.modules}
         ordered_modules = sorted(run.modules, key=lambda item: item.order)
 
+        forced_status: RunStatus | None = None
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
+                current_module = module
                 if any(modules_by_id[dependency].status != ModuleStatus.PASSED for dependency in module.depends_on):
                     module.status = ModuleStatus.BLOCKED
                     module.message = "선행 모듈 실패로 인해 실행되지 않음"
@@ -219,6 +231,7 @@ class RunService:
                             start_index=index,
                             runtime=hom_runtime,
                         )
+                        should_finalize = False
                         return
                     module.status = status
                     module.message = message
@@ -244,16 +257,16 @@ class RunService:
                 module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
                 await self._repository.save_run(run)
                 await self._publish_module_event("module_finished", run, module)
+        except Exception as exc:
+            forced_status = RunStatus.FAILED
+            await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
         finally:
             if hom_runtime is not None and run.run_id not in self._pending_otp:
                 await asyncio.to_thread(self._hom_executor.close_runtime, hom_runtime)
 
-        run.ended_at = datetime.now(UTC)
-        run.awaiting_input_module_id = None
-        run.awaiting_input_prompt = None
-        run.status = RunStatus.FAILED if any(module.status == ModuleStatus.FAILED for module in run.modules) else RunStatus.PASSED
-        await self._repository.save_run(run)
-        await self._publish_run_event("run_finished", run)
+        if not should_finalize:
+            return
+        await self._finalize_run(run, forced_status)
 
     async def _publish_run_event(self, event_type: str, run: Run) -> None:
         await self._repository.publish(
@@ -350,3 +363,54 @@ class RunService:
             if artifact.lower().endswith(".png"):
                 return str(Path(artifact.lstrip("/")))
         return None
+
+    async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
+        run.ended_at = datetime.now(UTC)
+        run.awaiting_input_module_id = None
+        run.awaiting_input_prompt = None
+        if forced_status is not None:
+            run.status = forced_status
+        else:
+            run.status = RunStatus.FAILED if any(module.status == ModuleStatus.FAILED for module in run.modules) else RunStatus.PASSED
+        await self._repository.save_run(run)
+        await self._publish_run_event("run_finished", run)
+        if self._run_completion_notifier is not None:
+            asyncio.create_task(self._notify_run_completion(run.model_copy(deep=True)))
+
+    async def _notify_run_completion(self, run: Run) -> None:
+        try:
+            await asyncio.to_thread(self._run_completion_notifier.send_run_completion, run)
+        except Exception as exc:
+            print(f"[email] run={run.run_id} 종료 메일 발송 실패: {exc}")
+
+    async def _mark_unexpected_run_failure(
+        self,
+        run: Run,
+        current_module: RunModule | None,
+        ordered_modules: list[RunModule],
+        exc: Exception,
+    ) -> None:
+        await self._repository.save_run(run)
+        target_module = None
+        if current_module is not None and current_module.status in {ModuleStatus.QUEUED, ModuleStatus.RUNNING}:
+            target_module = current_module
+        else:
+            for module in ordered_modules:
+                if module.status in {ModuleStatus.PENDING, ModuleStatus.QUEUED, ModuleStatus.RUNNING}:
+                    target_module = module
+                    break
+
+        if target_module is None:
+            print(f"[run] run={run.run_id} unexpected execution error: {exc}")
+            return
+
+        if target_module.started_at is None:
+            target_module.started_at = datetime.now(UTC)
+        await self._handle_module_log(run, target_module, f"[fatal] {exc}")
+        target_module.status = ModuleStatus.FAILED
+        target_module.message = f"예상하지 못한 실행 오류: {exc}"
+        target_module.logs = await self._repository.get_module_logs(run.run_id, target_module.module_id)
+        target_module.ended_at = datetime.now(UTC)
+        target_module.duration_ms = int((target_module.ended_at - target_module.started_at).total_seconds() * 1000)
+        await self._repository.save_run(run)
+        await self._publish_module_event("module_finished", run, target_module)
