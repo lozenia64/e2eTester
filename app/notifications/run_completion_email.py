@@ -74,6 +74,7 @@ class EmailNotificationConfig:
     smtp_host: str = GMAIL_SMTP_HOST
     smtp_port: int = GMAIL_SMTP_PORT
     timeout_seconds: int = 20
+    gemini_timeout_seconds: int = 90
     max_email_attachment_bytes: int = MAX_EMAIL_ATTACHMENT_BYTES
     max_gemini_attachment_bytes: int = MAX_GEMINI_ATTACHMENT_BYTES
     max_gemini_inline_image_bytes: int = MAX_GEMINI_INLINE_IMAGE_BYTES
@@ -283,20 +284,54 @@ class GeminiEmailHtmlComposer:
         prompt_context = {
             "run": context["run"],
             "module_summary": context["module_summary"],
+            "modules": context["modules"],
             "failed_modules": context["failed_modules"],
             "email_attachment_summary": context["email_attachment_summary"],
             "gemini_input_summary": context["gemini_input_summary"],
         }
         return "\n".join(
             [
-                "당신은 한국어 Gmail HTML 이메일 작성기다.",
-                "아래 JSON을 바탕으로 Gmail에서 바로 렌더링 가능한 HTML 본문 조각만 작성하라.",
-                "반드시 div/table/p/h2/ul/li/span 정도의 안전한 태그만 사용하고 모든 스타일은 inline style 로 작성하라.",
-                "script, style, iframe, form, 외부 이미지, 외부 CSS, 외부 링크를 사용하지 마라.",
-                "개인정보(이름, 생년월일, 전화번호, OTP)를 새로 추론하거나 노출하지 마라.",
-                "성공이면 차분한 완료 메일, 실패면 핵심 실패 모듈과 다음 조치를 강조하라.",
-                "첨부 누락이 있으면 별도 경고 박스를 넣어라.",
-                "응답은 JSON 하나만 반환하고 html 필드에 HTML 문자열을 넣어라.",
+                "# 역할",
+                "당신은 웹 브라우저 기반 E2E 자동화 테스트 결과를 보고하는 시니어 QA 엔지니어이자 한국어 Gmail HTML 이메일 작성기다.",
+                "운영 담당자가 이 메일 하나만 읽어도 테스트가 무엇을 검증했고 결과가 어떠했는지 완전히 파악할 수 있는,",
+                "공식 문서 수준의 '테스트 결과 보고서' HTML 본문을 작성하라.",
+                "",
+                "# 입력 자료",
+                "이 프롬프트와 함께 다음 자료가 제공된다. 모든 자료를 실제로 읽고 분석한 뒤 보고서에 반영하라.",
+                "1. 실행 메타데이터 JSON(아래 첨부): 실행(run) 정보, 모듈별 실행 결과(modules), 실패 모듈 분석(failed_modules), 첨부/제외 파일 요약.",
+                "2. 모듈별 스크린샷 이미지: 각 이미지 바로 앞에 '[screenshot] module_id=... module_name=... order=... path=...' 형식의 레이블 텍스트가 붙어 있다.",
+                "3. 모듈별 실행 로그 텍스트: '[execution_log] module_id=... module_name=... order=... path=...' 레이블 뒤에 로그 본문이 이어진다.",
+                "",
+                "# 분석 지침",
+                "- 스크린샷: 레이블의 module_id 로 어느 모듈의 최종 화면인지 식별하고, 화면에 실제로 무엇이 보이는지(페이지 제목, 주요 UI 상태, 조회 결과, 완료 표시, 오류 팝업/빈 화면 등 이상 징후) 직접 확인하라.",
+                "  모듈 상태(PASSED/FAILED)와 화면 내용이 일치하는지 검증하고, 관찰한 내용을 보고서의 화면 검증 섹션에 모듈별로 1~2문장으로 기술하라.",
+                "- 실행 로그: 시간 흐름에 따라 어떤 단계가 수행되었는지 파악하고, 경고/오류/재시도/타임아웃 등 특이 이벤트를 추출하라.",
+                "  실패가 있으면 실패 직전 로그를 근거로 원인을 분석하고, 근거가 된 로그 메시지를 보고서에 짧게 인용하라.",
+                "- 추측 금지: 스크린샷이나 로그에서 직접 확인되지 않는 사실을 만들어내지 마라. 자료가 제공되지 않은 모듈은 '자료 없음'으로 표기하라.",
+                "",
+                "# 보고서 구성 (아래 순서를 따르라)",
+                "1. 제목 헤더: '[E2E] {시스템명} 테스트 결과 보고서' 형태의 제목과 상태 배지(성공/실패). 성공은 #17804b, 실패는 #c44536 계열 색상 사용.",
+                "2. 실행 개요: Run ID, 시스템, 요청/시작/종료 시각(KST), 총 소요시간, 최종 상태를 표(table)로 정리.",
+                "3. 핵심 요약: 전체 결과를 2~3문장으로 요약. 실패 시 어떤 모듈에서 무엇이 실패했는지, 성공 시 어떤 업무 흐름이 검증되었는지 서술.",
+                "4. 모듈별 결과: modules 배열 전체를 순번/모듈명/상태/소요시간/비고 컬럼의 표로 정리. 상태는 색상으로 구분(성공 녹색, 실패 적색, 그 외 회색).",
+                "5. 화면 검증(스크린샷 분석): 제공된 스크린샷을 모듈 순서대로 분석한 관찰 결과. 각 항목에 모듈명과 관찰 내용을 기술.",
+                "6. 로그 분석: 로그에서 확인한 주요 진행 이벤트와 특이사항 요약. 로그가 제공되지 않았으면 이 섹션은 생략.",
+                "7. 실패 상세 분석(실패 시에만): 실패 모듈별로 증상, 로그/화면 근거, 추정 원인, 권장 조치를 정리. failed_modules 의 AI 분석 내용이 있으면 함께 반영.",
+                "8. 첨부 안내: 메일에 첨부된 스크린샷/로그 건수. 용량 한도로 제외된 파일이 있으면 눈에 띄는 경고 박스로 목록과 사유를 표시.",
+                "9. 푸터: 시스템 자동 발송 메일이라는 안내 문구를 작은 회색 글씨로 추가.",
+                "",
+                "# HTML 작성 규칙",
+                "- Gmail에서 바로 렌더링 가능한 HTML 본문 조각만 작성하라(html/head/body 태그 없이 최상위 div 하나로 시작).",
+                "- 허용 태그: div, table, thead, tbody, tr, td, th, p, h2, h3, ul, li, span, strong, code, hr, br 만 사용하라.",
+                "- 모든 스타일은 inline style 로 작성하고, 전체를 max-width:760px 의 카드형 레이아웃으로 구성하라.",
+                "- 글꼴은 Arial,'Noto Sans KR',sans-serif 를 사용하고 본문 line-height 는 1.6 정도로 유지하라.",
+                "- script, style, iframe, form, input, button, 외부 이미지(src), 외부 CSS, 외부 링크(href)를 절대 사용하지 마라.",
+                "- 개인정보(이름, 생년월일, 전화번호, OTP, 계약번호 등)를 새로 추론하거나 노출하지 마라. 화면에 보이더라도 보고서에는 옮기지 마라.",
+                "",
+                "# 출력 형식",
+                "응답은 JSON 하나만 반환하고 html 필드에 완성된 HTML 문자열을 넣어라.",
+                "",
+                "## 실행 메타데이터",
                 json.dumps(prompt_context, ensure_ascii=False, indent=2),
             ]
         )
@@ -334,7 +369,7 @@ class RunCompletionEmailBuilder:
             GeminiEmailHtmlComposer(
                 config.gemini_api_key,
                 config.gemini_model,
-                timeout_seconds=config.timeout_seconds,
+                timeout_seconds=config.gemini_timeout_seconds,
                 verify_ssl=config.gemini_verify_ssl,
             )
             if config.gemini_enabled and config.gemini_api_key
@@ -572,7 +607,7 @@ class RunCompletionEmailNotifier:
         return collected
 
     def _select_email_attachments(self, run: Run, artifacts: list[RunArtifact]) -> AttachmentSelection:
-        wanted_kinds = _wanted_kinds(run)
+        wanted_kinds = _wanted_email_kinds(run)
         included: list[RunArtifact] = []
         omitted: list[OmittedArtifact] = []
         total_bytes = 0
@@ -592,16 +627,18 @@ class RunCompletionEmailNotifier:
         return AttachmentSelection(included=included, omitted=omitted, total_bytes=total_bytes)
 
     def _select_gemini_prompt_inputs(self, run: Run, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
-        wanted_kinds = _wanted_kinds(run)
+        # 메일 첨부와 달리 Gemini 입력에는 성공/실패와 무관하게 스크린샷과 로그를 모두 제공한다.
+        # 보고서 품질이 화면·로그 분석에 의존하기 때문이다.
         parts: list[dict] = []
         omitted: list[OmittedArtifact] = []
         included_labels: list[str] = []
         total_bytes = 0
 
         for artifact in artifacts:
-            if artifact.kind not in wanted_kinds:
-                continue
-
+            label = (
+                f"module_id={artifact.module_id} module_name={artifact.module_name} "
+                f"order={artifact.order} path={artifact.relative_path}"
+            )
             if artifact.kind == "screenshot":
                 if artifact.size_bytes > self._config.max_gemini_inline_image_bytes:
                     omitted.append(
@@ -620,6 +657,7 @@ class RunCompletionEmailNotifier:
                     )
                     continue
                 mime_type = mimetypes.guess_type(artifact.path.name)[0] or "image/png"
+                parts.append({"text": f"[screenshot] {label}"})
                 parts.append(
                     {
                         "inline_data": {
@@ -645,7 +683,7 @@ class RunCompletionEmailNotifier:
             if len(log_text.encode("utf-8")) > self._config.max_gemini_log_bytes:
                 log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode("utf-8", errors="ignore")
                 log_text = "[truncated_tail]\n" + log_text.lstrip()
-            parts.append({"text": f"[execution_log]\npath={artifact.relative_path}\n{log_text}"})
+            parts.append({"text": f"[execution_log] {label}\n{log_text}"})
             included_labels.append(f"log:{artifact.relative_path}")
             total_bytes += min(len(log_text.encode("utf-8")), self._config.max_gemini_log_bytes)
 
@@ -659,8 +697,22 @@ def _build_subject(run: Run) -> str:
 
 def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_selection: GeminiPromptSelection) -> dict:
     module_summary = _module_status_counts(run)
+    ordered_modules = sorted(run.modules, key=lambda item: item.order)
+    modules = [
+        {
+            "order": module.order,
+            "module_id": module.module_id,
+            "module_name": module.name,
+            "group": module.group,
+            "status": module.status.value,
+            "message": module.message,
+            "duration_text": _format_module_duration(module.duration_ms),
+            "retry_count": module.retry_count,
+        }
+        for module in ordered_modules
+    ]
     failed_modules = []
-    for module in sorted(run.modules, key=lambda item: item.order):
+    for module in ordered_modules:
         if module.status != ModuleStatus.FAILED:
             continue
         failed_modules.append(
@@ -686,6 +738,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
             "duration_text": _format_duration(run),
         },
         "module_summary": module_summary,
+        "modules": modules,
         "failed_modules": failed_modules,
         "email_attachment_summary": {
             "screenshot_count": sum(1 for artifact in email_selection.included if artifact.kind == "screenshot"),
@@ -705,7 +758,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
     }
 
 
-def _wanted_kinds(run: Run) -> set[str]:
+def _wanted_email_kinds(run: Run) -> set[str]:
     if run.status == RunStatus.PASSED:
         return {"screenshot"}
     return {"screenshot", "log"}
@@ -732,6 +785,18 @@ def _format_datetime(value) -> str:
         return "-"
     local_dt = value.astimezone(KST)
     return local_dt.strftime("%Y-%m-%d %H:%M:%S KST")
+
+
+def _format_module_duration(duration_ms: int | None) -> str:
+    if duration_ms is None:
+        return "-"
+    if duration_ms < 1000:
+        return f"{duration_ms} ms"
+    seconds = duration_ms // 1000
+    minutes, seconds = divmod(seconds, 60)
+    if minutes:
+        return f"{minutes}분 {seconds}초"
+    return f"{seconds}초"
 
 
 def _format_duration(run: Run) -> str:
