@@ -1,3 +1,18 @@
+const STATUS_BADGE_CLASSES = {
+    pending: "bg-gray-100 text-gray-600",
+    queued: "bg-gray-100 text-gray-600",
+    running: "bg-blue-100 text-blue-700",
+    waiting_input: "bg-amber-100 text-amber-700",
+    passed: "bg-emerald-100 text-emerald-700",
+    failed: "bg-red-100 text-red-700",
+    blocked: "bg-orange-100 text-orange-700",
+};
+
+function statusBadgeClassName(status, sizeClasses = "px-2.5 py-1") {
+    const tone = STATUS_BADGE_CLASSES[String(status).toLowerCase()] ?? "bg-gray-100 text-gray-600";
+    return `inline-flex items-center rounded-full text-xs font-semibold ${sizeClasses} ${tone}`;
+}
+
 function collectFormInput(form) {
     const formData = new FormData(form);
     const inputData = {};
@@ -112,7 +127,7 @@ function updateModuleCard(module) {
     card.classList.add(`status-${module.status.toLowerCase()}`);
 
     const statusNode = card.querySelector('[data-role="module-status"]');
-    statusNode.className = `status-badge status-${module.status.toLowerCase()}`;
+    statusNode.className = statusBadgeClassName(module.status);
     statusNode.textContent = module.status;
 
     card.querySelector('[data-role="module-message"]').textContent = module.message;
@@ -136,6 +151,7 @@ function updateModuleCard(module) {
         link.href = artifact;
         link.target = "_blank";
         link.rel = "noreferrer";
+        link.className = "truncate font-medium text-indigo-600 hover:underline";
         link.textContent = artifact.split("/").pop();
         artifactList.appendChild(link);
     }
@@ -228,7 +244,7 @@ function bindRunSocket() {
 
         if (message.event_type === "snapshot") {
             document.getElementById("run-status").textContent = message.payload.status;
-            document.getElementById("run-status").className = `status-badge status-${message.payload.status.toLowerCase()}`;
+            document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
             updateOtpPanel(message.payload);
             for (const module of message.payload.modules) {
                 updateModuleCard(module);
@@ -247,7 +263,7 @@ function bindRunSocket() {
         if (message.run_status) {
             const runStatus = document.getElementById("run-status");
             runStatus.textContent = message.run_status;
-            runStatus.className = `status-badge status-${message.run_status.toLowerCase()}`;
+            runStatus.className = statusBadgeClassName(message.run_status, "px-3 py-1.5");
         }
 
         if (message.event_type === "run_waiting_input" || message.event_type === "run_resumed" || message.event_type === "run_finished") {

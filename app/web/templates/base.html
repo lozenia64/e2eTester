@@ -4,22 +4,49 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}E2E Tester{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/static/app.css?v=5">
 </head>
-<body>
-    <div class="page-shell">
-        <header class="topbar">
-            <a href="/" class="brand">E2E Control Deck</a>
-            <div class="topbar-copy">Python + FastAPI + Playwright MCP</div>
-        </header>
-        <main>
+<body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
+    <!-- 모바일 상단바 -->
+    <header class="sticky top-0 z-40 flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 md:hidden">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </span>
+        <a href="/" class="text-sm font-bold">E2E Control Deck</a>
+    </header>
+
+    <!-- 사이드바 -->
+    <aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-gray-200 bg-white md:flex">
+        <div class="flex items-center gap-3 px-6 py-5">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </span>
+            <div>
+                <a href="/" class="block text-sm font-bold leading-tight text-gray-900">E2E Control Deck</a>
+                <p class="text-xs text-gray-400">Test Automation</p>
+            </div>
+        </div>
+        <nav class="flex-1 space-y-1 px-3 py-4">
+            <p class="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">메뉴</p>
+            <a href="/" class="flex items-center gap-3 rounded-lg bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-700">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                대시보드
+            </a>
+        </nav>
+        <div class="border-t border-gray-200 px-6 py-4">
+            <p class="text-xs font-semibold text-gray-500">Stack</p>
+            <p class="mt-1 text-xs leading-relaxed text-gray-400">Python · FastAPI<br>Playwright MCP · Gemini</p>
+        </div>
+    </aside>
+
+    <main class="md:pl-64">
+        <div class="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 md:px-8">
             {% block content %}{% endblock %}
-        </main>
-    </div>
-    <script src="/static/app.js?v=3" defer></script>
+        </div>
+    </main>
+    <script src="/static/app.js?v=5" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -3,101 +3,150 @@
 {% block title %}E2E Systems{% endblock %}
 
 {% block content %}
-<section class="hero-panel">
-    <div>
-        <p class="eyebrow">System Trigger</p>
-        <h1>시스템 단위 E2E 실행</h1>
-        <p class="hero-copy">시스템 버튼을 누르면 Run이 생성되고, 각 기능 모듈 상태가 실시간 노드 대시보드로 전개됩니다.</p>
-    </div>
-    <div class="hero-metrics">
-        <div class="metric-card">
-            <span class="metric-label">등록 시스템</span>
-            <strong class="metric-value">{{ systems|length }}</strong>
-        </div>
-        <div class="metric-card analyzer-card analyzer-{{ analyzer_status.color }}">
-            <div class="analyzer-card-topline">
-                <span class="metric-label">AI 분석 상태</span>
-                <span class="analyzer-pill analyzer-{{ analyzer_status.color }}">{{ analyzer_status.title }}</span>
-            </div>
-            <strong class="analyzer-message">{{ analyzer_status.message }}</strong>
-            <p class="analyzer-detail">{{ analyzer_status.detail }}</p>
-            {% if analyzer_status.model_value %}
-            <p class="analyzer-meta">모델: {{ analyzer_status.model_value }}</p>
-            {% endif %}
-        </div>
-        <div class="metric-card analyzer-card analyzer-{{ email_status.color }}">
-            <div class="analyzer-card-topline">
-                <span class="metric-label">종료 메일 상태</span>
-                <span class="analyzer-pill analyzer-{{ email_status.color }}">{{ email_status.title }}</span>
-            </div>
-            <strong class="analyzer-message">{{ email_status.message }}</strong>
-            <p class="analyzer-detail">{{ email_status.detail }}</p>
-            {% if email_status.model_value %}
-            <p class="analyzer-meta">Gemini 모델: {{ email_status.model_value }}</p>
-            {% endif %}
-            {% if email_status.recipient_summary %}
-            <p class="analyzer-meta">수신자: {{ email_status.recipient_summary }}</p>
-            {% endif %}
-        </div>
-    </div>
-</section>
+{% set tone_pill = {'red': 'bg-red-100 text-red-700', 'orange': 'bg-orange-100 text-orange-700', 'yellow': 'bg-amber-100 text-amber-700', 'blue': 'bg-blue-100 text-blue-700'} %}
 
-<section class="section-grid">
-    <div class="panel">
-        <div class="panel-heading">
-            <h2>시스템</h2>
-            <p>아키텍처 문서 기준 시스템 목록</p>
+<!-- 페이지 헤더 -->
+<div>
+    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">System Trigger</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">시스템 단위 E2E 실행</h1>
+    <p class="mt-1.5 text-sm text-gray-500">시스템 버튼을 누르면 Run이 생성되고, 각 기능 모듈 상태가 실시간 노드 대시보드로 전개됩니다.</p>
+</div>
+
+<!-- 상태 카드 -->
+<div class="grid gap-4 md:grid-cols-3">
+    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+            </span>
+            <p class="text-sm font-medium text-gray-500">등록 시스템</p>
         </div>
-        <div class="system-grid">
-            {% for system in systems %}
-            <article class="system-card">
-                <div>
-                    <p class="system-code">{{ system.system_code|upper }}</p>
-                    <h3>{{ system.name }}</h3>
-                    <p class="system-description">{{ system.description }}</p>
-                </div>
-                <form class="system-form" data-system-code="{{ system.system_code }}">
-                    {% for field in system.run_form %}
-                    <label
-                        class="form-field{% if field.show_when %} conditional-field{% endif %}"
-                        {% if field.show_when %}
-                        {% set _sw_key = field.show_when.keys()|list|first %}
-                        {% set _sw_val = field.show_when[_sw_key] %}
-                        data-show-when-key="{{ _sw_key }}"
-                        data-show-when-value="{% if _sw_val is string %}{{ _sw_val }}{% else %}{{ _sw_val|join(',') }}{% endif %}"
-                        data-required="{{ 'true' if field.required else 'false' }}"
-                        {% endif %}
-                    >
-                        <span>{{ field.label }}{% if field.required %} *{% endif %}</span>
-                        {% if field.type == "select" %}
-                        <select name="{{ field.key }}" {% if field.required %}required{% endif %}>
-                            {% for option in field.options %}
-                            <option value="{{ option.value }}" {% if option.value == field.default %}selected{% endif %}>{{ option.label }}</option>
-                            {% endfor %}
-                        </select>
-                        {% else %}
-                        <input
-                            type="{{ field.type }}"
-                            name="{{ field.key }}"
-                            value="{{ field.default }}"
-                            placeholder="{{ field.placeholder }}"
-                            {% if field.required %}required{% endif %}
-                        >
-                        {% endif %}
-                        {% if field.help_text %}
-                        <small>{{ field.help_text }}</small>
-                        {% endif %}
-                    </label>
-                    {% endfor %}
-                    <span class="pill">모듈 {{ system.modules|length }}개</span>
-                    <div class="system-footer">
-                        <span class="form-note">HOM은 휴대폰인증·카카오인증을 실행할 수 있으며, 그 외 인증수단은 아직 연결되지 않았습니다.</span>
-                        <button type="submit" class="run-button" data-system-code="{{ system.system_code }}">실행</button>
-                    </div>
-                </form>
-            </article>
-            {% endfor %}
-        </div>
+        <p class="mt-4 text-3xl font-bold tracking-tight text-gray-900">{{ systems|length }}</p>
+        <p class="mt-1 text-xs text-gray-400">아키텍처 문서 기준 등록된 시스템 수</p>
     </div>
-</section>
+
+    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                </span>
+                <p class="text-sm font-medium text-gray-500">AI 분석 상태</p>
+            </div>
+            <span class="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ tone_pill.get(analyzer_status.color, 'bg-gray-100 text-gray-600') }}">{{ analyzer_status.title }}</span>
+        </div>
+        <p class="mt-4 text-sm font-semibold text-gray-900">{{ analyzer_status.message }}</p>
+        <p class="mt-1.5 text-xs leading-relaxed text-gray-400">{{ analyzer_status.detail }}</p>
+        {% if analyzer_status.model_value %}
+        <p class="mt-2 text-xs font-medium text-gray-500">모델 · {{ analyzer_status.model_value }}</p>
+        {% endif %}
+    </div>
+
+    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </span>
+                <p class="text-sm font-medium text-gray-500">종료 메일 상태</p>
+            </div>
+            <span class="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ tone_pill.get(email_status.color, 'bg-gray-100 text-gray-600') }}">{{ email_status.title }}</span>
+        </div>
+        <p class="mt-4 text-sm font-semibold text-gray-900">{{ email_status.message }}</p>
+        <p class="mt-1.5 text-xs leading-relaxed text-gray-400">{{ email_status.detail }}</p>
+        {% if email_status.model_value %}
+        <p class="mt-2 text-xs font-medium text-gray-500">Gemini 모델 · {{ email_status.model_value }}</p>
+        {% endif %}
+        {% if email_status.recipient_summary %}
+        <p class="mt-0.5 text-xs font-medium text-gray-500">수신자 · {{ email_status.recipient_summary }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 시스템 목록 -->
+<div class="space-y-4">
+    <div>
+        <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템</h2>
+        <p class="text-sm text-gray-500">카드를 클릭해 펼친 뒤 입력값을 채우고 실행하세요.</p>
+    </div>
+    <div class="space-y-3">
+        {% for system in systems %}
+        <details class="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 transition hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                <div class="flex min-w-0 items-center gap-4">
+                    <span class="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ system.system_code|upper }}</span>
+                    <div class="min-w-0">
+                        <h3 class="text-base font-bold text-gray-900">{{ system.name }}</h3>
+                        <p class="truncate text-sm text-gray-500">{{ system.description }}</p>
+                    </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-3">
+                    <span class="hidden items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200 sm:inline-flex">모듈 {{ system.modules|length }}개</span>
+                    <span class="hidden items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 sm:inline-flex">실행 가능</span>
+                    <svg class="h-5 w-5 shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+            </summary>
+            <form class="system-form grid gap-x-4 gap-y-5 border-t border-gray-100 px-6 py-6 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
+                {% for field in system.run_form %}
+                <label
+                    class="form-field flex flex-col gap-1.5{% if field.show_when %} conditional-field{% endif %}"
+                    {% if field.show_when %}
+                    {% set _sw_key = field.show_when.keys()|list|first %}
+                    {% set _sw_val = field.show_when[_sw_key] %}
+                    data-show-when-key="{{ _sw_key }}"
+                    data-show-when-value="{% if _sw_val is string %}{{ _sw_val }}{% else %}{{ _sw_val|join(',') }}{% endif %}"
+                    data-required="{{ 'true' if field.required else 'false' }}"
+                    {% endif %}
+                >
+                    <span class="text-sm font-medium text-gray-700">{{ field.label }}{% if field.required %} <span class="text-red-500">*</span>{% endif %}</span>
+                    {% if field.type == "select" %}
+                    <select name="{{ field.key }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" {% if field.required %}required{% endif %}>
+                        {% for option in field.options %}
+                        <option value="{{ option.value }}" {% if option.value == field.default %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input
+                        type="{{ field.type }}"
+                        name="{{ field.key }}"
+                        value="{{ field.default }}"
+                        placeholder="{{ field.placeholder }}"
+                        class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        {% if field.required %}required{% endif %}
+                    >
+                    {% endif %}
+                    {% if field.help_text %}
+                    <small class="text-xs leading-relaxed text-gray-400">{{ field.help_text }}</small>
+                    {% endif %}
+                </label>
+                {% endfor %}
+                <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
+                    <p class="max-w-sm text-xs leading-relaxed text-gray-400">HOM은 휴대폰인증·카카오인증을 실행할 수 있으며, 그 외 인증수단은 아직 연결되지 않았습니다.</p>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60" data-system-code="{{ system.system_code }}">실행</button>
+                </div>
+            </form>
+        </details>
+        {% endfor %}
+
+        {# 아직 연결되지 않은 시스템 placeholder — 등록되면 위 목록으로 자동 대체 #}
+        {% set registered_codes = systems|map(attribute='system_code')|map('upper')|list %}
+        {% for upcoming_code in ['MHM', 'HWFP'] %}
+        {% if upcoming_code not in registered_codes %}
+        <div class="flex cursor-not-allowed select-none items-center justify-between gap-4 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-5 opacity-60" aria-disabled="true" title="아직 연결되지 않은 시스템입니다.">
+            <div class="flex min-w-0 items-center gap-4">
+                <span class="inline-flex shrink-0 items-center rounded-md bg-gray-100 px-2.5 py-1.5 font-mono text-xs font-semibold text-gray-500 ring-1 ring-inset ring-gray-200">{{ upcoming_code }}</span>
+                <div class="min-w-0">
+                    <h3 class="text-base font-bold text-gray-500">{{ upcoming_code }}</h3>
+                    <p class="truncate text-sm text-gray-400">아직 연결되지 않은 시스템입니다. 모듈이 등록되면 실행할 수 있습니다.</p>
+                </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-3">
+                <span class="hidden items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500 sm:inline-flex">준비 중</span>
+                <svg class="h-4 w-4 shrink-0 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}
