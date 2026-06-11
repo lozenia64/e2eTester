@@ -9,15 +9,17 @@
 
 즉, 추상적인 이상 구조만 설명하는 문서가 아니라, 현재 코드가 어느 단계까지 와 있는지와 앞으로 어떤 방향으로 정리할지를 함께 기록한다.
 
+**시스템별 테스트 시나리오는 이 문서에 쓰지 않는다.** 각 시스템(HOM, MHM, HWFP, ...)의 시나리오는 `docs/scenarios/{system_code}.md` 개별 문서로 관리한다. 자세한 규칙은 [6. 시스템 시나리오 문서](#6-시스템-시나리오-문서)를 참고한다.
+
 ## 2. 현재 구현 한 줄 요약
 
 현재 구현은 다음과 같다.
 
 - FastAPI 서버가 웹 화면과 API, WebSocket을 제공한다.
-- HOM 시스템은 manifest 기반으로 로드된다.
+- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: HOM)
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
-- OTP는 **휴대폰인증**에서만 Run 도중 `WAITING_INPUT`으로 전환한 뒤 웹에서 제출한다. **카카오인증**은 OTP 없이 자동화 스크립트가 `인증요청` → 60초 대기 → `인증완료`까지 처리한다.
+- 모듈 실행 도중 사용자 입력이 필요하면 Run이 `WAITING_INPUT`으로 전환되고, 웹에서 입력을 제출해 재개할 수 있다. (예: HOM 휴대폰인증의 OTP)
 
 현재는 완성형 플랫폼이 아니라, “운영 가능한 작은 샘플 플랫폼” 단계다.
 
@@ -82,6 +84,9 @@ e2eTester/
         app.css
         app.js
     main.py
+  docs/
+    scenarios/
+      hom.md
   artifacts/
   hom_compensation_charge.py
   hom_compensation_result_cancel.py
@@ -122,7 +127,7 @@ e2eTester/
 - 최근 Run 패널은 제거되어 있다.
 - 홈 화면에는 AI 분석 설정 상태 카드가 표시된다.
 - 실행하면 곧바로 Run 상세 화면으로 이동한다.
-- 인증 수단 셀렉트에서 **휴대폰인증**과 **카카오인증**을 실행할 수 있다. (금융·공동인증서는 API에서 거부)
+- 인증 수단처럼 시스템별 실행 옵션은 manifest 의 `run_form` 정의로 렌더링된다.
 
 ### 5.2 API 계층
 
@@ -145,7 +150,7 @@ e2eTester/
 - OTP 재개 (`POST /api/runs/{run_id}/otp`)
 - 실시간 상태 이벤트 스트리밍
 
-**참고:** OTP API는 **휴대폰인증** Run에서 본인인증 단계가 `WAITING_INPUT`일 때만 의미가 있다. 카카오인증 Run에서는 해당 단계가 이 상태로 멈추지 않는다.
+**참고:** OTP API는 Run이 `WAITING_INPUT` 상태로 멈춰 있을 때만 의미가 있다. 어떤 인증 수단이 이 상태를 만드는지는 각 시스템 시나리오 문서를 참고한다.
 
 ### 5.3 Orchestrator 계층
 
@@ -153,7 +158,7 @@ e2eTester/
 
 역할:
 
-- Run 생성 시 `system_code`가 `hom`이면 `auth_method`는 `phone` 또는 `kakao`만 허용한다. 그 외 값은 요청 단계에서 거절된다.
+- Run 생성 시 입력값 검증 (예: `system_code`가 `hom`이면 `auth_method`는 `phone` 또는 `kakao`만 허용하고, 그 외 값은 요청 단계에서 거절)
 - manifest 기준 모듈 리스트 생성
 - 모듈 상태 전이 관리
 - 의존성 실패 시 `BLOCKED` 처리
@@ -201,29 +206,21 @@ Module:
 - Run form 정의 로드
 - 모듈 메타데이터 로드
 
-현재 `hom.yaml` 에 들어 있는 정보:
+manifest 에 들어 있는 정보:
 
 - 시스템 코드, 이름, 설명
 - 폼 필드 정의
 - `show_when` 기반 조건부 노출 규칙
 - 모듈 순서와 의존성
 - `workflow_step`
-- 모듈별 `timeout_seconds`(본인인증 로그인 300초, 보험금청구 접수 300초, 그 외 HOM 단계는 주로 180초)
+- 모듈별 `timeout_seconds`
 
 실행 규칙:
 
 - 모듈은 `order` 오름차순으로 순차 실행된다.
 - `depends_on` 은 추가 실행 제약이며, 선행 모듈이 모두 `PASSED` 여야 다음 모듈이 실행된다.
 
-현재 HOM 모듈 목록 (`hom.yaml` `order` 기준):
-
-1. `hom.main.access`
-2. `hom.login.move`
-3. `hom.login.phone_login` — `auth_method`에 따라 `hom_phone_login`(휴대폰·OTP) 또는 `hom_kakao_login`(카카오·60초·`인증완료`) 실행
-4. `hom.contract.list`
-5. `hom.contract.detail`
-6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
-7. `hom.compensation.result_cancel` — `hom_compensation_result_cancel.py` (`compensation_result_cancel` 단계)
+시스템별 실제 모듈 목록과 단계별 동작은 각 시스템 시나리오 문서(`docs/scenarios/`)를 참고한다.
 
 ### 5.5 Runtime / Runner 계층
 
@@ -280,188 +277,33 @@ Module:
 - 기본값은 비활성화다.
 - 설정이 잘못되어도 앱은 계속 실행되며, 실패 분석만 생략될 수 있다.
 
-## 6. 현재 HOM 샘플 워크플로우
+## 6. 시스템 시나리오 문서
 
-현재 실제 흐름은 아래와 같다.
+시스템별 테스트 시나리오(워크플로우 단계, 모듈 목록, 화면별 검증 항목, 입력 모델)는 이 문서에 직접 쓰지 않고, 시스템마다 개별 문서로 분리해 관리한다.
 
-```text
-메인화면 접속
-  -> 로그인 이동
-      -> 본인인증 로그인
-          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
-              -> 로그인 성공 후 팝업 정리
-                  -> 계약목록 조회
-                      -> 계약상세 조회
-                          -> 보험금청구 접수(charge00~charge06)
-                              -> 보험금청구 결과 조회 및 취소(result01~result02 → pop-result04 → result01)
-```
+규칙:
 
-### Step 1. 메인화면 접속
+- 위치: `docs/scenarios/{system_code}.md`
+- manifest(`app/registry/manifests/{system_code}.yaml`)와 1:1로 대응한다.
+- 새 시스템(MHM, HWFP 등)을 추가할 때는 manifest와 함께 시나리오 문서도 같이 추가한다.
+- 시나리오 문서에는 시스템 개요, 모듈 목록, 단계별 상세 동작(selector·URL 검증 포함), Run form 입력 모델을 기록한다.
+- 시스템의 흐름이나 selector 를 바꾸면 해당 시나리오 문서도 함께 갱신한다.
 
-파일:
+현재 작성된 시나리오 문서:
 
-- `hom_main_access.py`
-
-역할:
-
-- 메인 URL 직접 진입 (`page.goto`)
-- 메인화면 전용 `20000ms` timeout 적용
-- 랜딩 팝업 정리
-
-### Step 2. 로그인 이동
-
-파일:
-
-- `hom_login_move.py`
-
-역할:
-
-- 상단 로그인 링크 탐색
-- 로그인 페이지 이동
-
-### Step 3. 본인인증 로그인
-
-파일:
-
-- `hom_phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `hom_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
-- `hom_login_common.py`
-- `hom_login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
-
-역할:
-
-- 인증 수단에 따라 분기
-- **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
-- **카카오**: [`/util/login/login.do`](https://www.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
-- `/my/main.do` 포함 URL 진입 확인
-- 로그인 후 팝업 정리 시도
-- 스크린샷 저장
-
-### Step 4. 계약목록 조회
-
-파일:
-
-- `hom_contract_list.py`
-
-역할:
-
-- `MY한화 > 개인계약 조회` 이동
-- `/fplaza/inquiry/contract01.do` 포함 URL 확인
-- 목록 건수 확인
-- 스크린샷 저장
-
-### Step 5. 계약상세 조회
-
-파일:
-
-- `hom_contract_detail.py`
-
-역할:
-
-- `/fplaza/inquiry/contract01.do` 화면에서 증권번호 중 하나로 이동
-- `/fplaza/inquiry/contract02.do` 포함 URL 확인
-- 계약일반정보,수익자정보,자동이체현황,우편물 수령지/연락처,담당자정보,계약자정보 확인
-- `final.png`: 실제 계약상세 웹 화면 전체 스크린샷(데이터 표시 검증용; `artifacts/`에 그대로 저장)
-
-### Step 6. 보험금청구 접수
-
-파일:
-
-- `hom_compensation_charge.py`
-
-역할:
-
-- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/charge00.do"]`** 가시 링크 클릭.
-- `charge00`에서 **`a[href*="charge01.do"]`** 가시 링크로 `charge01` 이동(안내 화면의 보험금청구 신청 단계).
-- `charge01`에서 **`get_by_role("link", name=/보험금청구\s*신청/)`** 가시 항목 클릭 → 레이어 **`보험금청구를 위한 필요서류는 확인하셨나요?`** 표시.
-- 팝업에서 **`get_by_role("link", name=/준비가 된 상태/)`**(접근성 트리상 문구: *필요 서류를 확인하여 스캔 파일, 이미지 파일 등으로 준비가 된 상태입니다.*) 클릭 → `charge02` 로딩.
-- `/fplaza/compensation/charge02.do` 포함 URL 확인
-- 청구대상자 선택 표에서 본인 우측의 이름 클릭 후 하단 청구가능계약 조회 버튼 클릭
-- 보험금청구 안내 팝업이 나오는 경우 확인 버튼 클릭하여 팝업 종료
-- 신규접수 버튼을 클릭. 신규,추가접수 안내 팝업이 나오는 경우 신규접수 버튼 클릭.
-- `/fplaza/compensation/charge03.do` 포함 URL 확인
-- [필수]보험금 청구를 위한 요약 동의서 우측의 전체동의 버튼 클릭. 하단의 보험금청구신청 버튼 클릭
-- `/fplaza/compensation/charge04.do` 포함 URL 확인
-- 청구 상세내용 표에서 청구유형 우측의 라디오버튼 기타 클릭. 
-- 청구 상세내용 표에서 사고일 우측의 캘린더를 클릭하여 현재 날짜 1달전의 날짜 선택.
-- 하단 조회 버튼 클릭.
-- 청구유형 선택 안내 팝업이 나오는 경우 확인 버튼 클릭.
-- 상세내용 입력 표에서 청구내용 우측의 텍스트박스에 'IT직원 테스트입니다. 바로 취소할 예정입니다.' 입력
-- 하단 다음 버튼 클릭.
-- 청구내용 팝업이 나오는 경우 서류등록진행 버튼 클릭
-- `/fplaza/compensation/charge05.do` 포함 URL 확인
-- 서류제출 시 유의사항 팝업이 나오는 경우 우측 상단의 X 버튼 클릭.
-- 진료비영수증, 진단서, 수술확인서 등 파일 첨부 영역의 파일 추가 버튼을 클릭한 뒤 데스크탑의 스크린샷*.PNG 이미지 중 하나를 랜덤 선택 업로드
-- 진료비 세부(산정) 내역서 파일 첨부 영역의 파일 추가 버튼을 클릭한 뒤 데스크탑의 스크린샷*.PNG 이미지 중 하나를 랜덤 선택 업로드
-- 하단 서류등록/청구완료 버튼 클릭
-- 계속 진행하시겠습니까? 컨펌이 나오는 경우 확인 버튼 클릭.
-- 정상적으로 등록되었습니다. 알럿이 나오는 경우 닫기 버튼 클릭
-- `/fplaza/compensation/charge06.do` 포함 URL 확인
-
-### Step 7. 보험금청구 결과 조회 및 취소
-
-파일:
-
-- `hom_compensation_result_cancel.py`
-
-역할:
-
-- **진입**: GNB **`link` 「보상」** 호버 후 **`a[href*="/fplaza/compensation/result01.do"]`** 가시 링크 클릭.
-- `/fplaza/compensation/result01.do` 포함 URL 확인
-- 결과 목록 상단 탭에서 진행중 탭 앵커 **`#ing`** 이 활성 상태인지 확인하고, 비활성 상태면 `#ing` 클릭.
-- **`table` 「상해/질병/화재보험금 청구내역 목록」** 의 `tbody tr` 중 아래 조건을 모두 만족하는 행을 찾음:
-- 접수일자 셀에 **오늘 날짜(`YYYY.MM.DD`)** 포함
-- 청구내용 셀에 **`IT직원 테스트입니다. 바로 취소할`** 포함(목록에서는 말줄임표로 잘릴 수 있음)
-- 진행상태 셀 값이 **`처리중`**
-- 이용가능 서비스 셀에 **`제출서류확인`**, **`접수취소`** 버튼 노출
-- 여러 건이면 목록 상단 첫 번째 행 선택
-- 선택한 행의 접수번호 링크 클릭(목록 DOM 기준 `onclick="return goView(...)"`) → 상세 화면 이동
-- `/fplaza/compensation/result02.do` 포함 URL 확인
-- 상세 화면의 **`table` 「사고접수내용 상세」** 에서 아래 값 확인:
-- 접수번호
-- 보험청구일자 = 오늘 날짜
-- 사고(진단)일자
-- 청구유형
-- 청구내용 = **`IT직원 테스트입니다. 바로 취소할 예정입니다.`**
-- 상세 화면 서비스 버튼 확인:
-- **`#btn3`** `제출서류확인` (`onclick="return previewDocu();"`)
-- **`#btn4`** `접수취소` (`onclick="return cancelReceipt();"`)
-- **`#btn3`** 제출서류확인 클릭 → 새 탭/팝업 **`/fplaza/compensation/pop-result04.do?conRcpNo={접수번호}`** 열림 확인
-- 팝업에서 heading **`제출서류확인`** 확인
-- 팝업의 제출 파일 목록에서 **최소 2건** 의 `등록파일` 항목과 각 파일의 등록일 표시, 이미지 파일 미리보기가 제대로 되는지 확인
-- 각 `등록파일` 링크 클릭 시 파일 다운로드가 시작되는지 확인
-- 팝업에서 **`전체 다운로드`** 버튼(`onclick="return zipDown();"`) 가시 확인
-- 원래 상세 탭(`/result02.do`)으로 복귀
-- 상세 화면에서 **`#btn4`** 접수취소 클릭
-- 브라우저 `confirm` **`접수를 취소하시겠습니까?`** 표시 확인 후 확인
-- 브라우저 `alert` **`정상적으로 처리 되었습니다.`** 표시 확인 후 확인
-- `/fplaza/compensation/result01.do` 포함 URL로 복귀 확인
-- 진행중 탭(**`#ing`**)에서 방금 취소한 접수번호가 더 이상 조회되지 않는지 확인
-- 완료 탭 앵커 **`#fin`** 클릭
-- 완료 탭 목록에서 동일 접수번호/청구내용 행 조회
-- 해당 행의 진행상태 셀 값이 **`취소`** 인지 확인
-- 완료 탭의 동일 행에서 이용가능 서비스가 **`제출서류확인`만 노출** 되는지 확인
-
+- [HOM (한화손해보험 샘플)](docs/scenarios/hom.md)
 
 ## 7. 현재 UI 입력 모델
 
-홈 화면의 `HOM` 실행 카드에는 아래 입력이 있다.
+홈 화면의 시스템 실행 카드 입력 폼은 각 시스템 manifest 의 `run_form` 정의로 렌더링된다.
 
-- 브라우저 실행 모드
-- Base URL
-- 인증 수단
-- 고객명
-- 생년월일
-- 성별
-- 내외국인 구분
-- 통신사
-- 휴대폰 번호
+공통 규칙:
 
-조건부 규칙:
+- 현재 사용 중인 필드 타입은 `text` / `select` 다.
+- `show_when` 으로 다른 필드 값에 따른 조건부 노출을 정의한다.
+- `required`, `default`, `placeholder`, `help_text` 를 지원한다.
 
-- 성별·내외국인·통신사는 **휴대폰인증**에서만 폼에 노출 (`show_when`)
-- 고객명·생년월일·휴대폰 번호는 **휴대폰인증·카카오인증**에서 노출 (`manifest`의 `show_when.auth_method`에 `phone`·`kakao` 나열)
-- 금융인증서·공동인증서는 UI placeholder이며 API에서 실행을 거부
+시스템별 실제 입력 항목과 조건부 노출 규칙은 각 시스템 시나리오 문서를 참고한다.
 
 ## 8. 현재 아티팩트 전략
 
@@ -592,7 +434,9 @@ Web UI
                   -> BrowserGateway
                       -> Playwright MCP Gateway
                           -> Browser
+```
 
+```text
 Backend
   -> WebSocket Event Hub
   -> Persistent Run State Store
@@ -616,7 +460,7 @@ Backend
 
 - 웹에서 시스템 실행 가능
 - 실시간 모듈 노드 대시보드 존재
-- 휴대폰 본인인증에서 OTP pause/resume 존재 (카카오 경로는 해당 없음)
+- 입력 대기(`WAITING_INPUT`) pause/resume 구조 존재
 - 로그인 이후 후속 모듈 실행 구조 존재
 - manifest 기반 확장 포인트 존재
 
