@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +15,10 @@ from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.run_repository import InMemoryRunRepository
+
+
+ARTIFACTS_DIR = Path("artifacts")
+ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -34,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
-app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
+app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 app.include_router(dashboard_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
