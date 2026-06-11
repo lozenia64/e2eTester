@@ -35,6 +35,10 @@ class InMemoryRunRepository:
         async with self._lock:
             return self._runs[run_id]
 
+    async def list_runs(self) -> list[Run]:
+        async with self._lock:
+            return list(self._runs.values())
+
     async def publish(self, event: DashboardEvent) -> None:
         listeners = list(self._listeners.get(event.run_id, []))
         for queue in listeners:

@@ -8,6 +8,11 @@ from app.core.models import StartRunRequest, SubmitOtpRequest
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 
+@router.get("")
+async def list_runs(request: Request):
+    return await request.app.state.run_service.list_run_summaries()
+
+
 @router.post("/systems/{system_code}")
 async def start_system_run(request: Request, system_code: str, payload: StartRunRequest):
     try:

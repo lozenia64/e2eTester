@@ -114,6 +114,143 @@ async function startSystemRun(systemCode, button, form) {
     }
 }
 
+const ACTIVE_RUN_STATUSES = new Set(["pending", "running", "waiting_input"]);
+const RUN_LIST_LIMIT = 8;
+const RUN_LIST_POLL_MS = 5000;
+
+function formatRunTimestamp(isoString) {
+    if (!isoString) {
+        return "";
+    }
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+    const now = new Date();
+    const sameDay =
+        date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
+    const time = date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+    if (sameDay) {
+        return `오늘 ${time}`;
+    }
+    const day = date.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+    return `${day} ${time}`;
+}
+
+function createRunListItem(run) {
+    const status = String(run.status ?? "").toLowerCase();
+    const isWaitingInput = status === "waiting_input";
+    const isActive = ACTIVE_RUN_STATUSES.has(status);
+
+    const card = document.createElement("a");
+    card.href = `/runs/${run.run_id}`;
+    card.className = isWaitingInput
+        ? "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-6 py-4 shadow-sm transition hover:border-amber-400 hover:bg-amber-100"
+        : "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm transition hover:border-indigo-200 hover:bg-gray-50";
+
+    const left = document.createElement("div");
+    left.className = "flex min-w-0 items-center gap-4";
+
+    const codeChip = document.createElement("span");
+    codeChip.className = "inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200";
+    codeChip.textContent = String(run.system_code ?? "").toUpperCase();
+    left.appendChild(codeChip);
+
+    const info = document.createElement("div");
+    info.className = "min-w-0";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "flex flex-wrap items-center gap-2";
+
+    const title = document.createElement("h3");
+    title.className = "text-sm font-bold text-gray-900";
+    title.textContent = run.system_name ?? run.system_code ?? "";
+    titleRow.appendChild(title);
+
+    if (isWaitingInput) {
+        const waitingBadge = document.createElement("span");
+        waitingBadge.className = "inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-semibold text-white";
+        waitingBadge.textContent = "⚠ 입력 대기 중";
+        titleRow.appendChild(waitingBadge);
+    }
+    info.appendChild(titleRow);
+
+    const meta = document.createElement("p");
+    meta.className = "mt-0.5 truncate text-xs text-gray-400";
+    const metaParts = [run.run_id, formatRunTimestamp(run.requested_at)];
+    if (isWaitingInput && run.awaiting_input_prompt) {
+        metaParts.push(run.awaiting_input_prompt);
+    } else if (isActive && run.current_module_name) {
+        metaParts.push(`실행 중 · ${run.current_module_name}`);
+    } else if (status === "failed" && run.failed_module_name) {
+        metaParts.push(`실패 · ${run.failed_module_name}`);
+    }
+    meta.textContent = metaParts.filter(Boolean).join(" · ");
+    info.appendChild(meta);
+    left.appendChild(info);
+
+    const right = document.createElement("div");
+    right.className = "flex shrink-0 items-center gap-3";
+
+    const progress = document.createElement("span");
+    progress.className = "hidden text-xs font-medium text-gray-500 sm:inline";
+    progress.textContent = `모듈 ${run.module_passed ?? 0}/${run.module_total ?? 0} 통과`;
+    right.appendChild(progress);
+
+    const statusPill = document.createElement("span");
+    statusPill.className = statusBadgeClassName(run.status);
+    statusPill.textContent = run.status ?? "";
+    right.appendChild(statusPill);
+
+    card.appendChild(left);
+    card.appendChild(right);
+    return card;
+}
+
+function renderRunList(runs) {
+    const section = document.getElementById("runs-section");
+    const list = document.getElementById("runs-list");
+    if (!section || !list) {
+        return;
+    }
+
+    const activeRuns = runs.filter((run) => ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
+    const finishedRuns = runs.filter((run) => !ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
+    const visibleRuns = [...activeRuns, ...finishedRuns].slice(0, RUN_LIST_LIMIT);
+
+    section.classList.toggle("is-hidden", visibleRuns.length === 0);
+    list.innerHTML = "";
+    for (const run of visibleRuns) {
+        list.appendChild(createRunListItem(run));
+    }
+}
+
+async function refreshRunList() {
+    try {
+        const response = await fetch("/api/runs");
+        if (!response.ok) {
+            return;
+        }
+        renderRunList(await response.json());
+    } catch (error) {
+        console.error("Run 목록 갱신 실패", error);
+    }
+}
+
+function bindRunsOverview() {
+    if (!document.getElementById("runs-list")) {
+        return;
+    }
+    refreshRunList();
+    setInterval(() => {
+        if (!document.hidden) {
+            refreshRunList();
+        }
+    }, RUN_LIST_POLL_MS);
+}
+
 function updateModuleCard(module) {
     const card = document.querySelector(`[data-module-id="${module.module_id}"]`);
     if (!card) {
@@ -274,6 +411,7 @@ function bindRunSocket() {
 
 document.addEventListener("DOMContentLoaded", () => {
     bindSystemButtons();
+    bindRunsOverview();
     bindOtpForm();
     bindRunSocket();
 });
