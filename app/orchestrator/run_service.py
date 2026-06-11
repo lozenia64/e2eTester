@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -167,8 +168,7 @@ class RunService:
                 if definition.execution_mode == "hom_workflow_step":
                     if hom_runtime is None:
                         try:
-                            hom_runtime = await asyncio.to_thread(
-                                self._hom_executor.build_runtime,
+                            hom_runtime = await self._build_hom_runtime(
                                 input_data,
                                 run.run_id,
                                 module.module_id,
@@ -202,8 +202,7 @@ class RunService:
                         )
                         future.result()
 
-                    execution_result = await asyncio.to_thread(
-                        self._hom_executor.execute_step,
+                    execution_result = await self._execute_hom_step(
                         hom_runtime,
                         run.run_id,
                         definition,
@@ -262,11 +261,74 @@ class RunService:
             await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
         finally:
             if hom_runtime is not None and run.run_id not in self._pending_otp:
-                await asyncio.to_thread(self._hom_executor.close_runtime, hom_runtime)
+                try:
+                    await self._close_hom_runtime(hom_runtime)
+                except Exception as exc:
+                    if forced_status is None:
+                        forced_status = RunStatus.FAILED
+                        await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
+                    else:
+                        print(f"[run] run={run.run_id} runtime cleanup error: {exc}")
 
         if not should_finalize:
             return
         await self._finalize_run(run, forced_status)
+
+    async def _build_hom_runtime(
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+    ) -> HomWorkflowRuntime:
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"hom-runtime-{run_id}")
+        try:
+            runtime = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                self._hom_executor.build_runtime,
+                input_data,
+                run_id,
+                module_id,
+            )
+        except Exception:
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        runtime.executor = executor
+        return runtime
+
+    async def _execute_hom_step(
+        self,
+        runtime: HomWorkflowRuntime,
+        run_id: str,
+        definition,
+        emit_from_thread,
+    ) -> StepExecutionResult:
+        executor = runtime.executor
+        if executor is None:
+            return await asyncio.to_thread(self._hom_executor.execute_step, runtime, run_id, definition, emit_from_thread)
+        return await asyncio.get_running_loop().run_in_executor(
+            executor,
+            self._hom_executor.execute_step,
+            runtime,
+            run_id,
+            definition,
+            emit_from_thread,
+        )
+
+    async def _close_hom_runtime(self, runtime: HomWorkflowRuntime) -> None:
+        executor = runtime.executor
+        try:
+            if executor is None:
+                await asyncio.to_thread(self._hom_executor.close_runtime, runtime)
+            else:
+                await asyncio.get_running_loop().run_in_executor(
+                    executor,
+                    self._hom_executor.close_runtime,
+                    runtime,
+                )
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+                runtime.executor = None
 
     async def _publish_run_event(self, event_type: str, run: Run) -> None:
         await self._repository.publish(

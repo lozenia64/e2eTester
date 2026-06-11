@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import contextlib
 import io
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
@@ -31,6 +32,7 @@ class HomWorkflowRuntime:
     context: object
     page: object
     dialog_messages: list[str]
+    executor: ThreadPoolExecutor | None = None
     phone_login_sms_requested: bool = False
     closed: bool = False
 
