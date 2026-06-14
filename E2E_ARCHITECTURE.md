@@ -88,8 +88,10 @@ e2eTester/
     scenarios/
       hom.md
   artifacts/
+  hom_compensation_cancel.py
   hom_compensation_charge.py
-  hom_compensation_result_cancel.py
+  hom_compensation_result.py
+  hom_compensation_result_common.py
   hom_contract_detail.py
   hom_contract_list.py
   hom_kakao_login.py

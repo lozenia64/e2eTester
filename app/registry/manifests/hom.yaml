@@ -171,10 +171,10 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_charge
-  - module_id: hom.compensation.result_cancel
+  - module_id: hom.compensation.result
     system_code: hom
-    name: 보험금청구 결과 조회 및 취소
-    description: 보험금청구 결과조회에서 오늘 접수한 테스트 청구를 찾아 상세·제출서류를 확인한 뒤 접수취소되고 완료 탭에 취소 상태로 반영되는지 확인합니다.
+    name: 보험금청구 결과 조회
+    description: 보험금청구 결과조회에서 오늘 접수한 테스트 청구를 찾아 상세·제출서류를 확인합니다.
     group: inquiry
     order: 70
     depends_on:
@@ -182,4 +182,16 @@ modules:
     timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
-    workflow_step: compensation_result_cancel
+    workflow_step: compensation_result
+  - module_id: hom.compensation.cancel
+    system_code: hom
+    name: 보험금청구 취소
+    description: 진행중 보험금청구를 접수취소하고 진행중 탭에서 제거되며 완료 탭에 취소 상태로 반영되는지 확인합니다.
+    group: inquiry
+    order: 80
+    depends_on:
+      - hom.compensation.result
+    timeout_seconds: 300
+    execution_mode: hom_workflow_step
+    workflow_name: hom_login
+    workflow_step: compensation_cancel

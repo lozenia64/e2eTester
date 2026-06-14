@@ -47,7 +47,7 @@ Key points that span multiple files:
 ## Conventions and cautions
 
 - Root-level `hom_*.py` files are stateful, ordered automation steps against a live external website, full of carefully tuned selectors and Korean UI text matching — selector changes should follow the patterns already in `hom_login_common.py`. `hom_login_phone.py` is a manual CLI entry point, not part of the manifest workflow.
-- The claim-filing step (`hom_compensation_charge.py`) submits a real test claim (uploads PNGs found on the local Desktop, claim text `IT직원 테스트입니다. 바로 취소할 예정입니다.`) and `hom_compensation_result_cancel.py` finds and cancels exactly that claim — the two are coupled by that literal claim text and "today" date matching.
+- The claim-filing step (`hom_compensation_charge.py`) submits a real test claim (uploads PNGs found on the local Desktop, claim text `IT직원 테스트입니다. 바로 취소할 예정입니다.`); `hom_compensation_result.py` then verifies that claim's detail/submitted documents and `hom_compensation_cancel.py` finds and cancels exactly that claim (both share `hom_compensation_result_common.py` for list entry / row lookup / detail navigation) — all three are coupled by that literal claim text and "today" date matching.
 - When adding a new system or changing an existing system's flow/selectors, update (or create) its scenario doc in `docs/scenarios/{system_code}.md` alongside the manifest — scenario details do not belong in `E2E_ARCHITECTURE.md`.
 - `research/` contains throwaway probe scripts, not part of the app.
 - User-facing strings (UI labels, log messages, README) are in Korean; keep that consistent.

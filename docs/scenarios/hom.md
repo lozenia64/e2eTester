@@ -21,9 +21,12 @@
 4. `hom.contract.list`
 5. `hom.contract.detail`
 6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
-7. `hom.compensation.result_cancel` — `hom_compensation_result_cancel.py` (`compensation_result_cancel` 단계)
+7. `hom.compensation.result` — `hom_compensation_result.py` (`compensation_result` 단계)
+8. `hom.compensation.cancel` — `hom_compensation_cancel.py` (`compensation_cancel` 단계)
 
-모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회 및 취소는 300초, 그 외 HOM 단계는 180초.
+`hom_compensation_result.py`·`hom_compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `hom_compensation_result_common.py`에서 공유한다.
+
+모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
 
 ## 3. 워크플로우
 
@@ -38,7 +41,8 @@
                   -> 계약목록 조회
                       -> 계약상세 조회
                           -> 보험금청구 접수(charge00~charge06)
-                              -> 보험금청구 결과 조회 및 취소(result01~result02 → pop-result04 → result01)
+                              -> 보험금청구 결과 조회(result01 → result02 → pop-result04)
+                                  -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
 ```
 
 ### Step 1. 메인화면 접속
@@ -143,11 +147,12 @@
 - 정상적으로 등록되었습니다. 알럿이 나오는 경우 닫기 버튼 클릭
 - `/fplaza/compensation/charge06.do` 포함 URL 확인
 
-### Step 7. 보험금청구 결과 조회 및 취소
+### Step 7. 보험금청구 결과 조회
 
 파일:
 
-- `hom_compensation_result_cancel.py`
+- `hom_compensation_result.py`
+- `hom_compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
 
 역할:
 
@@ -176,7 +181,18 @@
 - 팝업의 제출 파일 목록에서 **최소 2건** 의 `등록파일` 항목과 각 파일의 등록일 표시, 이미지 파일 미리보기가 제대로 되는지 확인
 - 각 `등록파일` 링크 클릭 시 파일 다운로드가 시작되는지 확인
 - 팝업에서 **`전체 다운로드`** 버튼(`onclick="return zipDown();"`) 가시 확인
-- 원래 상세 탭(`/result02.do`)으로 복귀
+
+### Step 8. 보험금청구 취소
+
+파일:
+
+- `hom_compensation_cancel.py`
+- `hom_compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
+
+역할:
+
+- Step 7과 동일한 방식으로 result01에 다시 진입해 진행중 탭에서 동일 조건(오늘 날짜·`IT직원 테스트입니다. 바로 취소할`·`처리중`·`제출서류확인`/`접수취소` 버튼)의 행을 찾아 접수번호를 확보하고 상세 화면(`/fplaza/compensation/result02.do`)으로 이동
+- 상세 화면 데이터가 확보한 접수번호로 채워질 때까지 대기
 - 상세 화면에서 **`#btn4`** 접수취소 클릭
 - 브라우저 `confirm` **`접수를 취소하시겠습니까?`** 표시 확인 후 확인
 - 브라우저 `alert` **`정상적으로 처리 되었습니다.`** 표시 확인 후 확인
