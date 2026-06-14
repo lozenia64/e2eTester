@@ -180,6 +180,8 @@ e2eTester/
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/nodes`
 - `POST /api/runs/{run_id}/otp`
+- `POST /api/runs/{run_id}/cancel`
+- `POST /api/runs/{run_id}/rerun`
 - `WS /ws/runs/{run_id}`
 
 역할:
@@ -189,6 +191,8 @@ e2eTester/
 - Run 생성 (`selected_module_ids` 로 실행 모듈 부분 선택 가능)
 - Run / 노드 조회
 - OTP 재개 (`POST /api/runs/{run_id}/otp`)
+- Run 취소 (`POST /api/runs/{run_id}/cancel`) — 진행 중/대기 중 Run을 `CANCELLED` 로 중단
+- 동일 입력 재실행 (`POST /api/runs/{run_id}/rerun`) — 같은 시스템·입력·모듈 선택으로 새 Run 생성
 - 실시간 상태 이벤트 스트리밍
 
 **참고:** OTP API는 Run이 `WAITING_INPUT` 상태로 멈춰 있을 때만 의미가 있다. 어떤 인증 수단이 이 상태를 만드는지는 각 시스템 시나리오 문서를 참고한다.
@@ -206,6 +210,8 @@ e2eTester/
 - 의존성 실패 시 `BLOCKED` 처리
 - OTP 대기 상태 저장(`PendingOtpState`, 공유 runtime 유지)
 - OTP 제출 후 중단된 단계부터 재개
+- Run 취소(`cancel_run`): 취소 플래그(`_cancel_requested`)를 세팅하고, 실행 루프가 모듈 사이에서 이를 확인해 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 runtime 을 정리하고 종료한다.
+- 동일 입력 재실행(`rerun_run`): Run 생성 시 보관한 입력값(otp_code 제외, `_run_inputs`)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII를 포함할 수 있어 메모리에만 보관하며 응답/WebSocket payload 로는 직렬화하지 않는다.
 - 최근 Run 요약 생성(`list_run_summaries`)
 - 이벤트 publish
 
@@ -218,6 +224,7 @@ Run:
 - `WAITING_INPUT`
 - `PASSED`
 - `FAILED`
+- `CANCELLED` (사용자가 취소한 Run)
 
 Module:
 
@@ -229,12 +236,12 @@ Module:
 - `FAILED`
 - `BLOCKED`
 - `SKIPPED`
+- `CANCELLED` (Run 취소로 실행되지 않거나 중단된 모듈)
 
 아직 없는 것:
 
-- `CANCELLED`
 - 재시도 정책
-- 실패 모듈만 재실행
+- 실패 모듈만 부분 재실행 (현재는 `rerun_run` 으로 동일 입력 전체 재실행만 지원)
 
 ### 5.4 Registry 계층
 
@@ -447,7 +454,7 @@ WebSocket으로 흐르는 주요 이벤트:
 - `ModuleContext`, `ModuleResult` 표준화
 - 병렬 실행 스케줄러
 - 재시도 정책
-- 취소/중단/재실행
+- 실패 모듈만 부분 재실행 (취소·동일 입력 전체 재실행은 구현됨)
 - 오류 분류 체계
 
 ### 10.2 이미 방향이 맞는 것

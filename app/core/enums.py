@@ -9,6 +9,7 @@ class RunStatus(StrEnum):
     WAITING_INPUT = "WAITING_INPUT"
     PASSED = "PASSED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class ModuleStatus(StrEnum):
@@ -20,3 +21,4 @@ class ModuleStatus(StrEnum):
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
     SKIPPED = "SKIPPED"
+    CANCELLED = "CANCELLED"

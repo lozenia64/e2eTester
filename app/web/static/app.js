@@ -7,6 +7,7 @@ const STATUS_BADGE_CLASSES = {
     failed: "bg-red-100 text-red-700",
     blocked: "bg-orange-100 text-orange-700",
     skipped: "bg-slate-200 text-slate-700",
+    cancelled: "bg-zinc-200 text-zinc-700",
 };
 
 const MODULE_GRAPH_COLUMN_WIDTH = 172;
@@ -717,7 +718,7 @@ function updateModuleCard(module) {
         return;
     }
 
-    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "failed", "blocked", "skipped"];
+    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "failed", "blocked", "skipped", "cancelled"];
     for (const status of statuses) {
         card.classList.remove(`status-${status}`);
     }
@@ -1090,6 +1091,74 @@ function bindOtpForm() {
     });
 }
 
+const RUN_ACTIVE_STATUSES = new Set(["pending", "running", "waiting_input"]);
+
+function updateRunActions(status) {
+    const normalized = String(status ?? "").toLowerCase();
+    const isActive = RUN_ACTIVE_STATUSES.has(normalized);
+    const cancelButton = document.getElementById("run-cancel");
+    const rerunButton = document.getElementById("run-rerun");
+    if (cancelButton) {
+        cancelButton.classList.toggle("hidden", !isActive);
+        if (!isActive) {
+            cancelButton.disabled = false;
+            cancelButton.textContent = "실행 취소";
+        }
+    }
+    if (rerunButton) {
+        rerunButton.classList.toggle("hidden", isActive);
+    }
+}
+
+async function cancelRun(button) {
+    if (!window.confirm("진행 중인 Run을 취소하시겠습니까? 실행 중인 단계가 끝난 뒤 중단됩니다.")) {
+        return;
+    }
+    button.disabled = true;
+    button.textContent = "취소 요청됨...";
+    try {
+        const response = await fetch(`/api/runs/${currentRunId()}/cancel`, { method: "POST" });
+        if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+        }
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = "실행 취소";
+        window.alert(`취소에 실패했습니다: ${error.message}`);
+        console.error(error);
+    }
+}
+
+async function rerunRun(button) {
+    button.disabled = true;
+    button.textContent = "재실행 중...";
+    try {
+        const response = await fetch(`/api/runs/${currentRunId()}/rerun`, { method: "POST" });
+        if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+        }
+        const run = await response.json();
+        window.location.href = `/runs/${run.run_id}`;
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = "동일 조건으로 재실행";
+        window.alert(`재실행에 실패했습니다: ${error.message}`);
+        console.error(error);
+    }
+}
+
+function bindRunActions() {
+    const cancelButton = document.getElementById("run-cancel");
+    const rerunButton = document.getElementById("run-rerun");
+    if (cancelButton) {
+        cancelButton.addEventListener("click", () => cancelRun(cancelButton));
+    }
+    if (rerunButton) {
+        rerunButton.addEventListener("click", () => rerunRun(rerunButton));
+    }
+    updateRunActions(document.getElementById("run-status")?.textContent);
+}
+
 function bindRunSocket() {
     const grid = document.getElementById("node-grid");
     if (!grid) {
@@ -1106,6 +1175,7 @@ function bindRunSocket() {
         if (message.event_type === "snapshot") {
             document.getElementById("run-status").textContent = message.payload.status;
             document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
+            updateRunActions(message.payload.status);
             updateOtpPanel(message.payload);
             loadLogEntriesFromRun(message.payload);
             for (const module of message.payload.modules) {
@@ -1126,6 +1196,7 @@ function bindRunSocket() {
             const runStatus = document.getElementById("run-status");
             runStatus.textContent = message.run_status;
             runStatus.className = statusBadgeClassName(message.run_status, "px-3 py-1.5");
+            updateRunActions(message.run_status);
         }
 
         if (message.event_type === "run_waiting_input" || message.event_type === "run_resumed" || message.event_type === "run_finished") {
@@ -1140,6 +1211,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindRunsOverview();
     bindLogControls();
     startRuntimeTicker();
+    bindRunActions();
     bindOtpForm();
     bindRunSocket();
 });

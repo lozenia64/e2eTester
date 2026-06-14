@@ -37,6 +37,28 @@ async def submit_run_otp(request: Request, run_id: str, payload: SubmitOtpReques
     return run.model_dump(mode="json")
 
 
+@router.post("/{run_id}/cancel")
+async def cancel_run(request: Request, run_id: str):
+    try:
+        run = await request.app.state.run_service.cancel_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return run.model_dump(mode="json")
+
+
+@router.post("/{run_id}/rerun")
+async def rerun_run(request: Request, run_id: str):
+    try:
+        run = await request.app.state.run_service.rerun_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return run.model_dump(mode="json")
+
+
 @router.get("/{run_id}")
 async def get_run(request: Request, run_id: str):
     try:
