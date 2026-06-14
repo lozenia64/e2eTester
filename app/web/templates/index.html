@@ -131,7 +131,8 @@
                     {% if field.type == "select" %}
                     <select name="{{ field.key }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
-                        <option value="{{ option.value }}" {% if option.value == field.default %}selected{% endif %}>{{ option.label }}</option>
+                        {% set option_unsupported = field.key == 'auth_method' and system.supported_auth_methods and option.value not in system.supported_auth_methods %}
+                        <option value="{{ option.value }}"{% if option.value == field.default %} selected{% endif %}{% if option_unsupported %} disabled{% endif %}>{{ option.label }}{% if option_unsupported %} (준비 중){% endif %}</option>
                         {% endfor %}
                     </select>
                     {% else %}
@@ -150,6 +151,7 @@
                 </label>
                 {% endfor %}
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
+                    <p class="is-hidden text-sm font-medium text-red-600" data-role="form-feedback" role="alert"></p>
                     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60" data-system-code="{{ system.system_code }}">실행</button>
                 </div>
             </form>
