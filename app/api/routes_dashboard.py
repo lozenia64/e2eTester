@@ -15,6 +15,7 @@ templates = Jinja2Templates(directory="app/web/templates")
 async def dashboard_home(request: Request):
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
+    systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
     system_codes = [system.system_code for system in systems]
     analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
     email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
@@ -23,6 +24,7 @@ async def dashboard_home(request: Request):
         "index.html",
         {
             "systems": systems,
+            "systems_payload": systems_payload,
             "analyzer_status": analyzer_status,
             "email_status": email_status,
         },

@@ -99,6 +99,23 @@
                 </div>
             </summary>
             <form class="system-form grid gap-x-4 gap-y-5 border-t border-gray-100 px-6 py-6 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
+                <script type="application/json" data-role="system-definition">{{ systems_payload[system.system_code] | tojson }}</script>
+                <section class="sm:col-span-2 rounded-2xl border border-gray-200 bg-gray-50/80 p-5 shadow-sm" data-role="module-selector">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900">실행 모듈 선택</h4>
+                            <p class="mt-1 text-xs leading-relaxed text-gray-500">그래프에서 모듈을 클릭해 제외할 수 있습니다. 잘못된 의존성 조합은 실행 시 서버가 거부합니다.</p>
+                        </div>
+                        <p class="text-xs font-medium text-gray-500" data-role="module-selection-summary">모듈 선택 준비 중</p>
+                    </div>
+                    <div class="module-graph-viewport mt-4 overflow-x-auto pb-2">
+                        <div class="module-graph-canvas" data-role="module-graph-canvas">
+                            <svg class="module-graph-edges" data-role="module-graph-edges" aria-hidden="true"></svg>
+                            <div class="module-graph-grid" data-role="module-graph-grid"></div>
+                        </div>
+                    </div>
+                    <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 is-hidden" data-role="module-selection-warning"></div>
+                </section>
                 {% for field in system.run_form %}
                 <label
                     class="form-field flex flex-col gap-1.5{% if field.show_when %} conditional-field{% endif %}"

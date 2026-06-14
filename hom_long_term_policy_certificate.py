@@ -111,6 +111,7 @@ def _navigate_to_long_term_policy(page, config: common.LoginConfig) -> None:
 
     common.click_with_log(policy_link, "증명서 발급 > 장기보험증권 이동")
     _wait_url_contains(page, LONG_TERM_POLICY_FRAGMENT, config.timeout_ms)
+    common.wait_timeout_with_log(page, 3000, "장기보험증권 화면 진입 후 계약 조회 안정화 대기")
 
 
 def _find_visible_table_by_caption(page, caption_text: str, description: str):
@@ -133,6 +134,23 @@ def _find_visible_table_by_caption(page, caption_text: str, description: str):
     raise RuntimeError(f"표시 중인 표를 찾지 못했습니다: {description}")
 
 
+def _click_radio_with_fallback(page, radio, description: str, timeout_ms: int) -> None:
+    radio_id = radio.get_attribute("id") or ""
+    try:
+        print(f"[click] {description}: input 직접 클릭")
+        radio.click(force=True, timeout=timeout_ms)
+    except Exception as exc:
+        if not radio_id:
+            raise RuntimeError(f"{description} 클릭에 실패했습니다: {exc}") from exc
+
+        label = page.locator(f'label[for="{radio_id}"]').first
+        if label.count() == 0:
+            raise RuntimeError(f"{description} 클릭에 실패했고 연결된 라벨도 찾지 못했습니다: {exc}") from exc
+
+        print(f"[warn] {description}: input 클릭 실패, 라벨 클릭으로 재시도: {exc}")
+        common.click_with_log(label, f"{description} 라벨 클릭")
+
+
 def _select_first_contract(page, timeout_ms: int) -> str:
     table = _find_visible_table_by_caption(page, POLICY_TABLE_CAPTION, "보험계약 선택 표")
     rows = table.locator("tbody tr")
@@ -146,7 +164,7 @@ def _select_first_contract(page, timeout_ms: int) -> str:
     policy_name = radio.get_attribute("name") or "contract_no"
 
     print(f"[step] Select first contract for certificate issue: {policy_value}")
-    radio.check(force=True)
+    _click_radio_with_fallback(page, radio, "보험계약 선택 라디오", timeout_ms)
     page.wait_for_function(
         """
         ({name, value}) => {
@@ -169,7 +187,7 @@ def _select_download_method(page, timeout_ms: int) -> None:
         "다운로드 발급방법 라디오",
     )
     print("[step] Select download issue method")
-    radio.check(force=True)
+    _click_radio_with_fallback(page, radio, "다운로드 발급방법 라디오", timeout_ms)
     page.wait_for_function(
         """
         () => {

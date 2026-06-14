@@ -3,7 +3,7 @@
 {% block title %}Run Dashboard{% endblock %}
 
 {% block content %}
-{% set status_pill = {'pending': 'bg-gray-100 text-gray-600', 'queued': 'bg-gray-100 text-gray-600', 'running': 'bg-blue-100 text-blue-700', 'waiting_input': 'bg-amber-100 text-amber-700', 'passed': 'bg-emerald-100 text-emerald-700', 'failed': 'bg-red-100 text-red-700', 'blocked': 'bg-orange-100 text-orange-700'} %}
+{% set status_pill = {'pending': 'bg-gray-100 text-gray-600', 'queued': 'bg-gray-100 text-gray-600', 'running': 'bg-blue-100 text-blue-700', 'waiting_input': 'bg-amber-100 text-amber-700', 'passed': 'bg-emerald-100 text-emerald-700', 'failed': 'bg-red-100 text-red-700', 'blocked': 'bg-orange-100 text-orange-700', 'skipped': 'bg-slate-200 text-slate-700'} %}
 
 <!-- 페이지 헤더 -->
 <div class="flex flex-wrap items-start justify-between gap-4">
@@ -46,7 +46,7 @@
 <section class="space-y-4">
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">모듈 노드</h2>
-        <p class="text-sm text-gray-500">실시간으로 상태가 변경됩니다 · 메인화면 접속 → 로그인 이동 → 본인인증 로그인 → 계약목록 조회 → 계약상세 조회</p>
+        <p class="text-sm text-gray-500">전체 {{ run.modules|length }}개 모듈 중 {{ run.selected_module_ids|length }}개가 선택되었습니다. 제외된 모듈은 SKIPPED 상태로 유지됩니다.</p>
     </div>
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" id="node-grid" data-run-id="{{ run.run_id }}">
         {% for module in run.modules|sort(attribute='order') %}

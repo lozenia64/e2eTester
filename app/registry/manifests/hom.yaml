@@ -166,7 +166,7 @@ modules:
     group: inquiry
     order: 60
     depends_on:
-      - hom.contract.detail
+      - hom.login.phone_login
     timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
@@ -190,7 +190,7 @@ modules:
     group: inquiry
     order: 80
     depends_on:
-      - hom.compensation.result
+      - hom.compensation.charge
     timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
@@ -202,7 +202,7 @@ modules:
     group: proof
     order: 90
     depends_on:
-      - hom.compensation.cancel
+      - hom.login.phone_login
     timeout_seconds: 180
     execution_mode: hom_workflow_step
     workflow_name: hom_login

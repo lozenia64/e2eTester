@@ -6,7 +6,7 @@ from pathlib import Path
 import hom_login_common as common
 
 # 카카오톡에서 사용자 인증을 마칠 시간을 주기 위해 '인증요청' 후 이 시간만큼 대기한 뒤 '인증완료'를 누른다.
-KAKAO_AUTH_BACKGROUND_WAIT_MS = 60_000
+KAKAO_AUTH_BACKGROUND_WAIT_MS = 20_000
 
 LOGIN_HUB_URL_FRAGMENT = "/util/login/login.do"
 KAKAO_POPUP_SELECTOR = "#uiPOPKakaoLogin"

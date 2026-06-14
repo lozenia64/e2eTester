@@ -105,6 +105,7 @@ class Run(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     modules: list[RunModule]
+    selected_module_ids: list[str] = Field(default_factory=list)
     awaiting_input_module_id: str | None = None
     awaiting_input_prompt: str | None = None
 
@@ -119,6 +120,7 @@ class DashboardEvent(BaseModel):
 
 class StartRunRequest(BaseModel):
     input_data: dict[str, str] = Field(default_factory=dict)
+    selected_module_ids: list[str] | None = None
 
 
 class SubmitOtpRequest(BaseModel):

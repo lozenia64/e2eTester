@@ -19,3 +19,4 @@ class ModuleStatus(StrEnum):
     PASSED = "PASSED"
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
+    SKIPPED = "SKIPPED"

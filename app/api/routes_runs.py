@@ -16,7 +16,11 @@ async def list_runs(request: Request):
 @router.post("/systems/{system_code}")
 async def start_system_run(request: Request, system_code: str, payload: StartRunRequest):
     try:
-        run = await request.app.state.run_service.start_run(system_code, payload.input_data)
+        run = await request.app.state.run_service.start_run(
+            system_code,
+            payload.input_data,
+            payload.selected_module_ids,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="System not found") from exc
     except ValueError as exc:

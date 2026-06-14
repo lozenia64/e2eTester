@@ -6,7 +6,260 @@ const STATUS_BADGE_CLASSES = {
     passed: "bg-emerald-100 text-emerald-700",
     failed: "bg-red-100 text-red-700",
     blocked: "bg-orange-100 text-orange-700",
+    skipped: "bg-slate-200 text-slate-700",
 };
+
+const MODULE_GRAPH_COLUMN_WIDTH = 172;
+const MODULE_GRAPH_ROW_HEIGHT = 68;
+
+function parseSystemDefinition(form) {
+    const script = form.querySelector('[data-role="system-definition"]');
+    if (!script) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(script.textContent);
+    } catch (error) {
+        console.error("시스템 정의 파싱 실패", error);
+        return null;
+    }
+}
+
+function sortModulesByOrder(modules) {
+    return [...modules].sort((left, right) => Number(left.order ?? 0) - Number(right.order ?? 0));
+}
+
+function computeModuleDepth(moduleId, modulesById, cache = new Map()) {
+    if (cache.has(moduleId)) {
+        return cache.get(moduleId);
+    }
+
+    const module = modulesById.get(moduleId);
+    if (!module) {
+        return 0;
+    }
+
+    const dependencies = Array.isArray(module.depends_on) ? module.depends_on : [];
+    const depth = dependencies.length === 0
+        ? 0
+        : Math.max(...dependencies.map((dependency) => computeModuleDepth(dependency, modulesById, cache))) + 1;
+    cache.set(moduleId, depth);
+    return depth;
+}
+
+function createModuleGraphNode(module, depth, index) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "module-graph-node is-selected";
+    button.dataset.role = "module-graph-node";
+    button.dataset.moduleId = module.module_id;
+    button.dataset.moduleName = module.name;
+    button.dataset.order = String(module.order ?? index + 1);
+    button.dataset.dependsOn = JSON.stringify(module.depends_on ?? []);
+    button.dataset.depth = String(depth);
+    button.dataset.selected = "true";
+    button.style.gridColumn = String(depth + 1);
+    button.style.gridRow = String(index + 1);
+    button.setAttribute("aria-pressed", "true");
+
+    const header = document.createElement("div");
+    header.className = "flex items-center gap-3";
+
+    const order = document.createElement("span");
+    order.className = "module-graph-order";
+    order.textContent = String(index + 1);
+    header.appendChild(order);
+
+    const title = document.createElement("strong");
+    title.className = "module-graph-title";
+    title.textContent = module.name;
+    header.appendChild(title);
+
+    button.appendChild(header);
+    button.title = `${index + 1}. ${module.name}`;
+    return button;
+}
+
+function getModuleGraphNodes(form) {
+    return Array.from(form.querySelectorAll('[data-role="module-graph-node"]'));
+}
+
+function getSelectedModuleIds(form) {
+    return getModuleGraphNodes(form)
+        .filter((node) => node.dataset.selected === "true")
+        .sort((left, right) => Number(left.dataset.order) - Number(right.dataset.order))
+        .map((node) => node.dataset.moduleId);
+}
+
+function readSelectedModuleIdSet(form) {
+    return new Set(getSelectedModuleIds(form));
+}
+
+function buildModuleSelectionWarnings(form, selectedModuleIds) {
+    const nodeMap = new Map(getModuleGraphNodes(form).map((node) => [node.dataset.moduleId, node]));
+    const warnings = [];
+
+    for (const moduleId of selectedModuleIds) {
+        const node = nodeMap.get(moduleId);
+        if (!node) {
+            continue;
+        }
+        const dependencies = JSON.parse(node.dataset.dependsOn || "[]");
+        const missingDependencies = dependencies
+            .filter((dependency) => !selectedModuleIds.has(dependency))
+            .map((dependency) => nodeMap.get(dependency)?.dataset.moduleName ?? dependency);
+        if (missingDependencies.length === 0) {
+            continue;
+        }
+        warnings.push(`${node.dataset.moduleName}: ${missingDependencies.join(", ")} 선택 필요`);
+    }
+
+    return warnings;
+}
+
+function drawModuleGraph(form) {
+    const canvas = form.querySelector('[data-role="module-graph-canvas"]');
+    const grid = form.querySelector('[data-role="module-graph-grid"]');
+    const svg = form.querySelector('[data-role="module-graph-edges"]');
+    const nodes = getModuleGraphNodes(form);
+    if (!canvas || !grid || !svg || nodes.length === 0) {
+        return;
+    }
+
+    const canvasRect = canvas.getBoundingClientRect();
+    svg.innerHTML = "";
+    svg.setAttribute("viewBox", `0 0 ${Math.ceil(canvasRect.width)} ${Math.ceil(canvasRect.height)}`);
+
+    const nodeMap = new Map(nodes.map((node) => [node.dataset.moduleId, node]));
+    for (const node of nodes) {
+        const dependencies = JSON.parse(node.dataset.dependsOn || "[]");
+        for (const dependency of dependencies) {
+            const sourceNode = nodeMap.get(dependency);
+            if (!sourceNode) {
+                continue;
+            }
+
+            const sourceRect = sourceNode.getBoundingClientRect();
+            const targetRect = node.getBoundingClientRect();
+            const startX = sourceRect.right - canvasRect.left;
+            const startY = sourceRect.top - canvasRect.top + (sourceRect.height / 2);
+            const endX = targetRect.left - canvasRect.left;
+            const endY = targetRect.top - canvasRect.top + (targetRect.height / 2);
+            const controlX = startX + ((endX - startX) / 2);
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`);
+            path.setAttribute("class", "module-graph-edge");
+
+            const isActive = sourceNode.dataset.selected === "true" && node.dataset.selected === "true";
+            path.classList.add(isActive ? "is-active" : "is-muted");
+            svg.appendChild(path);
+        }
+    }
+}
+
+function updateModuleSelectorState(form) {
+    const summary = form.querySelector('[data-role="module-selection-summary"]');
+    const warning = form.querySelector('[data-role="module-selection-warning"]');
+    const nodes = getModuleGraphNodes(form);
+    const selectedIds = readSelectedModuleIdSet(form);
+
+    for (const node of nodes) {
+        const selected = node.dataset.selected === "true";
+        node.classList.toggle("is-selected", selected);
+        node.classList.toggle("is-unselected", !selected);
+        node.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+
+    const selectedCount = selectedIds.size;
+    const totalCount = nodes.length;
+    if (summary) {
+        summary.textContent = `${selectedCount} / ${totalCount} 선택 · ${totalCount - selectedCount}개 제외`;
+    }
+
+    if (warning) {
+        const warnings = buildModuleSelectionWarnings(form, selectedIds);
+        warning.classList.toggle("is-hidden", warnings.length === 0);
+        warning.textContent = warnings.length === 0
+            ? ""
+            : `선행 모듈 누락 가능: ${warnings.join(" / ")}`;
+    }
+
+    drawModuleGraph(form);
+}
+
+function renderModuleSelector(form) {
+    const selector = form.querySelector('[data-role="module-selector"]');
+    const canvas = form.querySelector('[data-role="module-graph-canvas"]');
+    const grid = form.querySelector('[data-role="module-graph-grid"]');
+    const definition = parseSystemDefinition(form);
+    if (!selector || !canvas || !grid || !definition?.modules?.length) {
+        return;
+    }
+
+    const modules = sortModulesByOrder(definition.modules);
+    const modulesById = new Map(modules.map((module) => [module.module_id, module]));
+    const depthCache = new Map();
+    let maxDepth = 0;
+
+    grid.innerHTML = "";
+    for (const [index, module] of modules.entries()) {
+        const depth = computeModuleDepth(module.module_id, modulesById, depthCache);
+        maxDepth = Math.max(maxDepth, depth);
+        grid.appendChild(createModuleGraphNode(module, depth, index));
+    }
+
+    canvas.style.width = `${Math.max(modules.length > 0 ? maxDepth + 1 : 1, 1) * MODULE_GRAPH_COLUMN_WIDTH}px`;
+    canvas.style.height = `${Math.max(modules.length, 1) * MODULE_GRAPH_ROW_HEIGHT}px`;
+    grid.style.gridTemplateColumns = `repeat(${Math.max(maxDepth + 1, 1)}, minmax(220px, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${Math.max(modules.length, 1)}, minmax(0, 1fr))`;
+
+    grid.addEventListener("click", (event) => {
+        const button = event.target.closest('[data-role="module-graph-node"]');
+        if (!button) {
+            return;
+        }
+        button.dataset.selected = button.dataset.selected === "true" ? "false" : "true";
+        updateModuleSelectorState(form);
+    });
+
+    updateModuleSelectorState(form);
+}
+
+function bindModuleSelectors() {
+    const forms = document.querySelectorAll(".system-form");
+    for (const form of forms) {
+        renderModuleSelector(form);
+        const details = form.closest("details");
+        if (details) {
+            details.addEventListener("toggle", () => {
+                if (details.open) {
+                    window.requestAnimationFrame(() => drawModuleGraph(form));
+                }
+            });
+        }
+    }
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            for (const form of document.querySelectorAll(".system-form")) {
+                drawModuleGraph(form);
+            }
+        }, 80);
+    });
+}
+
+async function readErrorMessage(response) {
+    try {
+        const payload = await response.json();
+        return payload.detail ?? JSON.stringify(payload);
+    } catch (_error) {
+        return await response.text();
+    }
+}
 
 function statusBadgeClassName(status, sizeClasses = "px-2.5 py-1") {
     const tone = STATUS_BADGE_CLASSES[String(status).toLowerCase()] ?? "bg-gray-100 text-gray-600";
@@ -85,6 +338,12 @@ async function startSystemRun(systemCode, button, form) {
         return;
     }
 
+    const selectedModuleIds = getSelectedModuleIds(form);
+    if (selectedModuleIds.length === 0) {
+        window.alert("최소 1개 이상의 모듈을 선택해야 합니다.");
+        return;
+    }
+
     button.disabled = true;
     button.textContent = "실행 중...";
 
@@ -96,11 +355,12 @@ async function startSystemRun(systemCode, button, form) {
             },
             body: JSON.stringify({
                 input_data: collectFormInput(form),
+                selected_module_ids: selectedModuleIds,
             }),
         });
 
         if (!response.ok) {
-            const errorBody = await response.text();
+            const errorBody = await readErrorMessage(response);
             throw new Error(`Run creation failed: ${response.status} ${errorBody}`);
         }
 
@@ -109,7 +369,7 @@ async function startSystemRun(systemCode, button, form) {
     } catch (error) {
         button.disabled = false;
         button.textContent = "실행";
-        window.alert("Run 생성에 실패했습니다. 콘솔을 확인하세요.");
+        window.alert(error.message.replace(/^Error:\s*/, "") || "Run 생성에 실패했습니다.");
         console.error(error);
     }
 }
@@ -196,7 +456,9 @@ function createRunListItem(run) {
 
     const progress = document.createElement("span");
     progress.className = "hidden text-xs font-medium text-gray-500 sm:inline";
-    progress.textContent = `모듈 ${run.module_passed ?? 0}/${run.module_total ?? 0} 통과`;
+    progress.textContent = run.module_skipped
+        ? `통과 ${run.module_passed ?? 0}/${run.module_total ?? 0} · 제외 ${run.module_skipped}`
+        : `통과 ${run.module_passed ?? 0}/${run.module_total ?? 0}`;
     right.appendChild(progress);
 
     const statusPill = document.createElement("span");
@@ -257,7 +519,7 @@ function updateModuleCard(module) {
         return;
     }
 
-    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "failed", "blocked"];
+    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "failed", "blocked", "skipped"];
     for (const status of statuses) {
         card.classList.remove(`status-${status}`);
     }
@@ -410,6 +672,7 @@ function bindRunSocket() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    bindModuleSelectors();
     bindSystemButtons();
     bindRunsOverview();
     bindOtpForm();

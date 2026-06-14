@@ -23,10 +23,25 @@
 6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
 7. `hom.compensation.result` — `hom_compensation_result.py` (`compensation_result` 단계)
 8. `hom.compensation.cancel` — `hom_compensation_cancel.py` (`compensation_cancel` 단계)
+9. `hom.proof.long_term_policy` — `hom_long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
 
 `hom_compensation_result.py`·`hom_compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `hom_compensation_result_common.py`에서 공유한다.
 
 모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
+
+선택 실행을 위한 현재 의존성 그래프는 아래와 같다.
+
+- `hom.main.access` → 없음
+- `hom.login.move` → `hom.main.access`
+- `hom.login.phone_login` → `hom.login.move`
+- `hom.contract.list` → `hom.login.phone_login`
+- `hom.contract.detail` → `hom.contract.list`
+- `hom.compensation.charge` → `hom.login.phone_login`
+- `hom.compensation.result` → `hom.compensation.charge`
+- `hom.compensation.cancel` → `hom.compensation.charge`
+- `hom.proof.long_term_policy` → `hom.login.phone_login`
+
+즉 HOM은 더 이상 단일 직선 체인만으로 해석하지 않는다. 로그인 이후 계약조회, 보험금청구, 증명서 발급이 서로 다른 브랜치로 분기하며, 대시보드에서 모듈을 선택 해제하면 선택되지 않은 모듈은 Run 화면에서 `SKIPPED` 로 표시된다.
 
 ## 3. 워크플로우
 
@@ -38,11 +53,9 @@
       -> 본인인증 로그인
           -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
               -> 로그인 성공 후 팝업 정리
-                  -> 계약목록 조회
-                      -> 계약상세 조회
-                          -> 보험금청구 접수(charge00~charge06)
-                              -> 보험금청구 결과 조회(result01 → result02 → pop-result04)
-                                  -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
+                  -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
+                  -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
+                  -> 증명서 브랜치: 장기보험증권 증명서 발급
 ```
 
 ### Step 1. 메인화면 접속
@@ -236,3 +249,10 @@
 - 성별·내외국인·통신사는 **휴대폰인증**에서만 폼에 노출 (`show_when`)
 - 고객명·생년월일·휴대폰 번호는 **휴대폰인증·카카오인증**에서 노출 (`manifest`의 `show_when.auth_method`에 `phone`·`kakao` 나열)
 - 금융인증서·공동인증서는 UI placeholder이며 API에서 실행을 거부
+
+추가 선택 규칙:
+
+- 실행 전 그래프에서 9개 모듈의 실행 여부를 개별 선택할 수 있다.
+- 기본값은 9개 전체 선택이다.
+- 선택 해제된 모듈은 실행 요청 payload의 `selected_module_ids` 에 포함되지 않으며 Run 화면에서 `SKIPPED` 로 렌더링된다.
+- 선행 모듈이 빠진 잘못된 조합은 UI에서 경고를 보여줄 수 있지만 최종 판정은 서버가 수행하며, 실행 생성 시 400 오류로 거부된다.

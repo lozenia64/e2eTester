@@ -32,6 +32,136 @@ body {
     border-left-color: #f97316;
 }
 
+.node-card.status-skipped {
+    border-left-color: #64748b;
+}
+
+.module-graph-canvas {
+    position: relative;
+    min-width: 100%;
+}
+
+.module-graph-edges {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.module-graph-grid {
+    position: relative;
+    display: grid;
+    gap: 10px 14px;
+    min-height: 100%;
+}
+
+.module-graph-node {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    min-height: 54px;
+    width: 100%;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 10px 12px;
+    text-align: left;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+
+.module-graph-node:hover {
+    border-color: #6366f1;
+    transform: translateY(-1px);
+}
+
+.module-graph-node.is-unselected {
+    border-style: dashed;
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    color: #64748b;
+    opacity: 0.6;
+}
+
+.module-graph-node.is-unselected:hover {
+    border-color: #94a3b8;
+}
+
+.module-graph-node:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 3px;
+}
+
+.module-graph-order {
+    display: inline-flex;
+    height: 28px;
+    width: 28px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: #eef2ff;
+    color: #4f46e5;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.module-graph-title {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-wrap: balance;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.module-graph-node.is-unselected .module-graph-order {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.module-graph-node.is-unselected .module-graph-title {
+    color: #64748b;
+}
+
+.module-graph-edge {
+    fill: none;
+    stroke: #cbd5e1;
+    stroke-linecap: round;
+    stroke-width: 2;
+}
+
+.module-graph-edge.is-active {
+    stroke: #6366f1;
+}
+
+.module-graph-edge.is-muted {
+    stroke: #cbd5e1;
+    stroke-dasharray: 6 6;
+}
+
+@media (max-width: 640px) {
+    .module-graph-grid {
+        gap: 8px 10px;
+    }
+
+    .module-graph-node {
+        min-height: 50px;
+        padding: 9px 10px;
+    }
+
+    .module-graph-title {
+        font-size: 12px;
+    }
+}
+
 .log-line {
     padding: 1px 0;
 }

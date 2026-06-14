@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import DashboardEvent, FailureAnalysisRequest, Run, RunModule
+from app.core.models import DashboardEvent, FailureAnalysisRequest, ModuleDefinition, Run, RunModule, SystemDefinition
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
@@ -20,7 +20,8 @@ from app.storage.run_repository import InMemoryRunRepository
 class PendingOtpState:
     run_id: str
     input_data: dict[str, str]
-    start_index: int
+    sequence_index: int
+    module_id: str
     runtime: HomWorkflowRuntime
 
 
@@ -54,16 +55,24 @@ class RunService:
     @staticmethod
     def _summarize_run(run: Run) -> dict:
         ordered_modules = sorted(run.modules, key=lambda module: module.order)
+        selected_module_ids = set(run.selected_module_ids) or {
+            module.module_id for module in ordered_modules if module.status != ModuleStatus.SKIPPED
+        }
         current_module = next(
             (
                 module
                 for module in ordered_modules
-                if module.status in {ModuleStatus.RUNNING, ModuleStatus.WAITING_INPUT}
+                if module.module_id in selected_module_ids
+                and module.status in {ModuleStatus.RUNNING, ModuleStatus.WAITING_INPUT}
             ),
             None,
         )
         failed_module = next(
-            (module for module in ordered_modules if module.status == ModuleStatus.FAILED),
+            (
+                module
+                for module in ordered_modules
+                if module.module_id in selected_module_ids and module.status == ModuleStatus.FAILED
+            ),
             None,
         )
         return {
@@ -76,8 +85,14 @@ class RunService:
             "ended_at": run.ended_at.isoformat() if run.ended_at else None,
             "awaiting_input_module_id": run.awaiting_input_module_id,
             "awaiting_input_prompt": run.awaiting_input_prompt,
-            "module_total": len(run.modules),
-            "module_passed": sum(1 for module in run.modules if module.status == ModuleStatus.PASSED),
+            "module_total": len(selected_module_ids),
+            "module_defined_total": len(run.modules),
+            "module_skipped": sum(1 for module in run.modules if module.status == ModuleStatus.SKIPPED),
+            "module_passed": sum(
+                1
+                for module in run.modules
+                if module.module_id in selected_module_ids and module.status == ModuleStatus.PASSED
+            ),
             "current_module_name": current_module.name if current_module else None,
             "failed_module_name": failed_module.name if failed_module else None,
         }
@@ -101,20 +116,26 @@ class RunService:
         run.status = RunStatus.RUNNING
         run.awaiting_input_module_id = None
         run.awaiting_input_prompt = None
-        waiting_module = run.modules[pending.start_index]
+        waiting_module = self._find_run_module(run, pending.module_id)
         waiting_module.status = ModuleStatus.QUEUED
         waiting_module.message = "OTP 입력이 접수되어 재개 대기 중"
         await self._repository.save_run(run)
         await self._publish_module_event("module_queued", run, waiting_module)
         await self._publish_run_event("run_resumed", run)
         del self._pending_otp[run_id]
-        asyncio.create_task(self._execute_run(run_id, pending.input_data, pending.start_index, pending.runtime))
+        asyncio.create_task(self._execute_run(run_id, pending.input_data, pending.sequence_index, pending.runtime))
         return run
 
-    async def start_run(self, system_code: str, input_data: dict[str, str] | None = None) -> Run:
+    async def start_run(
+        self,
+        system_code: str,
+        input_data: dict[str, str] | None = None,
+        selected_module_ids: list[str] | None = None,
+    ) -> Run:
         system = self.get_system(system_code)
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
+        resolved_selected_module_ids = self._resolve_selected_module_ids(system, selected_module_ids)
         if system_code == "hom":
             auth_method = sanitized_input.get("auth_method", "phone")
             if auth_method not in {"phone", "kakao"}:
@@ -125,16 +146,8 @@ class RunService:
             system_name=system.name,
             status=RunStatus.PENDING,
             requested_at=datetime.now(UTC),
-            modules=[
-                RunModule(
-                    module_id=module.module_id,
-                    name=module.name,
-                    group=module.group,
-                    order=module.order,
-                    depends_on=module.depends_on,
-                )
-                for module in system.modules
-            ],
+            modules=self._build_run_modules(system, resolved_selected_module_ids),
+            selected_module_ids=resolved_selected_module_ids,
         )
         await self._repository.create_run(run)
         await self._repository.publish(
@@ -166,13 +179,11 @@ class RunService:
             await self._publish_run_event("run_started", run)
         event_loop = asyncio.get_running_loop()
 
-        definitions = {
-            module.module_id: module
-            for module in self._registry.get_system(run.system_code).modules
-        }
+        system = self._registry.get_system(run.system_code)
+        definitions = {module.module_id: module for module in system.modules}
 
         modules_by_id = {module.module_id: module for module in run.modules}
-        ordered_modules = sorted(run.modules, key=lambda item: item.order)
+        ordered_modules = self._ordered_selected_run_modules(run)
 
         forced_status: RunStatus | None = None
         try:
@@ -263,7 +274,8 @@ class RunService:
                         self._pending_otp[run.run_id] = PendingOtpState(
                             run_id=run.run_id,
                             input_data=input_data,
-                            start_index=index,
+                            sequence_index=index,
+                            module_id=module.module_id,
                             runtime=hom_runtime,
                         )
                         should_finalize = False
@@ -512,3 +524,91 @@ class RunService:
         target_module.duration_ms = int((target_module.ended_at - target_module.started_at).total_seconds() * 1000)
         await self._repository.save_run(run)
         await self._publish_module_event("module_finished", run, target_module)
+
+    @staticmethod
+    def _find_run_module(run: Run, module_id: str) -> RunModule:
+        for module in run.modules:
+            if module.module_id == module_id:
+                return module
+        raise KeyError(f"Run module not found: {module_id}")
+
+    @staticmethod
+    def _ordered_modules(system: SystemDefinition) -> list[ModuleDefinition]:
+        return sorted(system.modules, key=lambda module: module.order)
+
+    def _resolve_selected_module_ids(
+        self,
+        system: SystemDefinition,
+        selected_module_ids: list[str] | None,
+    ) -> list[str]:
+        ordered_modules = self._ordered_modules(system)
+        if selected_module_ids is None:
+            return [module.module_id for module in ordered_modules]
+
+        selected_values: list[str] = []
+        seen_module_ids: set[str] = set()
+        for raw_module_id in selected_module_ids:
+            module_id = raw_module_id.strip()
+            if not module_id or module_id in seen_module_ids:
+                continue
+            selected_values.append(module_id)
+            seen_module_ids.add(module_id)
+
+        if not selected_values:
+            raise ValueError("최소 1개 이상의 모듈을 선택해야 합니다.")
+
+        module_name_by_id = {module.module_id: module.name for module in ordered_modules}
+        unknown_module_ids = [module_id for module_id in selected_values if module_id not in module_name_by_id]
+        if unknown_module_ids:
+            joined = ", ".join(unknown_module_ids)
+            raise ValueError(f"알 수 없는 모듈이 선택되었습니다: {joined}")
+
+        selected_set = set(selected_values)
+        dependency_errors: list[str] = []
+        for module in ordered_modules:
+            if module.module_id not in selected_set:
+                continue
+            missing_dependencies = [
+                dependency
+                for dependency in module.depends_on
+                if dependency not in selected_set
+            ]
+            if not missing_dependencies:
+                continue
+            missing_names = ", ".join(module_name_by_id[dependency] for dependency in missing_dependencies)
+            dependency_errors.append(f"{module.name}: {missing_names}")
+
+        if dependency_errors:
+            raise ValueError(
+                "선행 모듈이 선택되지 않아 실행할 수 없는 조합입니다. "
+                + " / ".join(dependency_errors)
+            )
+
+        return [module.module_id for module in ordered_modules if module.module_id in selected_set]
+
+    def _build_run_modules(self, system: SystemDefinition, selected_module_ids: list[str]) -> list[RunModule]:
+        selected_set = set(selected_module_ids)
+        run_modules: list[RunModule] = []
+        for module in self._ordered_modules(system):
+            is_selected = module.module_id in selected_set
+            run_modules.append(
+                RunModule(
+                    module_id=module.module_id,
+                    name=module.name,
+                    group=module.group,
+                    order=module.order,
+                    depends_on=module.depends_on,
+                    status=ModuleStatus.PENDING if is_selected else ModuleStatus.SKIPPED,
+                    message="대기 중" if is_selected else "사용자 선택에서 제외됨",
+                )
+            )
+        return run_modules
+
+    def _ordered_selected_run_modules(self, run: Run) -> list[RunModule]:
+        selected_set = set(run.selected_module_ids) or {
+            module.module_id for module in run.modules if module.status != ModuleStatus.SKIPPED
+        }
+        return sorted(
+            [module for module in run.modules if module.module_id in selected_set],
+            key=lambda module: module.order,
+        )

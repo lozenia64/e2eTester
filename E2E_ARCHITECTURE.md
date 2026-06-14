@@ -187,11 +187,11 @@ Module:
 - `PASSED`
 - `FAILED`
 - `BLOCKED`
+- `SKIPPED`
 
 아직 없는 것:
 
 - `CANCELLED`
-- `SKIPPED`
 - 재시도 정책
 - 실패 모듈만 재실행
 
@@ -221,6 +221,9 @@ manifest 에 들어 있는 정보:
 
 - 모듈은 `order` 오름차순으로 순차 실행된다.
 - `depends_on` 은 추가 실행 제약이며, 선행 모듈이 모두 `PASSED` 여야 다음 모듈이 실행된다.
+- 실행 요청에는 선택된 모듈 집합(`selected_module_ids`)이 포함될 수 있다.
+- 선택되지 않은 모듈은 Run 모델에 남겨 두되 `SKIPPED` 상태로 표시하고, 실제 실행 루프에는 들어가지 않는다.
+- 잘못된 조합(선행 모듈 없이 후행 모듈만 선택)은 프런트에서 경고할 수 있지만 최종적으로는 `RunService.start_run` 에서 거부한다.
 
 시스템별 실제 모듈 목록과 단계별 동작은 각 시스템 시나리오 문서(`docs/scenarios/`)를 참고한다.
 
