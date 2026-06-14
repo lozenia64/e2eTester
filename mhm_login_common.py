@@ -21,7 +21,7 @@ MAX_TIMEOUT_MS: Final[int] = 15000
 SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
 SCREENSHOT_PRE_CAPTURE_WAIT_MS: Final[int] = 3000
-POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/m/my/main\.do|/my/main\.do")
+POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/myh/mai/MySubMain")
 # 보안프로그램(키보드보안/백신류 로컬 에이전트 + 브라우저 확장)을 일반 브라우저나
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
 # 영속 프로파일(persistent context)로 실행해야 한다. 아래 디렉터리에 프로파일 상태
@@ -846,7 +846,7 @@ def save_screenshot(page: Page, output_path: Path) -> None:
 
 
 def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> None:
-    fragment = expected_fragment or "/my/main.do"
+    fragment = expected_fragment or "/myh/mai/MySubMain1000"
     print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "expectedFragment => window.location.href.includes(expectedFragment)",

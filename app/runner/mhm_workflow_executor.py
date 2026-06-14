@@ -69,7 +69,7 @@ class MhmWorkflowExecutor:
             timeout_ms=common.MAX_TIMEOUT_MS,
             success_stabilization_ms=common.MAX_TIMEOUT_MS,
             keep_open=False,
-            post_login_fragment="/m/my/main.do",
+            post_login_fragment="/myh/mai/MySubMain1000",
             screenshot=str(screenshot_path),
         )
         config = common.build_config(args)

@@ -52,7 +52,7 @@
 메인화면 접속
   -> 로그인 이동
       -> 본인인증 로그인
-          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
+          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증확인 클릭
               -> 로그인 성공 후 팝업 정리
                   -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
                   -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
@@ -88,7 +88,7 @@
 파일:
 
 - `mhm_phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `mhm_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
+- `mhm_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증확인)
 - `mhm_login_common.py`
 - `mhm_login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
 
@@ -96,8 +96,8 @@
 
 - 인증 수단에 따라 분기
 - **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
-- **카카오**: [`/util/login/login.do`](https://m.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
-- `/my/main.do` 포함 URL 진입 확인
+- **카카오**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`카카오인증`** 버튼 클릭 → [`/lin/kct/KakaoWebLgin1000`](https://m.hwgeneralins.com/lin/kct/KakaoWebLgin1000) 본인인증 페이지에서 이름·생년월일·휴대전화번호 입력·**전체동의** → **`인증요청`** → 발송 알림 **`확인`** 닫기 → **60초 대기**(카카오톡에서 인증 진행) → **`인증확인`**(버튼 활성화 후 클릭)
+- [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 포함 URL 진입 확인
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
 
