@@ -9,7 +9,15 @@ from typing import Any
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import DashboardEvent, FailureAnalysisRequest, ModuleDefinition, Run, RunModule, SystemDefinition
+from app.core.models import (
+    DashboardEvent,
+    FailureAnalysisRequest,
+    ModuleDefinition,
+    Run,
+    RunComparison,
+    RunModule,
+    SystemDefinition,
+)
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
@@ -191,14 +199,12 @@ class RunService:
             await self._repository.save_run(run)
             await self._publish_module_event("module_finished", run, module)
 
-    async def start_run(
+    def _prepare_run_request(
         self,
-        system_code: str,
-        input_data: dict[str, str] | None = None,
-        selected_module_ids: list[str] | None = None,
-    ) -> Run:
-        system = self.get_system(system_code)
-        run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+        system: SystemDefinition,
+        input_data: dict[str, str] | None,
+        selected_module_ids: list[str] | None,
+    ) -> tuple[dict[str, str], list[str]]:
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
         resolved_selected_module_ids = self._resolve_selected_module_ids(system, selected_module_ids)
         if system.supported_auth_methods:
@@ -207,6 +213,34 @@ class RunService:
             if auth_method not in system.supported_auth_methods:
                 label = system.name
                 raise ValueError(f"{label}에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
+        return sanitized_input, resolved_selected_module_ids
+
+    def validate_run_request(
+        self,
+        system_code: str,
+        input_data: dict[str, str] | None = None,
+        selected_module_ids: list[str] | None = None,
+    ) -> tuple[dict[str, str], list[str]]:
+        """Run 을 실제로 만들지 않고 입력값·모듈 선택·인증 수단만 검증한다.
+
+        예약(Schedule) 등록 시 잘못된 조합을 등록 단계에서 거르기 위해 쓴다.
+        """
+        system = self.get_system(system_code)
+        return self._prepare_run_request(system, input_data, selected_module_ids)
+
+    async def start_run(
+        self,
+        system_code: str,
+        input_data: dict[str, str] | None = None,
+        selected_module_ids: list[str] | None = None,
+        triggered_by: str = "manual",
+        schedule_id: str | None = None,
+    ) -> Run:
+        system = self.get_system(system_code)
+        run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+        sanitized_input, resolved_selected_module_ids = self._prepare_run_request(
+            system, input_data, selected_module_ids
+        )
         run = Run(
             run_id=run_id,
             system_code=system.system_code,
@@ -215,6 +249,8 @@ class RunService:
             requested_at=datetime.now(UTC),
             modules=self._build_run_modules(system, resolved_selected_module_ids),
             selected_module_ids=resolved_selected_module_ids,
+            triggered_by=triggered_by,
+            schedule_id=schedule_id,
         )
         self._run_inputs[run_id] = dict(sanitized_input)
         await self._repository.create_run(run)
@@ -576,12 +612,59 @@ class RunService:
             run.status = forced_status
         else:
             run.status = RunStatus.FAILED if any(module.status == ModuleStatus.FAILED for module in run.modules) else RunStatus.PASSED
+        if run.status in {RunStatus.PASSED, RunStatus.FAILED}:
+            run.comparison = await self._compute_comparison(run)
         await self._repository.save_run(run)
         self._cancel_requested.discard(run.run_id)
         await self._publish_run_event("run_finished", run)
         # 사용자가 취소한 Run은 결과 보고서 메일을 보내지 않는다. (PASSED/FAILED 만 발송)
         if self._run_completion_notifier is not None and run.status in {RunStatus.PASSED, RunStatus.FAILED}:
             asyncio.create_task(self._notify_run_completion(run.model_copy(deep=True)))
+
+    async def _compute_comparison(self, run: Run) -> RunComparison:
+        """직전에 종료된 같은 시스템 Run 을 기준선으로 모듈 상태 변화를 계산한다."""
+        baseline: Run | None = None
+        for other in await self._repository.list_runs():
+            if other.run_id == run.run_id or other.system_code != run.system_code:
+                continue
+            if other.status not in {RunStatus.PASSED, RunStatus.FAILED}:
+                continue
+            if other.requested_at >= run.requested_at:
+                continue
+            if baseline is None or other.requested_at > baseline.requested_at:
+                baseline = other
+
+        if baseline is None:
+            return RunComparison(has_baseline=False)
+
+        baseline_status = {
+            module.module_id: module.status
+            for module in baseline.modules
+            if module.status != ModuleStatus.SKIPPED
+        }
+        newly_failed: list[str] = []
+        recovered: list[str] = []
+        still_failing: list[str] = []
+        for module in sorted(run.modules, key=lambda item: item.order):
+            if module.status == ModuleStatus.SKIPPED:
+                continue
+            previous = baseline_status.get(module.module_id)
+            if module.status == ModuleStatus.FAILED:
+                if previous == ModuleStatus.FAILED:
+                    still_failing.append(module.name)
+                else:
+                    newly_failed.append(module.name)
+            elif module.status == ModuleStatus.PASSED and previous == ModuleStatus.FAILED:
+                recovered.append(module.name)
+
+        return RunComparison(
+            has_baseline=True,
+            baseline_run_id=baseline.run_id,
+            baseline_requested_at=baseline.requested_at,
+            newly_failed=newly_failed,
+            recovered=recovered,
+            still_failing=still_failing,
+        )
 
     async def _notify_run_completion(self, run: Run) -> None:
         try:

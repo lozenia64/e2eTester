@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -8,13 +9,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_runs import router as runs_router
+from app.api.routes_schedules import router as schedules_router
 from app.api.routes_systems import router as systems_router
 from app.api.ws_runs import router as ws_runs_router
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
+from app.scheduling.scheduler import SchedulerService
 from app.storage.run_repository import InMemoryRunRepository
+from app.storage.schedule_repository import InMemoryScheduleRepository
 
 
 ARTIFACTS_DIR = Path("artifacts")
@@ -28,13 +32,26 @@ async def lifespan(app: FastAPI):
     failure_analyzer = GeminiFailureAnalyzer.from_env()
     system_codes = [system.system_code for system in registry.list_systems()]
     email_notifier = RunCompletionEmailNotifier.from_env(system_codes)
-    app.state.run_service = RunService(
+    run_service = RunService(
         registry=registry,
         repository=repository,
         failure_analyzer=failure_analyzer,
         run_completion_notifier=email_notifier,
     )
-    yield
+    app.state.run_service = run_service
+
+    scheduler = SchedulerService(run_service=run_service, repository=InMemoryScheduleRepository())
+    app.state.schedule_service = scheduler
+    scheduler_task = asyncio.create_task(scheduler.run_forever())
+    try:
+        yield
+    finally:
+        scheduler.stop()
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)
@@ -43,4 +60,5 @@ app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 app.include_router(dashboard_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
+app.include_router(schedules_router)
 app.include_router(ws_runs_router)

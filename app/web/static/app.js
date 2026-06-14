@@ -761,6 +761,236 @@ function bindRunsOverview() {
     }, RUN_LIST_POLL_MS);
 }
 
+const SCHEDULE_LIST_POLL_MS = 15000;
+
+async function registerSchedule(systemCode, form, button) {
+    const feedback = form.querySelector('[data-role="schedule-feedback"]');
+    setInlineFeedback(feedback, "");
+
+    const cronInput = form.querySelector('[data-role="schedule-cron"]');
+    const nameInput = form.querySelector('[data-role="schedule-name"]');
+    const cron = (cronInput?.value ?? "").trim();
+    const name = (nameInput?.value ?? "").trim();
+    if (!cron) {
+        setInlineFeedback(feedback, "cron 식을 입력하세요. 예: 0 9 * * *");
+        return;
+    }
+
+    const authMethod = form.querySelector('[name="auth_method"]')?.value;
+    if (
+        (systemCode === "hom" || systemCode === "mhm")
+        && authMethod
+        && authMethod !== "phone"
+        && authMethod !== "kakao"
+    ) {
+        setInlineFeedback(feedback, `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 예약할 수 있습니다.`);
+        return;
+    }
+
+    const selectedModuleIds = getSelectedModuleIds(form);
+    if (selectedModuleIds.length === 0) {
+        setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = "등록 중...";
+    try {
+        const response = await fetch(`/api/schedules/systems/${systemCode}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                cron,
+                name,
+                input_data: collectFormInput(form),
+                selected_module_ids: selectedModuleIds,
+            }),
+        });
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `예약 등록에 실패했습니다. (${response.status})`);
+        }
+        setInlineFeedback(feedback, "예약이 등록되었습니다.", "success");
+        if (cronInput) {
+            cronInput.value = "";
+        }
+        if (nameInput) {
+            nameInput.value = "";
+        }
+        refreshScheduleList();
+    } catch (error) {
+        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "예약 등록에 실패했습니다.");
+        console.error(error);
+    } finally {
+        button.disabled = false;
+        button.textContent = "예약 등록";
+    }
+}
+
+function createScheduleActionButton(label, action, scheduleId, extraClasses) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.scheduleAction = action;
+    button.dataset.scheduleId = scheduleId;
+    button.className = `inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${extraClasses}`;
+    button.textContent = label;
+    return button;
+}
+
+function createScheduleListItem(schedule) {
+    const card = document.createElement("div");
+    card.className = "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm";
+
+    const left = document.createElement("div");
+    left.className = "flex min-w-0 items-center gap-4";
+
+    const codeChip = document.createElement("span");
+    codeChip.className = "inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200";
+    codeChip.textContent = String(schedule.system_code ?? "").toUpperCase();
+    left.appendChild(codeChip);
+
+    const info = document.createElement("div");
+    info.className = "min-w-0";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "flex flex-wrap items-center gap-2";
+    const title = document.createElement("h3");
+    title.className = "text-sm font-bold text-gray-900";
+    title.textContent = schedule.name || schedule.system_name || schedule.system_code || "";
+    titleRow.appendChild(title);
+    const cronChip = document.createElement("code");
+    cronChip.className = "rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700";
+    cronChip.textContent = schedule.cron ?? "";
+    titleRow.appendChild(cronChip);
+    if (!schedule.enabled) {
+        const offBadge = document.createElement("span");
+        offBadge.className = "inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600";
+        offBadge.textContent = "비활성";
+        titleRow.appendChild(offBadge);
+    }
+    info.appendChild(titleRow);
+
+    const meta = document.createElement("p");
+    meta.className = "mt-0.5 truncate text-xs text-gray-400";
+    const metaParts = [];
+    if (schedule.enabled && schedule.next_run_at) {
+        metaParts.push(`다음 ${formatRunTimestamp(schedule.next_run_at)}`);
+    }
+    if (schedule.module_count != null) {
+        metaParts.push(`모듈 ${schedule.module_count}개`);
+    }
+    if (schedule.auth_method) {
+        metaParts.push(schedule.auth_method);
+    }
+    if (schedule.timezone) {
+        metaParts.push(schedule.timezone);
+    }
+    meta.textContent = metaParts.filter(Boolean).join(" · ");
+    info.appendChild(meta);
+
+    if (schedule.last_run_id) {
+        const last = document.createElement("p");
+        last.className = "mt-0.5 truncate text-xs text-gray-400";
+        last.append("최근 실행: ");
+        const link = document.createElement("a");
+        link.href = `/runs/${schedule.last_run_id}`;
+        link.className = "font-medium text-indigo-600 hover:underline";
+        link.textContent = schedule.last_run_status || schedule.last_run_id;
+        last.appendChild(link);
+        if (schedule.last_run_at) {
+            last.append(` · ${formatRunTimestamp(schedule.last_run_at)}`);
+        }
+        info.appendChild(last);
+    }
+    left.appendChild(info);
+
+    const right = document.createElement("div");
+    right.className = "flex shrink-0 items-center gap-2";
+    right.appendChild(createScheduleActionButton("지금 실행", "run-now", schedule.schedule_id, "border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50"));
+    right.appendChild(createScheduleActionButton(schedule.enabled ? "비활성화" : "활성화", "toggle", schedule.schedule_id, "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"));
+    right.appendChild(createScheduleActionButton("삭제", "delete", schedule.schedule_id, "border-red-300 bg-white text-red-600 hover:bg-red-50"));
+
+    card.appendChild(left);
+    card.appendChild(right);
+    return card;
+}
+
+function renderScheduleList(schedules) {
+    const section = document.getElementById("schedules-section");
+    const list = document.getElementById("schedules-list");
+    if (!section || !list) {
+        return;
+    }
+    section.classList.toggle("is-hidden", schedules.length === 0);
+    list.innerHTML = "";
+    for (const schedule of schedules) {
+        list.appendChild(createScheduleListItem(schedule));
+    }
+}
+
+async function refreshScheduleList() {
+    try {
+        const response = await fetch("/api/schedules");
+        if (!response.ok) {
+            return;
+        }
+        renderScheduleList(await response.json());
+    } catch (error) {
+        console.error("예약 목록 갱신 실패", error);
+    }
+}
+
+async function handleScheduleAction(event) {
+    const button = event.target.closest("[data-schedule-action]");
+    if (!button) {
+        return;
+    }
+    const action = button.dataset.scheduleAction;
+    const scheduleId = button.dataset.scheduleId;
+    if (action === "delete" && !window.confirm("이 예약을 삭제하시겠습니까?")) {
+        return;
+    }
+
+    button.disabled = true;
+    try {
+        let response;
+        if (action === "toggle") {
+            response = await fetch(`/api/schedules/${scheduleId}/toggle`, { method: "POST" });
+        } else if (action === "run-now") {
+            response = await fetch(`/api/schedules/${scheduleId}/run-now`, { method: "POST" });
+        } else if (action === "delete") {
+            response = await fetch(`/api/schedules/${scheduleId}`, { method: "DELETE" });
+        }
+        if (!response || !response.ok) {
+            throw new Error(response ? await readErrorMessage(response) : "알 수 없는 동작입니다.");
+        }
+        if (action === "run-now") {
+            const run = await response.json();
+            window.location.href = `/runs/${run.run_id}`;
+            return;
+        }
+        refreshScheduleList();
+    } catch (error) {
+        button.disabled = false;
+        showToast(`예약 처리에 실패했습니다: ${error.message.replace(/^Error:\s*/, "")}`);
+        console.error(error);
+    }
+}
+
+function bindSchedulesOverview() {
+    const list = document.getElementById("schedules-list");
+    if (!list) {
+        return;
+    }
+    list.addEventListener("click", handleScheduleAction);
+    refreshScheduleList();
+    setInterval(() => {
+        if (!document.hidden) {
+            refreshScheduleList();
+        }
+    }, SCHEDULE_LIST_POLL_MS);
+}
+
 function updateModuleCard(module) {
     rememberModuleState(module);
     updateRunProgress();
@@ -1092,6 +1322,12 @@ function bindSystemButtons() {
             const button = form.querySelector("button[type='submit']");
             startSystemRun(form.dataset.systemCode, button, form);
         });
+        const scheduleButton = form.querySelector('[data-role="schedule-register"]');
+        if (scheduleButton) {
+            scheduleButton.addEventListener("click", () => {
+                registerSchedule(form.dataset.systemCode, form, scheduleButton);
+            });
+        }
     }
 }
 
@@ -1236,6 +1472,7 @@ function bindRunSocket() {
             document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
             updateRunActions(message.payload.status);
             updateOtpPanel(message.payload);
+            updateComparisonPanel(message.payload);
             loadLogEntriesFromRun(message.payload);
             for (const module of message.payload.modules) {
                 updateModuleCard(module);
@@ -1261,13 +1498,64 @@ function bindRunSocket() {
         if (message.event_type === "run_waiting_input" || message.event_type === "run_resumed" || message.event_type === "run_finished") {
             updateOtpPanel(message.payload);
         }
+
+        if (message.event_type === "run_finished") {
+            updateComparisonPanel(message.payload);
+        }
     });
+}
+
+function updateComparisonPanel(runPayload) {
+    const panel = document.getElementById("comparison-panel");
+    if (!panel) {
+        return;
+    }
+    const comparison = runPayload?.comparison;
+    const hasBaseline = Boolean(comparison && comparison.has_baseline);
+    panel.classList.toggle("is-hidden", !hasBaseline);
+    if (!hasBaseline) {
+        return;
+    }
+
+    const link = document.getElementById("comparison-baseline-link");
+    if (link && comparison.baseline_run_id) {
+        link.href = `/runs/${comparison.baseline_run_id}`;
+        link.textContent = `기준 Run: ${comparison.baseline_run_id}`;
+    }
+
+    const body = document.getElementById("comparison-body");
+    if (!body) {
+        return;
+    }
+    body.innerHTML = "";
+    const groups = [
+        { label: "새로 실패", names: comparison.newly_failed ?? [], cls: "bg-red-100 text-red-700" },
+        { label: "복구됨", names: comparison.recovered ?? [], cls: "bg-emerald-100 text-emerald-700" },
+        { label: "계속 실패", names: comparison.still_failing ?? [], cls: "bg-amber-100 text-amber-700" },
+    ];
+    let hasAny = false;
+    for (const group of groups) {
+        for (const name of group.names) {
+            hasAny = true;
+            const chip = document.createElement("span");
+            chip.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium ${group.cls}`;
+            chip.textContent = `${group.label}: ${name}`;
+            body.appendChild(chip);
+        }
+    }
+    if (!hasAny) {
+        const note = document.createElement("span");
+        note.className = "text-gray-500";
+        note.textContent = "직전 실행과 비교해 모듈 상태 변화가 없습니다.";
+        body.appendChild(note);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     bindModuleSelectors();
     bindSystemButtons();
     bindRunsOverview();
+    bindSchedulesOverview();
     bindLogControls();
     startRuntimeTicker();
     bindRunActions();

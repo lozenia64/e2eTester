@@ -283,6 +283,7 @@ class GeminiEmailHtmlComposer:
     def _build_prompt(self, context: dict) -> str:
         prompt_context = {
             "run": context["run"],
+            "comparison": context["comparison"],
             "module_summary": context["module_summary"],
             "modules": context["modules"],
             "failed_modules": context["failed_modules"],
@@ -308,6 +309,7 @@ class GeminiEmailHtmlComposer:
                 "- 실행 로그: 시간 흐름에 따라 어떤 단계가 수행되었는지 파악하고, 경고/오류/재시도/타임아웃 등 특이 이벤트를 추출하라.",
                 "  실패가 있으면 실패 직전 로그를 근거로 원인을 분석하고, 근거가 된 로그 메시지를 보고서에 짧게 인용하라.",
                 "- 추측 금지: 스크린샷이나 로그에서 직접 확인되지 않는 사실을 만들어내지 마라. 자료가 제공되지 않은 모듈은 '자료 없음'으로 표기하라.",
+                "- 직전 실행 대비: comparison 자료의 newly_failed(이번에 새로 실패)/recovered(이번에 복구)/still_failing(계속 실패) 모듈명을 활용하라. has_baseline 이 true 면 '직전 실행 대비 변화' 섹션을 만들어 새로 실패한 모듈을 가장 눈에 띄게 강조하고 복구·지속 실패도 정리하라. false 면 비교 대상이 없다고만 적어라.",
                 "",
                 "# 보고서 구성 (아래 순서를 따르라)",
                 "1. 제목 헤더: '[E2E] {시스템명} 테스트 결과 보고서' 형태의 제목과 상태 배지(성공/실패). 성공은 #17804b, 실패는 #c44536 계열 색상 사용.",
@@ -441,6 +443,18 @@ class RunCompletionEmailBuilder:
                     lines.append(f"  요약: {failed_module['analysis_summary']}")
                 if failed_module["recommended_action"]:
                     lines.append(f"  권장 조치: {failed_module['recommended_action']}")
+        comparison = context["comparison"]
+        if comparison["has_baseline"]:
+            lines.append("")
+            lines.append(f"직전 실행 대비 변화 (기준 Run: {comparison['baseline_run_id'] or '-'}):")
+            if comparison["newly_failed"]:
+                lines.append(f"- 새로 실패: {', '.join(comparison['newly_failed'])}")
+            if comparison["recovered"]:
+                lines.append(f"- 복구됨: {', '.join(comparison['recovered'])}")
+            if comparison["still_failing"]:
+                lines.append(f"- 계속 실패: {', '.join(comparison['still_failing'])}")
+            if not (comparison["newly_failed"] or comparison["recovered"] or comparison["still_failing"]):
+                lines.append("- 모듈 상태 변화 없음")
         attachment_summary = context["email_attachment_summary"]
         lines.extend(
             [
@@ -504,6 +518,33 @@ class RunCompletionEmailBuilder:
                 )
             )
 
+        comparison = context["comparison"]
+        comparison_section = ""
+        if comparison["has_baseline"]:
+            def _comparison_rows(title: str, names: list[str], color: str) -> str:
+                if not names:
+                    return ""
+                items = "".join(f"<li>{escape(name)}</li>" for name in names)
+                return (
+                    f"<div style=\"margin-top:8px;\"><strong style=\"color:{color};\">{escape(title)}</strong>"
+                    f"<ul style=\"margin:4px 0 0;padding-left:18px;\">{items}</ul></div>"
+                )
+
+            comparison_body = (
+                _comparison_rows(f"새로 실패 {len(comparison['newly_failed'])}건", comparison["newly_failed"], "#c44536")
+                + _comparison_rows(f"복구됨 {len(comparison['recovered'])}건", comparison["recovered"], "#17804b")
+                + _comparison_rows(f"계속 실패 {len(comparison['still_failing'])}건", comparison["still_failing"], "#9a6700")
+            ) or "<div style=\"margin-top:8px;\">직전 실행과 비교해 모듈 상태 변화가 없습니다.</div>"
+            comparison_section = (
+                "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f1f5ff;"
+                "border:1px solid rgba(37,99,235,0.18);\">"
+                "<h3 style=\"margin:0 0 6px;font-size:16px;\">직전 실행 대비 변화</h3>"
+                f"<div style=\"font-size:13px;color:#555;\">기준 Run: <code>{escape(str(comparison['baseline_run_id'] or '-'))}</code> "
+                f"({escape(comparison['baseline_requested_at'])})</div>"
+                f"{comparison_body}"
+                "</div>"
+            )
+
         module_rows = "".join(
             f"<li><strong>{escape(status)}</strong>: {count}</li>"
             for status, count in context["module_summary"].items()
@@ -535,6 +576,7 @@ class RunCompletionEmailBuilder:
             f"<ul style=\"margin:0;padding-left:18px;\">{module_rows}</ul>"
             "</div>"
             f"{failed_section}"
+            f"{comparison_section}"
             "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f6f3ef;\">"
             "<strong style=\"display:block;margin-bottom:8px;\">첨부 요약</strong>"
             f"<div>스크린샷 {context['email_attachment_summary']['screenshot_count']}건 / "
@@ -725,6 +767,20 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
             }
         )
 
+    comparison = run.comparison
+    comparison_context = {
+        "has_baseline": bool(comparison and comparison.has_baseline),
+        "baseline_run_id": comparison.baseline_run_id if comparison else None,
+        "baseline_requested_at": (
+            _format_datetime(comparison.baseline_requested_at)
+            if comparison and comparison.baseline_requested_at
+            else "-"
+        ),
+        "newly_failed": list(comparison.newly_failed) if comparison else [],
+        "recovered": list(comparison.recovered) if comparison else [],
+        "still_failing": list(comparison.still_failing) if comparison else [],
+    }
+
     return {
         "run": {
             "run_id": run.run_id,
@@ -736,7 +792,9 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
             "started_at_kst": _format_datetime(run.started_at),
             "ended_at_kst": _format_datetime(run.ended_at),
             "duration_text": _format_duration(run),
+            "triggered_by": "예약" if run.triggered_by == "schedule" else "수동",
         },
+        "comparison": comparison_context,
         "module_summary": module_summary,
         "modules": modules,
         "failed_modules": failed_modules,
