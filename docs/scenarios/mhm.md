@@ -17,30 +17,28 @@
 `mhm.yaml` `order` 기준:
 
 1. `mhm.main.access`
-2. `mhm.login.move`
-3. `mhm.login.phone_login` — `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
-4. `mhm.contract.list`
-5. `mhm.contract.detail`
-6. `mhm.compensation.charge` — `app/systems/mhm/steps/compensation_charge.py` (`compensation_charge` 단계)
-7. `mhm.compensation.result` — `app/systems/mhm/steps/compensation_result.py` (`compensation_result` 단계)
-8. `mhm.compensation.cancel` — `app/systems/mhm/steps/compensation_cancel.py` (`compensation_cancel` 단계)
-9. `mhm.proof.long_term_policy` — `app/systems/mhm/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+2. `mhm.login` — 로그인 화면 이동(`app/systems/mhm/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·60초·`인증확인`) 실행
+3. `mhm.contract.list`
+4. `mhm.contract.detail`
+5. `mhm.compensation.charge` — `app/systems/mhm/steps/compensation_charge.py` (`compensation_charge` 단계)
+6. `mhm.compensation.result` — `app/systems/mhm/steps/compensation_result.py` (`compensation_result` 단계)
+7. `mhm.compensation.cancel` — `app/systems/mhm/steps/compensation_cancel.py` (`compensation_cancel` 단계)
+8. `mhm.proof.long_term_policy` — `app/systems/mhm/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
 
 `app/systems/mhm/steps/compensation_result.py`·`app/systems/mhm/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/mhm/steps/compensation_result_common.py`에서 공유한다.
 
-모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 MHM 단계는 180초.
+모듈별 `timeout_seconds`: 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 MHM 단계는 180초.
 
 선택 실행을 위한 현재 의존성 그래프는 아래와 같다.
 
 - `mhm.main.access` → 없음
-- `mhm.login.move` → `mhm.main.access`
-- `mhm.login.phone_login` → `mhm.login.move`
-- `mhm.contract.list` → `mhm.login.phone_login`
+- `mhm.login` → `mhm.main.access`
+- `mhm.contract.list` → `mhm.login`
 - `mhm.contract.detail` → `mhm.contract.list`
-- `mhm.compensation.charge` → `mhm.login.phone_login`
+- `mhm.compensation.charge` → `mhm.login`
 - `mhm.compensation.result` → `mhm.compensation.charge`
 - `mhm.compensation.cancel` → `mhm.compensation.charge`
-- `mhm.proof.long_term_policy` → `mhm.login.phone_login`
+- `mhm.proof.long_term_policy` → `mhm.login`
 
 즉 MHM은 더 이상 단일 직선 체인만으로 해석하지 않는다. 로그인 이후 계약조회, 보험금청구, 증명서 발급이 서로 다른 브랜치로 분기하며, 대시보드에서 모듈을 선택 해제하면 선택되지 않은 모듈은 Run 화면에서 `SKIPPED` 로 표시된다.
 
@@ -50,13 +48,12 @@
 
 ```text
 메인화면 접속
-  -> 로그인 이동
-      -> 본인인증 로그인
-          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증확인 클릭
-              -> 로그인 성공 후 팝업 정리
-                  -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
-                  -> 보상 브랜치: 보험금청구 접수(IbnfDmRcp1020~1090) -> 보험금청구 결과 조회(IbnfDmRstInq1000~1020) -> 보험금청구 취소(IbnfDmRstInq1010~1020, UI 알림 확인)
-                  -> 증명서 브랜치: 장기보험증권 증명서 발급
+  -> 로그인 (로그인 이동 + 본인인증 로그인을 한 단계에서 처리)
+      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증확인 클릭
+          -> 로그인 성공 후 팝업 정리
+              -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
+              -> 보상 브랜치: 보험금청구 접수(IbnfDmRcp1020~1090) -> 보험금청구 결과 조회(IbnfDmRstInq1000~1020) -> 보험금청구 취소(IbnfDmRstInq1010~1020, UI 알림 확인)
+              -> 증명서 브랜치: 장기보험증권 증명서 발급
 ```
 
 ### Step 1. 메인화면 접속
@@ -72,21 +69,13 @@
 - 메인화면 전용 `20000ms` timeout 적용
 - 랜딩 팝업 정리
 
-### Step 2. 로그인 이동
+### Step 2. 로그인
+
+로그인 화면 이동과 본인인증 로그인을 하나의 `login` 단계에서 연속으로 수행한다. (휴대폰 OTP 대기로 Run이 일시정지되어도 SMS 요청은 한 번만 수행되도록 `phone_login_sms_requested` 플래그로 로그인 이동·SMS 요청을 함께 가드한다.)
 
 파일:
 
-- `app/systems/mhm/steps/login_move.py`
-
-역할:
-
-- 모바일 로그인 진입 (햄버거/하단 메뉴 등)
-- 로그인 페이지 이동
-
-### Step 3. 본인인증 로그인
-
-파일:
-
+- `app/systems/mhm/steps/login_move.py` — 모바일 로그인 진입(햄버거/하단 메뉴 등)·로그인 페이지 이동
 - `app/systems/mhm/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
 - `app/systems/mhm/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증확인)
 - `app/systems/mhm/steps/login_common.py`
@@ -94,6 +83,7 @@
 
 역할:
 
+- 모바일 로그인 진입(햄버거/하단 메뉴 등)으로 로그인 페이지로 이동
 - 인증 수단에 따라 분기
 - **휴대폰**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`다른 로그인 방법`**(`main button.btn.btn_more`) 클릭 → **`휴대폰인증`**(`main a[role="button"].c5` / `span.cert_select_text`) 클릭 → [`/lin/fid/LginTypSlc1020`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1020) 폼에서 `#customerName`·`#jumin1`(YYMMDD)·`#jumin2`(성별/내외국인)·`#cellphone0`(통신사)·`#cellphone1`(휴대전화번호) 입력·**`#checkAll` 전체동의** → **`인증요청`**(`button.btn.s3.c4`) → **`.dialog.modal.alert.show` 알림(인증번호가 발송되었습니다.)** 의 **`확인`**(`button.btn.ui_dialog_close`) 클릭 → OTP를 `#reqPhoneCheck`에 입력 후 **`확인`**(`button.btn.s1.c1`, 활성화 후 클릭) → [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 리다이렉트 → (있으면) **`#coachMarkDialog` 코치마크** 단계별 클릭으로 닫기 → (있으면) **모바일 안내장 신청안내** 팝업에서 **`다음에 할게요`**(`button.btn.s1.c2`) 클릭
 - **카카오**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`카카오인증`** 버튼 클릭 → [`/lin/kct/KakaoWebLgin1000`](https://m.hwgeneralins.com/lin/kct/KakaoWebLgin1000) 본인인증 페이지에서 이름·생년월일·휴대전화번호 입력·**전체동의** → **`인증요청`** → 발송 알림 **`확인`** 닫기 → **60초 대기**(카카오톡에서 인증 진행) → **`인증확인`**(버튼 활성화 후 클릭)
@@ -101,7 +91,7 @@
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
 
-### Step 4. 계약목록 조회
+### Step 3. 계약목록 조회
 
 파일:
 
@@ -115,7 +105,7 @@
 - **총 N 건** 또는 계약 카드(`main a[role="button"]:has(h3)`) 건수 확인
 - 스크린샷 저장
 
-### Step 5. 계약상세 조회
+### Step 4. 계약상세 조회
 
 파일:
 
@@ -128,7 +118,7 @@
 - 증권번호(`FA`/`LA` + 숫자) 및 **계약자정보**, **담당자정보**, **납입정보** 섹션 확인
 - `final.png`: 실제 계약상세 웹 화면 전체 스크린샷(데이터 표시 검증용; `artifacts/`에 그대로 저장)
 
-### Step 6. 보험금청구 접수
+### Step 5. 보험금청구 접수
 
 파일:
 
@@ -153,7 +143,7 @@
 - [`/cmp/dii/IbnfDmRcp1090`](https://m.hwgeneralins.com/cmp/dii/IbnfDmRcp1090) 완료 화면(제목 **보험금청구를 완료했어요**) 확인.
 - (있으면) **서비스만족도 조사** 팝업(`.dialog.full.show`) 우측 상단 **`button.dialog_close.ui_dialog_close`**(팝업창 닫기) 클릭.
 
-### Step 7. 보험금청구 결과 조회
+### Step 6. 보험금청구 결과 조회
 
 파일:
 
@@ -180,7 +170,7 @@
 - 슬라이드는 **1장씩** 표시되므로, 각 슬라이드마다 활성 `.swiper-slide-active`의 **미리보기 `img`** 가 `naturalWidth > 0` 로딩될 때까지 대기(최대 30초)한 뒤 **`button.hgismt_next`** 로 다음 서류로 넘기며 전건 검증
 - 검증 완료 후 **`확인`** 으로 닫기
 
-### Step 8. 보험금청구 취소
+### Step 7. 보험금청구 취소
 
 파일:
 
@@ -189,7 +179,7 @@
 
 역할:
 
-- Step 7과 동일한 방식으로 [`/cmp/dii/IbnfDmRstInq1010`](https://m.hwgeneralins.com/cmp/dii/IbnfDmRstInq1010) 목록에 진입해 **`진행중 본인`** 필터에서 동일 조건(오늘 날짜·`IT직원 테스트입니다. 바로 취소할`·진행 중 상태 힌트)의 카드를 찾아 접수번호를 확보하고 [`/cmp/dii/IbnfDmRstInq1020`](https://m.hwgeneralins.com/cmp/dii/IbnfDmRstInq1020) 상세로 이동
+- Step 6과 동일한 방식으로 [`/cmp/dii/IbnfDmRstInq1010`](https://m.hwgeneralins.com/cmp/dii/IbnfDmRstInq1010) 목록에 진입해 **`진행중 본인`** 필터에서 동일 조건(오늘 날짜·`IT직원 테스트입니다. 바로 취소할`·진행 중 상태 힌트)의 카드를 찾아 접수번호를 확보하고 [`/cmp/dii/IbnfDmRstInq1020`](https://m.hwgeneralins.com/cmp/dii/IbnfDmRstInq1020) 상세로 이동
 - 상세 화면 데이터가 확보한 접수번호로 채워질 때까지 대기
 - 상세 화면에서 **`접수취소`**(`main button:has-text("접수취소")`) 클릭
 - UI 알림 **`접수를 취소하시겠습니까?`** 표시 확인 후 **`.dialog.modal.alert.show`** 내부 **`예`**(`exact=True`) 클릭
@@ -200,7 +190,7 @@
 - 해당 카드에 **`취소`** 상태 태그(`span.tag.c3`)가 포함되는지 확인
 - 취소된 카드 상세에서 **`보험금청구 접수가 취소되었습니다`** 제목 확인, **`접수취소`** 버튼은 노출되지 않고 **`제출서류 확인하기`**·**`동일내용 다시청구`** 는 노출되는지 확인
 
-### Step 9. 장기보험증권 증명서 발급
+### Step 8. 장기보험증권 증명서 발급
 
 파일:
 
@@ -237,7 +227,7 @@
 
 추가 선택 규칙:
 
-- 실행 전 그래프에서 9개 모듈의 실행 여부를 개별 선택할 수 있다.
-- 기본값은 9개 전체 선택이다.
+- 실행 전 그래프에서 8개 모듈의 실행 여부를 개별 선택할 수 있다.
+- 기본값은 8개 전체 선택이다.
 - 선택 해제된 모듈은 실행 요청 payload의 `selected_module_ids` 에 포함되지 않으며 Run 화면에서 `SKIPPED` 로 렌더링된다.
 - 선행 모듈이 빠진 잘못된 조합은 UI에서 경고를 보여줄 수 있지만 최종 판정은 서버가 수행하며, 실행 생성 시 400 오류로 거부된다.

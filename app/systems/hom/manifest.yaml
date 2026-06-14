@@ -114,30 +114,18 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: main_access
-  - module_id: hom.login.move
+  - module_id: hom.login
     system_code: hom
-    name: 로그인 이동
-    description: 메인화면 우측 상단 로그인 버튼을 클릭해 로그인 화면으로 이동합니다.
+    name: 로그인
+    description: 메인화면 우측 상단 로그인 버튼을 클릭해 로그인 화면으로 이동한 뒤 선택한 인증수단(휴대폰 OTP 또는 카카오 60초 대기)으로 로그인을 완료합니다.
     group: login
     order: 20
     depends_on:
       - hom.main.access
-    timeout_seconds: 180
-    execution_mode: hom_workflow_step
-    workflow_name: hom_login
-    workflow_step: login_move
-  - module_id: hom.login.phone_login
-    system_code: hom
-    name: 본인인증 로그인
-    description: 선택한 인증수단(휴대폰 OTP 또는 카카오 60초 대기)으로 로그인을 완료합니다.
-    group: auth
-    order: 30
-    depends_on:
-      - hom.login.move
     timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
-    workflow_step: phone_login
+    workflow_step: login
   - module_id: hom.contract.list
     system_code: hom
     name: 계약목록 조회
@@ -145,7 +133,7 @@ modules:
     group: inquiry
     order: 40
     depends_on:
-      - hom.login.phone_login
+      - hom.login
     timeout_seconds: 180
     execution_mode: hom_workflow_step
     workflow_name: hom_login
@@ -169,7 +157,7 @@ modules:
     group: inquiry
     order: 60
     depends_on:
-      - hom.login.phone_login
+      - hom.login
     timeout_seconds: 300
     execution_mode: hom_workflow_step
     workflow_name: hom_login
@@ -205,7 +193,7 @@ modules:
     group: proof
     order: 90
     depends_on:
-      - hom.login.phone_login
+      - hom.login
     timeout_seconds: 180
     execution_mode: hom_workflow_step
     workflow_name: hom_login
