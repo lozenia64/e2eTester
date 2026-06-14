@@ -1,6 +1,6 @@
 system_code: hom
-name: Hanwha General Insurance
-description: 휴대폰·카카오 본인인증 로그인 흐름을 기준으로 구성한 HOM 샘플 시스템
+name: 대표홈페이지(PC)
+description: 주요업무 전체 일일점검
 run_form:
   - key: browser_mode
     label: 브라우저 실행 모드
@@ -13,13 +13,6 @@ run_form:
         value: headed
       - label: 백그라운드 실행
         value: headless
-  - key: base_url
-    label: Base URL
-    type: text
-    required: false
-    default: https://www.hwgeneralins.com
-    placeholder: https://www.hwgeneralins.com
-    help_text: 비워두면 기본 URL을 사용합니다.
   - key: auth_method
     label: 인증 수단
     type: select

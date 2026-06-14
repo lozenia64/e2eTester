@@ -1,4 +1,4 @@
-# HOM 시나리오 (한화손해보험 샘플)
+# HOM 시나리오 (대표홈페이지(PC))
 
 이 문서는 `hom` 시스템의 E2E 테스트 시나리오를 설명한다.
 
@@ -8,7 +8,7 @@
 
 - 시스템 코드: `hom`
 - manifest: `app/registry/manifests/hom.yaml`
-- 대상 사이트: `https://www.hwgeneralins.com` (Run form 의 Base URL 입력으로 변경 가능)
+- 대상 사이트: `https://www.hwgeneralins.com` (고정값)
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 
 ## 2. 모듈 목록
@@ -192,7 +192,6 @@
 홈 화면의 `HOM` 실행 카드에는 아래 입력이 있다.
 
 - 브라우저 실행 모드
-- Base URL
 - 인증 수단
 - 고객명
 - 생년월일
