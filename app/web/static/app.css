@@ -51,7 +51,7 @@ body {
 .module-graph-grid {
     position: relative;
     display: grid;
-    gap: 10px 14px;
+    gap: 16px 14px;
     min-height: 100%;
 }
 
@@ -88,6 +88,18 @@ body {
 
 .module-graph-node.is-unselected:hover {
     border-color: #94a3b8;
+}
+
+.module-graph-node.is-locked {
+    border-color: #dbe4f0;
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.module-graph-node.is-locked:hover {
+    border-color: #dbe4f0;
+    transform: none;
 }
 
 .module-graph-node:focus-visible {
@@ -127,8 +139,17 @@ body {
     color: #64748b;
 }
 
+.module-graph-node.is-locked .module-graph-order {
+    background: #e2e8f0;
+    color: #94a3b8;
+}
+
 .module-graph-node.is-unselected .module-graph-title {
     color: #64748b;
+}
+
+.module-graph-node.is-locked .module-graph-title {
+    color: #94a3b8;
 }
 
 .module-graph-edge {
@@ -149,7 +170,7 @@ body {
 
 @media (max-width: 640px) {
     .module-graph-grid {
-        gap: 8px 10px;
+        gap: 12px 10px;
     }
 
     .module-graph-node {

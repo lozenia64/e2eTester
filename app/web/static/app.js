@@ -10,7 +10,9 @@ const STATUS_BADGE_CLASSES = {
 };
 
 const MODULE_GRAPH_COLUMN_WIDTH = 172;
-const MODULE_GRAPH_ROW_HEIGHT = 68;
+const MODULE_GRAPH_ROW_HEIGHT = 76;
+const MODULE_GRAPH_ROW_GAP = 16;
+const MODULE_GRAPH_COLUMN_GAP = 14;
 
 function parseSystemDefinition(form) {
     const script = form.querySelector('[data-role="system-definition"]');
@@ -28,6 +30,31 @@ function parseSystemDefinition(form) {
 
 function sortModulesByOrder(modules) {
     return [...modules].sort((left, right) => Number(left.order ?? 0) - Number(right.order ?? 0));
+}
+
+function buildModuleRelations(modules) {
+    const modulesById = new Map(modules.map((module) => [module.module_id, module]));
+    const childrenById = new Map(modules.map((module) => [module.module_id, []]));
+
+    for (const module of modules) {
+        const dependencies = Array.isArray(module.depends_on) ? module.depends_on : [];
+        for (const dependency of dependencies) {
+            if (!childrenById.has(dependency)) {
+                childrenById.set(dependency, []);
+            }
+            childrenById.get(dependency).push(module.module_id);
+        }
+    }
+
+    for (const childIds of childrenById.values()) {
+        childIds.sort((left, right) => {
+            const leftOrder = Number(modulesById.get(left)?.order ?? 0);
+            const rightOrder = Number(modulesById.get(right)?.order ?? 0);
+            return leftOrder - rightOrder;
+        });
+    }
+
+    return { modulesById, childrenById };
 }
 
 function computeModuleDepth(moduleId, modulesById, cache = new Map()) {
@@ -48,7 +75,87 @@ function computeModuleDepth(moduleId, modulesById, cache = new Map()) {
     return depth;
 }
 
-function createModuleGraphNode(module, depth, index) {
+function computeModuleSubtreeHeight(moduleId, childrenById, cache = new Map()) {
+    if (cache.has(moduleId)) {
+        return cache.get(moduleId);
+    }
+
+    const childIds = childrenById.get(moduleId) ?? [];
+    let height = 1;
+    if (childIds.length === 1) {
+        height = computeModuleSubtreeHeight(childIds[0], childrenById, cache);
+    } else if (childIds.length > 1) {
+        height = childIds.reduce(
+            (totalHeight, childId) => totalHeight + computeModuleSubtreeHeight(childId, childrenById, cache),
+            0,
+        );
+    }
+
+    cache.set(moduleId, height);
+    return height;
+}
+
+function buildModuleGraphLayout(modules) {
+    const { modulesById, childrenById } = buildModuleRelations(modules);
+    const depthCache = new Map();
+    const subtreeHeightCache = new Map();
+    const layoutByModuleId = new Map();
+    const visited = new Set();
+
+    function assignModuleRows(moduleId, row, depth) {
+        if (visited.has(moduleId)) {
+            return;
+        }
+
+        visited.add(moduleId);
+        layoutByModuleId.set(moduleId, { depth, row });
+
+        const childIds = childrenById.get(moduleId) ?? [];
+        if (childIds.length === 0) {
+            return;
+        }
+
+        if (childIds.length === 1) {
+            assignModuleRows(childIds[0], row, depth + 1);
+            return;
+        }
+
+        let nextRow = row;
+        for (const childId of childIds) {
+            assignModuleRows(childId, nextRow, depth + 1);
+            nextRow += computeModuleSubtreeHeight(childId, childrenById, subtreeHeightCache);
+        }
+    }
+
+    const rootModules = modules.filter((module) => (Array.isArray(module.depends_on) ? module.depends_on : []).length === 0);
+    let nextRootRow = 0;
+    for (const module of rootModules) {
+        assignModuleRows(module.module_id, nextRootRow, 0);
+        nextRootRow += computeModuleSubtreeHeight(module.module_id, childrenById, subtreeHeightCache);
+    }
+
+    for (const [index, module] of modules.entries()) {
+        if (layoutByModuleId.has(module.module_id)) {
+            continue;
+        }
+        assignModuleRows(module.module_id, nextRootRow + index, computeModuleDepth(module.module_id, modulesById, depthCache));
+    }
+
+    let maxDepth = 0;
+    let maxRow = 0;
+    for (const [moduleId, position] of layoutByModuleId.entries()) {
+        maxDepth = Math.max(maxDepth, position.depth, computeModuleDepth(moduleId, modulesById, depthCache));
+        maxRow = Math.max(maxRow, position.row);
+    }
+
+    return {
+        layoutByModuleId,
+        maxDepth,
+        maxRow,
+    };
+}
+
+function createModuleGraphNode(module, position, index) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "module-graph-node is-selected";
@@ -57,10 +164,11 @@ function createModuleGraphNode(module, depth, index) {
     button.dataset.moduleName = module.name;
     button.dataset.order = String(module.order ?? index + 1);
     button.dataset.dependsOn = JSON.stringify(module.depends_on ?? []);
-    button.dataset.depth = String(depth);
+    button.dataset.depth = String(position.depth);
+    button.dataset.row = String(position.row);
     button.dataset.selected = "true";
-    button.style.gridColumn = String(depth + 1);
-    button.style.gridRow = String(index + 1);
+    button.style.gridColumn = String(position.depth + 1);
+    button.style.gridRow = String(position.row + 1);
     button.setAttribute("aria-pressed", "true");
 
     const header = document.createElement("div");
@@ -85,6 +193,49 @@ function getModuleGraphNodes(form) {
     return Array.from(form.querySelectorAll('[data-role="module-graph-node"]'));
 }
 
+function buildModuleNodeMap(form) {
+    return new Map(getModuleGraphNodes(form).map((node) => [node.dataset.moduleId, node]));
+}
+
+function buildModuleChildrenMap(nodes) {
+    const childrenById = new Map(nodes.map((node) => [node.dataset.moduleId, []]));
+    for (const node of nodes) {
+        const dependencies = JSON.parse(node.dataset.dependsOn || "[]");
+        for (const dependency of dependencies) {
+            if (!childrenById.has(dependency)) {
+                childrenById.set(dependency, []);
+            }
+            childrenById.get(dependency).push(node.dataset.moduleId);
+        }
+    }
+
+    for (const childIds of childrenById.values()) {
+        childIds.sort((left, right) => Number((nodes.find((node) => node.dataset.moduleId === left)?.dataset.order) ?? 0) - Number((nodes.find((node) => node.dataset.moduleId === right)?.dataset.order) ?? 0));
+    }
+
+    return childrenById;
+}
+
+function collectDescendantModuleIds(moduleId, childrenById, collectedIds = new Set()) {
+    const childIds = childrenById.get(moduleId) ?? [];
+    for (const childId of childIds) {
+        if (collectedIds.has(childId)) {
+            continue;
+        }
+        collectedIds.add(childId);
+        collectDescendantModuleIds(childId, childrenById, collectedIds);
+    }
+    return collectedIds;
+}
+
+function readNodeDependencyIds(node) {
+    return JSON.parse(node.dataset.dependsOn || "[]");
+}
+
+function findMissingDependencyIds(node, nodeMap) {
+    return readNodeDependencyIds(node).filter((dependencyId) => nodeMap.get(dependencyId)?.dataset.selected !== "true");
+}
+
 function getSelectedModuleIds(form) {
     return getModuleGraphNodes(form)
         .filter((node) => node.dataset.selected === "true")
@@ -97,7 +248,7 @@ function readSelectedModuleIdSet(form) {
 }
 
 function buildModuleSelectionWarnings(form, selectedModuleIds) {
-    const nodeMap = new Map(getModuleGraphNodes(form).map((node) => [node.dataset.moduleId, node]));
+    const nodeMap = buildModuleNodeMap(form);
     const warnings = [];
 
     for (const moduleId of selectedModuleIds) {
@@ -105,8 +256,7 @@ function buildModuleSelectionWarnings(form, selectedModuleIds) {
         if (!node) {
             continue;
         }
-        const dependencies = JSON.parse(node.dataset.dependsOn || "[]");
-        const missingDependencies = dependencies
+        const missingDependencies = readNodeDependencyIds(node)
             .filter((dependency) => !selectedModuleIds.has(dependency))
             .map((dependency) => nodeMap.get(dependency)?.dataset.moduleName ?? dependency);
         if (missingDependencies.length === 0) {
@@ -159,17 +309,21 @@ function drawModuleGraph(form) {
     }
 }
 
-function updateModuleSelectorState(form) {
+function updateModuleSelectorState(form, feedbackMessage = "") {
     const summary = form.querySelector('[data-role="module-selection-summary"]');
     const warning = form.querySelector('[data-role="module-selection-warning"]');
     const nodes = getModuleGraphNodes(form);
+    const nodeMap = buildModuleNodeMap(form);
     const selectedIds = readSelectedModuleIdSet(form);
 
     for (const node of nodes) {
         const selected = node.dataset.selected === "true";
+        const locked = !selected && findMissingDependencyIds(node, nodeMap).length > 0;
         node.classList.toggle("is-selected", selected);
         node.classList.toggle("is-unselected", !selected);
+        node.classList.toggle("is-locked", locked);
         node.setAttribute("aria-pressed", selected ? "true" : "false");
+        node.setAttribute("aria-disabled", locked ? "true" : "false");
     }
 
     const selectedCount = selectedIds.size;
@@ -180,10 +334,9 @@ function updateModuleSelectorState(form) {
 
     if (warning) {
         const warnings = buildModuleSelectionWarnings(form, selectedIds);
-        warning.classList.toggle("is-hidden", warnings.length === 0);
-        warning.textContent = warnings.length === 0
-            ? ""
-            : `선행 모듈 누락 가능: ${warnings.join(" / ")}`;
+        const message = feedbackMessage || (warnings.length === 0 ? "" : `선행 모듈 누락 가능: ${warnings.join(" / ")}`);
+        warning.classList.toggle("is-hidden", message.length === 0);
+        warning.textContent = message;
     }
 
     drawModuleGraph(form);
@@ -199,28 +352,55 @@ function renderModuleSelector(form) {
     }
 
     const modules = sortModulesByOrder(definition.modules);
-    const modulesById = new Map(modules.map((module) => [module.module_id, module]));
-    const depthCache = new Map();
-    let maxDepth = 0;
+    const { layoutByModuleId, maxDepth, maxRow } = buildModuleGraphLayout(modules);
 
     grid.innerHTML = "";
     for (const [index, module] of modules.entries()) {
-        const depth = computeModuleDepth(module.module_id, modulesById, depthCache);
-        maxDepth = Math.max(maxDepth, depth);
-        grid.appendChild(createModuleGraphNode(module, depth, index));
+        const position = layoutByModuleId.get(module.module_id) ?? { depth: 0, row: index };
+        grid.appendChild(createModuleGraphNode(module, position, index));
     }
 
     canvas.style.width = `${Math.max(modules.length > 0 ? maxDepth + 1 : 1, 1) * MODULE_GRAPH_COLUMN_WIDTH}px`;
-    canvas.style.height = `${Math.max(modules.length, 1) * MODULE_GRAPH_ROW_HEIGHT}px`;
+    canvas.style.height = `${(Math.max(maxRow + 1, 1) * MODULE_GRAPH_ROW_HEIGHT) + (Math.max(maxRow, 0) * MODULE_GRAPH_ROW_GAP)}px`;
     grid.style.gridTemplateColumns = `repeat(${Math.max(maxDepth + 1, 1)}, minmax(220px, 1fr))`;
-    grid.style.gridTemplateRows = `repeat(${Math.max(modules.length, 1)}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${Math.max(maxRow + 1, 1)}, ${MODULE_GRAPH_ROW_HEIGHT}px)`;
+    grid.style.rowGap = `${MODULE_GRAPH_ROW_GAP}px`;
+    grid.style.columnGap = `${MODULE_GRAPH_COLUMN_GAP}px`;
 
     grid.addEventListener("click", (event) => {
         const button = event.target.closest('[data-role="module-graph-node"]');
         if (!button) {
             return;
         }
-        button.dataset.selected = button.dataset.selected === "true" ? "false" : "true";
+
+        const nodes = getModuleGraphNodes(form);
+        const nodeMap = buildModuleNodeMap(form);
+        const childrenById = buildModuleChildrenMap(nodes);
+        const isSelected = button.dataset.selected === "true";
+
+        if (isSelected) {
+            button.dataset.selected = "false";
+            const descendantIds = collectDescendantModuleIds(button.dataset.moduleId, childrenById);
+            for (const descendantId of descendantIds) {
+                const descendantNode = nodeMap.get(descendantId);
+                if (descendantNode) {
+                    descendantNode.dataset.selected = "false";
+                }
+            }
+            updateModuleSelectorState(form);
+            return;
+        }
+
+        const missingDependencyIds = findMissingDependencyIds(button, nodeMap);
+        if (missingDependencyIds.length > 0) {
+            const missingDependencyNames = missingDependencyIds
+                .map((dependencyId) => nodeMap.get(dependencyId)?.dataset.moduleName ?? dependencyId)
+                .join(", ");
+            updateModuleSelectorState(form, `${button.dataset.moduleName}: ${missingDependencyNames} 선택 필요`);
+            return;
+        }
+
+        button.dataset.selected = "true";
         updateModuleSelectorState(form);
     });
 
@@ -331,9 +511,15 @@ function updateOtpPanel(runOrMessage) {
 
 async function startSystemRun(systemCode, button, form) {
     const authMethod = form.querySelector('[name="auth_method"]')?.value;
-    if (authMethod && authMethod !== "phone" && authMethod !== "kakao") {
+    if (
+        (systemCode === "hom" || systemCode === "mhm")
+        && authMethod
+        && authMethod !== "phone"
+        && authMethod !== "kakao"
+    ) {
+        const systemLabel = systemCode.toUpperCase();
         window.alert(
-            "HOM에서는 휴대폰인증·카카오인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.",
+            `${systemLabel}에서는 휴대폰인증·카카오인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.`,
         );
         return;
     }
