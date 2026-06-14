@@ -29,6 +29,43 @@ POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do"
 # 가리키게 하면 그 프로파일에 설치된 보안 확장을 그대로 사용할 수 있다.
 DEFAULT_USER_DATA_DIR: Final[Path] = Path.home() / ".e2etester" / "chrome-profile"
 
+# Playwright 가 Chrome 실행 시 끄는 기본 feature 들(브라우저 안정화 목적). 아래에서
+# 로컬 네트워크 차단 해제를 추가할 때, Chromium 은 명령행에서 마지막 --disable-features
+# 하나만 인식하므로 Playwright 기본값을 잃지 않도록 반드시 함께 포함해서 넘긴다.
+# (출처: playwright chromium chromiumSwitches.ts 의 disabledFeatures)
+PLAYWRIGHT_DEFAULT_DISABLED_FEATURES: Final[tuple[str, ...]] = (
+    "AvoidUnnecessaryBeforeUnloadCheckSync",
+    "BoundaryEventDispatchTracksNodeRemoval",
+    "DestroyProfileOnBrowserClose",
+    "DialMediaRouteProvider",
+    "GlobalMediaControls",
+    "HttpsUpgrades",
+    "LensOverlay",
+    "MediaRouter",
+    "PaintHolding",
+    "ThirdPartyStoragePartitioning",
+    "Translate",
+    "AutoDeElevate",
+    "RenderDocument",
+    "OptimizationHints",
+    "msForceBrowserSignIn",
+    "msEdgeUpdateLaunchServicesPreferredVersion",
+)
+
+# 한화손보 보안프로그램은 로컬에 떠 있는 보안 에이전트(loopback/사설망)와 통신한다.
+# Chrome 의 Local/Private Network Access 가 공개 사이트 -> 로컬 네트워크 요청을
+# 기본 차단(설정 화면에 '로컬 네트워크 허용: 차단(기본값)')하므로, 일반 브라우저에서
+# 사용자가 '허용'한 것과 동일하게 해당 차단 기능들을 꺼 준다. (모르는 feature 이름은
+# Chrome 이 무시하므로 버전별로 넓게 나열해도 안전하다.)
+LOCAL_NETWORK_DISABLED_FEATURES: Final[tuple[str, ...]] = (
+    "LocalNetworkAccessChecks",
+    "BlockInsecurePrivateNetworkRequests",
+    "PrivateNetworkAccessSendPreflights",
+    "PrivateNetworkAccessRespectPreflightResults",
+    "PrivateNetworkAccessForNavigations",
+    "PrivateNetworkAccessPermissionPrompt",
+)
+
 GENDER_VALUES: Final[dict[str, str]] = {
     "m": "01",
     "male": "01",
@@ -352,12 +389,24 @@ def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, 
     """
     target_dir = Path(user_data_dir) if user_data_dir else resolve_user_data_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
+    disabled_features = ",".join(
+        PLAYWRIGHT_DEFAULT_DISABLED_FEATURES + LOCAL_NETWORK_DISABLED_FEATURES
+    )
     common_args = {
         "headless": headless,
         "slow_mo": slow_mo,
         "viewport": {"width": 1440, "height": 1200},
         "locale": "ko-KR",
-        "ignore_default_args": ["--enable-automation"],
+        # --enable-automation: navigator.webdriver 를 실제 false 로(스텔스 위조 대신).
+        # --disable-extensions / --disable-component-extensions-with-background-pages:
+        #   Playwright 기본값이라 보안프로그램 브라우저 확장까지 꺼버리므로 제거한다.
+        "ignore_default_args": [
+            "--enable-automation",
+            "--disable-extensions",
+            "--disable-component-extensions-with-background-pages",
+        ],
+        # 로컬 네트워크 차단 해제(+ Playwright 기본 disable feature 들 유지).
+        "args": [f"--disable-features={disabled_features}"],
     }
     try:
         print(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})")
