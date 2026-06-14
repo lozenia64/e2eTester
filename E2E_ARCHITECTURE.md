@@ -297,6 +297,7 @@ manifest 에 들어 있는 정보:
 현재 작성된 시나리오 문서:
 
 - [HOM (한화손해보험 샘플)](docs/scenarios/hom.md)
+- [MHM (모바일 대표홈페이지)](docs/scenarios/mhm.md)
 
 ## 7. 현재 UI 입력 모델
 

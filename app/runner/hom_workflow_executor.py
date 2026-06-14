@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
-import io
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -24,6 +22,10 @@ import hom_phone_login
 from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
+from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
+
+# Re-export for backward compatibility.
+__all__ = ["HomWorkflowExecutor", "HomWorkflowRuntime", "StepExecutionResult"]
 
 
 @dataclass
@@ -39,57 +41,9 @@ class HomWorkflowRuntime:
     closed: bool = False
 
 
-@dataclass(frozen=True)
-class StepExecutionResult:
-    status: ModuleStatus
-    message: str
-    artifacts: list[str]
-    current_url: str | None
-    dialog_messages: list[str]
-    last_error: str | None = None
-    screenshot_path: Path | None = None
-
-    @classmethod
-    def failure(
-        cls,
-        message: str,
-        current_url: str | None,
-        dialog_messages: list[str],
-        last_error: str | None,
-        screenshot_path: Path | None = None,
-    ) -> "StepExecutionResult":
-        return cls(
-            status=ModuleStatus.FAILED,
-            message=message,
-            artifacts=[],
-            current_url=current_url,
-            dialog_messages=dialog_messages,
-            last_error=last_error,
-            screenshot_path=screenshot_path,
-        )
-
-
-class _LineWriter(io.TextIOBase):
-    def __init__(self, emit: Callable[[str], None]) -> None:
-        self._emit = emit
-        self._buffer = ""
-
-    def write(self, text: str) -> int:
-        self._buffer += text
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            stripped = line.rstrip()
-            if stripped:
-                self._emit(stripped)
-        return len(text)
-
-    def flush(self) -> None:
-        if self._buffer.strip():
-            self._emit(self._buffer.strip())
-        self._buffer = ""
-
-
 class HomWorkflowExecutor:
+    execution_mode = "hom_workflow_step"
+
     def __init__(self, artifact_manager: ArtifactManager) -> None:
         self._artifact_manager = artifact_manager
 
@@ -153,12 +107,12 @@ class HomWorkflowExecutor:
         log_path = self._artifact_manager.log_path(run_id, module.module_id)
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
         artifacts: list[str] = []
-        writer = _LineWriter(emit_log)
+        writer = LineWriter(emit_log)
         dialog_index = len(runtime.dialog_messages)
 
         try:
             with log_path.open("w", encoding="utf-8") as log_file:
-                tee = _LineWriter(lambda line: self._write_log_line(line, emit_log, log_file))
+                tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
                 with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
                     message = self._run_step(runtime, module, screenshot_path)
             if isinstance(message, str) and message.startswith("WAITING_INPUT::"):
@@ -264,15 +218,6 @@ class HomWorkflowExecutor:
             )
 
         raise RuntimeError(f"Unsupported HOM workflow step: {module.workflow_step}")
-
-    @staticmethod
-    def _write_log_line(line: str, emit_log: Callable[[str], None], log_file) -> None:
-        stripped = line.rstrip()
-        if not stripped:
-            return
-        log_file.write(stripped + "\n")
-        log_file.flush()
-        emit_log(stripped)
 
     @staticmethod
     def update_otp_code(runtime: HomWorkflowRuntime, otp_code: str) -> None:

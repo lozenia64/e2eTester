@@ -12,7 +12,9 @@ from app.core.models import DashboardEvent, FailureAnalysisRequest, ModuleDefini
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime, StepExecutionResult
+from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime
+from app.runner.mhm_workflow_executor import MhmWorkflowExecutor, MhmWorkflowRuntime
+from app.runner.workflow_common import StepExecutionResult
 from app.storage.run_repository import InMemoryRunRepository
 
 
@@ -22,7 +24,8 @@ class PendingOtpState:
     input_data: dict[str, str]
     sequence_index: int
     module_id: str
-    runtime: HomWorkflowRuntime
+    execution_mode: str
+    runtime: HomWorkflowRuntime | MhmWorkflowRuntime
 
 
 class RunService:
@@ -37,6 +40,11 @@ class RunService:
         self._repository = repository
         self._artifact_manager = ArtifactManager()
         self._hom_executor = HomWorkflowExecutor(self._artifact_manager)
+        self._mhm_executor = MhmWorkflowExecutor(self._artifact_manager)
+        self._workflow_executors = {
+            self._hom_executor.execution_mode: self._hom_executor,
+            self._mhm_executor.execution_mode: self._mhm_executor,
+        }
         self._pending_otp: dict[str, PendingOtpState] = {}
         self._failure_analyzer = failure_analyzer
         self._run_completion_notifier = run_completion_notifier
@@ -112,7 +120,10 @@ class RunService:
         if pending is None:
             raise KeyError(f"Run is not waiting for OTP: {run_id}")
         pending.input_data["otp_code"] = otp_code.strip()
-        self._hom_executor.update_otp_code(pending.runtime, pending.input_data["otp_code"])
+        executor = self._workflow_executors.get(pending.execution_mode)
+        if executor is None:
+            raise KeyError(f"Unsupported workflow execution mode: {pending.execution_mode}")
+        executor.update_otp_code(pending.runtime, pending.input_data["otp_code"])
         run.status = RunStatus.RUNNING
         run.awaiting_input_module_id = None
         run.awaiting_input_prompt = None
@@ -136,10 +147,11 @@ class RunService:
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
         resolved_selected_module_ids = self._resolve_selected_module_ids(system, selected_module_ids)
-        if system_code == "hom":
+        if system_code in {"hom", "mhm"}:
             auth_method = sanitized_input.get("auth_method", "phone")
             if auth_method not in {"phone", "kakao"}:
-                raise ValueError("HOM에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
+                label = system.name
+                raise ValueError(f"{label}에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
         run = Run(
             run_id=run_id,
             system_code=system.system_code,
@@ -167,7 +179,8 @@ class RunService:
         run_id: str,
         input_data: dict[str, str],
         start_index: int = 0,
-        hom_runtime: HomWorkflowRuntime | None = None,
+        workflow_runtime: HomWorkflowRuntime | MhmWorkflowRuntime | None = None,
+        active_workflow_executor=None,
     ) -> None:
         run = await self._repository.get_run(run_id)
         should_finalize = True
@@ -212,10 +225,13 @@ class RunService:
                 await self._publish_module_event("module_started", run, module)
 
                 definition = definitions[module.module_id]
-                if definition.execution_mode == "hom_workflow_step":
-                    if hom_runtime is None:
+                workflow_executor = self._workflow_executors.get(definition.execution_mode)
+                if workflow_executor is not None:
+                    active_workflow_executor = workflow_executor
+                    if workflow_runtime is None:
                         try:
-                            hom_runtime = await self._build_hom_runtime(
+                            workflow_runtime = await self._build_workflow_runtime(
+                                workflow_executor,
                                 input_data,
                                 run.run_id,
                                 module.module_id,
@@ -249,8 +265,9 @@ class RunService:
                         )
                         future.result()
 
-                    execution_result = await self._execute_hom_step(
-                        hom_runtime,
+                    execution_result = await self._execute_workflow_step(
+                        workflow_executor,
+                        workflow_runtime,
                         run.run_id,
                         definition,
                         emit_from_thread,
@@ -276,7 +293,8 @@ class RunService:
                             input_data=input_data,
                             sequence_index=index,
                             module_id=module.module_id,
-                            runtime=hom_runtime,
+                            execution_mode=definition.execution_mode,
+                            runtime=workflow_runtime,
                         )
                         should_finalize = False
                         return
@@ -308,9 +326,9 @@ class RunService:
             forced_status = RunStatus.FAILED
             await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
         finally:
-            if hom_runtime is not None and run.run_id not in self._pending_otp:
+            if workflow_runtime is not None and run.run_id not in self._pending_otp:
                 try:
-                    await self._close_hom_runtime(hom_runtime)
+                    await self._close_workflow_runtime(active_workflow_executor, workflow_runtime)
                 except Exception as exc:
                     if forced_status is None:
                         forced_status = RunStatus.FAILED
@@ -322,17 +340,19 @@ class RunService:
             return
         await self._finalize_run(run, forced_status)
 
-    async def _build_hom_runtime(
+    async def _build_workflow_runtime(
         self,
+        workflow_executor,
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
-    ) -> HomWorkflowRuntime:
-        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"hom-runtime-{run_id}")
+    ):
+        prefix = workflow_executor.execution_mode.replace("_workflow_step", "")
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{prefix}-runtime-{run_id}")
         try:
             runtime = await asyncio.get_running_loop().run_in_executor(
                 executor,
-                self._hom_executor.build_runtime,
+                workflow_executor.build_runtime,
                 input_data,
                 run_id,
                 module_id,
@@ -343,39 +363,48 @@ class RunService:
         runtime.executor = executor
         return runtime
 
-    async def _execute_hom_step(
+    async def _execute_workflow_step(
         self,
-        runtime: HomWorkflowRuntime,
+        workflow_executor,
+        runtime,
         run_id: str,
         definition,
         emit_from_thread,
     ) -> StepExecutionResult:
-        executor = runtime.executor
-        if executor is None:
-            return await asyncio.to_thread(self._hom_executor.execute_step, runtime, run_id, definition, emit_from_thread)
+        thread_executor = runtime.executor
+        if thread_executor is None:
+            return await asyncio.to_thread(
+                workflow_executor.execute_step,
+                runtime,
+                run_id,
+                definition,
+                emit_from_thread,
+            )
         return await asyncio.get_running_loop().run_in_executor(
-            executor,
-            self._hom_executor.execute_step,
+            thread_executor,
+            workflow_executor.execute_step,
             runtime,
             run_id,
             definition,
             emit_from_thread,
         )
 
-    async def _close_hom_runtime(self, runtime: HomWorkflowRuntime) -> None:
-        executor = runtime.executor
+    async def _close_workflow_runtime(self, workflow_executor, runtime) -> None:
+        if workflow_executor is None:
+            return
+        thread_executor = runtime.executor
         try:
-            if executor is None:
-                await asyncio.to_thread(self._hom_executor.close_runtime, runtime)
+            if thread_executor is None:
+                await asyncio.to_thread(workflow_executor.close_runtime, runtime)
             else:
                 await asyncio.get_running_loop().run_in_executor(
-                    executor,
-                    self._hom_executor.close_runtime,
+                    thread_executor,
+                    workflow_executor.close_runtime,
                     runtime,
                 )
         finally:
-            if executor is not None:
-                executor.shutdown(wait=True, cancel_futures=True)
+            if thread_executor is not None:
+                thread_executor.shutdown(wait=True, cancel_futures=True)
                 runtime.executor = None
 
     async def _publish_run_event(self, event_type: str, run: Run) -> None:
