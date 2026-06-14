@@ -21,26 +21,13 @@ MAX_TIMEOUT_MS: Final[int] = 15000
 SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
 POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do")
-STEALTH_INIT_SCRIPT: Final[str] = """
-Object.defineProperty(navigator, 'webdriver', {
-    get: () => undefined,
-});
-window.chrome = window.chrome || { runtime: {} };
-Object.defineProperty(navigator, 'languages', {
-    get: () => ['ko-KR', 'ko', 'en-US', 'en'],
-});
-Object.defineProperty(navigator, 'plugins', {
-    get: () => [1, 2, 3, 4, 5],
-});
-const originalQuery = window.navigator.permissions && window.navigator.permissions.query;
-if (originalQuery) {
-    window.navigator.permissions.query = (parameters) => (
-        parameters && parameters.name === 'notifications'
-            ? Promise.resolve({ state: Notification.permission })
-            : originalQuery(parameters)
-    );
-}
-"""
+# 보안프로그램(키보드보안/백신류 로컬 에이전트 + 브라우저 확장)을 일반 브라우저나
+# Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
+# 영속 프로파일(persistent context)로 실행해야 한다. 아래 디렉터리에 프로파일 상태
+# (로컬 에이전트 loopback 인증서 신뢰, 보안 확장 설치 등)가 누적된다.
+# 환경변수 E2E_USER_DATA_DIR 로 경로를 바꿀 수 있으며, 사용자의 실제 Chrome 프로파일을
+# 가리키게 하면 그 프로파일에 설치된 보안 확장을 그대로 사용할 수 있다.
+DEFAULT_USER_DATA_DIR: Final[Path] = Path.home() / ".e2etester" / "chrome-profile"
 
 GENDER_VALUES: Final[dict[str, str]] = {
     "m": "01",
@@ -347,34 +334,41 @@ def maybe_close_home_popup(page: Page) -> None:
         return
 
 
-def launch_browser(playwright, headless: bool, slow_mo: int):
-    launch_args = {
-        "channel": PREFERRED_BROWSER_CHANNEL,
+def resolve_user_data_dir() -> Path:
+    override = os.environ.get("E2E_USER_DATA_DIR")
+    target = Path(override).expanduser() if override else DEFAULT_USER_DATA_DIR
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, user_data_dir: Path | None = None):
+    """일반 브라우저/Cursor Playwright MCP와 동일하게, 영속 프로파일로 브라우저를 띄운다.
+
+    - 시크릿 일회용 컨텍스트가 아닌 persistent context 라서 보안프로그램 확장/프로파일
+      상태가 유지된다.
+    - `--enable-automation` 기본 플래그를 제거해 navigator.webdriver 를 (위조가 아니라)
+      실제로 false 로 만든다. 별도의 스텔스 위조 스크립트는 쓰지 않는다.
+    - 동시 실행은 같은 프로파일 디렉터리를 공유할 수 없으므로 지원하지 않는다(순차 실행 전제).
+    """
+    target_dir = Path(user_data_dir) if user_data_dir else resolve_user_data_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    common_args = {
         "headless": headless,
         "slow_mo": slow_mo,
-        "args": ["--disable-blink-features=AutomationControlled"],
+        "viewport": {"width": 1440, "height": 1200},
+        "locale": "ko-KR",
+        "ignore_default_args": ["--enable-automation"],
     }
     try:
-        print(f"[step] Launch browser: {PREFERRED_BROWSER_CHANNEL}")
-        return playwright.chromium.launch(**launch_args)
-    except Exception as exc:
-        print(f"[warn] Falling back to bundled Chromium: {exc}")
-        return playwright.chromium.launch(
-            headless=headless,
-            slow_mo=slow_mo,
-            args=["--disable-blink-features=AutomationControlled"],
+        print(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})")
+        return playwright.chromium.launch_persistent_context(
+            str(target_dir),
+            channel=PREFERRED_BROWSER_CHANNEL,
+            **common_args,
         )
-
-
-def configure_browser_context(context) -> None:
-    context.add_init_script(STEALTH_INIT_SCRIPT)
-
-    def _handle_analytics_request(route) -> None:
-        print(f"[route] Fulfill analytics request with empty 204: {route.request.url}")
-        route.fulfill(status=204, body="", content_type="text/plain")
-
-    context.route("https://www.google-analytics.com/**", _handle_analytics_request)
-    context.route("https://www.googletagmanager.com/**", _handle_analytics_request)
+    except Exception as exc:
+        print(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
+        return playwright.chromium.launch_persistent_context(str(target_dir), **common_args)
 
 
 def wait_timeout_with_log(page: Page, timeout_ms: int, reason: str) -> None:
@@ -1013,33 +1007,35 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
     raise RuntimeError("로그인 후 팝업을 닫았지만 차단 오버레이가 계속 남아 있습니다.")
 
 
-def shutdown_browser(page: Page, context, browser) -> None:
+def shutdown_browser(page: Page, context, browser=None) -> None:
     print("[step] Closing page")
     try:
         page.close(run_before_unload=False)
     except Exception as exc:
         print(f"[warn] Failed to close page cleanly: {exc}")
 
+    # persistent context 는 별도 browser 객체가 없으며, context 를 닫으면 브라우저도 종료된다.
     print("[step] Closing browser context")
     try:
         context.close()
     except Exception as exc:
         print(f"[warn] Failed to close browser context cleanly: {exc}")
 
-    print("[step] Closing browser")
-    try:
-        browser.close()
-    except Exception as exc:
-        print(f"[warn] Failed to close browser cleanly: {exc}")
+    if browser is not None:
+        print("[step] Closing browser")
+        try:
+            browser.close()
+        except Exception as exc:
+            print(f"[warn] Failed to close browser cleanly: {exc}")
 
 
-def keep_script_alive_with_browser_open(page: Page, browser) -> None:
+def keep_script_alive_with_browser_open(page: Page, context) -> None:
     print("[result] Keeping browser open. Close the browser window or press Ctrl+C to end the script.")
     sys.stdout.flush()
     sys.stderr.flush()
 
     try:
-        while browser.is_connected() and not page.is_closed():
+        while context.pages and not page.is_closed():
             page.wait_for_timeout(1000)
     except KeyboardInterrupt:
         print("\n[step] KeyboardInterrupt received. Cleaning up browser and exiting.")

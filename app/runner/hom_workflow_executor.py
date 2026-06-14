@@ -124,18 +124,18 @@ class HomWorkflowExecutor:
 
         playwright_manager = sync_playwright()
         playwright = playwright_manager.__enter__()
-        browser = common.launch_browser(playwright, config.headless, config.slow_mo)
-        context = browser.new_context(viewport={"width": 1440, "height": 1200}, locale="ko-KR")
-        common.configure_browser_context(context)
+        # 일반 브라우저/Cursor Playwright MCP 와 동일하게 영속 프로파일로 실행한다.
+        # (persistent context 는 별도 browser 객체 없이 context 만 반환한다.)
+        context = common.launch_persistent_browser_context(playwright, config.headless, config.slow_mo)
         common.grant_browser_permissions(context, config.base_url)
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(config.timeout_ms)
         page.set_default_navigation_timeout(config.timeout_ms)
         dialog_messages = common.add_dialog_logger(page)
         return HomWorkflowRuntime(
             config=config,
             playwright_manager=playwright_manager,
-            browser=browser,
+            browser=None,
             context=context,
             page=page,
             dialog_messages=dialog_messages,

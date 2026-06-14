@@ -57,6 +57,8 @@ python3 -m playwright install chromium
 
 브라우저 실행 시 코드는 로컬 Chrome 채널을 우선 사용하고, 실행이 어려우면 설치된 Playwright Chromium으로 자동 fallback 합니다.
 
+일반 브라우저나 Cursor의 Playwright MCP와 동일하게 보안프로그램(키보드보안/백신류 로컬 에이전트·확장)을 인식시키기 위해, 시크릿 일회용 컨텍스트가 아닌 **영속 프로파일(persistent context)** 로 브라우저를 띄웁니다. 프로파일은 기본적으로 `~/.e2etester/chrome-profile` 에 저장되며(로컬 에이전트 loopback 인증서 신뢰·확장 설치 상태 등이 누적됨), 환경변수 `E2E_USER_DATA_DIR` 로 경로를 바꿀 수 있습니다. 이미 보안 확장이 설치된 본인의 Chrome 프로파일을 그대로 쓰려면 해당 경로를 `E2E_USER_DATA_DIR` 로 지정하면 됩니다(단, 같은 프로파일을 쓰는 Chrome 창이 떠 있으면 안 되고, 동시 실행도 같은 프로파일을 공유할 수 없습니다).
+
 환경에 따라 `python3` 대신 회사 PC에 설치된 Python 실행 경로를 사용해야 할 수 있습니다.
 
 예:

@@ -70,11 +70,9 @@ def main() -> int:
         parser.error(str(exc))
 
     with sync_playwright() as playwright:
-        browser = common.launch_browser(playwright, config.headless, config.slow_mo)
-        context = browser.new_context(viewport={"width": 1440, "height": 1200}, locale="ko-KR")
-        common.configure_browser_context(context)
+        context = common.launch_persistent_browser_context(playwright, config.headless, config.slow_mo)
         common.grant_browser_permissions(context, config.base_url)
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(config.timeout_ms)
         page.set_default_navigation_timeout(config.timeout_ms)
         dialog_messages = common.add_dialog_logger(page)
@@ -92,14 +90,14 @@ def main() -> int:
             if dialog_messages:
                 print(f"[result] Dialogs seen: {dialog_messages}")
             if not config.headless:
-                common.keep_script_alive_with_browser_open(page, browser)
+                common.keep_script_alive_with_browser_open(page, context)
             if config.keep_open and not config.headless:
                 input("Login verified. Press Enter to close the browser... ")
             return 0
         finally:
             print(f"테스트 종료 시점 URL: {page.url}")
             if cleanup_needed:
-                common.shutdown_browser(page, context, browser)
+                common.shutdown_browser(page, context)
 
 
 if __name__ == "__main__":
