@@ -16,30 +16,28 @@
 `hom.yaml` `order` 기준:
 
 1. `hom.main.access`
-2. `hom.login.move`
-3. `hom.login.phone_login` — `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
-4. `hom.contract.list`
-5. `hom.contract.detail`
-6. `hom.compensation.charge` — `app/systems/hom/steps/compensation_charge.py` (`compensation_charge` 단계)
-7. `hom.compensation.result` — `app/systems/hom/steps/compensation_result.py` (`compensation_result` 단계)
-8. `hom.compensation.cancel` — `app/systems/hom/steps/compensation_cancel.py` (`compensation_cancel` 단계)
-9. `hom.proof.long_term_policy` — `app/systems/hom/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+2. `hom.login` — 로그인 화면 이동(`app/systems/hom/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
+3. `hom.contract.list`
+4. `hom.contract.detail`
+5. `hom.compensation.charge` — `app/systems/hom/steps/compensation_charge.py` (`compensation_charge` 단계)
+6. `hom.compensation.result` — `app/systems/hom/steps/compensation_result.py` (`compensation_result` 단계)
+7. `hom.compensation.cancel` — `app/systems/hom/steps/compensation_cancel.py` (`compensation_cancel` 단계)
+8. `hom.proof.long_term_policy` — `app/systems/hom/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
 
 `app/systems/hom/steps/compensation_result.py`·`app/systems/hom/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/hom/steps/compensation_result_common.py`에서 공유한다.
 
-모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
+모듈별 `timeout_seconds`: 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
 
 선택 실행을 위한 현재 의존성 그래프는 아래와 같다.
 
 - `hom.main.access` → 없음
-- `hom.login.move` → `hom.main.access`
-- `hom.login.phone_login` → `hom.login.move`
-- `hom.contract.list` → `hom.login.phone_login`
+- `hom.login` → `hom.main.access`
+- `hom.contract.list` → `hom.login`
 - `hom.contract.detail` → `hom.contract.list`
-- `hom.compensation.charge` → `hom.login.phone_login`
+- `hom.compensation.charge` → `hom.login`
 - `hom.compensation.result` → `hom.compensation.charge`
 - `hom.compensation.cancel` → `hom.compensation.charge`
-- `hom.proof.long_term_policy` → `hom.login.phone_login`
+- `hom.proof.long_term_policy` → `hom.login`
 
 즉 HOM은 더 이상 단일 직선 체인만으로 해석하지 않는다. 로그인 이후 계약조회, 보험금청구, 증명서 발급이 서로 다른 브랜치로 분기하며, 대시보드에서 모듈을 선택 해제하면 선택되지 않은 모듈은 Run 화면에서 `SKIPPED` 로 표시된다.
 
@@ -49,13 +47,12 @@
 
 ```text
 메인화면 접속
-  -> 로그인 이동
-      -> 본인인증 로그인
-          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
-              -> 로그인 성공 후 팝업 정리
-                  -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
-                  -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
-                  -> 증명서 브랜치: 장기보험증권 증명서 발급
+  -> 로그인 (로그인 이동 + 본인인증 로그인을 한 단계에서 처리)
+      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
+          -> 로그인 성공 후 팝업 정리
+              -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
+              -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
+              -> 증명서 브랜치: 장기보험증권 증명서 발급
 ```
 
 ### Step 1. 메인화면 접속
@@ -70,21 +67,13 @@
 - 메인화면 전용 `20000ms` timeout 적용
 - 랜딩 팝업 정리
 
-### Step 2. 로그인 이동
+### Step 2. 로그인
+
+로그인 화면 이동과 본인인증 로그인을 하나의 `login` 단계에서 연속으로 수행한다. (휴대폰 OTP 대기로 Run이 일시정지되어도 SMS 요청은 한 번만 수행되도록 `phone_login_sms_requested` 플래그로 로그인 이동·SMS 요청을 함께 가드한다.)
 
 파일:
 
-- `app/systems/hom/steps/login_move.py`
-
-역할:
-
-- 상단 로그인 링크 탐색
-- 로그인 페이지 이동
-
-### Step 3. 본인인증 로그인
-
-파일:
-
+- `app/systems/hom/steps/login_move.py` — 상단 로그인 링크 탐색·로그인 페이지 이동
 - `app/systems/hom/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
 - `app/systems/hom/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
 - `app/systems/hom/steps/login_common.py`
@@ -92,6 +81,7 @@
 
 역할:
 
+- 상단 로그인 링크를 탐색해 로그인 페이지로 이동
 - 인증 수단에 따라 분기
 - **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
 - **카카오**: [`/util/login/login.do`](https://www.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
@@ -99,7 +89,7 @@
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
 
-### Step 4. 계약목록 조회
+### Step 3. 계약목록 조회
 
 파일:
 
@@ -112,7 +102,7 @@
 - 목록 건수 확인
 - 스크린샷 저장
 
-### Step 5. 계약상세 조회
+### Step 4. 계약상세 조회
 
 파일:
 
@@ -125,7 +115,7 @@
 - 계약일반정보,수익자정보,자동이체현황,우편물 수령지/연락처,담당자정보,계약자정보 확인
 - `final.png`: 실제 계약상세 웹 화면 전체 스크린샷(데이터 표시 검증용; `artifacts/`에 그대로 저장)
 
-### Step 6. 보험금청구 접수
+### Step 5. 보험금청구 접수
 
 파일:
 
@@ -160,7 +150,7 @@
 - 정상적으로 등록되었습니다. 알럿이 나오는 경우 닫기 버튼 클릭
 - `/fplaza/compensation/charge06.do` 포함 URL 확인
 
-### Step 7. 보험금청구 결과 조회
+### Step 6. 보험금청구 결과 조회
 
 파일:
 
@@ -195,7 +185,7 @@
 - 각 `등록파일` 링크 클릭 시 파일 다운로드가 시작되는지 확인
 - 팝업에서 **`전체 다운로드`** 버튼(`onclick="return zipDown();"`) 가시 확인
 
-### Step 8. 보험금청구 취소
+### Step 7. 보험금청구 취소
 
 파일:
 
@@ -204,7 +194,7 @@
 
 역할:
 
-- Step 7과 동일한 방식으로 result01에 다시 진입해 진행중 탭에서 동일 조건(오늘 날짜·`IT직원 테스트입니다. 바로 취소할`·`처리중`·`제출서류확인`/`접수취소` 버튼)의 행을 찾아 접수번호를 확보하고 상세 화면(`/fplaza/compensation/result02.do`)으로 이동
+- Step 6과 동일한 방식으로 result01에 다시 진입해 진행중 탭에서 동일 조건(오늘 날짜·`IT직원 테스트입니다. 바로 취소할`·`처리중`·`제출서류확인`/`접수취소` 버튼)의 행을 찾아 접수번호를 확보하고 상세 화면(`/fplaza/compensation/result02.do`)으로 이동
 - 상세 화면 데이터가 확보한 접수번호로 채워질 때까지 대기
 - 상세 화면에서 **`#btn4`** 접수취소 클릭
 - 브라우저 `confirm` **`접수를 취소하시겠습니까?`** 표시 확인 후 확인
@@ -216,7 +206,7 @@
 - 해당 행의 진행상태 셀 값이 **`취소`** 인지 확인
 - 완료 탭의 동일 행에서 이용가능 서비스가 **`제출서류확인`만 노출** 되는지 확인
 
-### Step 9. 장기보험증권 증명서 발급
+### Step 8. 장기보험증권 증명서 발급
 
 파일:
 
@@ -252,7 +242,7 @@
 
 추가 선택 규칙:
 
-- 실행 전 그래프에서 9개 모듈의 실행 여부를 개별 선택할 수 있다.
-- 기본값은 9개 전체 선택이다.
+- 실행 전 그래프에서 8개 모듈의 실행 여부를 개별 선택할 수 있다.
+- 기본값은 8개 전체 선택이다.
 - 선택 해제된 모듈은 실행 요청 payload의 `selected_module_ids` 에 포함되지 않으며 Run 화면에서 `SKIPPED` 로 렌더링된다.
 - 선행 모듈이 빠진 잘못된 조합은 UI에서 경고를 보여줄 수 있지만 최종 판정은 서버가 수행하며, 실행 생성 시 400 오류로 거부된다.

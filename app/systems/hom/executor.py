@@ -169,11 +169,9 @@ class HomWorkflowExecutor:
         if module.workflow_step == "main_access":
             return main_access.run(runtime.page, runtime.config)
 
-        if module.workflow_step == "login_move":
-            return login_move.run(runtime.page)
-
-        if module.workflow_step == "phone_login":
+        if module.workflow_step == "login":
             if runtime.config.auth_method == "kakao":
+                login_move.run(runtime.page)
                 return kakao_login.run(
                     runtime.page,
                     runtime.config,
@@ -181,6 +179,7 @@ class HomWorkflowExecutor:
                     screenshot_path,
                 )
             if not runtime.phone_login_sms_requested:
+                login_move.run(runtime.page)
                 message = phone_login.request_sms(runtime.page, runtime.config, runtime.dialog_messages)
                 runtime.phone_login_sms_requested = True
                 if not runtime.config.otp_code:
