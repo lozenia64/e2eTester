@@ -16,6 +16,7 @@ import hom_compensation_result
 import hom_contract_detail
 import hom_contract_list
 import hom_kakao_login
+import hom_long_term_policy_certificate
 import hom_login_move
 import hom_main_access
 import hom_phone_login
@@ -253,6 +254,14 @@ class HomWorkflowExecutor:
 
         if module.workflow_step == "compensation_cancel":
             return hom_compensation_cancel.run(runtime.page, runtime.config, screenshot_path)
+
+        if module.workflow_step == "long_term_policy_certificate":
+            return hom_long_term_policy_certificate.run(
+                runtime.page,
+                runtime.config,
+                screenshot_path,
+                runtime.dialog_messages,
+            )
 
         raise RuntimeError(f"Unsupported HOM workflow step: {module.workflow_step}")
 

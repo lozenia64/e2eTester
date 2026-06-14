@@ -195,3 +195,15 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_cancel
+  - module_id: hom.proof.long_term_policy
+    system_code: hom
+    name: 장기보험증권 증명서 발급
+    description: 증명서 발급 메뉴에서 장기보험증권을 선택하고 첫 계약을 다운로드 방식으로 발급해 PDF 다운로드를 확인합니다.
+    group: proof
+    order: 90
+    depends_on:
+      - hom.compensation.cancel
+    timeout_seconds: 180
+    execution_mode: hom_workflow_step
+    workflow_name: hom_login
+    workflow_step: long_term_policy_certificate
