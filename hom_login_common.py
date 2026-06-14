@@ -20,6 +20,7 @@ PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 MAX_TIMEOUT_MS: Final[int] = 15000
 SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
+SCREENSHOT_PRE_CAPTURE_WAIT_MS: Final[int] = 3000
 POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do")
 # 보안프로그램(키보드보안/백신류 로컬 에이전트 + 브라우저 확장)을 일반 브라우저나
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
@@ -760,6 +761,8 @@ def save_screenshot(page: Page, output_path: Path) -> None:
         scroll_to_page_top(page)
     except Exception as exc:
         print(f"[warn] Failed to scroll before screenshot: {exc}")
+
+    wait_timeout_with_log(page, SCREENSHOT_PRE_CAPTURE_WAIT_MS, "Pre-screenshot settle delay")
 
     try:
         _capture_screenshot_with_playwright(page, output_path, SCREENSHOT_TIMEOUT_MS)
