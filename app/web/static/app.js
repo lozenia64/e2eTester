@@ -507,6 +507,15 @@ function updateOtpPanel(runOrMessage) {
     panel.dataset.awaitingModuleId = awaitingModuleId;
     document.getElementById("otp-prompt").textContent = prompt;
     panel.classList.toggle("is-hidden", !awaitingModuleId);
+
+    if (awaitingModuleId) {
+        const startedAt =
+            moduleStartedAtFromRun(runOrMessage, awaitingModuleId) ??
+            moduleStartedAtFromRun(runOrMessage.payload, awaitingModuleId);
+        startOtpCountdown(startedAt);
+    } else {
+        stopOtpCountdown();
+    }
 }
 
 async function startSystemRun(systemCode, button, form) {
@@ -700,6 +709,9 @@ function bindRunsOverview() {
 }
 
 function updateModuleCard(module) {
+    rememberModuleState(module);
+    updateRunProgress();
+
     const card = document.querySelector(`[data-module-id="${module.module_id}"]`);
     if (!card) {
         return;
@@ -740,18 +752,282 @@ function updateModuleCard(module) {
         link.textContent = artifact.split("/").pop();
         artifactList.appendChild(link);
     }
+
+    tickRunningElapsed();
 }
 
-function appendLogLine(text) {
+const logEntries = [];
+let logFilterModuleId = "";
+let logSearchText = "";
+
+function logEntryMatchesFilters(entry) {
+    if (logFilterModuleId && entry.moduleId !== logFilterModuleId) {
+        return false;
+    }
+    if (logSearchText && !entry.message.toLowerCase().includes(logSearchText)) {
+        return false;
+    }
+    return true;
+}
+
+function formatLogLine(entry) {
+    return entry.moduleId ? `[${entry.moduleId}] ${entry.message}` : entry.message;
+}
+
+function createLogLineNode(entry) {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    line.dataset.moduleId = entry.moduleId;
+    line.textContent = formatLogLine(entry);
+    return line;
+}
+
+function renderLogConsole() {
     const consoleNode = document.getElementById("log-console");
     if (!consoleNode) {
         return;
     }
-    const line = document.createElement("div");
-    line.className = "log-line";
-    line.textContent = text;
-    consoleNode.appendChild(line);
+    const visibleEntries = logEntries.filter(logEntryMatchesFilters);
+    consoleNode.innerHTML = "";
+    for (const entry of visibleEntries) {
+        consoleNode.appendChild(createLogLineNode(entry));
+    }
+    if (visibleEntries.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "log-empty";
+        empty.textContent = logEntries.length === 0 ? "아직 출력된 로그가 없습니다." : "조건에 맞는 로그가 없습니다.";
+        consoleNode.appendChild(empty);
+    }
     consoleNode.scrollTop = consoleNode.scrollHeight;
+}
+
+function appendLogEntry(moduleId, message) {
+    const entry = { moduleId: moduleId || "", message };
+    logEntries.push(entry);
+    if (!logEntryMatchesFilters(entry)) {
+        return;
+    }
+    const consoleNode = document.getElementById("log-console");
+    if (!consoleNode) {
+        return;
+    }
+    const emptyNode = consoleNode.querySelector(".log-empty");
+    if (emptyNode) {
+        emptyNode.remove();
+    }
+    const nearBottom = consoleNode.scrollHeight - consoleNode.scrollTop - consoleNode.clientHeight < 48;
+    consoleNode.appendChild(createLogLineNode(entry));
+    if (nearBottom) {
+        consoleNode.scrollTop = consoleNode.scrollHeight;
+    }
+}
+
+function loadLogEntriesFromRun(runPayload) {
+    logEntries.length = 0;
+    const modules = [...(runPayload.modules ?? [])].sort(
+        (left, right) => Number(left.order ?? 0) - Number(right.order ?? 0),
+    );
+    for (const module of modules) {
+        for (const line of module.logs ?? []) {
+            logEntries.push({ moduleId: module.module_id, message: line });
+        }
+    }
+    renderLogConsole();
+}
+
+function logExportText() {
+    return logEntries.filter(logEntryMatchesFilters).map(formatLogLine).join("\n");
+}
+
+function currentRunId() {
+    return document.getElementById("node-grid")?.dataset.runId ?? "run";
+}
+
+async function copyLogsToClipboard(button) {
+    const text = logExportText();
+    if (!text) {
+        return;
+    }
+    const original = button.textContent;
+    try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "복사됨";
+    } catch (error) {
+        console.error("로그 복사 실패", error);
+        button.textContent = "복사 실패";
+    }
+    window.setTimeout(() => {
+        button.textContent = original;
+    }, 1500);
+}
+
+function downloadLogs() {
+    const text = logExportText();
+    if (!text) {
+        return;
+    }
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    const suffix = logFilterModuleId ? `_${logFilterModuleId}` : "";
+    anchor.download = `${currentRunId()}${suffix}.log`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+}
+
+function bindLogControls() {
+    const filter = document.getElementById("log-filter");
+    const search = document.getElementById("log-search");
+    const copyButton = document.getElementById("log-copy");
+    const downloadButton = document.getElementById("log-download");
+    if (filter) {
+        filter.addEventListener("change", () => {
+            logFilterModuleId = filter.value;
+            renderLogConsole();
+        });
+    }
+    if (search) {
+        search.addEventListener("input", () => {
+            logSearchText = search.value.trim().toLowerCase();
+            renderLogConsole();
+        });
+    }
+    if (copyButton) {
+        copyButton.addEventListener("click", () => copyLogsToClipboard(copyButton));
+    }
+    if (downloadButton) {
+        downloadButton.addEventListener("click", downloadLogs);
+    }
+}
+
+const moduleRuntimeState = new Map();
+
+function formatClock(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${minutes}:${seconds}`;
+}
+
+function rememberModuleState(module) {
+    moduleRuntimeState.set(module.module_id, {
+        status: String(module.status ?? "").toLowerCase(),
+        startedAt: module.started_at ?? null,
+    });
+}
+
+function updateRunProgress() {
+    const bar = document.getElementById("run-progress-bar");
+    const label = document.getElementById("run-progress-label");
+    const detail = document.getElementById("run-progress-detail");
+    if (!bar || !label) {
+        return;
+    }
+    const states = [...moduleRuntimeState.values()].map((state) => state.status);
+    const total = states.filter((status) => status !== "skipped").length;
+    const passed = states.filter((status) => status === "passed").length;
+    const failed = states.filter((status) => status === "failed").length;
+    const blocked = states.filter((status) => status === "blocked").length;
+    const finished = passed + failed + blocked;
+    const ratio = total === 0 ? 0 : Math.round((finished / total) * 100);
+    bar.style.width = `${ratio}%`;
+    bar.classList.toggle("bg-red-500", failed > 0);
+    bar.classList.toggle("bg-emerald-500", failed === 0);
+    label.textContent = `통과 ${passed}/${total}`;
+    if (detail) {
+        const parts = [`완료 ${finished}/${total}`];
+        if (failed > 0) {
+            parts.push(`실패 ${failed}`);
+        }
+        if (blocked > 0) {
+            parts.push(`차단 ${blocked}`);
+        }
+        detail.textContent = parts.join(" · ");
+    }
+}
+
+function tickRunningElapsed() {
+    const now = Date.now();
+    for (const [moduleId, state] of moduleRuntimeState.entries()) {
+        const card = document.querySelector(`[data-module-id="${moduleId}"]`);
+        if (!card) {
+            continue;
+        }
+        const elapsedNode = card.querySelector('[data-role="module-elapsed"]');
+        if (!elapsedNode) {
+            continue;
+        }
+        const isLive = state.status === "running" || state.status === "waiting_input";
+        const startedMs = state.startedAt ? new Date(state.startedAt).getTime() : NaN;
+        if (isLive && !Number.isNaN(startedMs)) {
+            elapsedNode.textContent = `⏱ ${formatClock(now - startedMs)}`;
+            elapsedNode.classList.remove("hidden");
+        } else {
+            elapsedNode.classList.add("hidden");
+            elapsedNode.textContent = "";
+        }
+    }
+}
+
+function startRuntimeTicker() {
+    if (!document.getElementById("node-grid")) {
+        return;
+    }
+    window.setInterval(tickRunningElapsed, 1000);
+}
+
+const OTP_VALIDITY_SECONDS = 180;
+let otpCountdownTimer = null;
+
+function clearOtpCountdownTimer() {
+    if (otpCountdownTimer) {
+        window.clearInterval(otpCountdownTimer);
+        otpCountdownTimer = null;
+    }
+}
+
+function stopOtpCountdown() {
+    clearOtpCountdownTimer();
+    const node = document.getElementById("otp-countdown");
+    if (node) {
+        node.classList.add("is-hidden");
+        node.textContent = "";
+    }
+}
+
+function startOtpCountdown(startedAtIso) {
+    const node = document.getElementById("otp-countdown");
+    if (!node) {
+        return;
+    }
+    clearOtpCountdownTimer();
+    const startedMs = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
+    const baselineMs = Number.isNaN(startedMs) ? Date.now() : startedMs;
+    node.classList.remove("is-hidden");
+
+    const tick = () => {
+        const remaining = OTP_VALIDITY_SECONDS - Math.floor((Date.now() - baselineMs) / 1000);
+        if (remaining > 0) {
+            node.textContent = `⏳ 인증 유효시간 ${formatClock(remaining * 1000)} 남음`;
+            node.classList.remove("bg-red-100", "text-red-700");
+            node.classList.add("bg-amber-100", "text-amber-700");
+        } else {
+            node.textContent = "⚠ 인증 유효시간이 지났을 수 있습니다. 인증을 다시 시도하세요.";
+            node.classList.remove("bg-amber-100", "text-amber-700");
+            node.classList.add("bg-red-100", "text-red-700");
+            clearOtpCountdownTimer();
+        }
+    };
+    tick();
+    otpCountdownTimer = window.setInterval(tick, 1000);
+}
+
+function moduleStartedAtFromRun(runPayload, moduleId) {
+    const module = (runPayload?.modules ?? []).find((item) => item.module_id === moduleId);
+    return module?.started_at ?? null;
 }
 
 function bindSystemButtons() {
@@ -831,6 +1107,7 @@ function bindRunSocket() {
             document.getElementById("run-status").textContent = message.payload.status;
             document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
             updateOtpPanel(message.payload);
+            loadLogEntriesFromRun(message.payload);
             for (const module of message.payload.modules) {
                 updateModuleCard(module);
             }
@@ -842,7 +1119,7 @@ function bindRunSocket() {
         }
 
         if (message.event_type === "module_log") {
-            appendLogLine(`[${message.payload.module_id}] ${message.payload.message}`);
+            appendLogEntry(message.payload.module_id, message.payload.message);
         }
 
         if (message.run_status) {
@@ -861,6 +1138,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bindModuleSelectors();
     bindSystemButtons();
     bindRunsOverview();
+    bindLogControls();
+    startRuntimeTicker();
     bindOtpForm();
     bindRunSocket();
 });
