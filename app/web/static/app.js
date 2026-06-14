@@ -447,6 +447,54 @@ function statusBadgeClassName(status, sizeClasses = "px-2.5 py-1") {
     return `inline-flex items-center rounded-full text-xs font-semibold ${sizeClasses} ${tone}`;
 }
 
+const FEEDBACK_TONE_CLASSES = {
+    error: "text-red-600",
+    success: "text-emerald-600",
+    info: "text-gray-500",
+};
+
+// 폼/패널 안에 인라인 메시지를 표시한다. message 가 비어 있으면 숨긴다.
+function setInlineFeedback(element, message, tone = "error") {
+    if (!element) {
+        return;
+    }
+    for (const toneClass of Object.values(FEEDBACK_TONE_CLASSES)) {
+        element.classList.remove(toneClass);
+    }
+    if (!message) {
+        element.classList.add("is-hidden");
+        element.textContent = "";
+        return;
+    }
+    element.classList.add(FEEDBACK_TONE_CLASSES[tone] ?? FEEDBACK_TONE_CLASSES.error);
+    element.classList.remove("is-hidden");
+    element.textContent = message;
+}
+
+const TOAST_TONE_CLASSES = {
+    error: "border-red-200 bg-red-50 text-red-700",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    info: "border-gray-200 bg-white text-gray-700",
+};
+
+// 자연스러운 인라인 위치가 없는 동작(Run 취소·재실행 등)의 결과를 토스트로 알린다.
+function showToast(message, tone = "error") {
+    const container = document.getElementById("toast-container");
+    if (!container) {
+        window.alert(message);
+        return;
+    }
+    const toast = document.createElement("div");
+    toast.className = `pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm font-medium shadow-lg transition-opacity duration-300 ${TOAST_TONE_CLASSES[tone] ?? TOAST_TONE_CLASSES.error}`;
+    toast.setAttribute("role", "alert");
+    toast.textContent = message;
+    container.appendChild(toast);
+    window.setTimeout(() => {
+        toast.classList.add("opacity-0");
+        window.setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 function collectFormInput(form) {
     const formData = new FormData(form);
     const inputData = {};
@@ -520,6 +568,9 @@ function updateOtpPanel(runOrMessage) {
 }
 
 async function startSystemRun(systemCode, button, form) {
+    const feedback = form.querySelector('[data-role="form-feedback"]');
+    setInlineFeedback(feedback, "");
+
     const authMethod = form.querySelector('[name="auth_method"]')?.value;
     if (
         (systemCode === "hom" || systemCode === "mhm")
@@ -528,7 +579,8 @@ async function startSystemRun(systemCode, button, form) {
         && authMethod !== "kakao"
     ) {
         const systemLabel = systemCode.toUpperCase();
-        window.alert(
+        setInlineFeedback(
+            feedback,
             `${systemLabel}에서는 휴대폰인증·카카오인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.`,
         );
         return;
@@ -536,7 +588,7 @@ async function startSystemRun(systemCode, button, form) {
 
     const selectedModuleIds = getSelectedModuleIds(form);
     if (selectedModuleIds.length === 0) {
-        window.alert("최소 1개 이상의 모듈을 선택해야 합니다.");
+        setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
         return;
     }
 
@@ -557,7 +609,7 @@ async function startSystemRun(systemCode, button, form) {
 
         if (!response.ok) {
             const errorBody = await readErrorMessage(response);
-            throw new Error(`Run creation failed: ${response.status} ${errorBody}`);
+            throw new Error(errorBody || `Run 생성에 실패했습니다. (${response.status})`);
         }
 
         const run = await response.json();
@@ -565,7 +617,7 @@ async function startSystemRun(systemCode, button, form) {
     } catch (error) {
         button.disabled = false;
         button.textContent = "실행";
-        window.alert(error.message.replace(/^Error:\s*/, "") || "Run 생성에 실패했습니다.");
+        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "Run 생성에 실패했습니다.");
         console.error(error);
     }
 }
@@ -1043,8 +1095,14 @@ function bindSystemButtons() {
     }
 }
 
+function otpFeedbackNode() {
+    return document.querySelector('[data-role="otp-feedback"]');
+}
+
 async function submitOtp(runId, otpCode, form) {
     const button = form.querySelector("button[type='submit']");
+    const feedback = otpFeedbackNode();
+    setInlineFeedback(feedback, "");
     button.disabled = true;
     button.textContent = "제출 중...";
 
@@ -1058,13 +1116,14 @@ async function submitOtp(runId, otpCode, form) {
         });
 
         if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`OTP submit failed: ${response.status} ${errorBody}`);
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `OTP 제출에 실패했습니다. (${response.status})`);
         }
 
         form.reset();
+        setInlineFeedback(feedback, "OTP가 제출되었습니다. 인증 완료까지 잠시 기다려 주세요.", "success");
     } catch (error) {
-        window.alert("OTP 제출에 실패했습니다. 콘솔을 확인하세요.");
+        setInlineFeedback(feedback, `OTP 제출에 실패했습니다: ${error.message.replace(/^Error:\s*/, "")}`);
         console.error(error);
     } finally {
         button.disabled = false;
@@ -1084,7 +1143,7 @@ function bindOtpForm() {
         const runId = panel.dataset.runId;
         const otpCode = String(new FormData(form).get("otp_code") || "").trim();
         if (!otpCode) {
-            window.alert("OTP 코드를 입력하세요.");
+            setInlineFeedback(otpFeedbackNode(), "OTP 코드를 입력하세요.");
             return;
         }
         submitOtp(runId, otpCode, form);
@@ -1124,7 +1183,7 @@ async function cancelRun(button) {
     } catch (error) {
         button.disabled = false;
         button.textContent = "실행 취소";
-        window.alert(`취소에 실패했습니다: ${error.message}`);
+        showToast(`취소에 실패했습니다: ${error.message}`);
         console.error(error);
     }
 }
@@ -1142,7 +1201,7 @@ async function rerunRun(button) {
     } catch (error) {
         button.disabled = false;
         button.textContent = "동일 조건으로 재실행";
-        window.alert(`재실행에 실패했습니다: ${error.message}`);
+        showToast(`재실행에 실패했습니다: ${error.message}`);
         console.error(error);
     }
 }
