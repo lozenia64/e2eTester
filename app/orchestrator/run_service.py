@@ -44,6 +44,11 @@ class RunService:
             self._artifact_manager,
         )
         self._pending_otp: dict[str, PendingOtpState] = {}
+        # 취소 요청된 run_id 집합. 실행 루프가 모듈 사이에서 확인해 협력적으로 중단한다.
+        self._cancel_requested: set[str] = set()
+        # 동일 입력 재실행을 위해 run 생성 시 입력값(otp_code 제외)을 메모리에 보관한다.
+        # PII가 포함될 수 있어 WebSocket/응답 payload 에는 절대 직렬화하지 않는다.
+        self._run_inputs: dict[str, dict[str, str]] = {}
         self._failure_analyzer = failure_analyzer
         self._run_completion_notifier = run_completion_notifier
 
@@ -135,6 +140,57 @@ class RunService:
         asyncio.create_task(self._execute_run(run_id, pending.input_data, pending.sequence_index, pending.runtime))
         return run
 
+    async def cancel_run(self, run_id: str) -> Run:
+        run = await self._repository.get_run(run_id)
+        if run.status in {RunStatus.PASSED, RunStatus.FAILED, RunStatus.CANCELLED}:
+            raise ValueError("이미 종료된 Run은 취소할 수 없습니다.")
+        self._cancel_requested.add(run_id)
+        pending = self._pending_otp.pop(run_id, None)
+        if pending is not None:
+            # OTP 입력 대기 중에는 실행 루프가 돌고 있지 않으므로 여기서 직접 정리·종료한다.
+            await self._cancel_waiting_run(run, pending)
+        # 실행 중/대기열 상태에서는 실행 루프가 다음 모듈로 넘어가기 전에 취소 플래그를 확인해
+        # 협력적으로 중단한다. (진행 중인 단계는 끝나거나 timeout 된 뒤 중단된다.)
+        return run
+
+    async def rerun_run(self, run_id: str) -> Run:
+        original = await self._repository.get_run(run_id)
+        stored_input = self._run_inputs.get(run_id)
+        if stored_input is None:
+            raise ValueError("재실행에 필요한 입력 정보를 찾을 수 없습니다. 홈에서 새로 실행해 주세요.")
+        selected_module_ids = list(original.selected_module_ids) or None
+        return await self.start_run(original.system_code, dict(stored_input), selected_module_ids)
+
+    async def _cancel_waiting_run(self, run: Run, pending: PendingOtpState) -> None:
+        executor = self._workflow_executors.get(pending.execution_mode)
+        try:
+            await self._close_workflow_runtime(executor, pending.runtime)
+        except Exception as exc:
+            print(f"[run] run={run.run_id} 취소 중 runtime 정리 오류: {exc}")
+        await self._mark_modules_cancelled(run, self._ordered_selected_run_modules(run))
+        run.awaiting_input_module_id = None
+        run.awaiting_input_prompt = None
+        await self._finalize_run(run, RunStatus.CANCELLED)
+
+    async def _mark_modules_cancelled(self, run: Run, modules: list[RunModule]) -> None:
+        terminal_statuses = {
+            ModuleStatus.PASSED,
+            ModuleStatus.FAILED,
+            ModuleStatus.SKIPPED,
+            ModuleStatus.BLOCKED,
+            ModuleStatus.CANCELLED,
+        }
+        for module in modules:
+            if module.status in terminal_statuses:
+                continue
+            if module.started_at is not None and module.ended_at is None:
+                module.ended_at = datetime.now(UTC)
+                module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
+            module.status = ModuleStatus.CANCELLED
+            module.message = "사용자 요청으로 취소됨"
+            await self._repository.save_run(run)
+            await self._publish_module_event("module_finished", run, module)
+
     async def start_run(
         self,
         system_code: str,
@@ -160,6 +216,7 @@ class RunService:
             modules=self._build_run_modules(system, resolved_selected_module_ids),
             selected_module_ids=resolved_selected_module_ids,
         )
+        self._run_inputs[run_id] = dict(sanitized_input)
         await self._repository.create_run(run)
         await self._repository.publish(
             DashboardEvent(
@@ -201,6 +258,10 @@ class RunService:
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
                 current_module = module
+                if run.run_id in self._cancel_requested:
+                    forced_status = RunStatus.CANCELLED
+                    await self._mark_modules_cancelled(run, ordered_modules[index:])
+                    break
                 if any(modules_by_id[dependency].status != ModuleStatus.PASSED for dependency in module.depends_on):
                     module.status = ModuleStatus.BLOCKED
                     module.message = "선행 모듈 실패로 인해 실행되지 않음"
@@ -274,6 +335,11 @@ class RunService:
                     status = execution_result.status
                     message = execution_result.message
                     artifacts = execution_result.artifacts
+                    if status == ModuleStatus.WAITING_INPUT and run.run_id in self._cancel_requested:
+                        # OTP 대기로 멈추려는 순간 취소가 요청된 경우, 일시정지하지 않고 바로 중단한다.
+                        forced_status = RunStatus.CANCELLED
+                        await self._mark_modules_cancelled(run, ordered_modules[index:])
+                        break
                     if status == ModuleStatus.WAITING_INPUT:
                         module.status = ModuleStatus.WAITING_INPUT
                         module.message = f"{message}. 웹 화면에서 OTP를 입력해 제출하세요."
@@ -511,8 +577,10 @@ class RunService:
         else:
             run.status = RunStatus.FAILED if any(module.status == ModuleStatus.FAILED for module in run.modules) else RunStatus.PASSED
         await self._repository.save_run(run)
+        self._cancel_requested.discard(run.run_id)
         await self._publish_run_event("run_finished", run)
-        if self._run_completion_notifier is not None:
+        # 사용자가 취소한 Run은 결과 보고서 메일을 보내지 않는다. (PASSED/FAILED 만 발송)
+        if self._run_completion_notifier is not None and run.status in {RunStatus.PASSED, RunStatus.FAILED}:
             asyncio.create_task(self._notify_run_completion(run.model_copy(deep=True)))
 
     async def _notify_run_completion(self, run: Run) -> None:

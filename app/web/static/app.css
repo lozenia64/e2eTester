@@ -36,6 +36,10 @@ body {
     border-left-color: #64748b;
 }
 
+.node-card.status-cancelled {
+    border-left-color: #71717a;
+}
+
 .module-graph-canvas {
     position: relative;
     min-width: 100%;
