@@ -37,6 +37,16 @@
     <p class="mt-2 text-xs text-gray-500" id="run-progress-detail"></p>
 </section>
 
+<!-- 직전 실행 대비 변화 -->
+<section class="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 shadow-sm{% if not (run.comparison and run.comparison.has_baseline) %} is-hidden{% endif %}" id="comparison-panel">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-bold text-gray-900">직전 실행 대비 변화</h2>
+        <a id="comparison-baseline-link" class="text-xs font-medium text-indigo-600 hover:underline"
+           href="{% if run.comparison and run.comparison.baseline_run_id %}/runs/{{ run.comparison.baseline_run_id }}{% else %}#{% endif %}">{% if run.comparison and run.comparison.baseline_run_id %}기준 Run: {{ run.comparison.baseline_run_id }}{% endif %}</a>
+    </div>
+    <div id="comparison-body" class="mt-3 flex flex-wrap gap-2 text-xs"></div>
+</section>
+
 <!-- OTP 입력 -->
 <section class="otp-panel rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm{% if not run.awaiting_input_module_id %} is-hidden{% endif %}" id="otp-panel" data-run-id="{{ run.run_id }}" data-awaiting-module-id="{{ run.awaiting_input_module_id or '' }}">
     <div class="flex items-start gap-3">

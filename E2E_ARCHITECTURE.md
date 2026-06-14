@@ -182,6 +182,11 @@ e2eTester/
 - `POST /api/runs/{run_id}/otp`
 - `POST /api/runs/{run_id}/cancel`
 - `POST /api/runs/{run_id}/rerun`
+- `GET /api/schedules` (예약 목록 요약, input_data 제외)
+- `POST /api/schedules/systems/{system_code}` (cron 예약 등록)
+- `POST /api/schedules/{schedule_id}/toggle` (활성/비활성 전환)
+- `POST /api/schedules/{schedule_id}/run-now` (즉시 1회 실행)
+- `DELETE /api/schedules/{schedule_id}` (예약 삭제)
 - `WS /ws/runs/{run_id}`
 
 역할:
@@ -358,6 +363,29 @@ manifest 에 들어 있는 정보:
 
 - 기본값은 비활성화다.
 - 설정이 잘못되어도 앱은 계속 실행되며, 메일 발송만 생략될 수 있다.
+
+### 5.9 예약 실행(스케줄러)과 이력 비교 계층
+
+현재 구현:
+
+- `app/scheduling/cron.py` — 외부 의존성 없는 최소 cron(5필드 `분 시 일 월 요일`) 파서·다음 실행 시각 계산기. `* , - /` 와 요일 0/7(일요일)을 지원하고, 일·요일이 모두 제한되면 둘 중 하나만 맞아도 실행하는 표준 cron 규칙을 따른다.
+- `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run 을 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
+- `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 메모리 기반 예약 저장소(RunRepository 와 동일하게 재시작 시 사라짐).
+- `app/api/routes_schedules.py` — 예약 REST API.
+
+역할:
+
+- 홈 화면 시스템 폼에서 입력값·모듈 선택 그대로 cron 식을 붙여 예약을 등록한다. 등록 시 `RunService.validate_run_request` 로 시스템·인증 수단·모듈 조합을 Run 생성과 동일하게 검증한다.
+- 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅된다.
+- 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run 이 아직 진행 중이면 중복 실행을 건너뛴다.
+- 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
+- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunService._compute_comparison` 가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(Gemini 프롬프트·폴백 HTML·평문)에 반영된다.
+
+제약:
+
+- 예약과 비교 기준선 모두 메모리 기반이므로 서버 재시작 시 사라진다(영구 저장소 도입 시 함께 개선 대상).
+- 예약 실행은 무인 실행이라, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가 포함되면 해당 Run 은 `WAITING_INPUT` 에서 멈출 수 있다.
+- 입력값(`input_data`)은 PII 를 포함할 수 있어 예약 요약(API/UI)에는 직렬화하지 않는다.
 
 ## 6. 시스템 시나리오 문서
 
