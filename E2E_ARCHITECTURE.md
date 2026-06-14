@@ -69,11 +69,28 @@ e2eTester/
       run_service.py
     registry/
       loader.py
-      manifests/
-        hom.yaml
     runner/
       artifact_manager.py
       hom_workflow_executor.py
+    systems/
+      hom/
+        executor.py
+        manifest.yaml
+        scripts/
+          login_phone.py
+        steps/
+          login_common.py
+          main_access.py
+          login_move.py
+          phone_login.py
+          kakao_login.py
+          contract_list.py
+          contract_detail.py
+          compensation_charge.py
+          compensation_result_common.py
+          compensation_result.py
+          compensation_cancel.py
+          long_term_policy_certificate.py
     storage/
       run_repository.py
     web/
@@ -88,18 +105,6 @@ e2eTester/
     scenarios/
       hom.md
   artifacts/
-  hom_compensation_cancel.py
-  hom_compensation_charge.py
-  hom_compensation_result.py
-  hom_compensation_result_common.py
-  hom_contract_detail.py
-  hom_contract_list.py
-  hom_kakao_login.py
-  hom_login_common.py
-  hom_login_move.py
-  hom_login_phone.py
-  hom_main_access.py
-  hom_phone_login.py
   README.md
   E2E_ARCHITECTURE.md
 ```
@@ -200,7 +205,7 @@ Module:
 현재 구현:
 
 - `app/registry/loader.py`
-- `app/registry/manifests/hom.yaml`
+- `app/systems/hom/manifest.yaml`
 
 역할:
 
@@ -231,9 +236,9 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/runner/hom_workflow_executor.py`
+- `app/systems/hom/executor.py`
 - `app/runner/artifact_manager.py`
-- 루트 레벨 분할 모듈 파일들
+- `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들
 
 실행 모델:
 
@@ -289,7 +294,7 @@ manifest 에 들어 있는 정보:
 규칙:
 
 - 위치: `docs/scenarios/{system_code}.md`
-- manifest(`app/registry/manifests/{system_code}.yaml`)와 1:1로 대응한다.
+- manifest(`app/systems/{system_code}/manifest.yaml`)와 1:1로 대응한다.
 - 새 시스템(MHM, HWFP 등)을 추가할 때는 manifest와 함께 시나리오 문서도 같이 추가한다.
 - 시나리오 문서에는 시스템 개요, 모듈 목록, 단계별 상세 동작(selector·URL 검증 포함), Run form 입력 모델을 기록한다.
 - 시스템의 흐름이나 selector 를 바꾸면 해당 시나리오 문서도 함께 갱신한다.

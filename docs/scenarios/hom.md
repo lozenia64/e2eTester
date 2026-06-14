@@ -7,7 +7,7 @@
 ## 1. 시스템 개요
 
 - 시스템 코드: `hom`
-- manifest: `app/registry/manifests/hom.yaml`
+- manifest: `app/systems/hom/manifest.yaml`
 - 대상 사이트: `https://www.hwgeneralins.com` (고정값)
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 
@@ -17,15 +17,15 @@
 
 1. `hom.main.access`
 2. `hom.login.move`
-3. `hom.login.phone_login` — `auth_method`에 따라 `hom_phone_login`(휴대폰·OTP) 또는 `hom_kakao_login`(카카오·60초·`인증완료`) 실행
+3. `hom.login.phone_login` — `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
 4. `hom.contract.list`
 5. `hom.contract.detail`
-6. `hom.compensation.charge` — `hom_compensation_charge.py` (`compensation_charge` 단계)
-7. `hom.compensation.result` — `hom_compensation_result.py` (`compensation_result` 단계)
-8. `hom.compensation.cancel` — `hom_compensation_cancel.py` (`compensation_cancel` 단계)
-9. `hom.proof.long_term_policy` — `hom_long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+6. `hom.compensation.charge` — `app/systems/hom/steps/compensation_charge.py` (`compensation_charge` 단계)
+7. `hom.compensation.result` — `app/systems/hom/steps/compensation_result.py` (`compensation_result` 단계)
+8. `hom.compensation.cancel` — `app/systems/hom/steps/compensation_cancel.py` (`compensation_cancel` 단계)
+9. `hom.proof.long_term_policy` — `app/systems/hom/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
 
-`hom_compensation_result.py`·`hom_compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `hom_compensation_result_common.py`에서 공유한다.
+`app/systems/hom/steps/compensation_result.py`·`app/systems/hom/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/hom/steps/compensation_result_common.py`에서 공유한다.
 
 모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
 
@@ -85,10 +85,10 @@
 
 파일:
 
-- `hom_phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `hom_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
-- `hom_login_common.py`
-- `hom_login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
+- `app/systems/hom/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
+- `app/systems/hom/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
+- `app/systems/hom/steps/login_common.py`
+- `app/systems/hom/scripts/login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
 
 역할:
 

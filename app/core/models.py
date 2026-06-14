@@ -47,6 +47,7 @@ class SystemDefinition(BaseModel):
     description: str
     modules: list[ModuleDefinition]
     run_form: list[RunFormField] = Field(default_factory=list)
+    supported_auth_methods: list[str] = Field(default_factory=list)
 
 
 class FailureAnalysis(BaseModel):

@@ -7,7 +7,7 @@
 ## 1. 시스템 개요
 
 - 시스템 코드: `mhm`
-- manifest: `app/registry/manifests/mhm.yaml`
+- manifest: `app/systems/mhm/manifest.yaml`
 - 대상 사이트: `https://m.hwgeneralins.com` (고정값)
 - **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `mhm_login_common.apply_mobile_device_mode()` → `mhm_main_access.run()` 순서를 따른다.
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
@@ -18,15 +18,15 @@
 
 1. `mhm.main.access`
 2. `mhm.login.move`
-3. `mhm.login.phone_login` — `auth_method`에 따라 `mhm_phone_login`(휴대폰·OTP) 또는 `mhm_kakao_login`(카카오·60초·`인증완료`) 실행
+3. `mhm.login.phone_login` — `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
 4. `mhm.contract.list`
 5. `mhm.contract.detail`
-6. `mhm.compensation.charge` — `mhm_compensation_charge.py` (`compensation_charge` 단계)
-7. `mhm.compensation.result` — `mhm_compensation_result.py` (`compensation_result` 단계)
-8. `mhm.compensation.cancel` — `mhm_compensation_cancel.py` (`compensation_cancel` 단계)
-9. `mhm.proof.long_term_policy` — `mhm_long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+6. `mhm.compensation.charge` — `app/systems/mhm/steps/compensation_charge.py` (`compensation_charge` 단계)
+7. `mhm.compensation.result` — `app/systems/mhm/steps/compensation_result.py` (`compensation_result` 단계)
+8. `mhm.compensation.cancel` — `app/systems/mhm/steps/compensation_cancel.py` (`compensation_cancel` 단계)
+9. `mhm.proof.long_term_policy` — `app/systems/mhm/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
 
-`mhm_compensation_result.py`·`mhm_compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `mhm_compensation_result_common.py`에서 공유한다.
+`app/systems/mhm/steps/compensation_result.py`·`app/systems/mhm/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/mhm/steps/compensation_result_common.py`에서 공유한다.
 
 모듈별 `timeout_seconds`: 본인인증 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 MHM 단계는 180초.
 
@@ -52,7 +52,7 @@
 메인화면 접속
   -> 로그인 이동
       -> 본인인증 로그인
-          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
+          -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증확인 클릭
               -> 로그인 성공 후 팝업 정리
                   -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
                   -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
@@ -87,17 +87,17 @@
 
 파일:
 
-- `mhm_phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `mhm_kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
-- `mhm_login_common.py`
-- `mhm_login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
+- `app/systems/mhm/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
+- `app/systems/mhm/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증확인)
+- `app/systems/mhm/steps/login_common.py`
+- MHM은 현재 별도 수동 로그인 CLI 진입 스크립트를 두지 않는다.
 
 역할:
 
 - 인증 수단에 따라 분기
 - **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
-- **카카오**: [`/util/login/login.do`](https://m.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
-- `/my/main.do` 포함 URL 진입 확인
+- **카카오**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`카카오인증`** 버튼 클릭 → [`/lin/kct/KakaoWebLgin1000`](https://m.hwgeneralins.com/lin/kct/KakaoWebLgin1000) 본인인증 페이지에서 이름·생년월일·휴대전화번호 입력·**전체동의** → **`인증요청`** → 발송 알림 **`확인`** 닫기 → **60초 대기**(카카오톡에서 인증 진행) → **`인증확인`**(버튼 활성화 후 클릭)
+- [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 포함 URL 진입 확인
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
 

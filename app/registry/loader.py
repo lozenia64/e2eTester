@@ -9,7 +9,7 @@ from app.core.models import ModuleDefinition, RunFormField, SystemDefinition
 
 class ModuleRegistry:
     def __init__(self, manifest_dir: Path | None = None) -> None:
-        self._manifest_dir = manifest_dir or Path("app/registry/manifests")
+        self._manifest_dir = manifest_dir or Path(__file__).resolve().parents[1] / "systems"
         self._systems = self._load_systems()
 
     def list_systems(self) -> list[SystemDefinition]:
@@ -23,7 +23,7 @@ class ModuleRegistry:
 
     def _load_systems(self) -> dict[str, SystemDefinition]:
         systems: dict[str, SystemDefinition] = {}
-        for manifest_path in sorted(self._manifest_dir.glob("*.yaml")):
+        for manifest_path in sorted(self._manifest_dir.glob("*/manifest.yaml")):
             raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
             modules = [ModuleDefinition(**module_data) for module_data in raw.get("modules", [])]
             system = SystemDefinition(
@@ -32,6 +32,7 @@ class ModuleRegistry:
                 description=raw["description"],
                 modules=modules,
                 run_form=[RunFormField(**field_data) for field_data in raw.get("run_form", [])],
+                supported_auth_methods=raw.get("supported_auth_methods", []),
             )
             self._validate_system_definition(system, manifest_path)
             systems[system.system_code] = system

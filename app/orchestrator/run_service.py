@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
@@ -12,10 +13,9 @@ from app.core.models import DashboardEvent, FailureAnalysisRequest, ModuleDefini
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.hom_workflow_executor import HomWorkflowExecutor, HomWorkflowRuntime
-from app.runner.mhm_workflow_executor import MhmWorkflowExecutor, MhmWorkflowRuntime
 from app.runner.workflow_common import StepExecutionResult
 from app.storage.run_repository import InMemoryRunRepository
+from app.systems.loader import load_workflow_executors
 
 
 @dataclass
@@ -25,7 +25,7 @@ class PendingOtpState:
     sequence_index: int
     module_id: str
     execution_mode: str
-    runtime: HomWorkflowRuntime | MhmWorkflowRuntime
+    runtime: Any
 
 
 class RunService:
@@ -39,12 +39,10 @@ class RunService:
         self._registry = registry
         self._repository = repository
         self._artifact_manager = ArtifactManager()
-        self._hom_executor = HomWorkflowExecutor(self._artifact_manager)
-        self._mhm_executor = MhmWorkflowExecutor(self._artifact_manager)
-        self._workflow_executors = {
-            self._hom_executor.execution_mode: self._hom_executor,
-            self._mhm_executor.execution_mode: self._mhm_executor,
-        }
+        self._workflow_executors = load_workflow_executors(
+            (system.system_code for system in self._registry.list_systems()),
+            self._artifact_manager,
+        )
         self._pending_otp: dict[str, PendingOtpState] = {}
         self._failure_analyzer = failure_analyzer
         self._run_completion_notifier = run_completion_notifier
@@ -147,9 +145,10 @@ class RunService:
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
         resolved_selected_module_ids = self._resolve_selected_module_ids(system, selected_module_ids)
-        if system_code in {"hom", "mhm"}:
-            auth_method = sanitized_input.get("auth_method", "phone")
-            if auth_method not in {"phone", "kakao"}:
+        if system.supported_auth_methods:
+            auth_method = sanitized_input.get("auth_method") or system.supported_auth_methods[0]
+            sanitized_input["auth_method"] = auth_method
+            if auth_method not in system.supported_auth_methods:
                 label = system.name
                 raise ValueError(f"{label}에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
         run = Run(
@@ -179,7 +178,7 @@ class RunService:
         run_id: str,
         input_data: dict[str, str],
         start_index: int = 0,
-        workflow_runtime: HomWorkflowRuntime | MhmWorkflowRuntime | None = None,
+        workflow_runtime: Any | None = None,
         active_workflow_executor=None,
     ) -> None:
         run = await self._repository.get_run(run_id)

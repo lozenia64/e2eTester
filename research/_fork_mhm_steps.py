@@ -1,4 +1,4 @@
-"""Fork hom_*.py step modules to mhm_*.py"""
+"""Fork HOM step modules to the MHM step package."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,12 +16,13 @@ FILES = [
     "long_term_policy_certificate",
 ]
 
+HOM_STEPS = ROOT / "app" / "systems" / "hom" / "steps"
+MHM_STEPS = ROOT / "app" / "systems" / "mhm" / "steps"
+
 for name in FILES:
-    src = ROOT / f"hom_{name}.py"
-    dst = ROOT / f"mhm_{name}.py"
+    src = HOM_STEPS / f"{name}.py"
+    dst = MHM_STEPS / f"{name}.py"
     text = src.read_text(encoding="utf-8")
-    text = text.replace("hom_login_common", "mhm_login_common")
-    text = text.replace("hom_compensation_result_common", "mhm_compensation_result_common")
-    text = text.replace("import hom_", "import mhm_")
+    text = text.replace("from . import login_common as common", "from . import login_common as common")
     dst.write_text(text, encoding="utf-8")
     print("wrote", dst.name)

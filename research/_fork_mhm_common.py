@@ -1,7 +1,8 @@
-"""One-off: fork hom_login_common.py -> mhm_login_common.py"""
+"""One-off: fork HOM login_common.py -> MHM login_common.py"""
 from pathlib import Path
 
-text = Path("hom_login_common.py").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+text = (ROOT / "app" / "systems" / "hom" / "steps" / "login_common.py").read_text(encoding="utf-8")
 text = text.replace(
     'DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"',
     'DEFAULT_BASE_URL: Final[str] = "https://m.hwgeneralins.com"',
@@ -20,5 +21,5 @@ text = text.replace(
     'DEFAULT_USER_DATA_DIR_NAME: Final[str] = "chrome-profile"',
     'DEFAULT_USER_DATA_DIR_NAME: Final[str] = "mhm-chrome-profile"',
 ) if 'DEFAULT_USER_DATA_DIR_NAME' in text else text
-Path("mhm_login_common.py").write_text(text, encoding="utf-8")
-print("wrote mhm_login_common.py")
+(ROOT / "app" / "systems" / "mhm" / "steps" / "login_common.py").write_text(text, encoding="utf-8")
+print("wrote app/systems/mhm/steps/login_common.py")
