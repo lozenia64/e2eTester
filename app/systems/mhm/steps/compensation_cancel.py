@@ -1,96 +1,117 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from . import compensation_result_common as result_common
 from . import login_common as common
 
-CANCELLED_STATUS = "취소"
+CANCEL_CONFIRM_TEXT = "접수를 취소하시겠습니까?"
+CANCEL_SUCCESS_TEXT = re.compile(r"정상\s*처리\s*되었습니다")
+ALERT_DIALOG_SELECTOR = ".dialog.modal.alert.show, .dialog.show"
+FORBIDDEN_CANCELLED_DETAIL_BUTTONS = (
+    re.compile(r"접수\s*취소"),
+)
 
 
-def _attach_dialog_recorder(page) -> list[tuple[str, str]]:
-    seen_dialogs: list[tuple[str, str]] = []
+def _click_alert_dialog_button(
+    page,
+    dialog_text: str | re.Pattern[str],
+    button_name: str,
+    log_label: str,
+    timeout_ms: int,
+) -> None:
+    dialog = page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=dialog_text).first
+    common.wait_locator_visible_with_log(dialog, timeout_ms, log_label)
+    button = dialog.get_by_role("button", name=button_name, exact=True).first
+    common.click_with_log(button, log_label)
 
-    def _record(dialog) -> None:
-        seen_dialogs.append((dialog.type, dialog.message))
 
-    page.on("dialog", _record)
-    return seen_dialogs
-
-
-def _cancel_claim_and_return_result01(page, timeout_ms: int, seen_dialogs: list[tuple[str, str]]) -> None:
+def _cancel_claim_and_return_list(page, timeout_ms: int) -> None:
     cancel_button = common.first_visible_locator(
-        page.locator(result_common.DETAIL_CANCEL_SELECTOR), "상세 화면 접수취소(#btn4)"
+        page.locator(result_common.DETAIL_CANCEL_SELECTOR),
+        "상세 화면 접수취소",
     )
     common.click_with_log(cancel_button, "상세 화면 접수취소 클릭")
 
-    for _ in range(max(1, timeout_ms // 400)):
-        if "result01.do" in page.url:
-            break
-        common.wait_timeout_with_log(page, 400, "접수취소 처리 대기")
-    result_common.wait_url_contains(page, "result01.do", timeout_ms)
+    _click_alert_dialog_button(page, CANCEL_CONFIRM_TEXT, "예", "접수취소 확인(예)", timeout_ms)
+    _click_alert_dialog_button(page, CANCEL_SUCCESS_TEXT, "확인", "접수취소 완료 확인", timeout_ms)
 
-    if not any(dialog_type == "confirm" and "접수를 취소하시겠습니까?" in message for dialog_type, message in seen_dialogs):
-        raise RuntimeError(f"접수취소 confirm 대화상자를 확인하지 못했습니다: {seen_dialogs}")
-    if not any(dialog_type == "alert" and "정상적으로 처리 되었습니다." in message for dialog_type, message in seen_dialogs):
-        raise RuntimeError(f"접수취소 완료 alert를 확인하지 못했습니다: {seen_dialogs}")
+    result_common.wait_url_contains(page, result_common.RESULT_LIST_URL_FRAGMENT, timeout_ms)
 
 
 def _assert_receipt_absent_in_processing(page, timeout_ms: int, receipt_number: str) -> None:
     result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", timeout_ms)
-    table = result_common.result_table(page)
-    rows = table.locator("tbody tr")
+    cards = result_common.claim_cards(page)
 
     for _ in range(max(1, timeout_ms // 400)):
         present = False
-        for index in range(rows.count()):
-            row = rows.nth(index)
+        for index in range(cards.count()):
+            card = cards.nth(index)
             try:
-                if not row.is_visible(timeout=400):
+                if not card.is_visible(timeout=400):
                     continue
-                row_text = result_common.normalize_text(row.inner_text(timeout=400))
+                card_text = result_common.normalize_text(card.inner_text(timeout=400))
             except Exception:
                 continue
-            if receipt_number in row_text:
+            if receipt_number in card_text:
                 present = True
                 break
+
         if not present:
+            try:
+                empty_message = page.get_by_text(result_common.EMPTY_PROCESSING_MESSAGE).first
+                if empty_message.is_visible(timeout=400):
+                    print(f"[step] 진행중 탭 빈 목록 확인 (접수번호 {receipt_number} 없음)")
+                    return
+            except Exception:
+                pass
             print(f"[step] 진행중 탭에서 취소된 접수번호 제거 확인: {receipt_number}")
             return
+
         common.wait_timeout_with_log(page, 400, "진행중 탭 반영 대기")
     raise RuntimeError(f"진행중 탭에 취소된 접수번호가 여전히 남아 있습니다: {receipt_number}")
 
 
-def _find_row_by_receipt_number(page, receipt_number: str, timeout_ms: int):
-    table = result_common.result_table(page)
-    rows = table.locator("tbody tr")
-    for _ in range(max(1, timeout_ms // 400)):
-        for index in range(rows.count()):
-            row = rows.nth(index)
-            try:
-                if not row.is_visible(timeout=400):
-                    continue
-                row_text = result_common.normalize_text(row.inner_text(timeout=400))
-            except Exception:
-                continue
-            if receipt_number in row_text:
-                return row
-        common.wait_timeout_with_log(page, 400, "완료 탭 결과 행 대기")
-    raise RuntimeError(f"완료 탭에서 접수번호를 찾지 못했습니다: {receipt_number}")
+def _assert_cancelled_detail(page, timeout_ms: int) -> None:
+    heading = page.get_by_role("heading", name=result_common.CANCELLED_DETAIL_HEADING).first
+    common.wait_locator_visible_with_log(heading, timeout_ms, "취소된 청구 상세")
+
+    for pattern in FORBIDDEN_CANCELLED_DETAIL_BUTTONS:
+        button = page.get_by_role("button", name=pattern).first
+        try:
+            if button.is_visible(timeout=500):
+                label = result_common.normalize_text(button.inner_text(timeout=500))
+                raise RuntimeError(f"취소된 상세에 {label} 버튼이 노출됩니다")
+        except RuntimeError:
+            raise
+        except Exception:
+            continue
+
+    common.wait_locator_visible_with_log(
+        page.get_by_role("button", name=result_common.DETAIL_PREVIEW_BUTTON_PATTERN),
+        timeout_ms,
+        "취소된 청구 상세 제출서류 확인하기",
+    )
+    common.wait_locator_visible_with_log(
+        page.get_by_role("button", name="동일내용 다시청구"),
+        timeout_ms,
+        "취소된 청구 상세 동일내용 다시청구",
+    )
+    print("[step] 취소된 청구 상세 화면 검증 완료")
 
 
 def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str) -> None:
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
-    row = _find_row_by_receipt_number(page, receipt_number, timeout_ms)
-    row_text = result_common.normalize_text(row.inner_text(timeout=1000))
-    if result_common.TARGET_CLAIM_TEXT_TRUNCATED not in row_text:
-        raise RuntimeError(f"완료 탭 청구내용이 예상과 다릅니다: {row_text}")
-    if CANCELLED_STATUS not in row_text:
-        raise RuntimeError(f"완료 탭 상태값이 취소가 아닙니다: {row_text}")
+    card = result_common.find_card_by_receipt_number(page, receipt_number, timeout_ms)
+    card_text = result_common.normalize_text(card.inner_text(timeout=1000))
+    if result_common.TARGET_CLAIM_TEXT_TRUNCATED not in card_text:
+        raise RuntimeError(f"완료 탭 청구내용이 예상과 다릅니다: {card_text}")
+    if not result_common.card_has_cancelled_status(card):
+        raise RuntimeError(f"완료 탭 상태값이 취소가 아닙니다: {card_text}")
 
-    button_names = result_common.row_button_names(row)
-    if button_names != ["제출서류확인"]:
-        raise RuntimeError(f"완료 탭 이용가능 서비스가 예상과 다릅니다: {button_names}")
+    result_common.open_claim_detail(page, card, timeout_ms)
+    _assert_cancelled_detail(page, timeout_ms)
 
 
 def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
@@ -101,8 +122,7 @@ def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
         receipt_number = result_common.receipt_number_from_row(row)
         result_common.open_claim_detail(page, row, config.timeout_ms)
         result_common.wait_for_result02_detail_ready(page, config.timeout_ms, receipt_number)
-        seen_dialogs = _attach_dialog_recorder(page)
-        _cancel_claim_and_return_result01(page, config.timeout_ms, seen_dialogs)
+        _cancel_claim_and_return_list(page, config.timeout_ms)
         _assert_receipt_absent_in_processing(page, config.timeout_ms, receipt_number)
         _assert_cancelled_in_finished_tab(page, config.timeout_ms, receipt_number)
         common.save_screenshot(page, screenshot_path)

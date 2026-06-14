@@ -201,7 +201,7 @@ modules:
   - module_id: mhm.proof.long_term_policy
     system_code: mhm
     name: 장기보험증권 증명서 발급
-    description: 증명서 발급 메뉴에서 장기보험증권을 선택하고 첫 계약을 다운로드 방식으로 발급해 PDF 다운로드를 확인합니다.
+    description: 전체메뉴 증명서발급에서 보험증권(장기/자동차)을 선택하고 첫 계약을 다운로드 방식으로 발급해 PDF 다운로드를 확인합니다.
     group: proof
     order: 90
     depends_on:

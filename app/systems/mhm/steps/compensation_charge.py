@@ -8,15 +8,42 @@ from pathlib import Path
 
 from . import login_common as common
 
-CHARGE00_FRAGMENT = "/fplaza/compensation/charge00.do"
-POPUP_CONFIRM_PATTERN = re.compile(r"보험금청구를 위한 필요서류는 확인하셨나요")
-READY_LINK_PATTERN = re.compile(r"준비가 된 상태")
-STEP02_HEADING_PATTERN = re.compile(r"청구대상자\s*선택|질병/상해\s*보험금청구")
-STEP05_HEADING_PATTERN = re.compile(r"서류등록|서류제출|파일첨부")
-STEP06_HEADING_PATTERN = re.compile(r"청구완료|접수가\s*완료|등록되었습니다")
-CLAIM_GUIDE_POPUP_ROOT = "#uiPOPBcgah00"
-POP_LOADING_SELECTOR = "#popLoading"
-VISIBLE_MODAL_SELECTOR = ".modal_popup:visible, .modal_wrap:visible, .pop_wrap:visible, .popup_wrap:visible, .pop_modal1:visible, .pop_modal2:visible, [role='dialog']:visible"
+CLAIM_INTRO_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1020"
+TARGET_SELECT_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1040"
+CLAIM_REASON_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1050"
+CLAIM_DETAIL_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1052"
+DOCUMENT_UPLOAD_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1070"
+CLAIM_COMPLETE_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1090"
+CLAIM_COMPLETE_HEADING_PATTERN = re.compile(r"보험금청구를\s*완료")
+SERVICE_SATISFACTION_DIALOG_TEXT = re.compile(r"서비스\s*만족도\s*조사|서비스이용은\s*어떠셨")
+SERVICE_SATISFACTION_DIALOG_SELECTOR = ".dialog.full.show"
+SERVICE_SATISFACTION_CLOSE_SELECTOR = "button.dialog_close.ui_dialog_close, a.dialog_close.ui_dialog_close"
+VISIBLE_MODAL_SELECTOR = (
+    ".ui_dialog:visible, [role='dialog']:visible, .dialog.modal.show:visible, "
+    ".dialog.show:visible, .modal.show:visible, .pop_wrap:visible"
+)
+SILSOM24_DIALOG_SELECTOR = "#dialog_silson24Url"
+SILSOM24_DISMISS_LINK_SELECTOR = f'{SILSOM24_DIALOG_SELECTOR} a.link_txt[title="오늘 더이상 안볼래요"]'
+SILSOM24_CLOSE_LINK_SELECTOR = f"{SILSOM24_DIALOG_SELECTOR} a.dialog_close.ui_dialog_close"
+SELF_CLAIM_LABEL_SELECTOR = "label.ic_self.man"
+SELF_CLAIM_INPUT_SELECTOR = "#selectionRadio1_0_selectionRadio1_0"
+NEW_CLAIM_LABEL_SELECTOR = "label.ic_new"
+NEW_CLAIM_INPUT_SELECTOR = "#selectionRadio1_1_selectionRadio2_2"
+LOADING_OVERLAY_SELECTOR = "#loading"
+TARGET_SELECT_NEXT_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("다음")'
+CLAIM_FLOW_DIALOG_SELECTOR = ".dialog.modal.show, .dialog.show"
+DUPLICATE_CLAIM_NOTICE_TEXT = re.compile(r"동일한\s*사고|청구하신\s*이력|동일한\s*질병")
+DUPLICATE_ACCIDENT_DATE_TYPE_TEXT = re.compile(
+    r"동일한\s*발병|사고유형으로\s*완료|기존\s*청구내역"
+)
+EXISTING_CLAIM_HISTORY_ALERT_SELECTOR = ".dialog.modal.alert.show"
+CLAIM_CONFIRM_MODAL_TEXT = re.compile(
+    r"신규\s*접수|중복\s*청구|접수\s*확인|동일한\s*사고|청구하신\s*이력|동일한\s*질병"
+)
+ACCIDENT_TYPE_ETC_LABEL_SELECTOR = 'label:has(em.sel_lb_tit:text-is("기타"))'
+ACCIDENT_TYPE_ETC_INPUT_SELECTOR = 'main input[type="radio"][value="05"]'
+CLAIM_REASON_COMPLETE_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("청구사유 입력완료")'
+ACCIDENT_TYPE_CONFIRM_TEXT = re.compile(r"사고\s*유형")
 CLAIM_CONTENT_TEXT = "IT직원 테스트입니다. 바로 취소할 예정입니다."
 DESKTOP_SCREENSHOT_GLOB_PATTERNS = (
     "스크린샷*.PNG",
@@ -28,27 +55,28 @@ DESKTOP_PNG_FALLBACK_GLOB_PATTERNS = (
     "*.PNG",
     "*.png",
 )
-CHARGE03_ALL_CONSENT_INPUT_SELECTOR = "#formChk2"
-CHARGE03_ALL_CONSENT_LABEL_SELECTOR = 'label[for="formChk2"]'
-CHARGE04_OTHER_RADIO_SELECTOR = "#formAccident1_4"
-CHARGE04_OTHER_LABEL_SELECTOR = 'label[for="formAccident1_4"]'
-CHARGE04_DATE_INPUT_SELECTOR = "#sendDate"
-CHARGE04_QUERY_SELECTOR = '#searchBtn a[href="javascript:goSearch();"]'
-CHARGE04_CONTENT_TEXTAREA_SELECTOR = "#clmCn"
-CHARGE04_NEXT_SELECTOR = 'a[href="javascript:popDetail()"]'
-CHARGE05_PRIMARY_UPLOAD_FRAME_SELECTORS = (
-    "#dext5uploader_frame_dext5upload4",
-    'iframe[title="진료비영수증, 진단서, 수술확인서 등"]',
+DATE_INPUT_SELECTOR = "#dateInput"
+CLAIM_CONTENT_TEXTAREA_SELECTOR = "#cont"
+ACCOUNT_COMBO_SELECTOR = "#acccombo"
+ACCOUNT_SELECT_TRIGGER_SELECTOR = "main .sel_panel.active a.select_btn, main a.select_btn"
+ACCOUNT_SELECT_DIALOG_TEXT = re.compile(r"계좌\s*선택")
+SAVED_ACCOUNT_ITEM_PATTERN = re.compile(r"은행\s*/\s*\d+|/\s*\d{6,}")
+DETAIL_COMPLETE_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("상세정보 입력완료")'
+CLAIM_TYPE_DIAGNOSIS_LABEL_SELECTOR = 'label:has(span.sel_lb_cont:text-is("진단비"))'
+CLAIM_DETAIL_OTHER_DIAGNOSIS_LABEL_SELECTOR = 'label:has(span.sel_lb_cont:text-is("기타 진단"))'
+CLAIM_TYPE_DIAGNOSIS_INPUT_SELECTOR = "#selectionCh_1"
+CLAIM_DETAIL_OTHER_DIAGNOSIS_INPUT_SELECTOR = "#selectionCh2_A010204"
+MEDICAL_BENEFIT_NONE_LABEL_SELECTOR = '.btn_radio label[for="radio10"]'
+MEDICAL_BENEFIT_NONE_INPUT_SELECTOR = "#radio10"
+CONSENT_FULL_AGREE_FOR = "[필수] 전체동의"
+CONSENT_GUIDE_PATTERN = re.compile(r"동의\s*안내|보험금청구를\s*위한\s*동의")
+CONSENT_SUMMARY_PATTERN = re.compile(r"요약\s*동의서|보험금청구를\s*위한")
+CONSENT_MODAL_SELECTOR = (
+    ".ui_dialog, [role='dialog'], .dialog.full.show, .dialog.modal.show, .dialog.bottom.show, .dialog.show"
 )
-CHARGE05_SECONDARY_UPLOAD_FRAME_SELECTORS = (
-    "#dext5uploader_frame_dext5upload9",
-    'iframe[title="진료비 세부(산정) 내역서"]',
-    'iframe[title="DEXT5 Upload Component"]',
-)
-CHARGE05_FILE_INPUT_SELECTOR = 'input[type="file"]'
-CHARGE05_FILE_ADD_BUTTON_SELECTOR = "button#button_add"
-CHARGE05_COMPLETE_SELECTOR = 'a[href="javascript:confirmBtn()"]'
-CLAIM_TYPE_NOTICE_PATTERN = re.compile(r"청구유형\s*선택\s*안내")
+GALLERY_FILE_INPUT_SELECTOR = "#galleyFile"
+PRIMARY_UPLOAD_BUTTON_PATTERN = re.compile(r"보험금청구서류")
+SECONDARY_UPLOAD_BUTTON_PATTERN = re.compile(r"진료비\s*세부")
 
 
 def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
@@ -66,46 +94,19 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def _wait_for_overlay_to_clear(page, selector: str, timeout_ms: int, description: str) -> None:
-    print(f"[wait] Start overlay clear wait: {description} ({timeout_ms} ms)")
-    page.wait_for_function(
-        """
-        overlaySelector => {
-            const element = document.querySelector(overlaySelector);
-            if (!element) {
-                return true;
-            }
-            const style = window.getComputedStyle(element);
-            const rect = element.getBoundingClientRect();
-            const visible =
-                style.display !== 'none' &&
-                style.visibility !== 'hidden' &&
-                rect.width > 0 &&
-                rect.height > 0;
-            const open = element.classList.contains('open');
-            return !(visible && open);
-        }
-        """,
-        arg=selector,
-        timeout=timeout_ms,
-    )
-    print(f"[wait] End overlay clear wait: {description}")
-
-
-def _first_visible_selector(page, selector: str, description: str):
-    return common.first_visible_locator(page.locator(selector), description)
-
-
 def _action_locators(root, name_pattern: str | re.Pattern[str]):
     locators = [
         root.get_by_role("button", name=name_pattern),
         root.get_by_role("link", name=name_pattern),
+        root.get_by_role("radio", name=name_pattern),
+        root.get_by_role("tab", name=name_pattern),
     ]
     if isinstance(name_pattern, str):
         locators.extend(
             [
                 root.locator(f'button:has-text("{name_pattern}")'),
                 root.locator(f'a:has-text("{name_pattern}")'),
+                root.locator(f'label:has-text("{name_pattern}")'),
                 root.locator(f'input[type="button"][value*="{name_pattern}"]'),
                 root.locator(f'input[type="submit"][value*="{name_pattern}"]'),
             ]
@@ -186,80 +187,241 @@ def _maybe_click_modal_action(
     )
 
 
-def _set_text_field_by_keywords(
-    page,
-    keywords: tuple[str, ...],
-    value: str,
-    *,
-    prefer_textarea: bool = False,
-) -> bool:
-    return bool(
-        page.evaluate(
-            """
-            ({ keywords, value, preferTextarea }) => {
-                const normalize = (input) => (input || '').replace(/\\s+/g, ' ').trim();
-                const isVisible = (element) => {
-                    if (!element) {
-                        return false;
-                    }
-                    const style = window.getComputedStyle(element);
-                    const rect = element.getBoundingClientRect();
-                    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-                };
-                const selectorOrder = preferTextarea
-                    ? ['textarea', 'input[type="text"]', 'input:not([type])', 'input[type="tel"]']
-                    : ['input[type="text"]', 'input:not([type])', 'input[type="tel"]', 'textarea'];
-                const containers = Array.from(document.querySelectorAll('tr, li, dl, dd, td, th, div, section, article'))
-                    .filter((element) => isVisible(element))
-                    .map((element) => ({ element, text: normalize(element.innerText) }))
-                    .filter(({ text }) => keywords.every((keyword) => text.includes(keyword)))
-                    .sort((left, right) => left.text.length - right.text.length);
-
-                for (const { element } of containers) {
-                    for (const selector of selectorOrder) {
-                        const fields = Array.from(element.querySelectorAll(selector)).filter((field) => {
-                            if (field.disabled) {
-                                return false;
-                            }
-                            if (field.type === 'hidden') {
-                                return false;
-                            }
-                            return isVisible(field);
-                        });
-                        for (const field of fields) {
-                            const hadReadOnly = Boolean(field.readOnly);
-                            try {
-                                if (hadReadOnly) {
-                                    field.readOnly = false;
-                                }
-                            } catch (error) {}
-                            field.scrollIntoView({ block: 'center', inline: 'nearest' });
-                            field.focus();
-                            field.value = '';
-                            field.dispatchEvent(new Event('input', { bubbles: true }));
-                            field.value = value;
-                            field.dispatchEvent(new Event('input', { bubbles: true }));
-                            field.dispatchEvent(new Event('change', { bubbles: true }));
-                            field.blur();
-                            try {
-                                if (hadReadOnly) {
-                                    field.readOnly = true;
-                                }
-                            } catch (error) {}
+def _claim_flow_dialog_open(page, text_pattern: re.Pattern[str]) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                (patternSource) => {
+                    const pattern = new RegExp(patternSource);
+                    for (const dialog of document.querySelectorAll('.dialog.modal, [role="dialog"]')) {
+                        if (!dialog.classList.contains('show')) {
+                            continue;
+                        }
+                        const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                        if (pattern.test(text)) {
                             return true;
                         }
                     }
+                    return false;
                 }
-                return false;
-            }
-            """,
-            {
-                "keywords": list(keywords),
-                "value": value,
-                "preferTextarea": prefer_textarea,
-            },
+                """,
+                text_pattern.pattern,
+            )
         )
+    except Exception:
+        return False
+
+
+def _existing_claim_history_popup_open(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    const pattern = /동일한\\s*발병|사고유형으로\\s*완료|기존\\s*청구내역/;
+                    for (const dialog of document.querySelectorAll(
+                        '.dialog.modal.alert.show, .dialog.modal.show, [role="dialog"]'
+                    )) {
+                        if (!dialog.classList.contains('show')) {
+                            continue;
+                        }
+                        const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                        if (pattern.test(text)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
+def _click_existing_claim_history_no(page) -> bool:
+    alert = page.locator(EXISTING_CLAIM_HISTORY_ALERT_SELECTOR).filter(
+        has_text=DUPLICATE_ACCIDENT_DATE_TYPE_TEXT
     )
+    try:
+        if alert.count() > 0:
+            no_button = alert.first.locator('button.btn:has-text("아니오")').first
+            if no_button.count() > 0:
+                print("[click] 동일 발병일/사고유형 청구 이력 안내: 아니오")
+                no_button.click(force=True, timeout=3000)
+                common.wait_timeout_with_log(page, 500, "기존 청구내역 확인 팝업 닫힘 대기")
+                return True
+    except Exception as exc:
+        print(f"[warn] 기존 청구내역 확인 팝업 Playwright 클릭 실패: {exc}")
+
+    clicked = page.evaluate(
+        """
+        () => {
+            const pattern = /동일한\\s*발병|사고유형으로\\s*완료|기존\\s*청구내역/;
+            const dialogs = Array.from(document.querySelectorAll(
+                '.dialog.modal.alert.show, .dialog.modal.show, [role="dialog"]'
+            )).reverse();
+            for (const dialog of dialogs) {
+                if (!dialog.classList.contains('show')) {
+                    continue;
+                }
+                const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                if (!pattern.test(text)) {
+                    continue;
+                }
+                for (const button of dialog.querySelectorAll('.dialog_btn button, button.btn')) {
+                    const label = (button.innerText || button.getAttribute('title') || '')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                    if (label === '아니오' || label.startsWith('아니오')) {
+                        button.click();
+                        return label;
+                    }
+                }
+            }
+            return '';
+        }
+        """
+    )
+    if clicked:
+        print(f"[click] 동일 발병일/사고유형 청구 이력 안내(DOM): {clicked}")
+        common.wait_timeout_with_log(page, 500, "기존 청구내역 확인 팝업 닫힘 대기")
+        return True
+    return False
+
+
+def _click_claim_flow_dialog_button(
+    page,
+    text_pattern: re.Pattern[str],
+    button_labels: list[str | re.Pattern[str]],
+    description: str,
+) -> bool:
+    label_sources = [
+        label.pattern if isinstance(label, re.Pattern) else label for label in button_labels
+    ]
+    clicked = page.evaluate(
+        """
+        ([patternSource, buttonLabelSources]) => {
+            const pattern = new RegExp(patternSource);
+            const matchesLabel = (label) => {
+                const normalized = (label || '').replace(/\\s+/g, ' ').trim();
+                return buttonLabelSources.some((source) => {
+                    try {
+                        return new RegExp(source).test(normalized);
+                    } catch (error) {
+                        return normalized === source || normalized.startsWith(source);
+                    }
+                });
+            };
+            for (const dialog of document.querySelectorAll('.dialog.modal, [role="dialog"]')) {
+                if (!dialog.classList.contains('show')) {
+                    continue;
+                }
+                const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                if (!pattern.test(text)) {
+                    continue;
+                }
+                const buttons = dialog.querySelectorAll('button, a[role="button"]');
+                for (const button of buttons) {
+                    const label = (button.innerText || button.getAttribute('title') || '')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                    if (matchesLabel(label)) {
+                        button.click();
+                        return label;
+                    }
+                }
+            }
+            return '';
+        }
+        """,
+        [text_pattern.pattern, label_sources],
+    )
+    if clicked:
+        print(f"[click] {description}: {clicked}")
+        common.wait_timeout_with_log(page, 500, f"{description} 후 안정화")
+        return True
+
+    dialog = page.locator(CLAIM_FLOW_DIALOG_SELECTOR).filter(has_text=text_pattern).first
+    try:
+        if dialog.count() == 0:
+            return False
+        for label in button_labels:
+            if isinstance(label, re.Pattern):
+                button = dialog.get_by_role("button", name=label).first
+            else:
+                button = dialog.locator(f'button:has-text("{label}")').first
+            if button.count() == 0:
+                continue
+            print(f"[click] {description}: {label if isinstance(label, str) else label.pattern}")
+            button.click(force=True, timeout=3000)
+            common.wait_timeout_with_log(page, 500, f"{description} 후 안정화")
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _click_claim_flow_dialog_confirm(page, text_pattern: re.Pattern[str], description: str) -> bool:
+    return _click_claim_flow_dialog_button(
+        page,
+        text_pattern,
+        ["확인", re.compile(r"^확인")],
+        description,
+    )
+
+
+def _dismiss_duplicate_accident_date_type_popup(page, timeout_ms: int) -> bool:
+    if not _existing_claim_history_popup_open(page):
+        return False
+    for _ in range(max(3, timeout_ms // 500)):
+        _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+        if _click_existing_claim_history_no(page):
+            if not _existing_claim_history_popup_open(page):
+                return True
+        elif _click_claim_flow_dialog_button(
+            page,
+            DUPLICATE_ACCIDENT_DATE_TYPE_TEXT,
+            ["아니오", re.compile(r"^아니오$")],
+            "동일 발병일/사고유형 청구 이력 안내",
+        ):
+            if not _existing_claim_history_popup_open(page):
+                return True
+        common.wait_timeout_with_log(page, 400, "동일 발병일/사고유형 청구 이력 안내 팝업 재시도")
+    raise RuntimeError("동일 발병일/사고유형 청구 이력 안내 팝업을 닫지 못했습니다.")
+
+
+def _dismiss_duplicate_claim_notice_popup(page, timeout_ms: int) -> bool:
+    if not _claim_flow_dialog_open(page, DUPLICATE_CLAIM_NOTICE_TEXT):
+        return False
+    for _ in range(max(3, timeout_ms // 500)):
+        if _click_claim_flow_dialog_confirm(page, DUPLICATE_CLAIM_NOTICE_TEXT, "동일 사고 청구 이력 안내"):
+            _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+            if not _claim_flow_dialog_open(page, DUPLICATE_CLAIM_NOTICE_TEXT):
+                return True
+        common.wait_timeout_with_log(page, 400, "동일 사고 청구 이력 안내 팝업 재시도")
+    raise RuntimeError("동일 사고 청구 이력 안내 팝업을 닫지 못했습니다.")
+
+
+def _dismiss_claim_confirm_modals(page, timeout_ms: int) -> bool:
+    dismissed = False
+    if _dismiss_duplicate_accident_date_type_popup(page, timeout_ms):
+        dismissed = True
+    elif _dismiss_duplicate_claim_notice_popup(page, timeout_ms):
+        dismissed = True
+    elif _claim_flow_dialog_open(page, CLAIM_CONFIRM_MODAL_TEXT):
+        if _click_claim_flow_dialog_confirm(page, CLAIM_CONFIRM_MODAL_TEXT, "청구 접수 확인 팝업"):
+            _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+            dismissed = True
+    elif _maybe_click_modal_action(
+        page,
+        CLAIM_CONFIRM_MODAL_TEXT,
+        [re.compile(r"^확인$"), "확인", "확인했어요"],
+        "청구 접수 확인 팝업",
+    ):
+        dismissed = True
+    return dismissed
 
 
 def _one_month_ago(today: date) -> date:
@@ -274,16 +436,12 @@ def _one_month_ago(today: date) -> date:
 
 def _set_accident_date_one_month_ago(page) -> None:
     target = _one_month_ago(date.today())
-    values = {
-        "compact": target.strftime("%Y%m%d"),
-        "dotted": target.strftime("%Y.%m.%d"),
-        "dashed": target.strftime("%Y-%m-%d"),
-    }
-    direct_input = page.locator(CHARGE04_DATE_INPUT_SELECTOR).first
+    dotted = target.strftime("%Y.%m.%d")
+    date_input = page.locator(DATE_INPUT_SELECTOR).first
     try:
-        if direct_input.is_visible(timeout=1500):
-            direct_input.fill(values["compact"])
-            normalized_value = direct_input.evaluate(
+        if date_input.is_visible(timeout=1500):
+            date_input.fill(dotted)
+            date_input.evaluate(
                 """
                 (element) => {
                     element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -293,302 +451,12 @@ def _set_accident_date_one_month_ago(page) -> None:
                 }
                 """
             )
-            if _normalize_text(normalized_value):
-                print(f"[step] 사고일을 1개월 전 날짜로 입력: {normalized_value}")
-                common.wait_timeout_with_log(page, 400, "사고일 입력 반영 대기")
-                return
+            print(f"[step] 발병(사고)일을 1개월 전 날짜로 입력: {dotted}")
+            common.wait_timeout_with_log(page, 400, "발병(사고)일 입력 반영 대기")
+            return
     except Exception:
         pass
-    applied = bool(
-        page.evaluate(
-            """
-            ({ keywords, values }) => {
-                const normalize = (input) => (input || '').replace(/\\s+/g, ' ').trim();
-                const isVisible = (element) => {
-                    if (!element) {
-                        return false;
-                    }
-                    const style = window.getComputedStyle(element);
-                    const rect = element.getBoundingClientRect();
-                    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-                };
-                const chooseFormats = (field) => {
-                    const hint = normalize([
-                        field.getAttribute('placeholder'),
-                        field.getAttribute('title'),
-                        field.getAttribute('aria-label'),
-                        field.id,
-                        field.name,
-                        field.className,
-                    ].join(' '));
-                    if (hint.includes('.')) {
-                        return [values.dotted, values.dashed, values.compact];
-                    }
-                    if (hint.includes('-')) {
-                        return [values.dashed, values.dotted, values.compact];
-                    }
-                    return [values.compact, values.dotted, values.dashed];
-                };
-                const containers = Array.from(document.querySelectorAll('tr, li, dl, dd, td, th, div, section, article'))
-                    .filter((element) => isVisible(element))
-                    .map((element) => ({ element, text: normalize(element.innerText) }))
-                    .filter(({ text }) => keywords.every((keyword) => text.includes(keyword)))
-                    .sort((left, right) => left.text.length - right.text.length);
-
-                for (const { element } of containers) {
-                    const trigger = Array.from(element.querySelectorAll('button, a, img, span, label')).find((candidate) => {
-                        const hint = normalize([
-                            candidate.innerText,
-                            candidate.getAttribute('title'),
-                            candidate.getAttribute('aria-label'),
-                            candidate.className,
-                        ].join(' ')).toLowerCase();
-                        return hint.includes('달력') || hint.includes('캘린더') || hint.includes('calendar') || hint.includes('datepicker');
-                    });
-                    if (trigger && isVisible(trigger)) {
-                        trigger.click();
-                    }
-                    const fields = Array.from(
-                        element.querySelectorAll('input[type="text"], input:not([type]), input[type="tel"]')
-                    ).filter((field) => !field.disabled && field.type !== 'hidden' && isVisible(field));
-                    for (const field of fields) {
-                        const hadReadOnly = Boolean(field.readOnly);
-                        try {
-                            if (hadReadOnly) {
-                                field.readOnly = false;
-                            }
-                        } catch (error) {}
-                        field.scrollIntoView({ block: 'center', inline: 'nearest' });
-                        field.focus();
-                        for (const candidate of chooseFormats(field)) {
-                            field.value = '';
-                            field.dispatchEvent(new Event('input', { bubbles: true }));
-                            field.value = candidate;
-                            field.dispatchEvent(new Event('input', { bubbles: true }));
-                            field.dispatchEvent(new Event('change', { bubbles: true }));
-                            if (normalize(field.value)) {
-                                field.blur();
-                                try {
-                                    if (hadReadOnly) {
-                                        field.readOnly = true;
-                                    }
-                                } catch (error) {}
-                                return true;
-                            }
-                        }
-                        field.blur();
-                        try {
-                            if (hadReadOnly) {
-                                field.readOnly = true;
-                            }
-                        } catch (error) {}
-                    }
-                }
-                return false;
-            }
-            """,
-            {
-                "keywords": ["사고일"],
-                "values": values,
-            },
-        )
-    )
-    if not applied:
-        raise RuntimeError("사고일 입력 필드를 찾지 못했습니다.")
-    print(f"[step] 사고일을 1개월 전 날짜로 입력: {values['dotted']}")
-    common.wait_timeout_with_log(page, 400, "사고일 입력 반영 대기")
-
-
-def _maybe_confirm_claim_type_notice_popup(page) -> bool:
-    return _maybe_click_modal_action(
-        page,
-        CLAIM_TYPE_NOTICE_PATTERN,
-        [re.compile(r"^확인$"), "확인"],
-        "청구유형 선택 안내 팝업 확인",
-    )
-
-
-def _select_claim_type_other(page) -> None:
-    other_radio = page.locator(CHARGE04_OTHER_RADIO_SELECTOR).first
-    other_label = page.locator(CHARGE04_OTHER_LABEL_SELECTOR).first
-    print("[click] 청구유형: 기타 라벨")
-    try:
-        if other_label.is_visible(timeout=1500):
-            common.click_with_log(other_label, "청구유형: 기타 라벨 클릭")
-            if other_radio.is_checked():
-                common.wait_timeout_with_log(page, 300, "청구유형 선택 반영 대기")
-                return
-    except Exception:
-        pass
-    table = common.first_visible_locator(
-        page.get_by_role("table", name=re.compile(r"청구\s*상세내용")),
-        "청구 상세내용 표",
-    )
-    other_radio = common.first_visible_locator(
-        table.get_by_role("radio", name="기타"),
-        "청구유형 기타 라디오",
-    )
-    try:
-        other_radio.check(timeout=common.MAX_TIMEOUT_MS)
-    except Exception:
-        other_label.click(force=True, timeout=common.MAX_TIMEOUT_MS)
-    common.wait_timeout_with_log(page, 300, "청구유형 선택 반영 대기")
-
-
-def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
-    lookup = _first_visible_selector(page, CHARGE04_QUERY_SELECTOR, "청구 상세내용 조회(#searchBtn)")
-    common.wait_locator_visible_with_log(lookup, timeout_ms, "청구 상세내용 조회(#searchBtn)")
-    common.click_with_log(lookup, "청구 상세내용 조회")
-    textarea = page.locator(CHARGE04_CONTENT_TEXTAREA_SELECTOR).first
-    for _ in range(max(1, timeout_ms // 400)):
-        if _maybe_confirm_claim_type_notice_popup(page):
-            continue
-        try:
-            if textarea.is_visible(timeout=800):
-                textarea.fill(CLAIM_CONTENT_TEXT)
-                textarea.evaluate(
-                    """
-                    (element) => {
-                        element.dispatchEvent(new Event('input', { bubbles: true }));
-                        element.dispatchEvent(new Event('change', { bubbles: true }));
-                        element.blur();
-                    }
-                    """
-                )
-                if textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT:
-                    print(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
-                    return
-        except Exception:
-            pass
-        if _set_text_field_by_keywords(
-            page,
-            ("청구내용",),
-            CLAIM_CONTENT_TEXT,
-            prefer_textarea=True,
-        ):
-            try:
-                if textarea.is_visible(timeout=800) and textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT:
-                    print(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
-                    return
-            except Exception:
-                pass
-        common.wait_timeout_with_log(page, 400, "청구내용 입력 영역 대기")
-    raise RuntimeError("청구내용 입력 필드를 찾지 못했습니다.")
-
-
-def _click_next_and_go_charge05(page, timeout_ms: int) -> None:
-    for _ in range(max(1, timeout_ms // 400)):
-        if _maybe_confirm_claim_type_notice_popup(page):
-            continue
-        next_button = page.locator(CHARGE04_NEXT_SELECTOR).first
-        try:
-            if next_button.is_visible(timeout=500):
-                common.click_with_log(next_button, "청구내용 입력 다음 버튼")
-                break
-        except Exception:
-            pass
-        common.wait_timeout_with_log(page, 400, "청구내용 입력 다음 버튼 대기")
-    else:
-        raise RuntimeError("표시 중인 요소를 찾지 못했습니다: 청구내용 입력 다음 버튼")
-
-    for _ in range(max(1, timeout_ms // 400)):
-        if "charge05.do" in page.url:
-            _wait_url_contains(page, "charge05.do", timeout_ms)
-            return
-        if _maybe_confirm_claim_type_notice_popup(page):
-            continue
-        if _maybe_click_modal_action(
-            page,
-            re.compile(r"청구내용"),
-            [re.compile(r"서류등록\s*진행"), "서류등록진행"],
-            "청구내용 팝업: 서류등록진행",
-        ):
-            continue
-        common.wait_timeout_with_log(page, 400, "charge05 이동 대기")
-    _wait_url_contains(page, "charge05.do", timeout_ms)
-
-
-def _assert_charge05_landed(page, timeout_ms: int) -> None:
-    for _ in range(max(1, timeout_ms // 500)):
-        url_ok = "charge05.do" in page.url
-        try:
-            body_text = page.locator("body").inner_text()
-        except Exception:
-            body_text = ""
-        if url_ok and STEP05_HEADING_PATTERN.search(body_text):
-            return
-        common.wait_timeout_with_log(page, 400, "charge05 화면 요소 대기")
-    raise RuntimeError("보험금청구 charge05 화면(서류등록)을 확인하지 못했습니다.")
-
-
-def _dismiss_modal_with_close_like_button(page, modal_text_pattern: re.Pattern[str]) -> bool:
-    return bool(
-        page.evaluate(
-            """
-            (patternSource) => {
-                const pattern = new RegExp(patternSource, 'i');
-                const normalize = (input) => (input || '').replace(/\\s+/g, ' ').trim();
-                const isVisible = (element) => {
-                    if (!element) {
-                        return false;
-                    }
-                    const style = window.getComputedStyle(element);
-                    const rect = element.getBoundingClientRect();
-                    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-                };
-                const clickTarget = (element) => {
-                    if (!element || !isVisible(element)) {
-                        return false;
-                    }
-                    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                    element.click();
-                    return true;
-                };
-                const roots = Array.from(
-                    document.querySelectorAll('.modal_popup, .modal_wrap, .pop_wrap, .popup_wrap, [role="dialog"]')
-                ).filter((element) => isVisible(element) && pattern.test(normalize(element.innerText)));
-                for (const root of roots) {
-                    for (const candidate of root.querySelectorAll('button, a, input, [role="button"]')) {
-                        const text = normalize(candidate.innerText);
-                        const title = normalize(candidate.getAttribute('title'));
-                        const ariaLabel = normalize(candidate.getAttribute('aria-label'));
-                        const value = normalize(candidate.getAttribute('value'));
-                        const lowerText = text.toLowerCase();
-                        const closeLike = (
-                            text.includes('닫기') ||
-                            title.includes('닫기') ||
-                            ariaLabel.includes('닫기') ||
-                            value.includes('닫기') ||
-                            text === '×' ||
-                            lowerText === 'x' ||
-                            title.toLowerCase() === 'x' ||
-                            ariaLabel.toLowerCase() === 'x'
-                        );
-                        if (closeLike && clickTarget(candidate)) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-            """,
-            modal_text_pattern.pattern,
-        )
-    )
-
-
-def _maybe_close_upload_notice_popup(page) -> None:
-    modal_pattern = re.compile(r"서류제출\s*시\s*유의사항|유의사항")
-    if _maybe_click_modal_action(
-        page,
-        modal_pattern,
-        [re.compile(r"닫기"), "닫기"],
-        "서류제출 시 유의사항 팝업 닫기",
-    ):
-        return
-    if _dismiss_modal_with_close_like_button(page, modal_pattern):
-        print("[click] 서류제출 시 유의사항 팝업 닫기 (DOM fallback)")
-        common.wait_timeout_with_log(page, 400, "유의사항 팝업 닫기 후 안정화")
+    raise RuntimeError("발병(사고)일 입력 필드(#dateInput)를 찾지 못했습니다.")
 
 
 def _pick_random_desktop_screenshot() -> Path:
@@ -605,337 +473,1117 @@ def _pick_random_desktop_screenshot() -> Path:
     return random.choice(unique_candidates)
 
 
-def _resolve_visible_frame_selector(page, selectors: tuple[str, ...], description: str) -> str:
-    for selector in selectors:
-        locator = page.locator(selector).first
-        try:
-            if locator.is_visible(timeout=1200):
-                return selector
-        except Exception:
-            continue
-    joined = ", ".join(selectors)
-    raise RuntimeError(f"{description} 업로드 프레임을 찾지 못했습니다: {joined}")
+def _silsom24_dialog_open(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    const dialog = document.querySelector('#dialog_silson24Url');
+                    return !!(dialog && dialog.classList.contains('show'));
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
 
 
-def _wait_for_uploaded_item(page, frame_selector: str, description: str, timeout_ms: int) -> None:
-    print(f"[wait] Start upload reflection wait: {description} ({timeout_ms} ms)")
-    page.wait_for_function(
+def _close_gnb_menu_if_open(page) -> None:
+    try:
+        gnb_open = page.evaluate(
+            """
+            () => {
+                const gnb = document.querySelector('#gnb.mhm_gnb');
+                return !!(gnb && gnb.getAttribute('aria-hidden') === 'false');
+            }
+            """
+        )
+    except Exception:
+        return
+    if not gnb_open:
+        return
+    clicked = page.evaluate(
         """
-        ({ frameSelector }) => {
-            const iframe = document.querySelector(frameSelector);
-            const doc = iframe?.contentDocument;
-            if (!doc) {
+        () => {
+            const closeButton = document.querySelector('#gnb a.btn_gnb_close');
+            if (!closeButton) {
                 return false;
             }
-            const texts = Array.from(doc.querySelectorAll('li, strong, span, p'))
-                .map((element) => (element.textContent || '').replace(/\\s+/g, ' ').trim())
-                .filter(Boolean);
-            const hasUploadedCount = texts.some((text) => {
-                const match = text.match(/(\\d+)\\s*개/);
-                return Boolean(match) && Number(match[1]) > 0;
-            });
-            const hasUploadedFileEntry = texts.some((text) => /\\.(png|jpe?g|gif|bmp|pdf)\\b/i.test(text));
-            return hasUploadedCount || hasUploadedFileEntry;
+            closeButton.click();
+            return true;
+        }
+        """
+    )
+    if clicked:
+        print("[click] 전체메뉴 닫기(청구 화면 상호작용 전)")
+        common.wait_timeout_with_log(page, 400, "전체메뉴 닫힘 대기")
+
+
+def _click_silsom24_dismiss_via_dom(page) -> str:
+    return page.evaluate(
+        """
+        () => {
+            const dialog = document.querySelector('#dialog_silson24Url');
+            if (!dialog || !dialog.classList.contains('show')) {
+                return '';
+            }
+            const selectors = [
+                'a.link_txt[title*="안볼"]',
+                'a.dialog_close.ui_dialog_close',
+            ];
+            for (const selector of selectors) {
+                const element = dialog.querySelector(selector);
+                if (!element) {
+                    continue;
+                }
+                element.click();
+                return element.getAttribute('title') || (element.innerText || '').trim();
+            }
+            return '';
+        }
+        """
+    )
+
+
+def _dismiss_silsom24_popup(page, timeout_ms: int) -> None:
+    for _ in range(max(5, timeout_ms // 400)):
+        if not _silsom24_dialog_open(page):
+            return
+
+        dismissed_label = ""
+        for selector, description in (
+            (SILSOM24_DISMISS_LINK_SELECTOR, "오늘 더이상 안볼래요"),
+            (SILSOM24_CLOSE_LINK_SELECTOR, "팝업창 닫기"),
+        ):
+            target = page.locator(selector).first
+            try:
+                if target.count() == 0:
+                    continue
+                print(f"[click] 실손24 알림 닫기: {description}")
+                target.click(force=True, timeout=3000)
+                dismissed_label = description
+                common.wait_timeout_with_log(page, 500, "실손24 팝업 닫힘 대기")
+                break
+            except Exception:
+                continue
+
+        if not dismissed_label:
+            dismissed_label = _click_silsom24_dismiss_via_dom(page)
+            if dismissed_label:
+                print(f"[click] 실손24 알림 닫기(DOM): {dismissed_label}")
+                common.wait_timeout_with_log(page, 500, "실손24 팝업 닫힘 대기")
+
+        if not _silsom24_dialog_open(page):
+            print("[step] 실손24 알림 팝업 닫기 완료")
+            return
+        if not dismissed_label:
+            common.wait_timeout_with_log(page, 400, "실손24 팝업 재시도 대기")
+
+    if _silsom24_dialog_open(page):
+        raise RuntimeError("실손24 알림 팝업을 닫지 못했습니다.")
+
+
+def _dismiss_claim_entry_popups(page, timeout_ms: int) -> None:
+    _close_gnb_menu_if_open(page)
+    _dismiss_silsom24_popup(page, timeout_ms)
+
+
+def _open_hamburger_menu(page, timeout_ms: int) -> None:
+    close_button = page.get_by_role("button", name=re.compile(r"전체\s*메뉴\s*닫기"))
+    try:
+        if close_button.is_visible(timeout=800):
+            return
+    except Exception:
+        pass
+
+    open_candidates = [
+        page.locator("banner").get_by_text("전체메뉴 열기").first,
+        page.get_by_text("전체메뉴 열기").first,
+        page.get_by_role("button", name=re.compile(r"전체\s*메뉴")).first,
+    ]
+    for candidate in open_candidates:
+        try:
+            if candidate.is_visible(timeout=1500):
+                common.click_with_log(candidate, "전체메뉴 열기")
+                common.wait_timeout_with_log(page, 600, "전체메뉴 펼침 대기")
+                return
+        except Exception:
+            continue
+    raise RuntimeError("전체메뉴 열기 버튼을 찾지 못했습니다.")
+
+
+def _click_claim_entry_menu(page, timeout_ms: int) -> None:
+    claim_entry = page.locator("#code03020100, nav #code03020100").first
+    try:
+        claim_entry.scroll_into_view_if_needed(timeout=timeout_ms)
+        common.click_with_log(claim_entry, "질병/상해보험 > 보험금청구 접수")
+    except Exception as exc:
+        print(f"[warn] 보험금청구 접수 메뉴 일반 클릭 실패, JS 클릭 시도: {exc}")
+        claim_entry.evaluate("element => element.click()")
+
+
+def _wait_for_loading_overlay_gone(page, timeout_ms: int) -> None:
+    wait_ms = min(timeout_ms, 15000)
+    try:
+        page.wait_for_function(
+            """
+            () => {
+                const loading = document.querySelector('#loading');
+                if (!loading) {
+                    return true;
+                }
+                const style = window.getComputedStyle(loading);
+                const rect = loading.getBoundingClientRect();
+                return style.display === 'none'
+                    || style.visibility === 'hidden'
+                    || style.pointerEvents === 'none'
+                    || rect.width === 0
+                    || rect.height === 0
+                    || loading.getAttribute('aria-hidden') === 'true';
+            }
+            """,
+            timeout=wait_ms,
+        )
+    except Exception:
+        print("[warn] 로딩 오버레이(#loading) 대기 시간 초과, 계속 진행")
+
+
+def _scroll_target_to_center(target) -> None:
+    target.evaluate("element => element.scrollIntoView({ block: 'center', inline: 'nearest' })")
+
+
+def _click_selection_label(page, *, label_selector: str, input_selector: str, description: str) -> None:
+    main = page.locator("main")
+    input_id = input_selector.lstrip("#") if input_selector.startswith("#") else ""
+    candidates = [
+        main.locator(label_selector),
+    ]
+    if input_id:
+        candidates.append(main.locator(f'label[for="{input_id}"]'))
+    candidates.append(main.locator(input_selector))
+
+    for candidate in candidates:
+        try:
+            target = candidate.first
+            if target.count() == 0:
+                continue
+            target.scroll_into_view_if_needed(timeout=3000)
+            _scroll_target_to_center(target)
+            common.wait_timeout_with_log(page, 200, f"{description} 스크롤 안정화")
+            print(f"[click] {description}")
+            target.click(force=True, timeout=3000)
+            common.wait_timeout_with_log(page, 400, f"{description} 후 안정화")
+            return
+        except Exception:
+            continue
+
+    clicked = page.evaluate(
+        """
+        ([labelSelector, inputSelector]) => {
+            const scrollAndClick = (element) => {
+                element.scrollIntoView({ block: 'center', inline: 'nearest' });
+                element.click();
+            };
+            const label = document.querySelector(`main ${labelSelector}`)
+                || (inputSelector.startsWith('#')
+                    ? document.querySelector(`label[for="${inputSelector.slice(1)}"]`)
+                    : null);
+            if (label) {
+                scrollAndClick(label);
+                return 'label';
+            }
+            const input = document.querySelector(inputSelector);
+            if (input) {
+                scrollAndClick(input);
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                return 'input';
+            }
+            return '';
         }
         """,
-        arg={"frameSelector": frame_selector},
-        timeout=timeout_ms,
+        [label_selector, input_selector],
     )
-    print(f"[wait] End upload reflection wait: {description}")
+    if clicked:
+        print(f"[click] {description} (DOM fallback: {clicked})")
+        common.wait_timeout_with_log(page, 400, f"{description} 후 안정화")
+        return
+    raise RuntimeError(f"{description} 요소를 찾지 못했습니다.")
 
 
-def _upload_file_to_frame(page, frame_selectors: tuple[str, ...], file_path: Path, description: str) -> None:
-    frame_selector = _resolve_visible_frame_selector(page, frame_selectors, description)
-    frame = page.locator(frame_selector).first
-    frame_locator = page.frame_locator(frame_selector)
-    add_button = frame_locator.locator(CHARGE05_FILE_ADD_BUTTON_SELECTOR).first
-    input_locator = frame_locator.locator(CHARGE05_FILE_INPUT_SELECTOR).first
-    print(f"[upload] {description}: {file_path.name}")
-    common.wait_locator_visible_with_log(frame, common.MAX_TIMEOUT_MS, f"{description} 업로드 프레임")
+def _click_self_claim_target(page, timeout_ms: int) -> None:
+    _dismiss_claim_entry_popups(page, timeout_ms)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    _click_selection_label(
+        page,
+        label_selector=SELF_CLAIM_LABEL_SELECTOR,
+        input_selector=SELF_CLAIM_INPUT_SELECTOR,
+        description="청구 대상: 본인",
+    )
+
+
+def _click_new_claim_type(page, timeout_ms: int) -> None:
+    _close_gnb_menu_if_open(page)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    page.locator(f"main {NEW_CLAIM_LABEL_SELECTOR}").first.wait_for(state="attached", timeout=timeout_ms)
+    _click_selection_label(
+        page,
+        label_selector=NEW_CLAIM_LABEL_SELECTOR,
+        input_selector=NEW_CLAIM_INPUT_SELECTOR,
+        description="청구 유형: 신규접수",
+    )
+
+
+def _click_next_target_selection(page, timeout_ms: int) -> None:
+    next_button = page.locator(TARGET_SELECT_NEXT_SELECTOR).first
+    for _ in range(max(1, timeout_ms // 400)):
+        _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+        try:
+            next_button.wait_for(state="visible", timeout=1500)
+            if next_button.is_enabled(timeout=800):
+                next_button.scroll_into_view_if_needed(timeout=3000)
+                print("[click] 청구 대상 선택 다음")
+                next_button.click(force=True, timeout=3000)
+                common.wait_timeout_with_log(page, 400, "청구 대상 선택 다음 후 안정화")
+                return
+        except Exception:
+            pass
+        common.wait_timeout_with_log(page, 400, "다음 버튼 활성화 대기")
+    raise RuntimeError("청구 대상 선택 다음 버튼을 활성화하지 못했습니다.")
+
+
+def _click_compensation_tab(page, timeout_ms: int) -> None:
+    compensation_tab = page.locator("nav").get_by_role("tab", name="보상").first
+    compensation_tab.scroll_into_view_if_needed(timeout=timeout_ms)
     try:
-        with page.expect_file_chooser(timeout=3000) as chooser_info:
-            add_button.click(timeout=common.MAX_TIMEOUT_MS)
+        common.click_with_log(compensation_tab, "전체메뉴 보상 탭")
+    except Exception as exc:
+        print(f"[warn] 보상 탭 일반 클릭 실패, JS 클릭 시도: {exc}")
+        compensation_tab.evaluate("element => element.click()")
+    common.wait_timeout_with_log(page, 400, "보상 탭 전환 대기")
+
+
+def _navigate_to_claim_entry(page, timeout_ms: int, base_url: str) -> None:
+    common.maybe_close_post_login_popup(page, timeout_ms)
+    if CLAIM_INTRO_URL_FRAGMENT in page.url:
+        page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+        _dismiss_claim_entry_popups(page, timeout_ms)
+        return
+
+    try:
+        _open_hamburger_menu(page, timeout_ms)
+        _click_compensation_tab(page, timeout_ms)
+        _click_claim_entry_menu(page, timeout_ms)
+        _wait_url_contains(page, CLAIM_INTRO_URL_FRAGMENT, timeout_ms)
+        _dismiss_claim_entry_popups(page, timeout_ms)
+        return
+    except Exception as exc:
+        print(f"[warn] 메뉴로 보험금청구 접수 진입 실패, 직접 URL 시도: {exc}")
+
+    common.open_url(page, f"{base_url.rstrip('/')}{CLAIM_INTRO_URL_FRAGMENT}")
+    _wait_url_contains(page, CLAIM_INTRO_URL_FRAGMENT, timeout_ms)
+    _dismiss_claim_entry_popups(page, timeout_ms)
+
+
+def _start_claim_from_intro(page, timeout_ms: int) -> None:
+    _dismiss_claim_entry_popups(page, timeout_ms)
+    _click_named_action(page, ["보험금청구하기", re.compile(r"보험금\s*청구\s*하기")], "보험금청구하기")
+    _wait_url_contains(page, TARGET_SELECT_URL_FRAGMENT, timeout_ms)
+    _dismiss_claim_entry_popups(page, timeout_ms)
+
+
+def _complete_target_selection(page, timeout_ms: int) -> None:
+    _dismiss_claim_entry_popups(page, timeout_ms)
+    _click_self_claim_target(page, timeout_ms)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    common.wait_timeout_with_log(page, 600, "청구 유형 섹션 노출 대기")
+    _click_new_claim_type(page, timeout_ms)
+    _click_next_target_selection(page, timeout_ms)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    for _ in range(max(1, timeout_ms // 400)):
+        if _dismiss_claim_confirm_modals(page, timeout_ms):
+            continue
+        if CLAIM_REASON_URL_FRAGMENT in page.url:
+            _wait_url_contains(page, CLAIM_REASON_URL_FRAGMENT, timeout_ms)
+            return
+        common.wait_timeout_with_log(page, 400, "청구사유 입력 화면 대기")
+    _wait_url_contains(page, CLAIM_REASON_URL_FRAGMENT, timeout_ms)
+
+
+def _click_accident_type_etc(page) -> None:
+    _click_selection_label(
+        page,
+        label_selector=ACCIDENT_TYPE_ETC_LABEL_SELECTOR,
+        input_selector=ACCIDENT_TYPE_ETC_INPUT_SELECTOR,
+        description="사고 유형: 기타",
+    )
+
+
+def _click_claim_reason_complete(page, timeout_ms: int) -> None:
+    complete_button = page.locator(CLAIM_REASON_COMPLETE_SELECTOR).first
+    for _ in range(max(1, timeout_ms // 400)):
+        _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+        try:
+            complete_button.wait_for(state="visible", timeout=1500)
+            _scroll_target_to_center(complete_button)
+            if complete_button.is_enabled(timeout=800):
+                print("[click] 청구사유 입력완료(1/3)")
+                complete_button.click(force=True, timeout=3000)
+                common.wait_timeout_with_log(page, 400, "청구사유 입력완료(1/3) 후 안정화")
+                return
+        except Exception:
+            pass
+        common.wait_timeout_with_log(page, 400, "청구사유 입력완료 버튼 활성화 대기")
+    raise RuntimeError("청구사유 입력완료(1/3) 버튼을 활성화하지 못했습니다.")
+
+
+def _dismiss_accident_type_confirm_popup(page, timeout_ms: int) -> bool:
+    if _claim_flow_dialog_open(page, ACCIDENT_TYPE_CONFIRM_TEXT):
+        return _click_claim_flow_dialog_confirm(page, ACCIDENT_TYPE_CONFIRM_TEXT, "사고유형 확인 팝업")
+    return _maybe_click_modal_action(
+        page,
+        ACCIDENT_TYPE_CONFIRM_TEXT,
+        ["확인했어요", re.compile(r"^확인$"), "확인"],
+        "사고유형 확인 팝업",
+    )
+
+
+def _complete_claim_reason_step(page, timeout_ms: int) -> None:
+    _close_gnb_menu_if_open(page)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    _set_accident_date_one_month_ago(page)
+    _click_accident_type_etc(page)
+    for _ in range(max(1, timeout_ms // 400)):
+        if _dismiss_duplicate_accident_date_type_popup(page, timeout_ms):
+            continue
+        break
+    _click_claim_reason_complete(page, timeout_ms)
+    for _ in range(max(1, timeout_ms // 400)):
+        if _existing_claim_history_popup_open(page):
+            _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
+            _click_claim_reason_complete(page, timeout_ms)
+            continue
+        if _dismiss_accident_type_confirm_popup(page, timeout_ms):
+            continue
+        if _dismiss_claim_confirm_modals(page, timeout_ms):
+            continue
+        if _handle_consent_flow(page, timeout_ms):
+            continue
+        if CLAIM_DETAIL_URL_FRAGMENT in page.url:
+            _wait_url_contains(page, CLAIM_DETAIL_URL_FRAGMENT, timeout_ms)
+            return
+        common.wait_timeout_with_log(page, 400, "상세정보 입력 화면 대기")
+    _wait_url_contains(page, CLAIM_DETAIL_URL_FRAGMENT, timeout_ms)
+
+
+def _find_consent_modal(page, pattern: re.Pattern[str]):
+    roots = page.locator(CONSENT_MODAL_SELECTOR)
+    for index in range(roots.count()):
+        root = roots.nth(index)
+        try:
+            if not root.is_visible(timeout=600):
+                continue
+            text = _normalize_text(root.inner_text(timeout=800))
+        except Exception:
+            continue
+        if pattern.search(text):
+            return root
+    return None
+
+
+def _click_label_in_modal(
+    modal,
+    *,
+    label_for: str | None,
+    text_pattern: re.Pattern[str] | None,
+    description: str,
+) -> bool:
+    label_text = modal.evaluate(
+        """
+        (modal, args) => {
+            const [labelFor, patternSource] = args;
+            const pattern = patternSource ? new RegExp(patternSource) : null;
+            const clickTarget = (element) => {
+                element.scrollIntoView({ block: 'center', inline: 'nearest' });
+                element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                element.click();
+                return (element.innerText || element.textContent || '').replace(/\\s+/g, ' ').trim();
+            };
+            if (labelFor) {
+                const byFor = modal.querySelector(`label[for="${labelFor}"]`);
+                if (byFor) {
+                    return clickTarget(byFor);
+                }
+            }
+            for (const label of modal.querySelectorAll('label')) {
+                const text = (label.innerText || label.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (pattern && pattern.test(text)) {
+                    return clickTarget(label);
+                }
+            }
+            return '';
+        }
+        """,
+        [label_for or "", text_pattern.pattern if text_pattern else ""],
+    )
+    if label_text:
+        print(f"[click] {description}: {label_text}")
+        common.wait_timeout_with_log(modal.page, 400, f"{description} 후 안정화")
+        return True
+    return False
+
+
+def _click_button_in_modal(
+    modal,
+    *,
+    names: list[str | re.Pattern[str]],
+    description: str,
+) -> bool:
+    for name in names:
+        pattern_source = name.pattern if isinstance(name, re.Pattern) else name
+        clicked = modal.evaluate(
+            """
+            (modal, patternSource) => {
+                const pattern = new RegExp(patternSource);
+                const clickTarget = (element) => {
+                    element.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                    element.click();
+                    return (element.innerText || element.textContent || element.value || '')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                };
+                for (const element of modal.querySelectorAll('button, a[role="button"], input[type="button"], input[type="submit"]')) {
+                    const text = (element.innerText || element.textContent || element.value || '')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                    if (pattern.test(text)) {
+                        return clickTarget(element);
+                    }
+                }
+                return '';
+            }
+            """,
+            pattern_source,
+        )
+        if clicked:
+            print(f"[click] {description}: {clicked}")
+            common.wait_timeout_with_log(modal.page, 400, f"{description} 후 안정화")
+            return True
+    return False
+
+
+def _scroll_consent_sheet_to_bottom(page) -> None:
+    scrolled = page.evaluate(
+        """
+        () => {
+            const isVisible = (element) => {
+                if (!element) {
+                    return false;
+                }
+                const style = window.getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            };
+            const roots = Array.from(document.querySelectorAll('.ui_dialog, [role="dialog"], .bottom_sheet, .sheet'))
+                .filter((element) => isVisible(element));
+            for (const root of roots) {
+                const text = (root.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!text.includes('요약 동의서') && !text.includes('보험금청구를 위한')) {
+                    continue;
+                }
+                const scrollables = Array.from(root.querySelectorAll('main, article, .scroll, .scroll_area, .dialog_content, .content'))
+                    .filter((element) => element.scrollHeight > element.clientHeight + 20);
+                const target = scrollables[0] || root;
+                target.scrollTop = target.scrollHeight;
+                target.dispatchEvent(new Event('scroll', { bubbles: true }));
+                return true;
+            }
+            return false;
+        }
+        """
+    )
+    if scrolled:
+        common.wait_timeout_with_log(page, 400, "요약 동의서 스크롤 반영 대기")
+
+
+def _maybe_click_consent_action(
+    page,
+    names: list[str | re.Pattern[str]],
+    description: str,
+    *,
+    scope=None,
+    settle_ms: int = 400,
+) -> bool:
+    if _existing_claim_history_popup_open(page):
+        return _click_existing_claim_history_no(page)
+    _wait_for_loading_overlay_gone(page, 5000)
+    root = scope or page
+    if scope is not None:
+        if _click_button_in_modal(root, names=names, description=description):
+            return True
+        label_for = CONSENT_FULL_AGREE_FOR if "필수" in description and "전체" in description else None
+        text_pattern = next((name for name in names if isinstance(name, re.Pattern)), None)
+        if label_for or text_pattern is not None:
+            if _click_label_in_modal(
+                root,
+                label_for=label_for,
+                text_pattern=text_pattern,
+                description=description,
+            ):
+                return True
+        for name in names:
+            if isinstance(name, str) and _click_label_in_modal(
+                root,
+                label_for=name if name.startswith("[") else None,
+                text_pattern=re.compile(re.escape(name)),
+                description=description,
+            ):
+                return True
+    action = _find_visible_action(root, names, description)
+    if action is None:
+        return False
+    print(f"[click] {description}")
+    try:
+        _scroll_target_to_center(action)
+        action.click(force=True, timeout=3000)
+    except Exception as exc:
+        print(f"[warn] {description} Playwright 클릭 실패, DOM 클릭 시도: {exc}")
+        action.evaluate(
+            """
+            (element) => {
+                element.scrollIntoView({ block: 'center', inline: 'nearest' });
+                element.click();
+            }
+            """
+        )
+    common.wait_timeout_with_log(page, settle_ms, f"{description} 후 안정화")
+    return True
+
+
+def _handle_consent_flow(page, timeout_ms: int) -> bool:
+    if _existing_claim_history_popup_open(page):
+        return _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
+
+    consent_modal = _find_consent_modal(page, CONSENT_GUIDE_PATTERN)
+    if consent_modal is None:
+        return False
+
+    if _click_label_in_modal(
+        consent_modal,
+        label_for=CONSENT_FULL_AGREE_FOR,
+        text_pattern=re.compile(r"\[?\s*필수\s*\]?\s*전체\s*동의"),
+        description="동의 안내: [필수] 전체동의",
+    ) or _maybe_click_consent_action(
+        page,
+        [re.compile(r"\[?\s*필수\s*\]?\s*전체\s*동의"), "[필수] 전체동의"],
+        "동의 안내: [필수] 전체동의",
+        scope=consent_modal,
+    ):
+        if _existing_claim_history_popup_open(page):
+            return _click_existing_claim_history_no(page)
+        common.wait_timeout_with_log(page, 600, "요약 동의서 시트 표시 대기")
+
+    if _existing_claim_history_popup_open(page):
+        return _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
+
+    summary_modal = _find_consent_modal(page, CONSENT_SUMMARY_PATTERN)
+    if summary_modal is not None:
+        _scroll_consent_sheet_to_bottom(page)
+        if not (
+            _click_label_in_modal(
+                summary_modal,
+                label_for=None,
+                text_pattern=re.compile(r"^전체동의$|아래로\s*내려서\s*동의"),
+                description="요약 동의서: 전체동의",
+            )
+            or _maybe_click_consent_action(
+                page,
+                ["전체동의", re.compile(r"아래로\s*내려서\s*동의")],
+                "요약 동의서: 전체동의",
+                scope=summary_modal,
+            )
+        ):
+            _scroll_consent_sheet_to_bottom(page)
+            _click_label_in_modal(
+                summary_modal,
+                label_for=None,
+                text_pattern=re.compile(r"^전체동의$"),
+                description="요약 동의서: 전체동의(재시도)",
+            )
+
+    consent_modal = _find_consent_modal(page, re.compile(r"동의\s*안내"))
+    if consent_modal is not None:
+        return _click_button_in_modal(
+            consent_modal,
+            names=["다음", re.compile(r"^다음$")],
+            description="동의 안내: 다음",
+        ) or _maybe_click_consent_action(page, ["다음"], "동의 안내: 다음", scope=consent_modal)
+    return False
+
+
+def _ensure_checkbox_checked(
+    page,
+    *,
+    label_selector: str,
+    input_selector: str,
+    description: str,
+) -> None:
+    try:
+        checkbox = page.locator(input_selector).first
+        if checkbox.count() > 0 and checkbox.is_checked(timeout=800):
+            print(f"[step] {description} (이미 선택됨)")
+            return
+    except Exception:
+        pass
+    _click_selection_label(
+        page,
+        label_selector=label_selector,
+        input_selector=input_selector,
+        description=description,
+    )
+
+
+def _is_medical_beneficiary_none_selected(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    const input = document.querySelector('#radio10');
+                    if (!input) {
+                        return false;
+                    }
+                    const activeItem = input.closest('li');
+                    return input.checked || !!(activeItem && activeItem.classList.contains('active'));
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
+def _select_medical_beneficiary_none(page) -> None:
+    if _is_medical_beneficiary_none_selected(page):
+        print("[step] 의료급여 수급권자: 해당없음 (이미 선택됨)")
+        return
+    _click_selection_label(
+        page,
+        label_selector=MEDICAL_BENEFIT_NONE_LABEL_SELECTOR,
+        input_selector=MEDICAL_BENEFIT_NONE_INPUT_SELECTOR,
+        description="의료급여 수급권자: 해당없음",
+    )
+
+
+def _is_saved_account_selected(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    const isSavedAccount = (text) => {
+                        const normalized = (text || '').replace(/\\s+/g, ' ').trim();
+                        return normalized
+                            && !normalized.includes('선택해')
+                            && (/\\d{6,}/.test(normalized) || normalized.includes('은행'));
+                    };
+                    const select = document.querySelector('#loanAccountSel2');
+                    if (select && select.options.length > 0) {
+                        const optionText = (select.options[select.selectedIndex]?.text || '').replace(/\\s+/g, ' ').trim();
+                        if (isSavedAccount(optionText)) {
+                            return true;
+                        }
+                    }
+                    const trigger = document.querySelector('main .sel_panel.active a.select_btn');
+                    const triggerText = (trigger?.innerText || trigger?.textContent || '').replace(/\\s+/g, ' ').trim();
+                    return isSavedAccount(triggerText);
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
+def _click_detail_complete_button(page, timeout_ms: int) -> None:
+    complete_button = page.locator(DETAIL_COMPLETE_SELECTOR).first
+    for _ in range(max(1, timeout_ms // 400)):
+        _close_gnb_menu_if_open(page)
+        _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+        if _existing_claim_history_popup_open(page):
+            _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
+            continue
+        try:
+            complete_button.wait_for(state="visible", timeout=1500)
+            _scroll_target_to_center(complete_button)
+            if complete_button.is_enabled(timeout=800):
+                print("[click] 상세정보 입력완료(2/3)")
+                complete_button.click(force=True, timeout=3000)
+                common.wait_timeout_with_log(page, 400, "상세정보 입력완료(2/3) 후 안정화")
+                return
+        except Exception:
+            pass
+        common.wait_timeout_with_log(page, 400, "상세정보 입력완료 버튼 활성화 대기")
+    raise RuntimeError("상세정보 입력완료(2/3) 버튼을 활성화하지 못했습니다.")
+
+
+def _fill_claim_content(page) -> None:
+    textarea = page.locator(CLAIM_CONTENT_TEXTAREA_SELECTOR).first
+    common.wait_locator_visible_with_log(textarea, common.MAX_TIMEOUT_MS, "사고 내용 입력(#cont)")
+    textarea.fill(CLAIM_CONTENT_TEXT)
+    textarea.evaluate(
+        """
+        (element) => {
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.blur();
+        }
+        """
+    )
+    print(f"[step] 사고 내용 입력: {CLAIM_CONTENT_TEXT}")
+
+
+def _account_select_dialog_open(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    for (const dialog of document.querySelectorAll('.dialog.bottom.show, .dialog.show')) {
+                        if (!dialog.classList.contains('show')) {
+                            continue;
+                        }
+                        const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                        if (text.includes('계좌선택') || text.includes('계좌 선택')) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
+def _open_account_select_dialog(page, timeout_ms: int) -> None:
+    if _account_select_dialog_open(page):
+        return
+
+    trigger = page.locator(ACCOUNT_SELECT_TRIGGER_SELECTOR).first
+    common.wait_locator_visible_with_log(trigger, timeout_ms, "계좌선택 트리거(a.select_btn)")
+    print("[click] 등록 계좌 선택 팝업 열기")
+    try:
+        trigger.click(force=True, timeout=3000)
+    except Exception as exc:
+        print(f"[warn] 계좌선택 트리거 일반 클릭 실패, JS 클릭 시도: {exc}")
+        trigger.evaluate("element => element.click()")
+    common.wait_timeout_with_log(page, 400, "계좌선택 팝업 표시 대기")
+
+    for _ in range(max(3, timeout_ms // 1000)):
+        if _account_select_dialog_open(page):
+            return
+        common.wait_timeout_with_log(page, 400, "계좌선택 팝업 표시 재시도")
+    raise RuntimeError("계좌선택 팝업을 열지 못했습니다.")
+
+
+def _click_saved_account_item(page, timeout_ms: int) -> None:
+    dialog = page.locator(".dialog.bottom.show, .dialog.show").filter(has_text=ACCOUNT_SELECT_DIALOG_TEXT)
+    saved_account = dialog.locator("a.ui-pop-select-btn").filter(has_text=SAVED_ACCOUNT_ITEM_PATTERN).first
+    try:
+        if saved_account.count() > 0:
+            common.wait_locator_visible_with_log(saved_account, timeout_ms, "등록된 계좌 항목")
+            print("[click] 등록된 계좌 선택")
+            saved_account.click(force=True, timeout=3000)
+            common.wait_timeout_with_log(page, 400, "계좌 선택 반영 대기")
+            return
+    except Exception as exc:
+        print(f"[warn] 등록 계좌 Playwright 클릭 실패: {exc}")
+
+    selected_label = page.evaluate(
+        """
+        () => {
+            const dialogs = Array.from(document.querySelectorAll('.dialog.bottom.show, .dialog.show'))
+                .filter((dialog) => dialog.classList.contains('show'));
+            for (const dialog of dialogs) {
+                const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                if (!text.includes('계좌선택') && !text.includes('계좌 선택')) {
+                    continue;
+                }
+                for (const link of dialog.querySelectorAll('a.ui-pop-select-btn')) {
+                    const label = (link.innerText || '').replace(/\\s+/g, ' ').trim();
+                    if (!label || label.includes('선택해 주세요')) {
+                        continue;
+                    }
+                    if (/\\d{6,}/.test(label) || label.includes('은행')) {
+                        link.click();
+                        return label;
+                    }
+                }
+                for (const link of dialog.querySelectorAll('a.ui-pop-select-btn[data-value]')) {
+                    const value = link.getAttribute('data-value');
+                    if (!value || value === '0') {
+                        continue;
+                    }
+                    link.click();
+                    return (link.innerText || '').replace(/\\s+/g, ' ').trim() || value;
+                }
+            }
+            return '';
+        }
+        """
+    )
+    if selected_label:
+        print(f"[click] 등록된 계좌 선택(DOM): {selected_label}")
+        common.wait_timeout_with_log(page, 400, "계좌 선택 반영 대기")
+        return
+    raise RuntimeError("등록된 계좌 항목을 찾지 못했습니다.")
+
+
+def _select_saved_bank_account(page, timeout_ms: int) -> None:
+    if _is_saved_account_selected(page):
+        print("[step] 등록 계좌가 이미 선택되어 있습니다.")
+        return
+
+    account_combo = page.locator(ACCOUNT_COMBO_SELECTOR).first
+    common.wait_locator_visible_with_log(account_combo, timeout_ms, "계좌선택(#acccombo)")
+    account_combo.select_option(value="account")
+    common.wait_timeout_with_log(page, 400, "계좌선택 모드 전환 대기")
+    _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
+    _open_account_select_dialog(page, timeout_ms)
+    _click_saved_account_item(page, timeout_ms)
+    for _ in range(max(3, timeout_ms // 1000)):
+        if not _account_select_dialog_open(page):
+            return
+        common.wait_timeout_with_log(page, 400, "계좌선택 팝업 닫힘 대기")
+    print("[warn] 계좌선택 팝업이 닫히지 않았지만 계속 진행")
+
+
+def _complete_detail_step(page, timeout_ms: int) -> None:
+    _close_gnb_menu_if_open(page)
+    _wait_for_loading_overlay_gone(page, timeout_ms)
+    _ensure_checkbox_checked(
+        page,
+        label_selector=CLAIM_TYPE_DIAGNOSIS_LABEL_SELECTOR,
+        input_selector=CLAIM_TYPE_DIAGNOSIS_INPUT_SELECTOR,
+        description="청구 유형: 진단비",
+    )
+    _ensure_checkbox_checked(
+        page,
+        label_selector=CLAIM_DETAIL_OTHER_DIAGNOSIS_LABEL_SELECTOR,
+        input_selector=CLAIM_DETAIL_OTHER_DIAGNOSIS_INPUT_SELECTOR,
+        description="청구 상세 유형: 기타 진단",
+    )
+    _fill_claim_content(page)
+    _select_saved_bank_account(page, timeout_ms)
+    _select_medical_beneficiary_none(page)
+    _click_detail_complete_button(page, timeout_ms)
+    for _ in range(max(1, timeout_ms // 400)):
+        if _existing_claim_history_popup_open(page):
+            _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
+            _click_detail_complete_button(page, timeout_ms)
+            continue
+        if _maybe_click_modal_action(
+            page,
+            re.compile(r"접수\s*정보|서류\s*제출"),
+            ["확인 후 서류제출 하러 가기", re.compile(r"확인\s*후\s*서류\s*제출")],
+            "접수정보 확인: 서류제출 이동",
+        ):
+            if DOCUMENT_UPLOAD_URL_FRAGMENT in page.url:
+                _wait_url_contains(page, DOCUMENT_UPLOAD_URL_FRAGMENT, timeout_ms)
+                return
+            continue
+        if _maybe_click_named_action(
+            page,
+            ["확인 후 서류제출 하러 가기", re.compile(r"확인\s*후\s*서류\s*제출")],
+            "접수정보 확인: 서류제출 이동",
+        ):
+            if DOCUMENT_UPLOAD_URL_FRAGMENT in page.url:
+                _wait_url_contains(page, DOCUMENT_UPLOAD_URL_FRAGMENT, timeout_ms)
+                return
+            continue
+        if DOCUMENT_UPLOAD_URL_FRAGMENT in page.url:
+            _wait_url_contains(page, DOCUMENT_UPLOAD_URL_FRAGMENT, timeout_ms)
+            return
+        common.wait_timeout_with_log(page, 400, "서류등록 화면 대기")
+    _wait_url_contains(page, DOCUMENT_UPLOAD_URL_FRAGMENT, timeout_ms)
+
+
+def _upload_via_album(page, category_pattern: re.Pattern[str], file_path: Path, description: str) -> None:
+    category_button = page.get_by_role("button", name=category_pattern).first
+    common.click_with_log(category_button, f"{description} 업로드 영역 열기")
+    common.wait_timeout_with_log(page, 500, "서류 등록 시트 표시 대기")
+    album_label = page.locator('label[for="galleyFile"]').first
+    print(f"[upload] {description}: {file_path.name}")
+    try:
+        with page.expect_file_chooser(timeout=5000) as chooser_info:
+            common.click_with_log(album_label, f"{description} 앨범 선택")
         chooser_info.value.set_files(str(file_path))
     except Exception:
-        input_locator.set_input_files(str(file_path))
-    _wait_for_uploaded_item(page, frame_selector, f"{description} 업로드 항목 반영", common.MAX_TIMEOUT_MS)
-    common.wait_timeout_with_log(page, 1000, f"{description} 업로드 반영 대기")
+        page.locator(GALLERY_FILE_INPUT_SELECTOR).set_input_files(str(file_path))
+    page.wait_for_function(
+        """
+        () => {
+            const previews = Array.from(document.querySelectorAll('img[alt="미리보기 이미지"], img[alt*="미리보기"]'))
+                .filter((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                });
+            return previews.length > 0;
+        }
+        """,
+        timeout=common.MAX_TIMEOUT_MS,
+    )
+    common.wait_timeout_with_log(page, 800, f"{description} 업로드 반영 대기")
 
 
 def _upload_claim_documents(page) -> None:
     primary_file = _pick_random_desktop_screenshot()
     secondary_file = _pick_random_desktop_screenshot()
-    _upload_file_to_frame(
-        page,
-        CHARGE05_PRIMARY_UPLOAD_FRAME_SELECTORS,
-        primary_file,
-        "진료비영수증/진단서/수술확인서 등 첨부",
-    )
-    _upload_file_to_frame(
-        page,
-        CHARGE05_SECONDARY_UPLOAD_FRAME_SELECTORS,
-        secondary_file,
-        "진료비 세부(산정) 내역서 첨부",
-    )
+    _upload_via_album(page, PRIMARY_UPLOAD_BUTTON_PATTERN, primary_file, "보험금청구서류")
+    _upload_via_album(page, SECONDARY_UPLOAD_BUTTON_PATTERN, secondary_file, "진료비 세부(산정)내역서")
 
 
-def _submit_documents_and_wait_charge06(page, timeout_ms: int) -> None:
-    submit = _first_visible_selector(page, CHARGE05_COMPLETE_SELECTOR, "서류등록/청구완료 링크")
-    common.click_with_log(submit, "서류등록/청구완료 클릭")
+def _submit_documents(page, timeout_ms: int) -> None:
+    _click_named_action(
+        page,
+        ["서류 제출 후 완료(3/3)", re.compile(r"서류\s*제출\s*후\s*완료")],
+        "서류 제출 후 완료(3/3)",
+    )
     for _ in range(max(1, timeout_ms // 400)):
-        if "charge06.do" in page.url:
+        if _maybe_click_modal_action(
+            page,
+            re.compile(r"첨부파일을\s*전송|서류를\s*추가"),
+            ["서류제출", re.compile(r"^서류제출$")],
+            "첨부파일 전송 확인: 서류제출",
+        ):
+            continue
+        if CLAIM_COMPLETE_URL_FRAGMENT in page.url:
             return
-        if _maybe_click_modal_action(
-            page,
-            re.compile(r"계속 진행하시겠습니까"),
-            [re.compile(r"^확인$"), "확인"],
-            "계속 진행 확인 팝업",
-        ):
-            continue
-        if _maybe_click_modal_action(
-            page,
-            re.compile(r"정상적으로 등록되었습니다|등록되었습니다"),
-            [re.compile(r"닫기"), "닫기"],
-            "등록 완료 알림 닫기",
-        ):
-            continue
-        common.wait_timeout_with_log(page, 400, "charge06 이동 대기")
-    _wait_url_contains(page, "charge06.do", timeout_ms)
+        common.wait_timeout_with_log(page, 400, "보험금청구 완료 화면 대기")
+    _wait_url_contains(page, CLAIM_COMPLETE_URL_FRAGMENT, timeout_ms)
 
 
-def _assert_charge06_landed(page, timeout_ms: int) -> None:
+def _service_satisfaction_popup_open(page) -> bool:
+    try:
+        return bool(
+            page.evaluate(
+                """
+                () => {
+                    for (const dialog of document.querySelectorAll('.dialog.full.show, .dialog.show')) {
+                        if (!dialog.classList.contains('show')) {
+                            continue;
+                        }
+                        const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                        if (text.includes('서비스만족도 조사') || text.includes('서비스이용은')) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                """
+            )
+        )
+    except Exception:
+        return False
+
+
+def _dismiss_service_satisfaction_popup(page, timeout_ms: int) -> None:
+    saw_popup = False
+    for _ in range(max(5, timeout_ms // 400)):
+        if not _service_satisfaction_popup_open(page):
+            if saw_popup:
+                print("[step] 서비스만족도 조사 팝업 닫기 완료")
+                return
+            common.wait_timeout_with_log(page, 400, "서비스만족도 조사 팝업 표시 대기")
+            continue
+
+        saw_popup = True
+        clicked = page.evaluate(
+            """
+            () => {
+                for (const dialog of document.querySelectorAll('.dialog.full.show, .dialog.show')) {
+                    if (!dialog.classList.contains('show')) {
+                        continue;
+                    }
+                    const text = (dialog.innerText || '').replace(/\\s+/g, ' ');
+                    if (!text.includes('서비스만족도 조사') && !text.includes('서비스이용은')) {
+                        continue;
+                    }
+                    const closeButton = dialog.querySelector(
+                        'button.dialog_close.ui_dialog_close, a.dialog_close.ui_dialog_close'
+                    );
+                    if (!closeButton) {
+                        continue;
+                    }
+                    closeButton.click();
+                    return (closeButton.getAttribute('title') || closeButton.innerText || '팝업창 닫기')
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+                }
+                return '';
+            }
+            """
+        )
+        if clicked:
+            print(f"[click] 서비스만족도 조사 팝업 닫기: {clicked}")
+            common.wait_timeout_with_log(page, 500, "서비스만족도 조사 팝업 닫힘 대기")
+            if not _service_satisfaction_popup_open(page):
+                return
+        else:
+            dialog = page.locator(SERVICE_SATISFACTION_DIALOG_SELECTOR).filter(
+                has_text=SERVICE_SATISFACTION_DIALOG_TEXT
+            )
+            try:
+                close_button = dialog.locator(SERVICE_SATISFACTION_CLOSE_SELECTOR).first
+                if close_button.count() > 0:
+                    print("[click] 서비스만족도 조사 팝업 닫기: 팝업창 닫기")
+                    close_button.click(force=True, timeout=3000)
+                    common.wait_timeout_with_log(page, 500, "서비스만족도 조사 팝업 닫힘 대기")
+                    if not _service_satisfaction_popup_open(page):
+                        return
+            except Exception as exc:
+                print(f"[warn] 서비스만족도 조사 팝업 Playwright 닫기 실패: {exc}")
+        common.wait_timeout_with_log(page, 400, "서비스만족도 조사 팝업 재시도")
+    if _service_satisfaction_popup_open(page):
+        raise RuntimeError("서비스만족도 조사 팝업을 닫지 못했습니다.")
+    print("[step] 서비스만족도 조사 팝업 없음")
+
+
+def _assert_claim_complete(page, timeout_ms: int) -> None:
     for _ in range(max(1, timeout_ms // 500)):
-        url_ok = "charge06.do" in page.url
+        url_ok = CLAIM_COMPLETE_URL_FRAGMENT in page.url
         try:
             body_text = page.locator("body").inner_text()
         except Exception:
             body_text = ""
-        if url_ok and STEP06_HEADING_PATTERN.search(body_text):
+        if url_ok and CLAIM_COMPLETE_HEADING_PATTERN.search(body_text):
             return
-        if _maybe_click_modal_action(
+        if _maybe_click_named_action(
             page,
-            re.compile(r"정상적으로 등록되었습니다|등록되었습니다"),
-            [re.compile(r"닫기"), "닫기"],
-            "등록 완료 알림 닫기",
+            [re.compile(r"팝업창\s*닫기"), "팝업창 닫기"],
+            "완료 후 부가 팝업 닫기",
         ):
             continue
-        common.wait_timeout_with_log(page, 400, "charge06 화면 요소 대기")
-    raise RuntimeError("보험금청구 charge06 화면(청구완료)을 확인하지 못했습니다.")
-
-
-def _open_charge00_from_menu(page, timeout_ms: int) -> bool:
-    common.maybe_close_post_login_popup(page, timeout_ms)
-    try:
-        bosang = page.get_by_role("link", name=re.compile(r"^보상$")).first
-        if not bosang.is_visible(timeout=2000):
-            return False
-        print("[step] Hover GNB 보상")
-        bosang.hover(timeout=timeout_ms)
-        common.wait_timeout_with_log(page, 600, "보상 메뉴 펼침 대기")
-        link = common.first_visible_locator(
-            page.locator(f'a[href*="{CHARGE00_FRAGMENT}"]'),
-            "보상 메뉴의 charge00 링크",
-        )
-        common.click_with_log(link, "보상 > … > 보험금청구 접수(charge00) 메뉴 클릭")
-        _wait_url_contains(page, "charge00.do", timeout_ms)
-        return True
-    except Exception as exc:
-        print(f"[warn] 메뉴로 charge00 이동 실패, 직접 URL 시도: {exc}")
-        return False
-
-
-def _goto_charge00(page, config: common.LoginConfig) -> None:
-    if not _open_charge00_from_menu(page, config.timeout_ms):
-        common.maybe_close_post_login_popup(page, config.timeout_ms)
-        base = config.base_url.rstrip("/")
-        common.open_url(page, f"{base}{CHARGE00_FRAGMENT}")
-        _wait_url_contains(page, "charge00.do", config.timeout_ms)
-
-
-def _click_first_visible_href(page, href_substring: str, description: str, timeout_ms: int) -> None:
-    link = common.first_visible_locator(
-        page.locator(f'a[href*="{href_substring}"]'),
-        description,
-    )
-    with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout_ms):
-        common.click_with_log(link, description)
-
-
-def _open_document_check_popup(page, timeout_ms: int) -> None:
-    apply_link = common.first_visible_locator(
-        page.get_by_role("link", name=re.compile(r"보험금청구\s*신청")),
-        "보험금청구신청(팝업 호출)",
-    )
-    common.click_with_log(apply_link, "보험금청구신청 클릭 (문서확인 팝업)")
-    popup_marker = page.get_by_text(POPUP_CONFIRM_PATTERN).first
-    common.wait_locator_visible_with_log(popup_marker, timeout_ms, "필요서류 확인 팝업")
-
-
-def _confirm_ready_and_go_charge02(page, timeout_ms: int) -> None:
-    ready = common.first_visible_locator(
-        page.get_by_role("link", name=READY_LINK_PATTERN),
-        "팝업: 준비가 된 상태입니다 링크",
-    )
-    print("[click] 팝업에서 서류 준비 완료 확인(준비가 된 상태)")
-    with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout_ms):
-        try:
-            ready.click(timeout=timeout_ms)
-        except Exception:
-            ready.click(force=True, timeout=timeout_ms)
-    _wait_url_contains(page, "charge02.do", timeout_ms)
-
-
-def _assert_charge02_landed(page, timeout_ms: int) -> None:
-    for _ in range(max(1, timeout_ms // 500)):
-        url_ok = "charge02.do" in page.url
-        try:
-            body_text = page.locator("body").inner_text()
-        except Exception:
-            body_text = ""
-        text_ok = bool(STEP02_HEADING_PATTERN.search(body_text))
-        if url_ok and text_ok:
-            return
-        common.wait_timeout_with_log(page, 400, "charge02 화면 요소 대기")
-    raise RuntimeError(
-        "보험금청구 charge02 화면(청구대상자 선택 등)을 확인하지 못했습니다.",
-    )
-
-
-def _select_self_claimant_and_open_contracts(page, timeout_ms: int) -> None:
-    table = common.first_visible_locator(
-        page.get_by_role("table", name=re.compile(r"청구대상자\s*선택")),
-        "청구대상자 선택 표",
-    )
-    row = table.get_by_role("row").filter(
-        has=page.get_by_role("rowheader", name="본인"),
-    ).first
-    name_cell = common.first_visible_locator(
-        row.locator("td"),
-        "본인 행의 이름(피보험자) 셀",
-    )
-    common.click_with_log(
-        name_cell,
-        "청구대상자: 본인 우측 이름 영역 클릭",
-    )
-    lookup = common.first_visible_locator(
-        page.get_by_role("link", name=re.compile(r"청구가능계약\s*조회")),
-        "청구가능계약 조회",
-    )
-    common.click_with_log(lookup, "청구가능계약 조회 클릭")
-    _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, timeout_ms, "청구가능계약 조회 popLoading")
-    common.wait_timeout_with_log(page, 300, "청구가능계약 조회 결과 안정화")
-
-
-def _maybe_dismiss_claim_guide_popup(page, timeout_ms: int) -> bool:
-    confirm = page.locator(CLAIM_GUIDE_POPUP_ROOT).get_by_role("link", name="확인")
-    try:
-        if not confirm.is_visible(timeout=min(2800, timeout_ms)):
-            return False
-    except Exception:
-        return False
-    try:
-        common.click_with_log(confirm, "보험금청구 안내 팝업 확인(닫기)")
-    except Exception:
-        confirm.click(force=True, timeout=min(timeout_ms, 3000))
-    try:
-        _wait_for_overlay_to_clear(page, CLAIM_GUIDE_POPUP_ROOT, min(timeout_ms, 4000), "보험금청구 안내 팝업")
-    except Exception:
-        pass
-    try:
-        _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, min(timeout_ms, 4000), "보험금청구 안내 후 popLoading")
-    except Exception:
-        pass
-    return True
-
-
-def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
-    last_error: Exception | None = None
-    for _ in range(max(1, timeout_ms // 500)):
-        try:
-            _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, min(2000, timeout_ms), "신규접수 전 popLoading")
-        except Exception:
-            pass
-        if _maybe_dismiss_claim_guide_popup(page, min(2200, timeout_ms)):
-            continue
-        new_rx = common.first_visible_locator(
-            page.get_by_role("link", name="신규접수"),
-            "신규접수(링크)",
-        )
-        print("[click] 신규접수 링크 클릭")
-        try:
-            new_rx.click(timeout=min(1200, timeout_ms))
-            break
-        except Exception as exc:
-            last_error = exc
-            common.wait_timeout_with_log(page, 400, "신규접수 링크 재시도 대기")
-    else:
-        raise RuntimeError(f"신규접수 링크 클릭 실패: {last_error}")
-
-    _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, timeout_ms, "신규접수 클릭 후 popLoading")
-    common.wait_timeout_with_log(page, 500, "신규·추가접수 안내 레이어 표시 대기")
-    btn = page.get_by_role("button", name="신규접수")
-    try:
-        if btn.is_visible(timeout=min(3500, timeout_ms)):
-            common.click_with_log(btn, "신규·추가접수 안내: 신규접수 버튼")
-    except Exception:
-        pass
-
-
-def _agree_entire_summary_consent_and_apply(page, timeout_ms: int) -> None:
-    chk = page.locator(CHARGE03_ALL_CONSENT_INPUT_SELECTOR).first
-    label = page.locator(CHARGE03_ALL_CONSENT_LABEL_SELECTOR).first
-    common.wait_locator_visible_with_log(label, timeout_ms, "요약 동의서 전체동의 라벨")
-    print("[click] [필수]보험금 청구를 위한 요약 동의서 — 전체동의 라벨")
-    try:
-        label.click(timeout=timeout_ms)
-    except Exception:
-        label.evaluate("el => el.click()")
-    page.wait_for_function(
-        "selector => !!document.querySelector(selector)?.checked",
-        arg=CHARGE03_ALL_CONSENT_INPUT_SELECTOR,
-        timeout=timeout_ms,
-    )
-
-
-def _click_bottom_claim_apply_and_wait_charge04(page, timeout_ms: int) -> None:
-    submit = common.first_visible_locator(
-        page.get_by_role("link", name="보험금청구신청"),
-        "보험금청구신청(하단)",
-    )
-    with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout_ms):
-        common.click_with_log(submit, "보험금청구신청 클릭 → charge04")
-    _wait_url_contains(page, "charge04.do", timeout_ms)
+        common.wait_timeout_with_log(page, 400, "보험금청구 완료 화면 대기")
+    raise RuntimeError("보험금청구 완료 화면(IbnfDmRcp1090)을 확인하지 못했습니다.")
 
 
 def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
     try:
-        _goto_charge00(page, config)
-        _click_first_visible_href(
-            page,
-            "charge01.do",
-            "charge00 → charge01 (보험금청구신청 단계 진입)",
-            config.timeout_ms,
-        )
-        _open_document_check_popup(page, config.timeout_ms)
-        _confirm_ready_and_go_charge02(page, config.timeout_ms)
-        _assert_charge02_landed(page, config.timeout_ms)
-        _select_self_claimant_and_open_contracts(page, config.timeout_ms)
-        _maybe_dismiss_claim_guide_popup(page, config.timeout_ms)
-        _open_new_reception_and_confirm_layer(page, config.timeout_ms)
-        _wait_url_contains(page, "charge03.do", config.timeout_ms)
-        _agree_entire_summary_consent_and_apply(page, config.timeout_ms)
-        _click_bottom_claim_apply_and_wait_charge04(page, config.timeout_ms)
-        _select_claim_type_other(page)
-        _set_accident_date_one_month_ago(page)
-        _click_lookup_and_prepare_claim_content(page, config.timeout_ms)
-        _click_next_and_go_charge05(page, config.timeout_ms)
-        _assert_charge05_landed(page, config.timeout_ms)
-        _maybe_close_upload_notice_popup(page)
+        _navigate_to_claim_entry(page, config.timeout_ms, config.base_url)
+        _start_claim_from_intro(page, config.timeout_ms)
+        _complete_target_selection(page, config.timeout_ms)
+        _complete_claim_reason_step(page, config.timeout_ms)
+        _complete_detail_step(page, config.timeout_ms)
         _upload_claim_documents(page)
-        _submit_documents_and_wait_charge06(page, config.timeout_ms)
-        _assert_charge06_landed(page, config.timeout_ms)
+        _submit_documents(page, config.timeout_ms)
+        _assert_claim_complete(page, config.timeout_ms)
+        _dismiss_service_satisfaction_popup(page, config.timeout_ms)
         common.save_screenshot(page, screenshot_path)
-        return f"보험금청구 접수 프로세스 charge06 도달 성공 ({page.url})"
+        return f"보험금청구 접수 프로세스 완료 성공 ({page.url})"
     except Exception:
         common.save_screenshot(page, screenshot_path)
         raise

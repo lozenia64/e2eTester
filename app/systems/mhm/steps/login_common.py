@@ -845,6 +845,46 @@ def save_screenshot(page: Page, output_path: Path) -> None:
         print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
 
 
+def dismiss_coach_mark_if_present(page: Page, timeout_ms: int = 8000) -> None:
+    coach = page.locator("#coachMarkDialog.dialog.full.show, #coachMarkDialog.show")
+    try:
+        if not coach.first.is_visible(timeout=1500):
+            return
+    except Exception:
+        return
+
+    print("[step] Dismiss post-login coach mark overlay")
+    remaining_ms = timeout_ms
+    while remaining_ms > 0:
+        try:
+            if not coach.first.is_visible(timeout=500):
+                print("[step] Coach mark overlay dismissed")
+                return
+        except Exception:
+            print("[step] Coach mark overlay dismissed")
+            return
+
+        click_targets = [
+            page.locator("#coachMarkDialog .coach_mark").first,
+            page.locator("#coachMarkDialog .mark1, #coachMarkDialog .mark2, #coachMarkDialog .mark4").first,
+            page.locator("#coachMarkDialog label[for='notOpenCoachMark']").first,
+        ]
+        clicked = False
+        for target in click_targets:
+            try:
+                if target.is_visible(timeout=400):
+                    click_with_log(target, "Advance/dismiss coach mark overlay")
+                    clicked = True
+                    break
+            except Exception:
+                continue
+        if not clicked:
+            page.keyboard.press("Escape")
+        slice_ms = 500
+        wait_timeout_with_log(page, slice_ms, "Coach mark step settle")
+        remaining_ms -= slice_ms + 400
+
+
 def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> None:
     fragment = expected_fragment or "/myh/mai/MySubMain1000"
     print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
@@ -858,14 +898,18 @@ def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> N
 
 def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -> None:
     print("[step] Check post-login popup")
+    dismiss_coach_mark_if_present(page, min(timeout_ms, 8000))
 
     overlay_candidates = [
         page.locator("#uiPOPCtmAgreOverlay"),
         page.locator(".modal_overlay:visible"),
+        page.locator("#coachMarkDialog.dialog.full.show"),
     ]
     modal_candidates = [
         page.locator('#uiPOPCtmAgre:visible, #uiPOPCtmAgreLayer:visible').first,
+        page.locator('.dialog.modal.show:has-text("모바일 안내장")').first,
         page.locator(':visible >> text="모바일 안내장 신청 안내"').first,
+        page.locator(':visible >> text="모바일 안내장 신청안내"').first,
         page.locator(':visible >> text="모바일 안내장"').first,
     ]
     button_candidates = [
@@ -897,6 +941,14 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
                     return true;
                 }
 
+                for (const selector of ['#coachMarkDialog', '.dialog.full.show', '.dialog.modal.show']) {
+                    for (const element of document.querySelectorAll(selector)) {
+                        if (isVisible(element)) {
+                            return true;
+                        }
+                    }
+                }
+
                 for (const element of document.querySelectorAll('.modal_overlay, .modal_popup, .modal_wrap, .modal, .pop_wrap')) {
                     if (isVisible(element)) {
                         return true;
@@ -925,6 +977,14 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
                     const overlay = document.querySelector('#uiPOPCtmAgreOverlay');
                     if (isVisible(overlay)) {
                         return false;
+                    }
+
+                    for (const selector of ['#coachMarkDialog', '.dialog.full.show', '.dialog.modal.show']) {
+                        for (const element of document.querySelectorAll(selector)) {
+                            if (isVisible(element)) {
+                                return false;
+                            }
+                        }
                     }
 
                     for (const element of document.querySelectorAll('.modal_overlay, .modal_popup, .modal_wrap, .modal, .pop_wrap')) {
@@ -1089,7 +1149,7 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
             };
 
             let changed = false;
-            for (const selector of ['#uiPOPCtmAgreOverlay', '#uiPOPCtmAgre', '#uiPOPCtmAgreLayer', '.modal_overlay', '.modal_popup', '.modal_wrap', '.modal', '.pop_wrap']) {
+            for (const selector of ['#uiPOPCtmAgreOverlay', '#uiPOPCtmAgre', '#uiPOPCtmAgreLayer', '#coachMarkDialog', '.dialog.full.show', '.dialog.modal.show', '.modal_overlay', '.modal_popup', '.modal_wrap', '.modal', '.pop_wrap']) {
                 for (const element of document.querySelectorAll(selector)) {
                     if (!isVisible(element)) {
                         continue;

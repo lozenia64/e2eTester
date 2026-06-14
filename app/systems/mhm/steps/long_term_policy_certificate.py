@@ -8,13 +8,14 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from . import login_common as common
 
-
-PROOF_LIST_FRAGMENT = "/fplaza/proof/list.do"
-LONG_TERM_POLICY_FRAGMENT = "/fplaza/proof/ioltrh070.do"
-POLICY_TABLE_CAPTION = "보험계약 선택"
-DOWNLOAD_IFRAME_SELECTOR = "iframe#filedownload"
-DOWNLOAD_IFRAME_FRAGMENT = "/fileDownloadAndViiew.json"
-SUCCESS_DIALOG_TEXT = "PDF 파일 다운로드가 완료되었습니다."
+PROOF_TAB_SELECTOR = '[id="05000000"]'
+PROOF_ENTRY_MENU_SELECTOR = "#code05010000"
+CERT_LIST_HEADING_TEXT = "필요한 증명서를 선택하세요"
+POLICY_CERT_LINK_TEXT = "보험증권(장기/자동차)"
+POLICY_PAGE_HEADING_TEXT = "보험증권(장기/자동차)을 발급하실 수 있습니다"
+CONTRACT_DIALOG_SELECTOR = ".dialog.full.show"
+ALERT_DIALOG_SELECTOR = ".dialog.modal.alert.show, .dialog.show"
+SUCCESS_DIALOG_TEXT = re.compile(r"PDF\s*파일\s*다운로드가\s*완료되었습니다")
 FAILURE_DIALOG_PATTERNS: tuple[str, ...] = (
     "PDF 파일 다운로드를 실패하였습니다.",
     "PDF 파일 다운로드 중 오류가 발생했습니다.",
@@ -29,207 +30,240 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
-    page.wait_for_function(
-        "fragment => window.location.href.includes(fragment)",
-        arg=fragment,
-        timeout=timeout_ms,
-    )
-    page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+def _close_gnb_menu_if_open(page) -> None:
+    try:
+        gnb_open = page.evaluate(
+            """
+            () => {
+                const gnb = document.querySelector('#gnb.mhm_gnb');
+                return !!(gnb && gnb.getAttribute('aria-hidden') === 'false');
+            }
+            """
+        )
+    except Exception:
+        return
+    if not gnb_open:
+        return
+
+    close_button = page.locator("#gnb a.btn_gnb_close").first
+    try:
+        common.click_with_log(close_button, "전체메뉴 닫기")
+    except Exception:
+        page.evaluate(
+            """
+            () => {
+                const closeButton = document.querySelector('#gnb a.btn_gnb_close');
+                if (closeButton) {
+                    closeButton.click();
+                }
+            }
+            """
+        )
+    common.wait_timeout_with_log(page, 400, "전체메뉴 닫힘 대기")
 
 
-def _first_visible_candidate(candidates, description: str):
-    for candidate in candidates:
-        try:
-            if candidate.count() == 0:
-                continue
-            if candidate.first.is_visible(timeout=1200):
-                return candidate.first
-        except Exception:
-            continue
-    raise RuntimeError(f"표시 중인 요소를 찾지 못했습니다: {description}")
+def _open_hamburger_menu(page, timeout_ms: int) -> None:
+    try:
+        close_button = page.get_by_role("button", name=re.compile(r"전체\s*메뉴\s*닫기"))
+        if close_button.is_visible(timeout=800):
+            return
+    except Exception:
+        pass
 
-
-def _find_long_term_policy_link(page):
-    candidates = [
-        page.locator(f'a[href*="{LONG_TERM_POLICY_FRAGMENT}"]:visible'),
-        page.get_by_role("link", name=re.compile(r"장기보험\s*증권")),
-        page.locator('a:has-text("장기보험증권")'),
+    open_candidates = [
+        page.locator("#btnGnb").first,
+        page.locator("banner").get_by_text("전체메뉴 열기").first,
+        page.get_by_text("전체메뉴 열기").first,
     ]
-
-    for candidate in candidates:
+    for candidate in open_candidates:
         try:
-            if candidate.count() == 0:
-                continue
-            if candidate.first.is_visible(timeout=1200):
-                return candidate.first
+            if candidate.is_visible(timeout=1500):
+                common.click_with_log(candidate, "전체메뉴 열기")
+                common.wait_timeout_with_log(page, 600, "전체메뉴 펼침 대기")
+                return
         except Exception:
             continue
+    raise RuntimeError("전체메뉴 열기 버튼을 찾지 못했습니다.")
 
-    return None
+
+def _click_alert_dialog_button(
+    page,
+    dialog_text: str | re.Pattern[str],
+    button_name: str,
+    log_label: str,
+    timeout_ms: int,
+) -> None:
+    dialog = page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=dialog_text).first
+    common.wait_locator_visible_with_log(dialog, timeout_ms, log_label)
+    button = dialog.get_by_role("button", name=button_name, exact=True).first
+    common.click_with_log(button, log_label)
 
 
-def _open_proof_menu(page, timeout_ms: int) -> None:
-    menu = _first_visible_candidate(
-        [
-            page.get_by_role("link", name=re.compile(r"^증명서\s*발급$")),
-            page.locator("header").get_by_text("증명서 발급", exact=True),
-            page.get_by_text("증명서 발급", exact=True),
-        ],
-        "증명서 발급 GNB 메뉴",
+def _scroll_gnb_item_into_view(page, selector: str) -> None:
+    page.evaluate(
+        """
+        (selector) => {
+            const item = document.querySelector(`#gnb ${selector}`);
+            if (!item) {
+                return false;
+            }
+            item.scrollIntoView({ block: 'center', inline: 'center' });
+            const scrollHost = item.closest('.nav_area')
+                || item.closest('.menu_area')
+                || item.closest('.mhm_gnb_body');
+            if (!scrollHost) {
+                return true;
+            }
+            const rect = item.getBoundingClientRect();
+            const hostRect = scrollHost.getBoundingClientRect();
+            if (rect.left < hostRect.left || rect.right > hostRect.right) {
+                scrollHost.scrollLeft += rect.left - hostRect.left - (hostRect.width / 2) + (rect.width / 2);
+            }
+            if (rect.top < hostRect.top || rect.bottom > hostRect.bottom) {
+                scrollHost.scrollTop += rect.top - hostRect.top - (hostRect.height / 2) + (rect.height / 2);
+            }
+            return true;
+        }
+        """,
+        selector,
     )
 
-    print("[step] Open 증명서 발급 GNB menu")
+
+def _click_gnb_item(page, selector: str, log_label: str, timeout_ms: int) -> None:
+    locator = page.locator(f"#gnb {selector}").first
+    common.wait_locator_visible_with_log(locator, timeout_ms, log_label)
+    _scroll_gnb_item_into_view(page, selector)
+    common.wait_timeout_with_log(page, 200, f"{log_label} GNB 스크롤 안정화")
+
     try:
-        menu.hover(timeout=timeout_ms)
-        common.wait_timeout_with_log(page, 600, "증명서 발급 메뉴 펼침 대기")
+        common.click_with_log(locator, log_label)
+        return
     except Exception as exc:
-        print(f"[warn] 증명서 발급 메뉴 hover 실패, 목록 페이지 직접 이동으로 대체: {exc}")
+        print(f"[warn] {log_label} 일반 클릭 실패: {exc}")
+
+    clicked = page.evaluate(
+        """
+        (selector) => {
+            const item = document.querySelector(`#gnb ${selector}`);
+            if (!item) {
+                return false;
+            }
+            item.scrollIntoView({ block: 'center', inline: 'center' });
+            item.click();
+            return true;
+        }
+        """,
+        selector,
+    )
+    if clicked:
+        print(f"[click] {log_label} (JS fallback)")
+        common.wait_timeout_with_log(page, 400, f"{log_label} 후 안정화")
+        return
+
+    print(f"[warn] {log_label} JS 클릭 실패, force 클릭 재시도")
+    locator.click(force=True, timeout=min(timeout_ms, 5000))
+    common.wait_timeout_with_log(page, 400, f"{log_label} 후 안정화")
 
 
-def _navigate_to_long_term_policy(page, config: common.LoginConfig) -> None:
-    common.maybe_close_post_login_popup(page, config.timeout_ms)
+def _navigate_to_certificate_list(page, timeout_ms: int) -> None:
+    common.maybe_close_post_login_popup(page, timeout_ms)
+    _close_gnb_menu_if_open(page)
+    _open_hamburger_menu(page, timeout_ms)
 
-    policy_link = _find_long_term_policy_link(page)
-    if policy_link is None:
-        try:
-            _open_proof_menu(page, config.timeout_ms)
-        except Exception as exc:
-            print(f"[warn] 증명서 발급 메뉴 접근 실패: {exc}")
-        policy_link = _find_long_term_policy_link(page)
+    _click_gnb_item(page, PROOF_TAB_SELECTOR, "전체메뉴 증명서발급 탭", timeout_ms)
+    common.wait_timeout_with_log(page, 400, "증명서발급 탭 전환 대기")
 
-    if policy_link is None:
-        base_url = config.base_url.rstrip("/")
-        common.open_url(page, f"{base_url}{PROOF_LIST_FRAGMENT}")
-        _wait_url_contains(page, PROOF_LIST_FRAGMENT, config.timeout_ms)
-        policy_link = _find_long_term_policy_link(page)
+    _click_gnb_item(page, PROOF_ENTRY_MENU_SELECTOR, "전체메뉴 증명서발급 메뉴", timeout_ms)
+    _close_gnb_menu_if_open(page)
 
-    if policy_link is None:
-        raise RuntimeError("장기보험증권 메뉴 링크를 찾지 못했습니다.")
-
-    common.click_with_log(policy_link, "증명서 발급 > 장기보험증권 이동")
-    _wait_url_contains(page, LONG_TERM_POLICY_FRAGMENT, config.timeout_ms)
-    common.wait_timeout_with_log(page, 3000, "장기보험증권 화면 진입 후 계약 조회 안정화 대기")
+    heading = page.get_by_role("heading", name=CERT_LIST_HEADING_TEXT).first
+    common.wait_locator_visible_with_log(heading, timeout_ms, "증명서 선택 화면")
 
 
-def _find_visible_table_by_caption(page, caption_text: str, description: str):
-    tables = page.locator("table")
-    normalized_caption = _normalize_text(caption_text)
+def _open_long_term_policy_certificate(page, timeout_ms: int) -> None:
+    policy_link = (
+        page.locator(".cert_select_2")
+        .locator("a[title='페이지 이동'], a[role='button']")
+        .filter(has_text=POLICY_CERT_LINK_TEXT)
+        .first
+    )
+    common.click_with_log(policy_link, "공통 > 보험증권(장기/자동차) 선택")
 
-    for index in range(tables.count()):
-        table = tables.nth(index)
-        try:
-            if not table.is_visible(timeout=800):
-                continue
-            caption = table.locator("caption").first
-            if caption.count() == 0:
-                continue
-            if normalized_caption in _normalize_text(caption.inner_text(timeout=800)):
-                return table
-        except Exception:
-            continue
-
-    raise RuntimeError(f"표시 중인 표를 찾지 못했습니다: {description}")
-
-
-def _click_radio_with_fallback(page, radio, description: str, timeout_ms: int) -> None:
-    radio_id = radio.get_attribute("id") or ""
-    try:
-        print(f"[click] {description}: input 직접 클릭")
-        radio.click(force=True, timeout=timeout_ms)
-    except Exception as exc:
-        if not radio_id:
-            raise RuntimeError(f"{description} 클릭에 실패했습니다: {exc}") from exc
-
-        label = page.locator(f'label[for="{radio_id}"]').first
-        if label.count() == 0:
-            raise RuntimeError(f"{description} 클릭에 실패했고 연결된 라벨도 찾지 못했습니다: {exc}") from exc
-
-        print(f"[warn] {description}: input 클릭 실패, 라벨 클릭으로 재시도: {exc}")
-        common.click_with_log(label, f"{description} 라벨 클릭")
+    heading = page.get_by_role("heading", name=POLICY_PAGE_HEADING_TEXT).first
+    common.wait_locator_visible_with_log(heading, timeout_ms, "보험증권(장기/자동차) 발급 화면")
+    long_term_tab = page.locator("#ltins").first
+    common.wait_locator_visible_with_log(long_term_tab, timeout_ms, "장기보험증권 탭")
 
 
 def _select_first_contract(page, timeout_ms: int) -> str:
-    table = _find_visible_table_by_caption(page, POLICY_TABLE_CAPTION, "보험계약 선택 표")
-    rows = table.locator("tbody tr")
-    row_count = rows.count()
-    print(f"[step] 보험계약 선택 표 행 수: {row_count}")
-    if row_count < 1:
-        raise RuntimeError("보험계약 선택 테이블에 발급 가능한 항목이 없습니다.")
+    contract_button = page.locator(".certificate_list a.btn").filter(has_text="계약 선택").first
+    common.click_with_log(contract_button, "계약 선택 열기")
 
-    radio = common.first_visible_locator(table.get_by_role("radio"), "보험계약 선택 라디오")
-    policy_value = radio.get_attribute("value") or ""
-    policy_name = radio.get_attribute("name") or "contract_no"
+    dialog = page.locator(CONTRACT_DIALOG_SELECTOR).filter(has_text="계약 선택").first
+    common.wait_locator_visible_with_log(dialog, timeout_ms, "계약 선택 시트")
 
-    print(f"[step] Select first contract for certificate issue: {policy_value}")
-    _click_radio_with_fallback(page, radio, "보험계약 선택 라디오", timeout_ms)
-    page.wait_for_function(
-        """
-        ({name, value}) => {
-            const radios = Array.from(document.querySelectorAll(`input[name="${name}"]`));
-            return radios.some((radio) => radio.value === value && radio.checked);
-        }
-        """,
-        arg={"name": policy_name, "value": policy_value},
-        timeout=timeout_ms,
-    )
-    return policy_value
+    contract_items = dialog.locator(".list.box a.btn.inner")
+    if contract_items.count() < 1:
+        raise RuntimeError("계약 선택 시트에 발급 가능한 계약이 없습니다.")
+
+    contract = contract_items.first
+    contract_text = _normalize_text(contract.inner_text(timeout=1000))
+    policy_number_match = re.search(r"(LA|FA)\d[\d*]+", contract_text)
+    policy_number = policy_number_match.group(0) if policy_number_match else contract_text[:40]
+    common.click_with_log(contract, f"계약 선택: {policy_number}")
+
+    confirm = dialog.get_by_role("button", name="확인", exact=True).first
+    common.click_with_log(confirm, "계약 선택 시트 확인")
+    common.wait_timeout_with_log(page, 400, "계약 선택 반영 대기")
+    print(f"[step] Selected contract for certificate issue: {policy_number}")
+    return policy_number
 
 
 def _select_download_method(page, timeout_ms: int) -> None:
-    radio = _first_visible_candidate(
-        [
-            page.locator('input[name="chk_type"][value="1"]'),
-            page.get_by_role("radio", name=re.compile(r"^다운로드$")),
-        ],
-        "다운로드 발급방법 라디오",
-    )
-    print("[step] Select download issue method")
-    _click_radio_with_fallback(page, radio, "다운로드 발급방법 라디오", timeout_ms)
+    download_tab = page.locator("#issueMtdDownload").first
+    common.click_with_log(download_tab, "발급방법 다운로드 선택")
     page.wait_for_function(
         """
         () => {
-            const radio = document.querySelector('input[name="chk_type"][value="1"]');
-            return !!radio && radio.checked;
+            const tab = document.querySelector('#issueMtdDownload');
+            return !!tab && tab.getAttribute('aria-selected') === 'true';
         }
         """,
         timeout=timeout_ms,
     )
 
 
-def _wait_for_download_trigger(page, timeout_ms: int) -> bool:
-    try:
-        page.wait_for_function(
-            """
-            ({selector, fragment}) => {
-                const iframe = document.querySelector(selector);
-                if (!iframe) {
-                    return false;
-                }
-                return (iframe.getAttribute('src') || '').includes(fragment);
-            }
-            """,
-            arg={"selector": DOWNLOAD_IFRAME_SELECTOR, "fragment": DOWNLOAD_IFRAME_FRAGMENT},
-            timeout=timeout_ms,
-        )
-        print("[step] Hidden iframe download trigger detected")
-        return True
-    except PlaywrightTimeoutError:
-        print("[warn] Hidden iframe download trigger를 확인하지 못했습니다.")
-        return False
+def _wait_for_issue_button_enabled(page, timeout_ms: int) -> None:
+    issue_button = page.locator(".fixed_bottom_button button.btn.s1.c1").first
+    common.wait_locator_visible_with_log(issue_button, timeout_ms, "증명서 발급 버튼")
+    page.wait_for_function(
+        """
+        () => {
+            const button = document.querySelector('.fixed_bottom_button button.btn.s1.c1');
+            return !!button && !button.disabled;
+        }
+        """,
+        timeout=timeout_ms,
+    )
 
 
-def _wait_for_issue_dialog(page, dialog_messages: list[str], start_index: int, timeout_ms: int) -> str:
+def _wait_for_issue_result(page, dialog_messages: list[str], start_index: int, timeout_ms: int) -> None:
     deadline = time.monotonic() + (timeout_ms / 1000)
 
     while time.monotonic() < deadline:
+        try:
+            success_dialog = page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=SUCCESS_DIALOG_TEXT).first
+            if success_dialog.is_visible(timeout=400):
+                print("[step] PDF download success alert detected")
+                return
+        except Exception:
+            pass
+
         for message in dialog_messages[start_index:]:
             normalized = _normalize_text(message)
-            if SUCCESS_DIALOG_TEXT in normalized:
+            if SUCCESS_DIALOG_TEXT.search(normalized):
                 print(f"[step] Download success dialog detected: {normalized}")
-                return normalized
+                return
             for pattern in FAILURE_DIALOG_PATTERNS:
                 if pattern in normalized:
                     raise RuntimeError(f"장기보험증권 발급 실패: {normalized}")
@@ -239,26 +273,31 @@ def _wait_for_issue_dialog(page, dialog_messages: list[str], start_index: int, t
 
 
 def _issue_certificate(page, dialog_messages: list[str], timeout_ms: int, artifact_dir: Path) -> str:
-    issue_button = _first_visible_candidate(
-        [
-            page.locator('a[onclick*="reqIssue"]'),
-            page.get_by_role("link", name=re.compile(r"^증명서발급$")),
-        ],
-        "증명서발급 버튼",
-    )
+    _wait_for_issue_button_enabled(page, timeout_ms)
+    issue_button = page.locator(".fixed_bottom_button button.btn.s1.c1").first
 
     dialog_index = len(dialog_messages)
     download = None
     try:
         with page.expect_download(timeout=timeout_ms) as download_info:
-            common.click_with_log(issue_button, "증명서발급 버튼 클릭")
+            common.click_with_log(issue_button, "증명서 발급 버튼 클릭")
         download = download_info.value
         print(f"[step] Playwright download event captured: {download.suggested_filename}")
     except PlaywrightTimeoutError as exc:
-        print(f"[warn] Playwright download event 미포착, DOM/알림 기반으로 검증 계속: {exc}")
+        print(f"[warn] Playwright download event 미포착, UI 알림 기반으로 검증 계속: {exc}")
 
-    iframe_detected = _wait_for_download_trigger(page, timeout_ms)
-    _wait_for_issue_dialog(page, dialog_messages, dialog_index, timeout_ms)
+    _wait_for_issue_result(page, dialog_messages, dialog_index, timeout_ms)
+
+    try:
+        _click_alert_dialog_button(
+            page,
+            SUCCESS_DIALOG_TEXT,
+            "확인",
+            "PDF 다운로드 완료 알림 확인",
+            timeout_ms,
+        )
+    except Exception as exc:
+        print(f"[warn] PDF 다운로드 완료 UI 알림 닫기 실패: {exc}")
 
     if download is not None:
         filename = download.suggested_filename or "long_term_policy_certificate.pdf"
@@ -267,18 +306,21 @@ def _issue_certificate(page, dialog_messages: list[str], timeout_ms: int, artifa
         print(f"[artifact] Download saved to {target_path}")
         return filename
 
-    if iframe_detected:
-        return "browser-managed download"
-
-    raise RuntimeError("PDF 다운로드 성공 여부를 확인하지 못했습니다.")
+    return "browser-managed download"
 
 
 def run(page, config: common.LoginConfig, screenshot_path: Path, dialog_messages: list[str]) -> str:
     try:
-        _navigate_to_long_term_policy(page, config)
+        _navigate_to_certificate_list(page, config.timeout_ms)
+        _open_long_term_policy_certificate(page, config.timeout_ms)
         selected_policy = _select_first_contract(page, config.timeout_ms)
         _select_download_method(page, config.timeout_ms)
-        download_result = _issue_certificate(page, dialog_messages, config.timeout_ms, screenshot_path.parent)
+        download_result = _issue_certificate(
+            page,
+            dialog_messages,
+            config.timeout_ms,
+            screenshot_path.parent,
+        )
         common.save_screenshot(page, screenshot_path)
         return f"장기보험증권 증명서 발급 성공: {selected_policy} ({download_result})"
     except Exception:
