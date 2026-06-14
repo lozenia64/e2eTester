@@ -9,7 +9,7 @@
 - 시스템 코드: `mhm`
 - manifest: `app/systems/mhm/manifest.yaml`
 - 대상 사이트: `https://m.hwgeneralins.com` (고정값)
-- **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `mhm_login_common.apply_mobile_device_mode()` → `mhm_main_access.run()` 순서를 따른다.
+- **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()`(executor `build_runtime()` 단계) → `app/systems/mhm/steps/main_access.py` 의 `run()` 순서를 따른다.
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 
 ## 2. 모듈 목록
@@ -63,11 +63,11 @@
 
 파일:
 
-- `mhm_main_access.py`
+- `app/systems/mhm/steps/main_access.py`
 
 역할:
 
-- **선행 조건**: `MhmWorkflowExecutor.build_runtime()` 에서 브라우저 기동 후 `mhm_login_common.apply_mobile_device_mode()` 로 모바일 모드 적용 완료
+- **선행 조건**: `MhmWorkflowExecutor.build_runtime()` 에서 브라우저 기동 후 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()` 로 모바일 모드 적용 완료
 - 모바일 모드 적용 확인(`ensure_mobile_mode_before_navigation`) 후 메인 URL 직접 진입 (`page.goto`)
 - 메인화면 전용 `20000ms` timeout 적용
 - 랜딩 팝업 정리
@@ -76,7 +76,7 @@
 
 파일:
 
-- `mhm_login_move.py`
+- `app/systems/mhm/steps/login_move.py`
 
 역할:
 

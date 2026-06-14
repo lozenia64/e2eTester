@@ -16,7 +16,7 @@
 현재 구현은 다음과 같다.
 
 - FastAPI 서버가 웹 화면과 API, WebSocket을 제공한다.
-- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: HOM)
+- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: HOM, MHM)
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
 - 모듈 실행 도중 사용자 입력이 필요하면 Run이 `WAITING_INPUT`으로 전환되고, 웹에서 입력을 제출해 재개할 수 있다. (예: HOM 휴대폰인증의 OTP)
@@ -29,11 +29,11 @@
 Browser
   -> FastAPI app
       -> RunService
-          -> ModuleRegistry
+          -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml)
           -> InMemoryRunRepository
-          -> HomWorkflowExecutor
+          -> WorkflowExecutor         (execution_mode -> HOM / MHM executor)
               -> Shared Playwright browser session
-                  -> Split HOM modules
+                  -> Split system modules (app/systems/{code}/steps/*.py)
                       -> Site
 
 FastAPI app
@@ -46,7 +46,8 @@ FastAPI app
 현재 구조의 핵심 특징:
 
 - 웹 요청과 실행 orchestration은 같은 프로세스에 있다.
-- 실제 Playwright 실행은 `asyncio.to_thread(...)`로 메인 이벤트 루프 바깥 스레드에서 수행한다.
+- 워크플로 실행기는 `execution_mode`(`hom_workflow_step` / `mhm_workflow_step`) 기준으로 `app/systems/loader.py` 가 동적으로 로드한다.
+- 실제 Playwright sync API 실행은 Run마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)에서 수행한다. 같은 Run의 build/step/close 호출이 모두 이 스레드에서 돈다. (실행기에 thread executor가 없으면 `asyncio.to_thread(...)` 로 폴백)
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - 모듈 로그와 상태 이벤트는 repository를 통해 WebSocket에 전파된다.
 
@@ -57,6 +58,7 @@ e2eTester/
   app/
     ai/
       failure_analyzer.py
+      gemini_http.py
     api/
       routes_dashboard.py
       routes_runs.py
@@ -64,21 +66,43 @@ e2eTester/
       ws_runs.py
     core/
       enums.py
+      env_utils.py
       models.py
+    notifications/
+      run_completion_email.py
     orchestrator/
       run_service.py
     registry/
       loader.py
     runner/
       artifact_manager.py
-      hom_workflow_executor.py
+      workflow_common.py
+      hom_workflow_executor.py   # app.systems.hom.executor 재노출
+      mhm_workflow_executor.py   # app.systems.mhm.executor 재노출
     systems/
+      loader.py                  # execution_mode -> 시스템별 executor 로딩
       hom/
         executor.py
         manifest.yaml
         scripts/
-          login_phone.py
+          login_phone.py         # 수동 실행용 CLI (manifest 워크플로 아님)
         steps/
+          login_common.py
+          main_access.py
+          login_move.py
+          phone_login.py
+          kakao_login.py
+          contract_list.py
+          contract_detail.py
+          compensation_charge.py
+          compensation_result_common.py
+          compensation_result.py
+          compensation_cancel.py
+          long_term_policy_certificate.py
+      mhm/
+        executor.py
+        manifest.yaml
+        steps/                   # hom 과 동일한 단계 구성 (모바일 selector)
           login_common.py
           main_access.py
           login_move.py
@@ -95,6 +119,7 @@ e2eTester/
       run_repository.py
     web/
       templates/
+        base.html
         index.html
         run.html
       static/
@@ -104,7 +129,11 @@ e2eTester/
   docs/
     scenarios/
       hom.md
+      mhm.md
+  research/                      # 1회성 probe 스크립트 (앱 구성 요소 아님)
   artifacts/
+  .env.example
+  requirements.txt
   README.md
   E2E_ARCHITECTURE.md
 ```
@@ -115,7 +144,8 @@ e2eTester/
 
 현재 구현:
 
-- `routes_dashboard.py`
+- `app/api/routes_dashboard.py`
+- `app/web/templates/base.html`
 - `app/web/templates/index.html`
 - `app/web/templates/run.html`
 - `app/web/static/app.js`
@@ -125,14 +155,16 @@ e2eTester/
 
 - 시스템 카드 렌더링
 - 조건부 입력 폼 렌더링
+- 실행 모듈 선택 그래프(`module-graph`) 렌더링과 의존성 경고
 - Run 화면 렌더링
 - WebSocket 수신 후 노드/로그/OTP 패널 갱신
 
 현재 UX 특징:
 
 - 홈 화면은 “시스템 실행” 중심이다.
-- 최근 Run 패널은 제거되어 있다.
-- 홈 화면에는 AI 분석 설정 상태 카드가 표시된다.
+- 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
+- 홈 화면에는 “진행 중 / 최근 Run” 패널이 있으며 `GET /api/runs` 요약을 주기적으로 불러와 렌더링한다. (메모리 기반이라 서버 재시작 시 사라짐)
+- 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
 - 실행하면 곧바로 Run 상세 화면으로 이동한다.
 - 인증 수단처럼 시스템별 실행 옵션은 manifest 의 `run_form` 정의로 렌더링된다.
 
@@ -140,9 +172,10 @@ e2eTester/
 
 현재 구현:
 
-- `GET /`
-- `GET /runs/{run_id}`
+- `GET /` (홈 대시보드 HTML)
+- `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /api/systems`
+- `GET /api/runs` (최근 Run 요약 목록, 최대 50건)
 - `POST /api/runs/systems/{system_code}`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/nodes`
@@ -152,8 +185,9 @@ e2eTester/
 역할:
 
 - 시스템 목록 조회
-- Run 생성
-- Run 조회
+- 최근 Run 요약 목록 조회 (`list_run_summaries`)
+- Run 생성 (`selected_module_ids` 로 실행 모듈 부분 선택 가능)
+- Run / 노드 조회
 - OTP 재개 (`POST /api/runs/{run_id}/otp`)
 - 실시간 상태 이벤트 스트리밍
 
@@ -165,12 +199,14 @@ e2eTester/
 
 역할:
 
-- Run 생성 시 입력값 검증 (예: `system_code`가 `hom`이면 `auth_method`는 `phone` 또는 `kakao`만 허용하고, 그 외 값은 요청 단계에서 거절)
+- Run 생성 시 입력값 검증 (시스템 manifest의 `supported_auth_methods` 기준으로 `auth_method`를 검증하며, HOM·MHM은 `phone`/`kakao`만 허용하고 그 외 값은 요청 단계에서 거절)
+- `selected_module_ids` 검증 (미지정 시 전체 선택, 알 수 없는 모듈·선행 모듈 누락 조합은 거절, 선택되지 않은 모듈은 `SKIPPED`)
 - manifest 기준 모듈 리스트 생성
 - 모듈 상태 전이 관리
 - 의존성 실패 시 `BLOCKED` 처리
-- OTP 대기 상태 저장
+- OTP 대기 상태 저장(`PendingOtpState`, 공유 runtime 유지)
 - OTP 제출 후 중단된 단계부터 재개
+- 최근 Run 요약 생성(`list_run_summaries`)
 - 이벤트 publish
 
 현재 상태 전이:
@@ -204,14 +240,16 @@ Module:
 
 현재 구현:
 
-- `app/registry/loader.py`
+- `app/registry/loader.py` (`app/systems/*/manifest.yaml` 글롭 로드)
 - `app/systems/hom/manifest.yaml`
+- `app/systems/mhm/manifest.yaml`
 
 역할:
 
-- 시스템 정의 로드
+- 시스템 정의 로드 (`system_code` 오름차순)
 - Run form 정의 로드
 - 모듈 메타데이터 로드
+- manifest 정합성 검증: `module_id` 중복, 모듈의 `system_code` 불일치, 알 수 없는 `depends_on`, 의존성 순서(선행 모듈 `order`가 더 작아야 함), 의존성 순환을 로드 시점에 검사하고 위반 시 `ValueError`
 
 manifest 에 들어 있는 정보:
 
@@ -236,16 +274,22 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/systems/hom/executor.py`
+- `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
+- `app/systems/hom/executor.py` (`HomWorkflowExecutor`, `execution_mode = "hom_workflow_step"`)
+- `app/systems/mhm/executor.py` (`MhmWorkflowExecutor`, `execution_mode = "mhm_workflow_step"`)
+- `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
 - `app/runner/artifact_manager.py`
+- `app/runner/hom_workflow_executor.py` / `app/runner/mhm_workflow_executor.py` (각 시스템 executor 재노출 모듈)
 - `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들
 
 실행 모델:
 
-- Run 단위로 Playwright 런타임 생성
+- Run 단위로 Playwright 런타임 생성 (영속 프로파일 persistent context)
 - 하나의 browser/context/page를 공유
-- 단계형 모듈을 순차 실행
-- 표준 출력/표준 에러를 가로채 실행 로그로 저장
+- MHM은 `build_runtime()` 에서 페이지 생성 직후 `apply_mobile_device_mode()` 로 모바일 디바이스 모드를 먼저 적용한 뒤 접속
+- 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → executor의 `_run_step` 디스패치)
+- 표준 출력/표준 에러를 가로채 모듈별 `execution.log` 와 라이브 WebSocket 로그로 저장
+- 휴대폰인증 단계는 OTP 미입력 시 `WAITING_INPUT::` 표식을 반환해 Run을 일시정지시킴
 
 이 구조를 택한 이유:
 
@@ -274,18 +318,39 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/ai/failure_analyzer.py`
+- `app/ai/failure_analyzer.py` (`GeminiFailureAnalyzer`)
+- `app/ai/gemini_http.py` (Gemini HTTP 호출 / SSL 검증 모드 처리)
+- `app/core/env_utils.py` (환경 변수·`.env` 우선순위 해석)
 
 역할:
 
-- 환경 변수와 `.env` 기준으로 Gemini 설정을 읽는다.
+- 환경 변수와 `.env` 기준으로 Gemini 설정을 읽는다. (터미널 환경 변수 우선, 없으면 `.env`)
 - 실패한 모듈의 최근 로그, 다이얼로그, 현재 URL, 스크린샷을 바탕으로 원인 요약을 시도한다.
-- 홈 화면에 현재 AI 분석 설정 상태를 표시한다.
+- 홈 화면에 현재 AI 분석 설정 상태(`inspect_env_status`)를 표시한다.
 
 제약:
 
 - 기본값은 비활성화다.
 - 설정이 잘못되어도 앱은 계속 실행되며, 실패 분석만 생략될 수 있다.
+- 회사망 SSL 검사 환경에서는 `E2E_GEMINI_SSL_VERIFY=false` 로 Gemini 호출의 SSL 검증만 우회할 수 있다.
+
+### 5.8 종료 메일 알림 계층
+
+현재 구현:
+
+- `app/notifications/run_completion_email.py` (`RunCompletionEmailNotifier`)
+
+역할:
+
+- Run이 최종 종료(`PASSED`/`FAILED`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
+- 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, 여러 명은 `|` 로 구분)
+- 메일 본문 HTML은 Gemini로 생성하고, 실패하면 기본 템플릿으로 fallback 한다.
+- 홈 화면에 현재 메일 알림 설정 상태(`inspect_env_status`)를 표시한다.
+
+제약:
+
+- 기본값은 비활성화다.
+- 설정이 잘못되어도 앱은 계속 실행되며, 메일 발송만 생략될 수 있다.
 
 ## 6. 시스템 시나리오 문서
 
@@ -330,15 +395,15 @@ artifacts/
 
 현재 구현 내용:
 
-- 현재 HOM manifest의 `hom_workflow_step` 모듈은 로그를 `execution.log` 로 남긴다.
-- 현재 HOM manifest의 `hom_workflow_step` 모듈은 스크린샷을 `final.png` 로 남긴다.
+- 워크플로 단계 모듈(`hom_workflow_step` / `mhm_workflow_step`)은 로그를 `execution.log` 로 남긴다.
+- 워크플로 단계 모듈은 스크린샷을 `final.png` 로 남긴다.
 - Run 화면에서 아티팩트 링크 노출
 - 링크 경로는 `/artifacts/{run_id}/{module_id}/{filename}` 형식이다.
 
 주의:
 
 - 초기 단계에서 실패하면 스크린샷이 없을 수 있다.
-- `simulated` 실행 모드는 현재 HOM 샘플에서 쓰이지 않으며, 이 경우 아티팩트가 생성되지 않을 수 있다.
+- `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 HOM·MHM manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. (등록된 executor가 없는 `execution_mode` 일 때만 시뮬레이션으로 동작하며, 이 경우 아티팩트가 생성되지 않는다.)
 
 아직 없는 것:
 

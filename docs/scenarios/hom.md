@@ -62,7 +62,7 @@
 
 파일:
 
-- `hom_main_access.py`
+- `app/systems/hom/steps/main_access.py`
 
 역할:
 
@@ -74,7 +74,7 @@
 
 파일:
 
-- `hom_login_move.py`
+- `app/systems/hom/steps/login_move.py`
 
 역할:
 
@@ -103,7 +103,7 @@
 
 파일:
 
-- `hom_contract_list.py`
+- `app/systems/hom/steps/contract_list.py`
 
 역할:
 
@@ -116,7 +116,7 @@
 
 파일:
 
-- `hom_contract_detail.py`
+- `app/systems/hom/steps/contract_detail.py`
 
 역할:
 
@@ -129,7 +129,7 @@
 
 파일:
 
-- `hom_compensation_charge.py`
+- `app/systems/hom/steps/compensation_charge.py`
 
 역할:
 
@@ -164,8 +164,8 @@
 
 파일:
 
-- `hom_compensation_result.py`
-- `hom_compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
+- `app/systems/hom/steps/compensation_result.py`
+- `app/systems/hom/steps/compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
 
 역할:
 
@@ -199,8 +199,8 @@
 
 파일:
 
-- `hom_compensation_cancel.py`
-- `hom_compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
+- `app/systems/hom/steps/compensation_cancel.py`
+- `app/systems/hom/steps/compensation_result_common.py` (결과 목록 진입·행 탐색·상세 진입 공통 헬퍼)
 
 역할:
 
@@ -220,7 +220,7 @@
 
 파일:
 
-- `hom_long_term_policy_certificate.py`
+- `app/systems/hom/steps/long_term_policy_certificate.py`
 
 역할:
 
