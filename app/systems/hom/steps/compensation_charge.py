@@ -439,6 +439,7 @@ def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
     lookup = _first_visible_selector(page, CHARGE04_QUERY_SELECTOR, "청구 상세내용 조회(#searchBtn)")
     common.wait_locator_visible_with_log(lookup, timeout_ms, "청구 상세내용 조회(#searchBtn)")
     common.click_with_log(lookup, "청구 상세내용 조회")
+    common.wait_timeout_with_log(page, 3000, "청구 상세내용 조회 완료 대기")
     textarea = page.locator(CHARGE04_CONTENT_TEXTAREA_SELECTOR).first
     for _ in range(max(1, timeout_ms // 400)):
         if _maybe_confirm_claim_type_notice_popup(page):
