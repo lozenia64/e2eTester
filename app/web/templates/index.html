@@ -261,25 +261,6 @@
         </details>
         {% endfor %}
 
-        {# 아직 연결되지 않은 시스템 placeholder — 등록되면 위 목록으로 자동 대체 #}
-        {% set registered_codes = systems|map(attribute='system_code')|map('upper')|list %}
-        {% for upcoming_code in ['MHM', 'HWFP'] %}
-        {% if upcoming_code not in registered_codes %}
-        <div class="flex cursor-not-allowed select-none items-center justify-between gap-4 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-5 opacity-60" aria-disabled="true" title="아직 연결되지 않은 시스템입니다.">
-            <div class="flex min-w-0 items-center gap-4">
-                <span class="inline-flex shrink-0 items-center rounded-md bg-gray-100 px-2.5 py-1.5 font-mono text-xs font-semibold text-gray-500 ring-1 ring-inset ring-gray-200">{{ upcoming_code }}</span>
-                <div class="min-w-0">
-                    <h3 class="text-base font-bold text-gray-500">{{ upcoming_code }}</h3>
-                    <p class="truncate text-sm text-gray-400">아직 연결되지 않은 시스템입니다. 모듈이 등록되면 실행할 수 있습니다.</p>
-                </div>
-            </div>
-            <div class="flex shrink-0 items-center gap-3">
-                <span class="hidden items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500 sm:inline-flex">준비 중</span>
-                <svg class="h-4 w-4 shrink-0 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-            </div>
-        </div>
-        {% endif %}
-        {% endfor %}
     </div>
 </div>
 {% endblock %}

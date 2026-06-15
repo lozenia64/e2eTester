@@ -9,14 +9,14 @@
 
 즉, 추상적인 이상 구조만 설명하는 문서가 아니라, 현재 코드가 어느 단계까지 와 있는지와 앞으로 어떤 방향으로 정리할지를 함께 기록한다.
 
-**시스템별 테스트 시나리오는 이 문서에 쓰지 않는다.** 각 시스템(HOM, MHM, HWFP, ...)의 시나리오는 `docs/scenarios/{system_code}.md` 개별 문서로 관리한다. 자세한 규칙은 [6. 시스템 시나리오 문서](#6-시스템-시나리오-문서)를 참고한다.
+**시스템별 테스트 시나리오는 이 문서에 쓰지 않는다.** 각 시스템(HOM, MHM, FP, HRP, HWTC, CHBOT, ...)의 시나리오는 `docs/scenarios/{system_code}.md` 개별 문서로 관리한다. 자세한 규칙은 [6. 시스템 시나리오 문서](#6-시스템-시나리오-문서)를 참고한다.
 
 ## 2. 현재 구현 한 줄 요약
 
 현재 구현은 다음과 같다.
 
 - FastAPI 서버가 웹 화면과 API, WebSocket을 제공한다.
-- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: HOM, MHM)
+- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: 대표홈페이지 HOM·MHM, 접속 점검 시스템 FP·HRP·HWTC·CHBOT)
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
 - 모듈 실행 도중 사용자 입력이 필요하면 Run이 `WAITING_INPUT`으로 전환되고, 웹에서 입력을 제출해 재개할 수 있다. (예: HOM 휴대폰인증의 OTP)
@@ -395,7 +395,7 @@ manifest 에 들어 있는 정보:
 
 - 위치: `docs/scenarios/{system_code}.md`
 - manifest(`app/systems/{system_code}/manifest.yaml`)와 1:1로 대응한다.
-- 새 시스템(MHM, HWFP 등)을 추가할 때는 manifest와 함께 시나리오 문서도 같이 추가한다.
+- 새 시스템(FP, HRP, HWTC, CHBOT 등)을 추가할 때는 manifest와 함께 시나리오 문서도 같이 추가한다.
 - 시나리오 문서에는 시스템 개요, 모듈 목록, 단계별 상세 동작(selector·URL 검증 포함), Run form 입력 모델을 기록한다.
 - 시스템의 흐름이나 selector 를 바꾸면 해당 시나리오 문서도 함께 갱신한다.
 
@@ -403,6 +403,10 @@ manifest 에 들어 있는 정보:
 
 - [HOM (한화손해보험 샘플)](docs/scenarios/hom.md)
 - [MHM (모바일 대표홈페이지)](docs/scenarios/mhm.md)
+- [FP (영업가족 위촉서류 등록 / PC)](docs/scenarios/fp.md)
+- [HRP (현장출동 홈페이지 / PC)](docs/scenarios/hrp.md)
+- [HWTC (연수원 / PC)](docs/scenarios/hwtc.md)
+- [CHBOT (챗봇 / 모바일)](docs/scenarios/chbot.md)
 
 ## 7. 현재 UI 입력 모델
 

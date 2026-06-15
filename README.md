@@ -106,12 +106,21 @@ http://127.0.0.1:8000
 4. Run 화면에서 진행 상태, 로그, 결과를 확인합니다.
 5. 추가 입력이 필요한 경우 화면 안내에 따라 계속 진행합니다.
 
-현재 기본으로 포함된 시스템은 두 가지입니다.
+현재 기본으로 포함된 시스템은 다음과 같습니다.
+
+대표홈페이지(로그인·본인인증 포함 전체 점검):
 
 - **HOM**(`대표홈페이지(PC)`): PC 웹 대표홈페이지 점검
 - **MHM**(`대표홈페이지(모바일)`): 모바일 웹 대표홈페이지 점검 (Playwright로 모바일 디바이스 모드를 먼저 적용한 뒤 접속)
 
-두 시스템 모두 홈 화면 카드를 펼쳐 입력값을 채우고 실행하며, 실행 전 모듈 선택 그래프에서 실행할 모듈을 개별로 선택/해제할 수 있습니다. 선택하지 않은 모듈은 Run 화면에서 `SKIPPED`(건너뜀)로 표시됩니다.
+대표홈페이지와 별개의 업무 시스템(현재는 **메인화면 접속만** 점검, 이후 시나리오는 모듈로 하나씩 추가):
+
+- **FP**(`영업가족 위촉서류 등록(PC)`): `https://fp.hwgeneralins.com`
+- **HRP**(`현장출동 홈페이지(PC)`): `https://www.eagleprm.co.kr`
+- **HWTC**(`연수원(PC)`): `https://sls.hwgeneralins.com`
+- **CHBOT**(`챗봇(모바일)`): `https://chbot.hwgeneralins.com/...` (모바일 디바이스 모드 적용 후 접속)
+
+모든 시스템은 홈 화면 카드를 펼쳐 입력값을 채우고 실행하며, 실행 전 모듈 선택 그래프에서 실행할 모듈을 개별로 선택/해제할 수 있습니다. 선택하지 않은 모듈은 Run 화면에서 `SKIPPED`(건너뜀)로 표시됩니다. FP·HRP·HWTC·CHBOT은 로그인/인증 없이 메인화면 접속 1개 모듈만 점검합니다.
 
 ### HOM 시스템
 
@@ -159,6 +168,10 @@ http://127.0.0.1:8000
 
 - HOM: `docs/scenarios/hom.md`
 - MHM: `docs/scenarios/mhm.md`
+- FP: `docs/scenarios/fp.md`
+- HRP: `docs/scenarios/hrp.md`
+- HWTC: `docs/scenarios/hwtc.md`
+- CHBOT: `docs/scenarios/chbot.md`
 
 ## 결과 확인
 
