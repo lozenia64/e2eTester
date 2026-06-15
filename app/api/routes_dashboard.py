@@ -31,6 +31,21 @@ async def dashboard_home(request: Request):
     )
 
 
+@router.get("/suites/{suite_id}", response_class=HTMLResponse)
+async def suite_dashboard(request: Request, suite_id: str):
+    try:
+        suite = await request.app.state.suite_service.get_suite(suite_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Suite not found") from exc
+    return templates.TemplateResponse(
+        request,
+        "suite.html",
+        {
+            "suite": suite,
+        },
+    )
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def run_dashboard(request: Request, run_id: str):
     try:

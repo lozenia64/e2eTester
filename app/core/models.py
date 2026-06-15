@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 
 
 class ModuleDefinition(BaseModel):
@@ -124,6 +124,7 @@ class Run(BaseModel):
     awaiting_input_prompt: str | None = None
     triggered_by: str = "manual"
     schedule_id: str | None = None
+    suite_id: str | None = None
     comparison: RunComparison | None = None
 
 
@@ -187,3 +188,37 @@ class CreateScheduleRequest(BaseModel):
     input_data: dict[str, str] = Field(default_factory=dict)
     selected_module_ids: list[str] | None = None
     enabled: bool = True
+
+
+class SuiteStep(BaseModel):
+    system_code: str
+    system_name: str
+    order: int
+    run_id: str | None = None
+    status: SuiteStatus = SuiteStatus.PENDING
+    module_total: int = 0
+
+
+class SuiteRun(BaseModel):
+    suite_id: str
+    status: SuiteStatus
+    steps: list[SuiteStep]
+    current_step_index: int = 0
+    requested_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    awaiting_input_run_id: str | None = None
+    awaiting_input_prompt: str | None = None
+    browser_mode: str = "headed"
+
+
+class SuiteEvent(BaseModel):
+    event_type: str
+    suite_id: str
+    suite_status: SuiteStatus
+    payload: dict
+
+
+class StartSuiteRequest(BaseModel):
+    browser_mode: str = "headed"
+    systems: dict[str, dict[str, str]] = Field(default_factory=dict)

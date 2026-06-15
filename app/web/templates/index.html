@@ -13,53 +13,47 @@
 </div>
 
 <!-- 상태 카드 -->
-<div class="grid gap-4 md:grid-cols-3">
-    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div class="flex items-center gap-3">
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+<div class="grid gap-3 md:grid-cols-3">
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--indigo" aria-hidden="true">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+                </span>
+                <span class="status-metric-card__title">등록 시스템</span>
+            </div>
+            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="등록된 시스템 수">
+                <span class="status-metric-card__kpi-value">{{ systems|length }}</span>
+                <span class="status-metric-card__kpi-unit">개</span>
             </span>
-            <p class="text-sm font-medium text-gray-500">등록 시스템</p>
         </div>
-        <p class="mt-4 text-3xl font-bold tracking-tight text-gray-900">{{ systems|length }}</p>
-        <p class="mt-1 text-xs text-gray-400">아키텍처 문서 기준 등록된 시스템 수</p>
+        <p class="status-metric-card__summary">개별·전체 순차 점검 모두 지원</p>
     </div>
 
-    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--violet" aria-hidden="true">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
                 </span>
-                <p class="text-sm font-medium text-gray-500">AI 분석 상태</p>
+                <span class="status-metric-card__title">AI 분석 상태</span>
             </div>
-            <span class="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ tone_pill.get(analyzer_status.color, 'bg-gray-100 text-gray-600') }}">{{ analyzer_status.title }}</span>
+            <span class="status-metric-card__badge {{ tone_pill.get(analyzer_status.color, 'bg-gray-100 text-gray-600') }}">{{ analyzer_status.title }}</span>
         </div>
-        <p class="mt-4 text-sm font-semibold text-gray-900">{{ analyzer_status.message }}</p>
-        <p class="mt-1.5 text-xs leading-relaxed text-gray-400">{{ analyzer_status.detail }}</p>
-        {% if analyzer_status.model_value %}
-        <p class="mt-2 text-xs font-medium text-gray-500">모델 · {{ analyzer_status.model_value }}</p>
-        {% endif %}
+        <p class="status-metric-card__summary">{{ analyzer_status.message }}</p>
     </div>
 
-    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--sky" aria-hidden="true">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 </span>
-                <p class="text-sm font-medium text-gray-500">종료 메일 상태</p>
+                <span class="status-metric-card__title">종료 메일 상태</span>
             </div>
-            <span class="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ tone_pill.get(email_status.color, 'bg-gray-100 text-gray-600') }}">{{ email_status.title }}</span>
+            <span class="status-metric-card__badge {{ tone_pill.get(email_status.color, 'bg-gray-100 text-gray-600') }}">{{ email_status.title }}</span>
         </div>
-        <p class="mt-4 text-sm font-semibold text-gray-900">{{ email_status.message }}</p>
-        <p class="mt-1.5 text-xs leading-relaxed text-gray-400">{{ email_status.detail }}</p>
-        {% if email_status.model_value %}
-        <p class="mt-2 text-xs font-medium text-gray-500">Gemini 모델 · {{ email_status.model_value }}</p>
-        {% endif %}
-        {% if email_status.recipient_summary %}
-        <p class="mt-0.5 text-xs font-medium text-gray-500">수신자 · {{ email_status.recipient_summary }}</p>
-        {% endif %}
+        <p class="status-metric-card__summary">{{ email_status.message }}</p>
     </div>
 </div>
 
@@ -91,9 +85,108 @@
 <div class="space-y-4">
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템</h2>
-        <p class="text-sm text-gray-500">카드를 클릭해 펼친 뒤 입력값을 채우고 실행하세요.</p>
+        <p class="text-sm text-gray-500">카드를 클릭해 펼친 뒤 입력값을 채우고 실행하세요. 맨 위 카드에서 전체 시스템 순차 점검도 시작할 수 있습니다.</p>
     </div>
-    <div class="space-y-3">
+    <div class="space-y-3" id="suite-section">
+        <details class="group overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm ring-1 ring-inset ring-violet-100">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 transition hover:bg-violet-50/40 [&::-webkit-details-marker]:hidden">
+                <div class="flex min-w-0 items-center gap-4">
+                    <span class="inline-flex shrink-0 items-center rounded-md bg-violet-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">SUITE</span>
+                    <div class="min-w-0">
+                        <h3 class="text-base font-bold text-gray-900">전체 시스템 순차 점검</h3>
+                        <p class="truncate text-sm text-gray-500">등록된 {{ systems|length }}개 시스템 · 전체 모듈 · HOM·MHM 인증 각각 설정</p>
+                    </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-3">
+                    <span class="hidden items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200 sm:inline-flex">시스템 {{ systems|length }}개</span>
+                    <span class="hidden items-center rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700 sm:inline-flex">순차 실행</span>
+                    <svg class="h-5 w-5 shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+            </summary>
+            <form id="suite-form" class="grid gap-x-4 gap-y-5 border-t border-gray-100 px-6 py-6 sm:grid-cols-2">
+                <p class="sm:col-span-2 text-xs leading-relaxed text-gray-500">모든 시스템을 display_order 순으로 실행합니다. 한 시스템이 실패해도 다음 시스템 점검은 계속됩니다.</p>
+
+                <label class="form-field flex flex-col gap-1.5">
+                    <span class="text-sm font-medium text-gray-700">브라우저 실행 모드 <span class="text-red-500">*</span></span>
+                    <select name="browser_mode" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" required>
+                        <option value="headed" selected>실제 브라우저 창 열기</option>
+                        <option value="headless">백그라운드 실행</option>
+                    </select>
+                    <small class="text-xs leading-relaxed text-gray-400">모든 시스템에 공통 적용됩니다.</small>
+                </label>
+
+                <div class="sm:col-span-2 space-y-3">
+                    {% for system in systems %}
+                    {% if system.supported_auth_methods %}
+                    <details class="group/suite-auth overflow-hidden rounded-xl border border-gray-200 bg-gray-50/60">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <span class="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2 py-1 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ system.system_code|upper }}</span>
+                                <div class="min-w-0">
+                                    <h4 class="text-sm font-bold text-gray-900">{{ system.name }}</h4>
+                                    <p class="text-xs text-gray-500">인증 정보 · 모듈 {{ system.modules|length }}개</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open/suite-auth:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                        </summary>
+                        <div class="suite-system-panel grid gap-x-4 gap-y-4 border-t border-gray-100 bg-white px-4 py-4 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
+                            {% for field in system.run_form %}
+                            {% if field.key != 'browser_mode' %}
+                            <label
+                                class="form-field flex flex-col gap-1.5{% if field.show_when %} conditional-field{% endif %}"
+                                {% if field.show_when %}
+                                {% set _sw_key = field.show_when.keys()|list|first %}
+                                {% set _sw_val = field.show_when[_sw_key] %}
+                                data-show-when-key="{{ _sw_key }}"
+                                data-show-when-value="{% if _sw_val is string %}{{ _sw_val }}{% else %}{{ _sw_val|join(',') }}{% endif %}"
+                                data-required="{{ 'true' if field.required else 'false' }}"
+                                {% endif %}
+                            >
+                                <span class="text-sm font-medium text-gray-700">{{ field.label }}{% if field.required %} <span class="text-red-500">*</span>{% endif %}</span>
+                                {% if field.type == "select" %}
+                                <select name="{{ field.key }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" {% if field.required %}required{% endif %}>
+                                    {% for option in field.options %}
+                                    {% set option_unsupported = field.key == 'auth_method' and system.supported_auth_methods and option.value not in system.supported_auth_methods %}
+                                    <option value="{{ option.value }}"{% if option.value == field.default %} selected{% endif %}{% if option_unsupported %} disabled{% endif %}>{{ option.label }}{% if option_unsupported %} (준비 중){% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <input
+                                    type="{{ field.type }}"
+                                    name="{{ field.key }}"
+                                    value="{{ field.default }}"
+                                    placeholder="{{ field.placeholder }}"
+                                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    {% if field.required %}required{% endif %}
+                                >
+                                {% endif %}
+                                {% if field.help_text %}
+                                <small class="text-xs leading-relaxed text-gray-400">{{ field.help_text }}</small>
+                                {% endif %}
+                            </label>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div class="sm:col-span-2 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                    <p class="text-xs font-semibold text-gray-700">접속 전용 (인증 없음)</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                        {% for system in systems if not system.supported_auth_methods %}{{ system.system_code|upper }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        — 공통 브라우저 모드로 메인화면 접속만 점검합니다.
+                    </p>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
+                    <p class="is-hidden text-sm font-medium text-red-600" data-role="suite-feedback" role="alert"></p>
+                    <button type="submit" id="suite-start-button" class="inline-flex items-center justify-center rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-60">전체 점검 시작</button>
+                </div>
+            </form>
+        </details>
+
         {% for system in systems %}
         <details class="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 transition hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
