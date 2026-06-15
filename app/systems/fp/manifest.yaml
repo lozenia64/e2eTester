@@ -1,6 +1,7 @@
 system_code: fp
 name: 영업가족 위촉서류 등록(PC)
 description: 영업가족 위촉서류 등록 사이트 메인화면 접속 점검
+display_order: 40
 supported_auth_methods: []
 run_form:
   - key: browser_mode

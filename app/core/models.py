@@ -48,6 +48,8 @@ class SystemDefinition(BaseModel):
     modules: list[ModuleDefinition]
     run_form: list[RunFormField] = Field(default_factory=list)
     supported_auth_methods: list[str] = Field(default_factory=list)
+    # 홈 화면 시스템 카드 노출 순서(작을수록 먼저). 미지정 시 뒤로 밀린다.
+    display_order: int = 1000
 
 
 class FailureAnalysis(BaseModel):

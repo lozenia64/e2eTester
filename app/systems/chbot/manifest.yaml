@@ -1,6 +1,7 @@
 system_code: chbot
 name: 챗봇(모바일)
 description: 챗봇(모바일) 사이트 메인화면 접속 점검
+display_order: 60
 supported_auth_methods: []
 run_form:
   - key: browser_mode

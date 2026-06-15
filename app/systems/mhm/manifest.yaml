@@ -1,6 +1,7 @@
 system_code: mhm
 name: 대표홈페이지(모바일)
 description: 주요업무 전체 일일점검
+display_order: 20
 supported_auth_methods:
   - phone
   - kakao
