@@ -246,6 +246,7 @@ def _verify_preview_sheet(page, timeout_ms: int) -> None:
     heading = page.get_by_role("heading", name=PREVIEW_SHEET_HEADING_PATTERN).first
     common.wait_locator_visible_with_log(heading, timeout_ms, "제출 서류 확인 시트")
     common.wait_locator_visible_with_log(_preview_swipe_root(page), timeout_ms, "제출 서류 슬라이드 영역")
+    common.wait_timeout_with_log(page, 3000, "제출 서류 파일 로딩 대기")
 
     _verify_preview_slides(page, timeout_ms)
 
