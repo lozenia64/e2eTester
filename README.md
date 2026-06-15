@@ -214,7 +214,7 @@ cp .env.example .env
 ```bash
 E2E_FAILURE_ANALYZER_ENABLED=true
 GEMINI_API_KEY="실제_발급받은_API_KEY"
-GEMINI_MODEL="gemini-3.1-flash-lite"
+GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
 E2E_GEMINI_SSL_VERIFY=true
 ```
 
@@ -232,7 +232,7 @@ cd e2eTester
 
 export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
-export GEMINI_MODEL="gemini-3.1-flash-lite"
+export GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
 
 python3 -m uvicorn app.main:app --reload
 ```
@@ -244,7 +244,7 @@ cd e2eTester
 
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
-GEMINI_MODEL="gemini-3.1-flash-lite" \
+GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest" \
 python3 -m uvicorn app.main:app --reload
 ```
 
@@ -276,7 +276,7 @@ http://127.0.0.1:8000
 
 - `E2E_FAILURE_ANALYZER_ENABLED`: `true`일 때만 실패 분석 기능을 활성화합니다.
 - `GEMINI_API_KEY`: Gemini API 호출 키입니다.
-- `GEMINI_MODEL`: 사용할 모델 이름입니다. 비우면 기본 모델 값을 사용합니다.
+- `GEMINI_MODELS`: `|` 또는 `,`로 구분한 Gemini 모델 fallback 체인입니다. 비우면 기본 4모델 체인을 사용합니다.
 - `E2E_GEMINI_SSL_VERIFY`: 기본값은 `true` 입니다. 회사망 SSL 검사 환경에서 Gemini API 인증서 검증 오류가 날 때만 `false` 로 바꿉니다.
 
 ## 선택 기능: 종료 메일 알림
@@ -295,7 +295,7 @@ http://127.0.0.1:8000
 E2E_EMAIL_ENABLED=true
 E2E_EMAIL_GMAIL_ACCOUNT="sender@gmail.com"
 E2E_EMAIL_GMAIL_APP_PASSWORD="실제_앱비밀번호"
-E2E_EMAIL_GEMINI_MODEL="gemini-3.1-flash-lite"
+GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
 E2E_GEMINI_SSL_VERIFY=true
 E2E_EMAIL_RECIPIENTS_HOM="user1@company.com|user2@company.com|user3@company.com"
 E2E_EMAIL_RECIPIENTS_MHM="user1@company.com|user2@company.com"
