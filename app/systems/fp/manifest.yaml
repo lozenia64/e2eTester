@@ -1,0 +1,28 @@
+system_code: fp
+name: 영업가족 위촉서류 등록(PC)
+description: 영업가족 위촉서류 등록 사이트 메인화면 접속 점검
+supported_auth_methods: []
+run_form:
+  - key: browser_mode
+    label: 브라우저 실행 모드
+    type: select
+    required: true
+    default: headed
+    help_text: headed를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열립니다.
+    options:
+      - label: 실제 브라우저 창 열기
+        value: headed
+      - label: 백그라운드 실행
+        value: headless
+modules:
+  - module_id: fp.main.access
+    system_code: fp
+    name: 메인화면 접속
+    description: 영업가족 위촉서류 등록(PC) 메인화면에 접속하고 초기 팝업을 정리합니다.
+    group: access
+    order: 10
+    depends_on: []
+    timeout_seconds: 120
+    execution_mode: fp_workflow_step
+    workflow_name: fp_access
+    workflow_step: main_access
