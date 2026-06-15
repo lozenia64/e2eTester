@@ -763,18 +763,187 @@ function bindRunsOverview() {
 
 const SCHEDULE_LIST_POLL_MS = 15000;
 
+const WEEKDAY_LABELS = { 0: "일", 1: "월", 2: "화", 3: "수", 4: "목", 5: "금", 6: "토" };
+
+// "HH:MM" 24시간 표기를 "오전/오후 h:MM" 한국어 표기로 변환한다.
+function formatScheduleTime(value) {
+    const [hourRaw, minuteRaw] = String(value ?? "").split(":");
+    const hour = Number(hourRaw);
+    const minute = Number(minuteRaw);
+    if (Number.isNaN(hour) || Number.isNaN(minute)) {
+        return null;
+    }
+    const period = hour < 12 ? "오전" : "오후";
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    return `${period} ${hour12}:${String(minute).padStart(2, "0")}`;
+}
+
+function getSelectedWeekdays(form) {
+    return Array.from(form.querySelectorAll('[data-role="schedule-dow"].is-active'))
+        .map((chip) => Number(chip.dataset.dow))
+        .sort((left, right) => left - right);
+}
+
+// 예약 폼의 친화적 입력값에서 cron 식과 사람이 읽을 요약을 만든다.
+// 입력이 불완전하면 { error } 를 반환한다.
+function buildScheduleCron(form) {
+    const container = form.querySelector('[data-role="schedule-form"]');
+    const mode = container?.dataset.mode ?? "daily";
+
+    if (mode === "interval") {
+        const unit = container.dataset.intervalUnit ?? "hour";
+        const everyRaw = form.querySelector('[data-role="schedule-interval-n"]')?.value;
+        const every = Number(everyRaw);
+        const max = unit === "minute" ? 59 : 23;
+        if (!Number.isInteger(every) || every < 1 || every > max) {
+            return { error: `반복 간격은 1~${max} 사이의 값이어야 합니다.` };
+        }
+        if (unit === "minute") {
+            return { cron: `*/${every} * * * *`, summary: `${every}분마다 실행` };
+        }
+        return { cron: `0 */${every} * * *`, summary: `${every}시간마다 실행` };
+    }
+
+    const timeValue = form.querySelector('[data-role="schedule-time"]')?.value;
+    const timeText = formatScheduleTime(timeValue);
+    if (!timeText) {
+        return { error: "실행 시각을 선택하세요." };
+    }
+    const [hour, minute] = timeValue.split(":").map(Number);
+
+    if (mode === "daily") {
+        return { cron: `${minute} ${hour} * * *`, summary: `매일 ${timeText}에 실행` };
+    }
+    if (mode === "weekdays") {
+        return { cron: `${minute} ${hour} * * 1-5`, summary: `평일(월–금) ${timeText}에 실행` };
+    }
+    if (mode === "weekly") {
+        const weekdays = getSelectedWeekdays(form);
+        if (weekdays.length === 0) {
+            return { error: "실행할 요일을 1개 이상 선택하세요." };
+        }
+        const labels = weekdays.map((dow) => WEEKDAY_LABELS[dow]).join("·");
+        return { cron: `${minute} ${hour} * * ${weekdays.join(",")}`, summary: `매주 ${labels}요일 ${timeText}에 실행` };
+    }
+    if (mode === "monthly") {
+        const dom = Number(container.dataset.dom ?? "1");
+        return { cron: `${minute} ${hour} ${dom} * *`, summary: `매월 ${dom}일 ${timeText}에 실행` };
+    }
+
+    return { error: "반복 주기를 선택하세요." };
+}
+
+// 모드에 따라 관련 컨트롤만 노출한다.
+function applyScheduleModeVisibility(form) {
+    const container = form.querySelector('[data-role="schedule-form"]');
+    const mode = container?.dataset.mode ?? "daily";
+    const usesTime = mode === "daily" || mode === "weekdays" || mode === "weekly" || mode === "monthly";
+
+    form.querySelector('[data-role="schedule-weekly"]')?.classList.toggle("is-hidden", mode !== "weekly");
+    form.querySelector('[data-role="schedule-monthly"]')?.classList.toggle("is-hidden", mode !== "monthly");
+    form.querySelector('[data-role="schedule-interval"]')?.classList.toggle("is-hidden", mode !== "interval");
+    form.querySelector('[data-role="schedule-time-wrap"]')?.classList.toggle("is-hidden", !usesTime);
+}
+
+function updateSchedulePreview(form) {
+    const summaryNode = form.querySelector('[data-role="schedule-summary"]');
+    const cronNode = form.querySelector('[data-role="schedule-cron-preview"]');
+    const result = buildScheduleCron(form);
+    if (summaryNode) {
+        summaryNode.textContent = result.error ?? result.summary;
+        summaryNode.classList.toggle("text-red-600", Boolean(result.error));
+        summaryNode.classList.toggle("text-gray-800", !result.error);
+    }
+    if (cronNode) {
+        cronNode.textContent = result.cron ?? "—";
+    }
+}
+
+function bindScheduleBuilder(form) {
+    const container = form.querySelector('[data-role="schedule-form"]');
+    if (!container) {
+        return;
+    }
+
+    // 매월 날짜 선택지(1~31일) 채우기
+    const domSelect = form.querySelector('[data-role="schedule-dom"]');
+    if (domSelect && domSelect.options.length === 0) {
+        for (let day = 1; day <= 31; day += 1) {
+            const option = document.createElement("option");
+            option.value = String(day);
+            option.textContent = `${day}일`;
+            domSelect.appendChild(option);
+        }
+        domSelect.value = container.dataset.dom ?? "1";
+    }
+
+    // 반복 주기 세그먼트
+    for (const button of container.querySelectorAll('[data-role="schedule-mode"]')) {
+        button.addEventListener("click", () => {
+            for (const sibling of container.querySelectorAll('[data-role="schedule-mode"]')) {
+                sibling.classList.toggle("is-active", sibling === button);
+            }
+            container.dataset.mode = button.dataset.mode;
+            applyScheduleModeVisibility(form);
+            updateSchedulePreview(form);
+        });
+    }
+
+    // 요일 칩 토글
+    for (const chip of container.querySelectorAll('[data-role="schedule-dow"]')) {
+        chip.addEventListener("click", () => {
+            chip.classList.toggle("is-active");
+            chip.setAttribute("aria-pressed", chip.classList.contains("is-active") ? "true" : "false");
+            updateSchedulePreview(form);
+        });
+    }
+
+    // 반복 단위(분/시간) 세그먼트
+    const intervalInput = form.querySelector('[data-role="schedule-interval-n"]');
+    for (const button of container.querySelectorAll('[data-role="schedule-interval-unit"]')) {
+        button.addEventListener("click", () => {
+            for (const sibling of container.querySelectorAll('[data-role="schedule-interval-unit"]')) {
+                sibling.classList.toggle("is-active", sibling === button);
+            }
+            container.dataset.intervalUnit = button.dataset.unit;
+            if (intervalInput) {
+                const max = button.dataset.unit === "minute" ? 59 : 23;
+                intervalInput.max = String(max);
+                if (Number(intervalInput.value) > max) {
+                    intervalInput.value = String(max);
+                }
+            }
+            updateSchedulePreview(form);
+        });
+    }
+
+    if (domSelect) {
+        domSelect.addEventListener("change", () => {
+            container.dataset.dom = domSelect.value;
+            updateSchedulePreview(form);
+        });
+    }
+    for (const input of container.querySelectorAll('[data-role="schedule-time"], [data-role="schedule-interval-n"]')) {
+        input.addEventListener("input", () => updateSchedulePreview(form));
+        input.addEventListener("change", () => updateSchedulePreview(form));
+    }
+
+    applyScheduleModeVisibility(form);
+    updateSchedulePreview(form);
+}
+
 async function registerSchedule(systemCode, form, button) {
     const feedback = form.querySelector('[data-role="schedule-feedback"]');
     setInlineFeedback(feedback, "");
 
-    const cronInput = form.querySelector('[data-role="schedule-cron"]');
     const nameInput = form.querySelector('[data-role="schedule-name"]');
-    const cron = (cronInput?.value ?? "").trim();
     const name = (nameInput?.value ?? "").trim();
-    if (!cron) {
-        setInlineFeedback(feedback, "cron 식을 입력하세요. 예: 0 9 * * *");
+    const built = buildScheduleCron(form);
+    if (built.error) {
+        setInlineFeedback(feedback, built.error);
         return;
     }
+    const cron = built.cron;
 
     const authMethod = form.querySelector('[name="auth_method"]')?.value;
     if (
@@ -811,9 +980,6 @@ async function registerSchedule(systemCode, form, button) {
             throw new Error(errorBody || `예약 등록에 실패했습니다. (${response.status})`);
         }
         setInlineFeedback(feedback, "예약이 등록되었습니다.", "success");
-        if (cronInput) {
-            cronInput.value = "";
-        }
         if (nameInput) {
             nameInput.value = "";
         }
@@ -1324,6 +1490,7 @@ function bindSystemButtons() {
         });
         const scheduleButton = form.querySelector('[data-role="schedule-register"]');
         if (scheduleButton) {
+            bindScheduleBuilder(form);
             scheduleButton.addEventListener("click", () => {
                 registerSchedule(form.dataset.systemCode, form, scheduleButton);
             });

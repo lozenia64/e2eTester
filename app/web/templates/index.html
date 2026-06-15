@@ -80,7 +80,7 @@
     <div class="flex flex-wrap items-end justify-between gap-2">
         <div>
             <h2 class="text-lg font-bold tracking-tight text-gray-900">예약 실행</h2>
-            <p class="text-sm text-gray-500">cron 일정에 따라 Run 이 자동 생성됩니다. 시스템 카드를 펼쳐 예약을 추가하세요.</p>
+            <p class="text-sm text-gray-500">설정한 일정에 따라 Run 이 자동 생성됩니다. 시스템 카드를 펼쳐 예약을 추가하세요.</p>
         </div>
         <p class="text-xs text-gray-400">메모리 기반 · 서버를 재시작하면 사라집니다</p>
     </div>
@@ -162,19 +162,90 @@
                     {% endif %}
                 </label>
                 {% endfor %}
-                <section class="sm:col-span-2 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5" data-role="schedule-form">
-                    <h4 class="text-sm font-bold text-gray-900">예약 실행 (cron)</h4>
-                    <p class="mt-1 text-xs leading-relaxed text-gray-500">위에서 입력한 값·모듈 선택 그대로 cron 일정에 맞춰 자동 실행합니다. 예: <code class="rounded bg-white px-1 py-0.5">0 9 * * *</code> 매일 09:00 · <code class="rounded bg-white px-1 py-0.5">*/30 * * * *</code> 30분마다 · <code class="rounded bg-white px-1 py-0.5">0 9 * * 1-5</code> 평일 09:00. 무인 실행이라 인증 단계가 포함되면 OTP 대기에서 멈출 수 있습니다.</p>
-                    <div class="mt-3 flex flex-wrap items-end gap-3">
-                        <label class="form-field flex flex-col gap-1.5">
-                            <span class="text-sm font-medium text-gray-700">cron 식</span>
-                            <input type="text" data-role="schedule-cron" placeholder="0 9 * * *" class="block w-44 rounded-lg border border-gray-300 bg-white px-3 py-2.5 font-mono text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                <section class="sched sm:col-span-2 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-white p-5 shadow-sm" data-role="schedule-form" data-mode="daily" data-dom="1" data-interval-unit="hour">
+                    <div class="flex items-start gap-3">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-600">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 13.5V16l1.5 1"/></svg>
+                        </span>
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-bold text-gray-900">예약 실행</h4>
+                            <p class="mt-1 text-xs leading-relaxed text-gray-500">위에서 입력한 값·모듈 선택 그대로 정해진 일정에 맞춰 자동 실행합니다. 무인 실행이라 인증 단계가 포함되면 OTP 대기에서 멈출 수 있습니다.</p>
+                        </div>
+                    </div>
+
+                    <!-- 반복 주기 선택 (세그먼트) -->
+                    <div class="sched-seg mt-4" role="group" aria-label="반복 주기">
+                        <button type="button" class="sched-seg-btn is-active" data-role="schedule-mode" data-mode="daily">매일</button>
+                        <button type="button" class="sched-seg-btn" data-role="schedule-mode" data-mode="weekdays">평일</button>
+                        <button type="button" class="sched-seg-btn" data-role="schedule-mode" data-mode="weekly">매주</button>
+                        <button type="button" class="sched-seg-btn" data-role="schedule-mode" data-mode="monthly">매월</button>
+                        <button type="button" class="sched-seg-btn" data-role="schedule-mode" data-mode="interval">주기 반복</button>
+                    </div>
+
+                    <!-- 상황별 컨트롤 -->
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <!-- 요일 선택 (매주) -->
+                        <div class="sm:col-span-2 is-hidden" data-role="schedule-weekly">
+                            <span class="text-xs font-semibold text-gray-700">실행 요일</span>
+                            <div class="sched-dow mt-2" role="group" aria-label="실행 요일">
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="1">월</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="2">화</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="3">수</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="4">목</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="5">금</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="6">토</button>
+                                <button type="button" class="sched-dow-chip" data-role="schedule-dow" data-dow="0">일</button>
+                            </div>
+                        </div>
+
+                        <!-- 날짜 선택 (매월) -->
+                        <label class="form-field flex flex-col gap-1.5 is-hidden" data-role="schedule-monthly">
+                            <span class="text-xs font-semibold text-gray-700">매월 며칠</span>
+                            <select data-role="schedule-dom" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"></select>
                         </label>
-                        <label class="form-field flex flex-col gap-1.5">
-                            <span class="text-sm font-medium text-gray-700">예약 이름(선택)</span>
-                            <input type="text" data-role="schedule-name" placeholder="매일 오전 점검" class="block w-52 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+
+                        <!-- 실행 시각 (매일/평일/매주/매월) -->
+                        <label class="form-field flex flex-col gap-1.5" data-role="schedule-time-wrap">
+                            <span class="text-xs font-semibold text-gray-700">실행 시각</span>
+                            <input type="time" data-role="schedule-time" value="09:00" step="60" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
                         </label>
-                        <button type="button" data-role="schedule-register" class="inline-flex items-center justify-center rounded-lg border border-indigo-300 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60">예약 등록</button>
+
+                        <!-- 반복 간격 (주기 반복) -->
+                        <div class="sm:col-span-2 is-hidden" data-role="schedule-interval">
+                            <span class="text-xs font-semibold text-gray-700">반복 간격</span>
+                            <div class="mt-2 flex items-center gap-2">
+                                <span class="text-sm text-gray-500">매</span>
+                                <input type="number" data-role="schedule-interval-n" value="1" min="1" max="23" class="block w-20 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-center text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                                <div class="sched-seg sched-seg-sm" role="group" aria-label="반복 단위">
+                                    <button type="button" class="sched-seg-btn" data-role="schedule-interval-unit" data-unit="minute">분</button>
+                                    <button type="button" class="sched-seg-btn is-active" data-role="schedule-interval-unit" data-unit="hour">시간</button>
+                                </div>
+                                <span class="text-sm text-gray-500">마다</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 미리보기 -->
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-white px-4 py-3">
+                        <div class="flex min-w-0 items-center gap-2.5">
+                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+                            </span>
+                            <p class="truncate text-sm font-semibold text-gray-800" data-role="schedule-summary">매일 오전 9:00에 실행</p>
+                        </div>
+                        <code class="shrink-0 rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-500" data-role="schedule-cron-preview" title="생성된 cron 식">0 9 * * *</code>
+                    </div>
+
+                    <!-- 이름 + 등록 -->
+                    <div class="mt-4 flex flex-wrap items-end gap-3">
+                        <label class="form-field flex flex-1 flex-col gap-1.5" style="min-width: 12rem;">
+                            <span class="text-xs font-semibold text-gray-700">예약 이름 <span class="font-normal text-gray-400">(선택)</span></span>
+                            <input type="text" data-role="schedule-name" placeholder="매일 오전 점검" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                        </label>
+                        <button type="button" data-role="schedule-register" class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m4-4H8"/></svg>
+                            예약 등록
+                        </button>
                     </div>
                     <p class="is-hidden mt-2 text-sm font-medium text-red-600" data-role="schedule-feedback" role="alert"></p>
                 </section>
