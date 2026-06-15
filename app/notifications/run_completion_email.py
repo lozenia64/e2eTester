@@ -13,7 +13,17 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.ai.gemini_http import gemini_ssl_mode_detail, load_gemini_transport_settings, post_gemini_generate_content
+from app.ai.gemini_http import (
+    gemini_ssl_mode_detail,
+    load_gemini_transport_settings,
+    post_gemini_generate_content_with_fallback,
+)
+from app.ai.gemini_models import (
+    api_key_looks_valid,
+    gemini_models_look_valid,
+    resolve_gemini_models,
+    resolve_gemini_models_source,
+)
 from app.core.env_utils import (
     DEFAULT_ENV_FILE_PATH,
     env_flag,
@@ -25,7 +35,6 @@ from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.models import Run, SuiteRun
 from app.runner.artifact_manager import ArtifactManager
 
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
 KST = ZoneInfo("Asia/Seoul")
@@ -67,7 +76,7 @@ class EmailNotificationConfig:
     gmail_app_password: str
     recipients_by_system: dict[str, tuple[str, ...]]
     gemini_api_key: str | None
-    gemini_model: str
+    gemini_models: tuple[str, ...]
     gemini_enabled: bool
     gemini_verify_ssl: bool = True
     enabled: bool = True
@@ -94,16 +103,16 @@ class EmailNotificationConfig:
         if recipient_errors:
             return None
 
-        gemini_model = _resolve_gemini_model(dotenv_values)
+        gemini_models = tuple(resolve_gemini_models(dotenv_values))
         gemini_api_key = (resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
         transport_settings = load_gemini_transport_settings(dotenv_values)
-        gemini_enabled = _api_key_looks_valid(gemini_api_key) and _model_looks_valid(gemini_model)
+        gemini_enabled = api_key_looks_valid(gemini_api_key) and gemini_models_look_valid(list(gemini_models))
         return cls(
             gmail_account=gmail_account,
             gmail_app_password=gmail_app_password,
             recipients_by_system=recipients_by_system,
             gemini_api_key=gemini_api_key if gemini_enabled else None,
-            gemini_model=gemini_model,
+            gemini_models=gemini_models,
             gemini_enabled=gemini_enabled,
             gemini_verify_ssl=transport_settings.verify_ssl,
         )
@@ -157,9 +166,11 @@ class EmailNotificationConfig:
                 recipient_summary=_recipient_summary(recipients_by_system),
             )
 
-        gemini_model = _resolve_gemini_model(dotenv_values)
+        gemini_models = tuple(resolve_gemini_models(dotenv_values))
         gemini_api_key, gemini_api_key_source = resolve_env_with_source("GEMINI_API_KEY", dotenv_values)
-        gemini_enabled = _api_key_looks_valid(gemini_api_key or "") and _model_looks_valid(gemini_model)
+        gemini_enabled = api_key_looks_valid(gemini_api_key or "") and gemini_models_look_valid(list(gemini_models))
+        models_label = " -> ".join(gemini_models)
+        models_source = resolve_gemini_models_source(dotenv_values)
         if not gemini_enabled:
             return EmailNotificationStatus(
                 state="degraded",
@@ -168,10 +179,10 @@ class EmailNotificationConfig:
                 message="메일 발송은 가능하지만 Gemini HTML 생성 설정이 유효하지 않습니다.",
                 detail=(
                     f"발신 계정은 {gmail_account_source or 'unknown'}, 앱 비밀번호는 {gmail_app_password_source or 'unknown'} 에서 읽혔습니다. "
-                    f"Gemini API 키는 {gemini_api_key_source or 'missing'}, 모델은 {_resolve_gemini_model_source(dotenv_values)} 에서 읽혔습니다. "
+                    f"Gemini API 키는 {gemini_api_key_source or 'missing'}, 모델 체인은 {models_source} 에서 읽혔습니다. "
                     f"이 경우 기본 HTML 템플릿으로 메일을 보냅니다. {gemini_ssl_mode_detail(transport_settings)}"
                 ),
-                model_value=gemini_model,
+                model_value=models_label,
                 recipient_summary=_recipient_summary(recipients_by_system),
             )
 
@@ -182,10 +193,10 @@ class EmailNotificationConfig:
             message="메일 알림 기능이 활성화되어 있고 Gmail/Gemini 설정도 유효합니다.",
             detail=(
                 f"발신 계정은 {gmail_account_source or 'unknown'}, Gemini API 키는 {gemini_api_key_source or 'unknown'}, "
-                f"모델은 {_resolve_gemini_model_source(dotenv_values)} 에서 읽혔습니다. "
+                f"모델 체인은 {models_source} ({models_label}) 에서 읽혔습니다. "
                 f"{gemini_ssl_mode_detail(transport_settings)}"
             ),
-            model_value=gemini_model,
+            model_value=models_label,
             recipient_summary=_recipient_summary(recipients_by_system),
         )
 
@@ -245,9 +256,15 @@ class GmailEmailSender:
 
 
 class GeminiEmailHtmlComposer:
-    def __init__(self, api_key: str, model: str, timeout_seconds: int = 20, verify_ssl: bool = True) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        models: tuple[str, ...],
+        timeout_seconds: int = 20,
+        verify_ssl: bool = True,
+    ) -> None:
         self._api_key = api_key
-        self._model = model
+        self._models = models
         self._timeout_seconds = timeout_seconds
         self._endpoint = "https://generativelanguage.googleapis.com/v1beta"
         self._verify_ssl = verify_ssl
@@ -275,7 +292,19 @@ class GeminiEmailHtmlComposer:
                 },
             },
         }
-        response_json = self._post_generate_content(payload)
+        html, _model = post_gemini_generate_content_with_fallback(
+            api_key=self._api_key,
+            models=list(self._models),
+            payload=payload,
+            timeout_seconds=self._timeout_seconds,
+            verify_ssl=self._verify_ssl,
+            endpoint=self._endpoint,
+            log_prefix="[email]",
+            transform=self._parse_html_response,
+        )
+        return html
+
+    def _parse_html_response(self, response_json: dict, _model: str) -> str:
         parsed = self._extract_response_json(response_json)
         if parsed is None:
             raise RuntimeError("Gemini HTML 응답을 JSON으로 파싱하지 못했습니다.")
@@ -391,16 +420,6 @@ class GeminiEmailHtmlComposer:
             ]
         )
 
-    def _post_generate_content(self, payload: dict) -> dict:
-        return post_gemini_generate_content(
-            api_key=self._api_key,
-            model=self._model,
-            payload=payload,
-            timeout_seconds=self._timeout_seconds,
-            verify_ssl=self._verify_ssl,
-            endpoint=self._endpoint,
-        )
-
     @staticmethod
     def _extract_response_json(response_json: dict) -> dict | None:
         candidates = response_json.get("candidates") or []
@@ -423,7 +442,7 @@ class RunCompletionEmailBuilder:
         self._composer = (
             GeminiEmailHtmlComposer(
                 config.gemini_api_key,
-                config.gemini_model,
+                config.gemini_models,
                 timeout_seconds=config.gemini_timeout_seconds,
                 verify_ssl=config.gemini_verify_ssl,
             )
@@ -1533,24 +1552,6 @@ def _format_duration(run: Run) -> str:
     return f"{seconds}초"
 
 
-def _resolve_gemini_model(dotenv_values: dict[str, str]) -> str:
-    return (
-        resolve_env_value("E2E_EMAIL_GEMINI_MODEL", dotenv_values)
-        or resolve_env_value("GEMINI_MODEL", dotenv_values)
-        or DEFAULT_GEMINI_MODEL
-    ).strip()
-
-
-def _resolve_gemini_model_source(dotenv_values: dict[str, str]) -> str:
-    _, email_model_source = resolve_env_with_source("E2E_EMAIL_GEMINI_MODEL", dotenv_values)
-    if email_model_source:
-        return email_model_source
-    _, gemini_model_source = resolve_env_with_source("GEMINI_MODEL", dotenv_values)
-    if gemini_model_source:
-        return gemini_model_source
-    return "default"
-
-
 def _resolve_recipient_map(system_codes: list[str], dotenv_values: dict[str, str]) -> tuple[dict[str, tuple[str, ...]], list[str]]:
     recipient_map: dict[str, tuple[str, ...]] = {}
     errors: list[str] = []
@@ -1614,24 +1615,6 @@ def _gmail_app_password_looks_valid(password: str) -> bool:
     if normalized.lower() in {"yourapppassword", "your_actual_app_password"}:
         return False
     return len(normalized) >= 16
-
-
-def _api_key_looks_valid(api_key: str) -> bool:
-    candidate = api_key.strip()
-    if not candidate:
-        return False
-    if candidate in {"your_actual_api_key", "your_api_key"}:
-        return False
-    return len(candidate) >= 16
-
-
-def _model_looks_valid(model: str) -> bool:
-    candidate = model.strip()
-    if not candidate:
-        return False
-    if candidate in {"your_model", "your_actual_model"}:
-        return False
-    return candidate.startswith("gemini-")
 
 
 def _html_looks_safe(html: str) -> bool:
