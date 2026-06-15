@@ -5,15 +5,25 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.core.enums import RunStatus
+from app.core.enums import RunStatus, SuiteStatus
 from app.core.env_utils import DEFAULT_ENV_FILE_PATH, load_dotenv_file, resolve_env_value
-from app.core.models import CreateScheduleRequest, Run, Schedule
+from app.core.models import (
+    SUITE_SCHEDULE_SYSTEM_CODE,
+    SUITE_SCHEDULE_SYSTEM_NAME,
+    CreateScheduleRequest,
+    CreateSuiteScheduleRequest,
+    Run,
+    Schedule,
+    StartSuiteRequest,
+    SuiteRun,
+)
 from app.scheduling.cron import next_run_after, parse_cron
 from app.storage.schedule_repository import InMemoryScheduleRepository
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"
 DEFAULT_TICK_SECONDS = 20
 _ACTIVE_RUN_STATUSES = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+_ACTIVE_SUITE_STATUSES = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
 
 
 def _resolve_timezone() -> tuple[ZoneInfo, str]:
@@ -27,20 +37,22 @@ def _resolve_timezone() -> tuple[ZoneInfo, str]:
 
 
 class SchedulerService:
-    """예약(Schedule) CRUD 와, cron 기준으로 Run 을 자동 트리거하는 백그라운드 루프.
+    """예약(Schedule) CRUD 와, cron 기준으로 Run/Suite 를 자동 트리거하는 백그라운드 루프.
 
     메모리 기반이라 서버 재시작 시 예약이 사라진다(영구 저장소 도입 시 함께 개선 예정).
     예약 실행은 무인 실행이므로, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가
-    선택되어 있으면 해당 Run 은 OTP 대기(WAITING_INPUT)에서 멈출 수 있다.
+    선택되어 있으면 해당 Run/Suite 은 OTP 대기(WAITING_INPUT)에서 멈출 수 있다.
     """
 
     def __init__(
         self,
         run_service,
+        suite_service,
         repository: InMemoryScheduleRepository,
         tick_seconds: int = DEFAULT_TICK_SECONDS,
     ) -> None:
         self._run_service = run_service
+        self._suite_service = suite_service
         self._repository = repository
         self._tick_seconds = tick_seconds
         self._timezone, self._timezone_name = _resolve_timezone()
@@ -56,6 +68,7 @@ class SchedulerService:
         )
         schedule = Schedule(
             schedule_id=f"sch_{uuid4().hex[:8]}",
+            schedule_kind="system",
             system_code=system.system_code,
             system_name=system.name,
             name=request.name.strip(),
@@ -70,11 +83,36 @@ class SchedulerService:
         await self._repository.save(schedule)
         return schedule
 
+    async def create_suite_schedule(self, request: CreateSuiteScheduleRequest) -> Schedule:
+        parse_cron(request.cron)  # ValueError -> 400
+        browser_mode, normalized_systems = self._suite_service.validate_suite_request(
+            request.browser_mode,
+            request.systems,
+        )
+        step_total = len(self._run_service.list_systems())
+        schedule = Schedule(
+            schedule_id=f"sch_{uuid4().hex[:8]}",
+            schedule_kind="suite",
+            system_code=SUITE_SCHEDULE_SYSTEM_CODE,
+            system_name=SUITE_SCHEDULE_SYSTEM_NAME,
+            name=request.name.strip(),
+            cron=request.cron.strip(),
+            timezone=self._timezone_name,
+            enabled=request.enabled,
+            browser_mode=browser_mode,
+            suite_systems=normalized_systems,
+            step_total=step_total,
+            created_at=datetime.now(UTC),
+            next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
+        )
+        await self._repository.save(schedule)
+        return schedule
+
     async def list_schedules(self) -> list[dict]:
         schedules = sorted(await self._repository.list(), key=lambda item: item.created_at, reverse=True)
         summaries: list[dict] = []
         for schedule in schedules:
-            await self._refresh_last_run_status(schedule)
+            await self._refresh_last_execution_status(schedule)
             summaries.append(schedule.to_summary())
         return summaries
 
@@ -93,11 +131,21 @@ class SchedulerService:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         return await self.set_enabled(schedule_id, not schedule.enabled)
 
-    async def run_now(self, schedule_id: str) -> Run:
+    async def run_now(self, schedule_id: str) -> dict:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
-        run = await self._trigger(schedule)
+        if schedule.schedule_kind == "suite":
+            suite = await self._trigger_suite(schedule)
+            await self._repository.save(schedule)
+            return {
+                "schedule_kind": "suite",
+                "suite_id": suite.suite_id,
+                "status": suite.status.value,
+            }
+        run = await self._trigger_run(schedule)
         await self._repository.save(schedule)
-        return run
+        payload = run.model_dump(mode="json")
+        payload["schedule_kind"] = "system"
+        return payload
 
     # --- 백그라운드 루프 --------------------------------------------------
 
@@ -128,20 +176,22 @@ class SchedulerService:
             await self._fire(schedule, now)
 
     async def _fire(self, schedule: Schedule, now: datetime) -> None:
-        # 직전 실행이 아직 진행 중이면 중복 실행을 피하고 다음 주기로 미룬다.
-        if schedule.last_run_id and await self._last_run_active(schedule.last_run_id):
-            print(f"[scheduler] {schedule.schedule_id} 직전 Run 진행 중 -> 이번 주기 건너뜀")
+        if await self._last_execution_active(schedule):
+            print(f"[scheduler] {schedule.schedule_id} 직전 실행 진행 중 -> 이번 주기 건너뜀")
             schedule.next_run_at = self._next_run_from_now(schedule.cron)
             await self._repository.save(schedule)
             return
         try:
-            await self._trigger(schedule)
+            if schedule.schedule_kind == "suite":
+                await self._trigger_suite(schedule)
+            else:
+                await self._trigger_run(schedule)
         except Exception as exc:
             print(f"[scheduler] {schedule.schedule_id} 예약 실행 실패: {exc}")
         schedule.next_run_at = self._next_run_from_now(schedule.cron)
         await self._repository.save(schedule)
 
-    async def _trigger(self, schedule: Schedule) -> Run:
+    async def _trigger_run(self, schedule: Schedule) -> Run:
         run = await self._run_service.start_run(
             schedule.system_code,
             dict(schedule.input_data),
@@ -154,6 +204,27 @@ class SchedulerService:
         schedule.last_run_status = run.status
         return run
 
+    async def _trigger_suite(self, schedule: Schedule) -> SuiteRun:
+        suite = await self._suite_service.start_suite(
+            StartSuiteRequest(
+                browser_mode=schedule.browser_mode or "headed",
+                systems=dict(schedule.suite_systems or {}),
+            )
+        )
+        schedule.last_suite_id = suite.suite_id
+        schedule.last_run_at = datetime.now(UTC)
+        schedule.last_suite_status = suite.status
+        return suite
+
+    async def _last_execution_active(self, schedule: Schedule) -> bool:
+        if schedule.schedule_kind == "suite":
+            if not schedule.last_suite_id:
+                return False
+            return await self._last_suite_active(schedule.last_suite_id)
+        if not schedule.last_run_id:
+            return False
+        return await self._last_run_active(schedule.last_run_id)
+
     async def _last_run_active(self, run_id: str) -> bool:
         try:
             run = await self._run_service.get_run(run_id)
@@ -161,7 +232,26 @@ class SchedulerService:
             return False
         return run.status in _ACTIVE_RUN_STATUSES
 
-    async def _refresh_last_run_status(self, schedule: Schedule) -> None:
+    async def _last_suite_active(self, suite_id: str) -> bool:
+        try:
+            suite = await self._suite_service.get_suite(suite_id)
+        except KeyError:
+            return False
+        return suite.status in _ACTIVE_SUITE_STATUSES
+
+    async def _refresh_last_execution_status(self, schedule: Schedule) -> None:
+        if schedule.schedule_kind == "suite":
+            if not schedule.last_suite_id:
+                return
+            try:
+                suite = await self._suite_service.get_suite(schedule.last_suite_id)
+            except KeyError:
+                return
+            if schedule.last_suite_status != suite.status:
+                schedule.last_suite_status = suite.status
+                await self._repository.save(schedule)
+            return
+
         if not schedule.last_run_id:
             return
         try:

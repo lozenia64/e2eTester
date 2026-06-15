@@ -128,8 +128,13 @@ class Run(BaseModel):
     comparison: RunComparison | None = None
 
 
+SUITE_SCHEDULE_SYSTEM_CODE = "suite"
+SUITE_SCHEDULE_SYSTEM_NAME = "전체 시스템 순차 점검"
+
+
 class Schedule(BaseModel):
     schedule_id: str
+    schedule_kind: str = "system"
     system_code: str
     system_name: str
     name: str = ""
@@ -138,16 +143,23 @@ class Schedule(BaseModel):
     enabled: bool = True
     input_data: dict[str, str] = Field(default_factory=dict)
     selected_module_ids: list[str] | None = None
+    browser_mode: str | None = None
+    suite_systems: dict[str, dict[str, str]] | None = None
+    step_total: int | None = None
     created_at: datetime
     next_run_at: datetime | None = None
     last_run_at: datetime | None = None
     last_run_id: str | None = None
     last_run_status: RunStatus | None = None
+    last_suite_id: str | None = None
+    last_suite_status: SuiteStatus | None = None
 
     def to_summary(self) -> dict:
         """API/UI 노출용 요약. input_data 는 PII 가 있을 수 있어 직렬화하지 않는다."""
+        is_suite = self.schedule_kind == "suite"
         return {
             "schedule_id": self.schedule_id,
+            "schedule_kind": self.schedule_kind,
             "system_code": self.system_code,
             "system_name": self.system_name,
             "name": self.name,
@@ -156,12 +168,16 @@ class Schedule(BaseModel):
             "enabled": self.enabled,
             "selected_module_ids": list(self.selected_module_ids or []),
             "module_count": len(self.selected_module_ids) if self.selected_module_ids is not None else None,
-            "auth_method": self.input_data.get("auth_method"),
+            "step_total": self.step_total if is_suite else None,
+            "browser_mode": self.browser_mode if is_suite else None,
+            "auth_method": None if is_suite else self.input_data.get("auth_method"),
             "created_at": self.created_at.isoformat(),
             "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_run_id": self.last_run_id,
             "last_run_status": self.last_run_status.value if self.last_run_status else None,
+            "last_suite_id": self.last_suite_id,
+            "last_suite_status": self.last_suite_status.value if self.last_suite_status else None,
         }
 
 
@@ -187,6 +203,14 @@ class CreateScheduleRequest(BaseModel):
     name: str = ""
     input_data: dict[str, str] = Field(default_factory=dict)
     selected_module_ids: list[str] | None = None
+    enabled: bool = True
+
+
+class CreateSuiteScheduleRequest(BaseModel):
+    cron: str
+    name: str = ""
+    browser_mode: str = "headed"
+    systems: dict[str, dict[str, str]] = Field(default_factory=dict)
     enabled: bool = True
 
 
