@@ -18,6 +18,7 @@ class SuiteStatus(StrEnum):
     WAITING_INPUT = "WAITING_INPUT"
     PASSED = "PASSED"
     FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
     CANCELLED = "CANCELLED"
 
 

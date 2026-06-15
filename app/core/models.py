@@ -145,6 +145,7 @@ class Schedule(BaseModel):
     selected_module_ids: list[str] | None = None
     browser_mode: str | None = None
     suite_systems: dict[str, dict[str, str]] | None = None
+    selected_system_codes: list[str] | None = None
     step_total: int | None = None
     created_at: datetime
     next_run_at: datetime | None = None
@@ -169,6 +170,8 @@ class Schedule(BaseModel):
             "selected_module_ids": list(self.selected_module_ids or []),
             "module_count": len(self.selected_module_ids) if self.selected_module_ids is not None else None,
             "step_total": self.step_total if is_suite else None,
+            "selected_system_codes": list(self.selected_system_codes or []) if is_suite else [],
+            "selected_system_count": len(self.selected_system_codes) if is_suite and self.selected_system_codes is not None else None,
             "browser_mode": self.browser_mode if is_suite else None,
             "auth_method": None if is_suite else self.input_data.get("auth_method"),
             "created_at": self.created_at.isoformat(),
@@ -211,6 +214,7 @@ class CreateSuiteScheduleRequest(BaseModel):
     name: str = ""
     browser_mode: str = "headed"
     systems: dict[str, dict[str, str]] = Field(default_factory=dict)
+    selected_system_codes: list[str] | None = None
     enabled: bool = True
 
 
@@ -234,6 +238,7 @@ class SuiteRun(BaseModel):
     awaiting_input_run_id: str | None = None
     awaiting_input_prompt: str | None = None
     browser_mode: str = "headed"
+    selected_system_codes: list[str] = Field(default_factory=list)
 
 
 class SuiteEvent(BaseModel):
@@ -246,3 +251,4 @@ class SuiteEvent(BaseModel):
 class StartSuiteRequest(BaseModel):
     browser_mode: str = "headed"
     systems: dict[str, dict[str, str]] = Field(default_factory=dict)
+    selected_system_codes: list[str] | None = None

@@ -10,6 +10,7 @@
 - manifest: `app/systems/hom/manifest.yaml`
 - 대상 사이트: `https://www.hwgeneralins.com` (고정값)
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
+- **전체 순차 점검(SUITE)**: 홈 SUITE 카드에서 시스템 체크박스로 포함 여부를 선택할 수 있다. SUITE에 포함되면 이 시스템의 **전체 모듈**이 순차 실행되며, 인증 정보는 SUITE 카드의 HOM 전용 패널에서 설정한다.
 
 ## 2. 모듈 목록
 

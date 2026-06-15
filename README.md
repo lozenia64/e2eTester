@@ -100,11 +100,11 @@ http://127.0.0.1:8000
 
 ## 사용 흐름
 
-1. 홈 화면에서 테스트할 시스템을 선택합니다.
-2. 필요한 입력값을 작성합니다.
-3. `실행` 버튼을 눌러 테스트를 시작합니다.
-4. Run 화면에서 진행 상태, 로그, 결과를 확인합니다.
-5. 추가 입력이 필요한 경우 화면 안내에 따라 계속 진행합니다.
+1. 홈 화면에서 테스트할 시스템을 선택하거나, 맨 위 **전체 시스템 순차 점검(SUITE)** 카드에서 여러 시스템을 한 번에 실행합니다.
+2. 필요한 입력값을 작성합니다. (개별 Run은 모듈 선택, SUITE는 시스템 선택)
+3. `실행` 또는 `전체 점검 시작` 버튼을 눌러 테스트를 시작합니다.
+4. Run/Suite 화면에서 진행 상태, 로그, 결과를 확인합니다.
+5. 추가 입력이 필요한 경우 화면 안내에 따라 계속 진행합니다. (SUITE 실행 중 OTP는 Suite 화면의 OTP 패널에서 제출)
 
 현재 기본으로 포함된 시스템은 다음과 같습니다.
 
@@ -121,6 +121,19 @@ http://127.0.0.1:8000
 - **CHBOT**(`챗봇(모바일)`): `https://chbot.hwgeneralins.com/...` (모바일 디바이스 모드 적용 후 접속)
 
 모든 시스템은 홈 화면 카드를 펼쳐 입력값을 채우고 실행하며, 실행 전 모듈 선택 그래프에서 실행할 모듈을 개별로 선택/해제할 수 있습니다. 선택하지 않은 모듈은 Run 화면에서 `SKIPPED`(건너뜀)로 표시됩니다. FP·HRP·HWTC·CHBOT은 로그인/인증 없이 메인화면 접속 1개 모듈만 점검합니다.
+
+### 전체 시스템 순차 점검 (SUITE)
+
+홈 화면 맨 위 **SUITE** 카드에서 등록된 시스템을 `display_order` 순으로 **하나씩 순차 실행**할 수 있습니다. 개별 Run의 모듈 선택과 같은 패턴으로, 실행 전 **시스템 체크박스**에서 포함할 시스템만 골라 실행할 수 있습니다.
+
+- **시스템 선택**: 기본값은 전체 선택. 체크 해제한 시스템은 Suite 결과 화면에서 `SKIPPED`(건너뜀)로 남고 Run은 생성되지 않습니다.
+- **브라우저 모드**: 모든 선택 시스템에 공통 적용 (`headed` / `headless`).
+- **HOM·MHM 인증**: 해당 시스템이 선택된 경우에만 인증 입력 패널이 표시·검증됩니다.
+- **실패 시 동작**: 한 시스템이 실패해도 다음 선택 시스템 점검은 계속됩니다.
+- **OTP**: 휴대폰인증 Run이 `WAITING_INPUT`이 되면 Suite 화면(`/suites/{suite_id}`)에서 OTP를 제출합니다.
+- **예약 실행**: SUITE 카드 안에서 cron 예약을 등록할 수 있으며, 등록 시점의 **시스템 선택·브라우저 모드·HOM/MHM 인증 정보**가 함께 저장되어 예약 트리거 시 동일하게 재현됩니다. 무인 예약은 OTP 대기에서 멈출 수 있습니다.
+
+API 요청 시 `selected_system_codes`를 생략하면 기존과 같이 전체 시스템이 선택됩니다.
 
 ### HOM 시스템
 
@@ -180,6 +193,7 @@ http://127.0.0.1:8000
 추가로 아래 사항을 알아두면 됩니다.
 
 - Run 화면의 상태, 실시간 로그, OTP 대기 정보는 메모리 기반이라 서버를 재시작하면 사라집니다. (OTP 대기는 **휴대폰인증** Run에서 본인인증 단계에 한합니다.)
+- Suite 실행 상태·예약 정보도 메모리 기반이라 서버 재시작 시 사라집니다.
 - 이미 생성된 아티팩트 파일은 로컬 `artifacts/` 폴더에 남아 있습니다.
 
 ## 주의 사항
@@ -286,8 +300,9 @@ http://127.0.0.1:8000
 - 성공 종료(`PASSED`)와 실패 종료(`FAILED`) 모두 메일을 보냅니다.
 - `WAITING_INPUT` 처럼 중간 대기 상태에서는 메일을 보내지 않습니다.
 - 메일 본문의 Gmail용 HTML은 Gemini API로 생성하고, Gemini 호출이 실패하면 기본 HTML 템플릿으로 자동 fallback 합니다.
-- 수신자 메일은 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{시스템코드}` 로 구분합니다. 현재 기본 포함 시스템은 `HOM`·`MHM` 이므로 `E2E_EMAIL_RECIPIENTS_HOM`·`E2E_EMAIL_RECIPIENTS_MHM` 을 사용합니다.
+- 수신자 메일은 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{시스템코드}` 로 구분합니다. 기본 포함 시스템은 `HOM`·`MHM`·`FP`·`HRP`·`HWTC`·`CHBOT` 이며, 각각 `E2E_EMAIL_RECIPIENTS_HOM` 등으로 설정합니다.
 - 한 채널에 여러 수신자를 넣고 싶다면 `|` 로 구분하면 됩니다.
+- **전체 시스템 순차 점검(SUITE)** 이 종료되면, Suite에 포함된 각 시스템 Run의 수신자를 합쳐 **통합 결과 메일 1통**을 보냅니다. 개별 Run 종료 메일은 Suite 소속 Run에서는 보내지 않습니다.
 
 예:
 
@@ -297,8 +312,12 @@ E2E_EMAIL_GMAIL_ACCOUNT="sender@gmail.com"
 E2E_EMAIL_GMAIL_APP_PASSWORD="실제_앱비밀번호"
 GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
 E2E_GEMINI_SSL_VERIFY=true
-E2E_EMAIL_RECIPIENTS_HOM="user1@company.com|user2@company.com|user3@company.com"
+E2E_EMAIL_RECIPIENTS_HOM="user1@company.com|user2@company.com"
 E2E_EMAIL_RECIPIENTS_MHM="user1@company.com|user2@company.com"
+E2E_EMAIL_RECIPIENTS_FP="user1@company.com"
+E2E_EMAIL_RECIPIENTS_HRP="user1@company.com"
+E2E_EMAIL_RECIPIENTS_HWTC="user1@company.com"
+E2E_EMAIL_RECIPIENTS_CHBOT="user1@company.com"
 ```
 
 이 기능도 아래 우선순위로 값을 읽습니다.
@@ -310,10 +329,13 @@ E2E_EMAIL_RECIPIENTS_MHM="user1@company.com|user2@company.com"
 
 메일 동작 규칙:
 
-- 성공 종료 메일:
-  - 해당 Run 의 모든 스크린샷(`final.png`)을 첨부 대상으로 수집
-- 실패 종료 메일:
-  - 해당 Run 의 모든 스크린샷과 로그(`execution.log`)를 첨부 대상으로 수집
+- **개별 Run** 종료 메일:
+  - 성공: 해당 Run 의 모든 스크린샷(`final.png`)을 첨부 대상으로 수집
+  - 실패: 해당 Run 의 모든 스크린샷과 로그(`execution.log`)를 첨부 대상으로 수집
+- **전체 점검(SUITE)** 종료 메일:
+  - 선택되어 실행된 각 시스템 Run 결과를 하나의 보고서로 통합
+  - `SKIPPED`(선택 제외) 시스템은 "제외"로 표시하고 통과 분모에는 포함하지 않음
+  - 실패 Suite는 관련 시스템의 로그를 첨부 대상으로 우선 수집
 - Gemini HTML 생성 입력:
   - 성공/실패와 무관하게 해당 Run 의 모든 스크린샷과 실행 로그를 함께 전달
   - 각 스크린샷/로그에는 어느 모듈의 산출물인지 식별할 수 있는 레이블(모듈 ID, 모듈명, 순번)을 붙여 전달

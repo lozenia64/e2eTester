@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.core.enums import RunStatus, SuiteStatus
-from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep
+from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep, SystemDefinition
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.suite_repository import InMemorySuiteRepository
@@ -38,6 +38,8 @@ class SuiteService:
     def _summarize_suite(suite: SuiteRun) -> dict:
         passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
         failed = sum(1 for step in suite.steps if step.status == SuiteStatus.FAILED)
+        skipped = sum(1 for step in suite.steps if step.status == SuiteStatus.SKIPPED)
+        selected_total = len(suite.steps) - skipped
         return {
             "suite_id": suite.suite_id,
             "status": suite.status,
@@ -45,8 +47,10 @@ class SuiteService:
             "started_at": suite.started_at.isoformat() if suite.started_at else None,
             "ended_at": suite.ended_at.isoformat() if suite.ended_at else None,
             "step_total": len(suite.steps),
+            "step_selected_total": selected_total,
             "step_passed": passed,
             "step_failed": failed,
+            "step_skipped": skipped,
             "current_step_index": suite.current_step_index,
             "awaiting_input_run_id": suite.awaiting_input_run_id,
         }
@@ -62,7 +66,42 @@ class SuiteService:
         merged.update(systems_input.get(system_code, {}))
         return merged
 
-    def validate_suite_request(self, browser_mode: str, systems: dict[str, dict[str, str]]) -> tuple[str, dict[str, dict[str, str]]]:
+    @staticmethod
+    def _resolve_selected_system_codes(
+        systems: list[SystemDefinition],
+        selected_system_codes: list[str] | None,
+    ) -> list[str]:
+        ordered_codes = [system.system_code for system in systems]
+        if selected_system_codes is None:
+            return ordered_codes
+
+        selected_values: list[str] = []
+        seen_codes: set[str] = set()
+        for raw_code in selected_system_codes:
+            code = raw_code.strip().lower()
+            if not code or code in seen_codes:
+                continue
+            selected_values.append(code)
+            seen_codes.add(code)
+
+        if not selected_values:
+            raise ValueError("최소 1개 시스템을 선택해야 합니다.")
+
+        known_codes = set(ordered_codes)
+        unknown_codes = [code for code in selected_values if code not in known_codes]
+        if unknown_codes:
+            joined = ", ".join(unknown_codes)
+            raise ValueError(f"알 수 없는 시스템이 선택되었습니다: {joined}")
+
+        selected_set = set(selected_values)
+        return [code for code in ordered_codes if code in selected_set]
+
+    def validate_suite_request(
+        self,
+        browser_mode: str,
+        systems: dict[str, dict[str, str]],
+        selected_system_codes: list[str] | None = None,
+    ) -> tuple[str, dict[str, dict[str, str]], list[str]]:
         registered = self._registry.list_systems()
         if not registered:
             raise ValueError("등록된 시스템이 없습니다.")
@@ -72,26 +111,37 @@ class SuiteService:
             raise ValueError("browser_mode는 headed 또는 headless 여야 합니다.")
 
         normalized_systems = {key: dict(value) for key, value in (systems or {}).items()}
+        resolved_system_codes = self._resolve_selected_system_codes(registered, selected_system_codes)
+        selected_set = set(resolved_system_codes)
         for system in registered:
+            if system.system_code not in selected_set:
+                continue
             merged_input = self._merge_input(normalized_mode, system.system_code, normalized_systems)
             self._run_service.validate_run_request(system.system_code, merged_input, selected_module_ids=None)
-        return normalized_mode, normalized_systems
+        return normalized_mode, normalized_systems, resolved_system_codes
 
     async def start_suite(self, request: StartSuiteRequest) -> SuiteRun:
         systems = self._registry.list_systems()
         if not systems:
             raise ValueError("등록된 시스템이 없습니다.")
 
-        browser_mode, normalized_systems = self.validate_suite_request(request.browser_mode, request.systems)
+        browser_mode, normalized_systems, resolved_system_codes = self.validate_suite_request(
+            request.browser_mode,
+            request.systems,
+            request.selected_system_codes,
+        )
+        selected_set = set(resolved_system_codes)
 
         steps: list[SuiteStep] = []
         for index, system in enumerate(systems):
+            is_selected = system.system_code in selected_set
             steps.append(
                 SuiteStep(
                     system_code=system.system_code,
                     system_name=system.name,
                     order=index,
                     module_total=len(system.modules),
+                    status=SuiteStatus.PENDING if is_selected else SuiteStatus.SKIPPED,
                 )
             )
 
@@ -102,6 +152,7 @@ class SuiteService:
             steps=steps,
             requested_at=datetime.now(UTC),
             browser_mode=browser_mode,
+            selected_system_codes=resolved_system_codes,
         )
         await self._repository.create_suite(suite)
         await self._publish_event("suite_created", suite)
@@ -143,6 +194,9 @@ class SuiteService:
                 cancelled = True
                 await self._mark_remaining_cancelled(suite, index)
                 break
+
+            if step.status == SuiteStatus.SKIPPED:
+                continue
 
             suite.current_step_index = index
             step.status = SuiteStatus.RUNNING
@@ -249,7 +303,12 @@ class SuiteService:
 
     async def _mark_remaining_cancelled(self, suite: SuiteRun, start_index: int) -> None:
         for step in suite.steps[start_index:]:
-            if step.status in {SuiteStatus.PASSED, SuiteStatus.FAILED, SuiteStatus.CANCELLED}:
+            if step.status in {
+                SuiteStatus.PASSED,
+                SuiteStatus.FAILED,
+                SuiteStatus.CANCELLED,
+                SuiteStatus.SKIPPED,
+            }:
                 continue
             step.status = SuiteStatus.CANCELLED
         await self._repository.save_suite(suite)
