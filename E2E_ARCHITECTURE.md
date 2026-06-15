@@ -18,6 +18,7 @@
 - FastAPI 서버가 웹 화면과 API, WebSocket을 제공한다.
 - 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: 대표홈페이지 HOM·MHM, 접속 점검 시스템 FP·HRP·HWTC·CHBOT)
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
+- **전체 시스템 순차 점검(Suite)** 으로 등록 시스템을 `display_order` 순으로 연속 실행할 수 있으며, 실행 전 시스템별 포함/제외(`selected_system_codes`)를 선택할 수 있다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
 - 모듈 실행 도중 사용자 입력이 필요하면 Run이 `WAITING_INPUT`으로 전환되고, 웹에서 입력을 제출해 재개할 수 있다. (예: HOM 휴대폰인증의 OTP)
 
@@ -31,15 +32,21 @@ Browser
       -> RunService
           -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml)
           -> InMemoryRunRepository
-          -> WorkflowExecutor         (execution_mode -> HOM / MHM executor)
+          -> WorkflowExecutor         (execution_mode -> HOM / MHM / access_common executor)
               -> Shared Playwright browser session
                   -> Split system modules (app/systems/{code}/steps/*.py)
                       -> Site
 
+Browser
+  -> FastAPI app
+      -> SuiteService
+          -> RunService (시스템별 Run 순차 생성·대기)
+          -> InMemorySuiteRepository
+
 FastAPI app
-  -> HTML routes
+  -> HTML routes (/, /runs/{id}, /suites/{id})
   -> JSON APIs
-  -> WebSocket stream
+  -> WebSocket stream (/ws/runs, /ws/suites)
   -> Static artifacts mount
 ```
 
@@ -49,6 +56,7 @@ FastAPI app
 - 워크플로 실행기는 `execution_mode`(`hom_workflow_step` / `mhm_workflow_step`) 기준으로 `app/systems/loader.py` 가 동적으로 로드한다.
 - 실제 Playwright sync API 실행은 Run마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)에서 수행한다. 같은 Run의 build/step/close 호출이 모두 이 스레드에서 돈다. (실행기에 thread executor가 없으면 `asyncio.to_thread(...)` 로 폴백)
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
+- **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
 - 모듈 로그와 상태 이벤트는 repository를 통해 WebSocket에 전파된다.
 
 ## 4. 현재 폴더 구조
@@ -62,8 +70,11 @@ e2eTester/
     api/
       routes_dashboard.py
       routes_runs.py
+      routes_schedules.py
+      routes_suites.py
       routes_systems.py
       ws_runs.py
+      ws_suites.py
     core/
       enums.py
       env_utils.py
@@ -72,8 +83,12 @@ e2eTester/
       run_completion_email.py
     orchestrator/
       run_service.py
+      suite_service.py
     registry/
       loader.py
+    scheduling/
+      cron.py
+      scheduler.py
     runner/
       artifact_manager.py
       workflow_common.py
@@ -115,13 +130,24 @@ e2eTester/
           compensation_result.py
           compensation_cancel.py
           long_term_policy_certificate.py
+      access_common/
+        executor.py
+        steps/
+          main_access.py
+      fp/
+      hrp/
+      hwtc/
+      chbot/
     storage/
       run_repository.py
+      schedule_repository.py
+      suite_repository.py
     web/
       templates/
         base.html
         index.html
         run.html
+        suite.html
       static/
         app.css
         app.js
@@ -130,6 +156,10 @@ e2eTester/
     scenarios/
       hom.md
       mhm.md
+      fp.md
+      hrp.md
+      hwtc.md
+      chbot.md
   research/                      # 1회성 probe 스크립트 (앱 구성 요소 아님)
   artifacts/
   .env.example
@@ -148,24 +178,27 @@ e2eTester/
 - `app/web/templates/base.html`
 - `app/web/templates/index.html`
 - `app/web/templates/run.html`
+- `app/web/templates/suite.html`
 - `app/web/static/app.js`
 - `app/web/static/app.css`
 
 역할:
 
 - 시스템 카드 렌더링
+- **전체 시스템 순차 점검(SUITE)** 카드: 시스템 체크박스 선택, 공통 브라우저 모드, HOM/MHM 인증 패널(선택된 시스템만), cron 예약 등록
 - 조건부 입력 폼 렌더링
 - 실행 모듈 선택 그래프(`module-graph`) 렌더링과 의존성 경고
-- Run 화면 렌더링
+- Run / Suite 화면 렌더링
 - WebSocket 수신 후 노드/로그/OTP 패널 갱신
 
 현재 UX 특징:
 
-- 홈 화면은 “시스템 실행” 중심이다.
+- 홈 화면은 “시스템 실행”과 “전체 순차 점검”을 함께 제공한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
 - 홈 화면에는 “진행 중 / 최근 Run” 패널이 있으며 `GET /api/runs` 요약을 주기적으로 불러와 렌더링한다. (메모리 기반이라 서버 재시작 시 사라짐)
-- 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
-- 실행하면 곧바로 Run 상세 화면으로 이동한다.
+- 개별 시스템 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
+- **SUITE** 실행 전 시스템 체크박스에서 시스템을 개별 해제할 수 있고, 선택값은 `selected_system_codes` 로 전달된다. 미선택 시스템은 Suite step `SKIPPED` 로 남는다.
+- 개별 Run 실행 시 곧바로 Run 상세 화면으로, SUITE 실행 시 Suite 상세 화면(`/suites/{suite_id}`)으로 이동한다.
 - 인증 수단처럼 시스템별 실행 옵션은 manifest 의 `run_form` 정의로 렌더링된다.
 
 ### 5.2 API 계층
@@ -174,6 +207,7 @@ e2eTester/
 
 - `GET /` (홈 대시보드 HTML)
 - `GET /runs/{run_id}` (Run 상세 HTML)
+- `GET /suites/{suite_id}` (Suite 상세 HTML)
 - `GET /api/systems`
 - `GET /api/runs` (최근 Run 요약 목록, 최대 50건)
 - `POST /api/runs/systems/{system_code}`
@@ -182,21 +216,30 @@ e2eTester/
 - `POST /api/runs/{run_id}/otp`
 - `POST /api/runs/{run_id}/cancel`
 - `POST /api/runs/{run_id}/rerun`
-- `GET /api/schedules` (예약 목록 요약, input_data 제외)
-- `POST /api/schedules/systems/{system_code}` (cron 예약 등록)
+- `GET /api/suites` (최근 Suite 요약 목록)
+- `POST /api/suites` (`browser_mode`, `systems`, `selected_system_codes` 로 Suite 생성)
+- `GET /api/suites/{suite_id}`
+- `POST /api/suites/{suite_id}/cancel`
+- `POST /api/suites/{suite_id}/otp` (현재 대기 중인 시스템 Run에 OTP 전달)
+- `GET /api/schedules` (예약 목록 요약, input_data / suite_systems 제외)
+- `POST /api/schedules/systems/{system_code}` (개별 시스템 cron 예약 등록)
+- `POST /api/schedules/suites` (전체 점검 cron 예약 등록, `selected_system_codes` 포함)
 - `POST /api/schedules/{schedule_id}/toggle` (활성/비활성 전환)
 - `POST /api/schedules/{schedule_id}/run-now` (즉시 1회 실행)
 - `DELETE /api/schedules/{schedule_id}` (예약 삭제)
 - `WS /ws/runs/{run_id}`
+- `WS /ws/suites/{suite_id}`
 
 역할:
 
 - 시스템 목록 조회
 - 최근 Run 요약 목록 조회 (`list_run_summaries`)
 - Run 생성 (`selected_module_ids` 로 실행 모듈 부분 선택 가능)
-- Run / 노드 조회
-- OTP 재개 (`POST /api/runs/{run_id}/otp`)
+- Suite 생성 (`selected_system_codes` 로 실행 시스템 부분 선택 가능, 미지정 시 전체)
+- Run / Suite / 노드 조회
+- OTP 재개 (`POST /api/runs/{run_id}/otp`, Suite 경유 `POST /api/suites/{suite_id}/otp`)
 - Run 취소 (`POST /api/runs/{run_id}/cancel`) — 진행 중/대기 중 Run을 `CANCELLED` 로 중단
+- Suite 취소 (`POST /api/suites/{suite_id}/cancel`) — 진행 중 Suite와 현재 시스템 Run을 함께 중단
 - 동일 입력 재실행 (`POST /api/runs/{run_id}/rerun`) — 같은 시스템·입력·모듈 선택으로 새 Run 생성
 - 실시간 상태 이벤트 스트리밍
 
@@ -248,6 +291,35 @@ Module:
 - 재시도 정책
 - 실패 모듈만 부분 재실행 (현재는 `rerun_run` 으로 동일 입력 전체 재실행만 지원)
 
+### 5.3.1 Suite Orchestrator 계층
+
+현재 구현 핵심은 `app/orchestrator/suite_service.py` 다.
+
+역할:
+
+- `selected_system_codes` 검증·정규화 (`_resolve_selected_system_codes`, `None` 이면 전체 선택)
+- 선택된 시스템에 대해서만 `RunService.validate_run_request` 호출 (HOM 해제 시 HOM 인증 입력 불필요)
+- 등록된 모든 시스템에 대해 `SuiteStep` 생성, 미선택 시스템은 `SKIPPED`
+- `display_order` 순으로 시스템별 Run을 순차 생성 (`triggered_by="suite"`, `suite_id` 태깅)
+- 한 시스템 Run이 실패해도 다음 선택 시스템은 계속 실행
+- 시스템 Run의 `WAITING_INPUT`(OTP)을 Suite `WAITING_INPUT`으로 승격하고, OTP 제출 후 재개
+- Suite 종료 시 통합 결과 메일 1통 발송 (`RunService.notify_suite_completion`); Suite 소속 개별 Run 종료 메일은 생략
+
+Suite / SuiteStep 상태:
+
+Suite:
+
+- `PENDING`
+- `RUNNING`
+- `WAITING_INPUT`
+- `PASSED` (선택된 시스템이 모두 통과)
+- `FAILED` (선택된 시스템 중 하나라도 실패)
+- `CANCELLED`
+
+SuiteStep (시스템 단위):
+
+- 위 상태 + `SKIPPED` (사용자가 시스템 선택에서 제외)
+
 ### 5.4 Registry 계층
 
 현재 구현:
@@ -258,7 +330,7 @@ Module:
 
 역할:
 
-- 시스템 정의 로드 (`system_code` 오름차순)
+- 시스템 정의 로드 (`display_order` 오름차순, 동률은 `system_code` 순)
 - Run form 정의 로드
 - 모듈 메타데이터 로드
 - manifest 정합성 검증: `module_id` 중복, 모듈의 `system_code` 불일치, 알 수 없는 `depends_on`, 의존성 순서(선행 모듈 `order`가 더 작아야 함), 의존성 순환을 로드 시점에 검사하고 위반 시 `ValueError`
@@ -314,17 +386,18 @@ manifest 에 들어 있는 정보:
 현재 구현:
 
 - `app/storage/run_repository.py`
+- `app/storage/suite_repository.py`
 
 역할:
 
-- Run 객체 저장
+- Run / Suite 객체 저장
 - 모듈 로그 저장
 - WebSocket listener 큐 관리
 
 제약:
 
 - 메모리 기반 저장소다.
-- 서버 재시작 시 Run, 로그, OTP 대기 상태가 모두 사라진다.
+- 서버 재시작 시 Run, Suite, 로그, OTP 대기 상태가 모두 사라진다.
 
 ### 5.7 AI 실패 분석 계층
 
@@ -355,7 +428,9 @@ manifest 에 들어 있는 정보:
 역할:
 
 - Run이 최종 종료(`PASSED`/`FAILED`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
-- 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, 여러 명은 `|` 로 구분)
+- **Suite** 가 최종 종료되면 포함 시스템 Run 결과를 통합한 메일 1통을 보낸다. `SKIPPED` 시스템은 제외로 표시한다.
+- 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, `E2E_EMAIL_RECIPIENTS_FP`, … — 여러 명은 `|` 로 구분)
+- Suite 메일 수신자는 실행된(선택된) 시스템들의 수신자 집합을 합친다.
 - 메일 본문 HTML은 Gemini로 생성하고, 실패하면 기본 템플릿으로 fallback 한다.
 - 홈 화면에 현재 메일 알림 설정 상태(`inspect_env_status`)를 표시한다.
 
@@ -369,23 +444,25 @@ manifest 에 들어 있는 정보:
 현재 구현:
 
 - `app/scheduling/cron.py` — 외부 의존성 없는 최소 cron(5필드 `분 시 일 월 요일`) 파서·다음 실행 시각 계산기. `* , - /` 와 요일 0/7(일요일)을 지원하고, 일·요일이 모두 제한되면 둘 중 하나만 맞아도 실행하는 표준 cron 규칙을 따른다.
-- `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run 을 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
+- `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
 - `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 메모리 기반 예약 저장소(RunRepository 와 동일하게 재시작 시 사라짐).
 - `app/api/routes_schedules.py` — 예약 REST API.
 
 역할:
 
-- 홈 화면 시스템 폼에서 입력값·모듈 선택 그대로 cron 식을 붙여 예약을 등록한다. 등록 시 `RunService.validate_run_request` 로 시스템·인증 수단·모듈 조합을 Run 생성과 동일하게 검증한다.
-- 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅된다.
-- 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run 이 아직 진행 중이면 중복 실행을 건너뛴다.
+- 홈 화면 시스템 폼에서 입력값·모듈 선택 그대로 cron 식을 붙여 **개별 시스템** 예약을 등록한다. 등록 시 `RunService.validate_run_request` 로 검증한다.
+- 홈 SUITE 카드에서 브라우저 모드·시스템 선택(`selected_system_codes`)·HOM/MHM 인증 정보와 함께 **전체 점검** 예약을 등록한다 (`POST /api/schedules/suites`). 등록 시 `SuiteService.validate_suite_request` 로 검증한다.
+- 예약은 `schedule_kind` 가 `system`(개별 Run) 또는 `suite`(전체 점검) 이다.
+- 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
+- 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
 - **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunService._compute_comparison` 가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(Gemini 프롬프트·폴백 HTML·평문)에 반영된다.
 
 제약:
 
 - 예약과 비교 기준선 모두 메모리 기반이므로 서버 재시작 시 사라진다(영구 저장소 도입 시 함께 개선 대상).
-- 예약 실행은 무인 실행이라, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가 포함되면 해당 Run 은 `WAITING_INPUT` 에서 멈출 수 있다.
-- 입력값(`input_data`)은 PII 를 포함할 수 있어 예약 요약(API/UI)에는 직렬화하지 않는다.
+- 예약 실행은 무인 실행이라, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가 포함되면 해당 Run/Suite 는 `WAITING_INPUT` 에서 멈출 수 있다.
+- 입력값(`input_data`, `suite_systems`)은 PII 를 포함할 수 있어 예약 요약(API/UI)에는 직렬화하지 않는다. Suite 예약 요약에는 `selected_system_count`, `step_total` 등 선택 시스템 수만 노출한다.
 
 ## 6. 시스템 시나리오 문서
 
@@ -398,6 +475,7 @@ manifest 에 들어 있는 정보:
 - 새 시스템(FP, HRP, HWTC, CHBOT 등)을 추가할 때는 manifest와 함께 시나리오 문서도 같이 추가한다.
 - 시나리오 문서에는 시스템 개요, 모듈 목록, 단계별 상세 동작(selector·URL 검증 포함), Run form 입력 모델을 기록한다.
 - 시스템의 흐름이나 selector 를 바꾸면 해당 시나리오 문서도 함께 갱신한다.
+- **전체 순차 점검(SUITE)** 에서의 시스템 포함/제외는 시나리오 문서가 아니라 홈 SUITE 카드·`selected_system_codes` 로 제어한다. SUITE 실행 시 각 시스템은 모듈 부분 선택 없이 manifest 전체 모듈이 실행된다.
 
 현재 작성된 시나리오 문서:
 
@@ -411,6 +489,12 @@ manifest 에 들어 있는 정보:
 ## 7. 현재 UI 입력 모델
 
 홈 화면의 시스템 실행 카드 입력 폼은 각 시스템 manifest 의 `run_form` 정의로 렌더링된다.
+
+**SUITE 카드** 추가 입력:
+
+- 공통 `browser_mode` (`headed` / `headless`)
+- `selected_system_codes` (체크박스, 기본 전체 선택)
+- HOM/MHM `systems.{code}` 인증 필드 (해당 시스템이 선택된 경우만 표시·검증)
 
 공통 규칙:
 
@@ -455,6 +539,8 @@ artifacts/
 
 WebSocket으로 흐르는 주요 이벤트:
 
+Run (`/ws/runs/{run_id}`):
+
 - `snapshot`
 - `run_created`
 - `run_started`
@@ -467,9 +553,21 @@ WebSocket으로 흐르는 주요 이벤트:
 - `module_log`
 - `module_finished`
 
+Suite (`/ws/suites/{suite_id}`):
+
+- `snapshot`
+- `suite_created`
+- `suite_started`
+- `suite_step_started`
+- `suite_step_finished`
+- `suite_waiting_input`
+- `suite_resumed`
+- `suite_finished`
+
 현재 payload 특징:
 
 - Run 이벤트는 `run.model_dump(mode="json")`
+- Suite 이벤트는 `suite.model_dump(mode="json")` (+ `step_index` 등 보조 필드)
 - Module 이벤트는 `module` 스냅샷과 `run_status`
 - Log 이벤트는 `module_id`, `message`
 
@@ -574,8 +672,9 @@ Backend
 정리하면 현재 상태는 아래다.
 
 - 웹에서 시스템 실행 가능
+- **전체 시스템 순차 점검(Suite)** 과 시스템별 선택 실행 가능
 - 실시간 모듈 노드 대시보드 존재
-- 입력 대기(`WAITING_INPUT`) pause/resume 구조 존재
+- 입력 대기(`WAITING_INPUT`) pause/resume 구조 존재 (Run·Suite)
 - 로그인 이후 후속 모듈 실행 구조 존재
 - manifest 기반 확장 포인트 존재
 

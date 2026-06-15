@@ -11,6 +11,7 @@
 - 대상 사이트: `https://sls.hwgeneralins.com`
 - 플랫폼: PC 웹
 - 인증 수단: 없음. 이 시스템은 대표홈페이지와 별개의 업무를 수행하며, 현재는 로그인 없이 메인화면 접속만 점검한다(`supported_auth_methods: []`).
+- **전체 순차 점검(SUITE)**: 홈 SUITE 카드의 시스템 체크박스로 포함 여부를 선택할 수 있다. 선택 시 공통 `browser_mode`로 메인화면 접속 모듈이 실행된다.
 - 실행기: 공용 접속 점검 프레임워크 `app/systems/access_common/`(`AccessWorkflowExecutor`, `execution_mode = hwtc_workflow_step`)를 사용한다. 시스템별 진입점은 `app/systems/hwtc/executor.py`.
 
 ## 2. 모듈 목록

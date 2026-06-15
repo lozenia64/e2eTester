@@ -1182,6 +1182,13 @@ def _module_status_label(status: str) -> str:
         ModuleStatus.QUEUED.value: "대기",
         ModuleStatus.PENDING.value: "대기",
         ModuleStatus.WAITING_INPUT.value: "입력 대기",
+        SuiteStatus.PASSED.value: "성공",
+        SuiteStatus.FAILED.value: "실패",
+        SuiteStatus.SKIPPED.value: "제외",
+        SuiteStatus.CANCELLED.value: "취소",
+        SuiteStatus.RUNNING.value: "실행 중",
+        SuiteStatus.PENDING.value: "대기",
+        SuiteStatus.WAITING_INPUT.value: "입력 대기",
     }
     return labels.get(status, status)
 
@@ -1197,6 +1204,7 @@ def _suite_module_status_color(status: str) -> str:
         RunStatus.PASSED.value: "#17804b",
         RunStatus.FAILED.value: "#c44536",
         RunStatus.CANCELLED.value: "#71717a",
+        SuiteStatus.SKIPPED.value: "#64748b",
     }
     return colors.get(status, "#6b7280")
 
@@ -1277,6 +1285,8 @@ def _build_suite_email_context(
     run_by_id = {run.run_id: run for run in runs}
     step_passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
     step_failed = sum(1 for step in suite.steps if step.status == SuiteStatus.FAILED)
+    step_skipped = sum(1 for step in suite.steps if step.status == SuiteStatus.SKIPPED)
+    step_selected_total = len(suite.steps) - step_skipped
     step_summary = []
     system_runs = []
     for step in sorted(suite.steps, key=lambda item: item.order):
@@ -1305,7 +1315,12 @@ def _build_suite_email_context(
                 }
             )
         else:
-            note = "Run이 생성되지 않았습니다." if step.status == SuiteStatus.FAILED else "실행되지 않음"
+            if step.status == SuiteStatus.SKIPPED:
+                note = "건너뜀 (선택 제외)"
+            elif step.status == SuiteStatus.FAILED:
+                note = "Run이 생성되지 않았습니다."
+            else:
+                note = "실행되지 않음"
             system_runs.append(
                 {
                     "order": step.order,
@@ -1346,7 +1361,9 @@ def _build_suite_email_context(
             "started_at_kst": _format_datetime(suite.started_at),
             "ended_at_kst": _format_datetime(suite.ended_at),
             "duration_text": _format_suite_duration(suite),
-            "step_total": len(suite.steps),
+            "step_total": step_selected_total,
+            "step_defined_total": len(suite.steps),
+            "step_skipped": step_skipped,
             "step_passed": step_passed,
             "step_failed": step_failed,
             "browser_mode": suite.browser_mode,
@@ -1379,7 +1396,8 @@ def _build_suite_plain_text(context: dict) -> str:
         f"요청 시각(KST): {suite_info['requested_at_kst']}",
         f"종료 시각(KST): {suite_info['ended_at_kst']}",
         f"총 소요시간: {suite_info['duration_text']}",
-        f"시스템 통과: {suite_info['step_passed']}/{suite_info['step_total']}",
+        f"시스템 통과: {suite_info['step_passed']}/{suite_info['step_total']}"
+        + (f" ({suite_info['step_skipped']}개 제외)" if suite_info.get("step_skipped") else ""),
         "",
         "=== 시스템 요약 ===",
     ]

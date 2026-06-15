@@ -85,11 +85,11 @@ class SchedulerService:
 
     async def create_suite_schedule(self, request: CreateSuiteScheduleRequest) -> Schedule:
         parse_cron(request.cron)  # ValueError -> 400
-        browser_mode, normalized_systems = self._suite_service.validate_suite_request(
+        browser_mode, normalized_systems, resolved_system_codes = self._suite_service.validate_suite_request(
             request.browser_mode,
             request.systems,
+            request.selected_system_codes,
         )
-        step_total = len(self._run_service.list_systems())
         schedule = Schedule(
             schedule_id=f"sch_{uuid4().hex[:8]}",
             schedule_kind="suite",
@@ -101,7 +101,8 @@ class SchedulerService:
             enabled=request.enabled,
             browser_mode=browser_mode,
             suite_systems=normalized_systems,
-            step_total=step_total,
+            selected_system_codes=resolved_system_codes,
+            step_total=len(resolved_system_codes),
             created_at=datetime.now(UTC),
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
@@ -209,6 +210,9 @@ class SchedulerService:
             StartSuiteRequest(
                 browser_mode=schedule.browser_mode or "headed",
                 systems=dict(schedule.suite_systems or {}),
+                selected_system_codes=list(schedule.selected_system_codes)
+                if schedule.selected_system_codes is not None
+                else None,
             )
         )
         schedule.last_suite_id = suite.suite_id

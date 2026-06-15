@@ -1051,7 +1051,9 @@ function createScheduleListItem(schedule) {
     if (schedule.enabled && schedule.next_run_at) {
         metaParts.push(`다음 ${formatRunTimestamp(schedule.next_run_at)}`);
     }
-    if (isSuite && schedule.step_total != null) {
+    if (isSuite && schedule.selected_system_count != null) {
+        metaParts.push(`시스템 ${schedule.selected_system_count}개 선택`);
+    } else if (isSuite && schedule.step_total != null) {
         metaParts.push(`시스템 ${schedule.step_total}개`);
     } else if (schedule.module_count != null) {
         metaParts.push(`모듈 ${schedule.module_count}개`);
@@ -1655,25 +1657,77 @@ function collectInputFromContainer(container) {
     return inputData;
 }
 
+function readSelectedSuiteSystemCodes(form) {
+    const codes = [];
+    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
+        if (checkbox.checked) {
+            codes.push(String(checkbox.dataset.systemCode ?? checkbox.value ?? "").trim());
+        }
+    }
+    return codes.filter(Boolean);
+}
+
+function updateSuiteSystemSelectorState(form) {
+    const summary = form.querySelector('[data-role="suite-system-selection-summary"]');
+    const checkboxes = [...form.querySelectorAll('[data-role="suite-system-checkbox"]')];
+    const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+    const totalCount = checkboxes.length;
+    if (summary) {
+        summary.textContent = `${selectedCount} / ${totalCount} 시스템 선택`;
+    }
+
+    const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
+    for (const panel of form.querySelectorAll("[data-suite-auth-for]")) {
+        const systemCode = panel.dataset.suiteAuthFor;
+        const isSelected = selectedCodes.has(systemCode);
+        panel.classList.toggle("is-hidden", !isSelected);
+        for (const field of panel.querySelectorAll("input, select, textarea")) {
+            if (!field.dataset.suiteInitiallyRequired) {
+                field.dataset.suiteInitiallyRequired = field.required ? "true" : "false";
+            }
+            field.disabled = !isSelected;
+            if (!isSelected) {
+                field.removeAttribute("required");
+            } else if (field.dataset.suiteInitiallyRequired === "true") {
+                field.setAttribute("required", "");
+            }
+        }
+    }
+}
+
 function collectSuiteRequest(form) {
     const browserMode = String(form.querySelector('[name="browser_mode"]')?.value ?? "headed").trim();
     const systems = {};
+    const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
     for (const panel of form.querySelectorAll(".suite-system-panel")) {
         const systemCode = panel.dataset.systemCode;
-        if (!systemCode) {
+        if (!systemCode || !selectedCodes.has(systemCode)) {
             continue;
         }
         systems[systemCode] = collectInputFromContainer(panel);
     }
-    return { browser_mode: browserMode, systems };
+    return {
+        browser_mode: browserMode,
+        systems,
+        selected_system_codes: [...selectedCodes],
+    };
 }
 
 async function startSuiteRun(button, form) {
     const feedback = form.querySelector('[data-role="suite-feedback"]');
     setInlineFeedback(feedback, "");
 
+    const selectedCodes = readSelectedSuiteSystemCodes(form);
+    if (selectedCodes.length === 0) {
+        setInlineFeedback(feedback, "최소 1개 시스템을 선택해야 합니다.");
+        return;
+    }
+
     for (const panel of form.querySelectorAll(".suite-system-panel")) {
         const systemCode = panel.dataset.systemCode;
+        if (!selectedCodes.includes(systemCode)) {
+            continue;
+        }
         const authMethod = panel.querySelector('[name="auth_method"]')?.value;
         if (
             (systemCode === "hom" || systemCode === "mhm")
@@ -1720,6 +1774,12 @@ async function registerSuiteSchedule(form, button) {
     const feedback = form.querySelector('[data-role="suite-schedule-feedback"]');
     setInlineFeedback(feedback, "");
 
+    const selectedCodes = readSelectedSuiteSystemCodes(form);
+    if (selectedCodes.length === 0) {
+        setInlineFeedback(feedback, "최소 1개 시스템을 선택해야 합니다.");
+        return;
+    }
+
     const name = (form.querySelector('[data-role="schedule-name"]')?.value ?? "").trim();
     const built = buildScheduleCron(form);
     if (built.error) {
@@ -1729,6 +1789,9 @@ async function registerSuiteSchedule(form, button) {
 
     for (const panel of form.querySelectorAll(".suite-system-panel")) {
         const systemCode = panel.dataset.systemCode;
+        if (!selectedCodes.includes(systemCode)) {
+            continue;
+        }
         const authMethod = panel.querySelector('[name="auth_method"]')?.value;
         if (
             (systemCode === "hom" || systemCode === "mhm")
@@ -1783,6 +1846,30 @@ function bindSuiteForm() {
     for (const panel of form.querySelectorAll(".suite-system-panel")) {
         bindConditionalFields(panel);
     }
+    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
+        checkbox.addEventListener("change", () => {
+            updateSuiteSystemSelectorState(form);
+        });
+    }
+    const selectAllButton = form.querySelector('[data-role="suite-system-select-all"]');
+    if (selectAllButton) {
+        selectAllButton.addEventListener("click", () => {
+            for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
+                checkbox.checked = true;
+            }
+            updateSuiteSystemSelectorState(form);
+        });
+    }
+    const deselectAllButton = form.querySelector('[data-role="suite-system-deselect-all"]');
+    if (deselectAllButton) {
+        deselectAllButton.addEventListener("click", () => {
+            for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
+                checkbox.checked = false;
+            }
+            updateSuiteSystemSelectorState(form);
+        });
+    }
+    updateSuiteSystemSelectorState(form);
     bindScheduleBuilder(form);
     const scheduleButton = form.querySelector('[data-role="suite-schedule-register"]');
     if (scheduleButton) {
@@ -2075,16 +2162,19 @@ function updateSuiteActions(status) {
 
 function updateSuiteProgress(suite) {
     const steps = suite.steps ?? [];
+    const skipped = steps.filter((step) => String(step.status).toLowerCase() === "skipped").length;
+    const selectedTotal = steps.length - skipped;
     const passed = steps.filter((step) => String(step.status).toLowerCase() === "passed").length;
-    const total = steps.length;
     const label = document.getElementById("suite-progress-label");
     const bar = document.getElementById("suite-progress-bar");
     const detail = document.getElementById("suite-progress-detail");
     if (label) {
-        label.textContent = `통과 ${passed}/${total}`;
+        const skippedSuffix = skipped > 0 ? ` (${skipped}개 제외)` : "";
+        label.textContent = `통과 ${passed}/${selectedTotal || steps.length}${skippedSuffix}`;
     }
     if (bar) {
-        bar.style.width = total > 0 ? `${Math.round((passed / total) * 100)}%` : "0%";
+        const denominator = selectedTotal || steps.length;
+        bar.style.width = denominator > 0 ? `${Math.round((passed / denominator) * 100)}%` : "0%";
     }
     if (detail) {
         const currentIndex = suite.current_step_index ?? 0;
@@ -2096,10 +2186,14 @@ function updateSuiteProgress(suite) {
             } else {
                 detail.textContent = "OTP 입력 대기 중입니다.";
             }
-        } else if (currentStep && SUITE_ACTIVE_STATUSES.has(String(suite.status).toLowerCase())) {
+        } else if (
+            currentStep
+            && String(currentStep.status).toLowerCase() !== "skipped"
+            && SUITE_ACTIVE_STATUSES.has(String(suite.status).toLowerCase())
+        ) {
             detail.textContent = `현재: ${currentStep.system_name} (${currentStep.system_code?.toUpperCase() ?? ""})`;
         } else {
-            detail.textContent = "";
+            detail.textContent = skipped > 0 ? `${skipped}개 시스템이 선택에서 제외되었습니다.` : "";
         }
     }
 }
@@ -2119,7 +2213,9 @@ function updateSuiteStepCard(step) {
     }
     const linkNode = card.querySelector('[data-role="step-run-link"]');
     if (linkNode) {
-        if (step.run_id) {
+        if (status === "skipped") {
+            linkNode.innerHTML = '<span class="text-gray-400">건너뜀 (선택 제외)</span>';
+        } else if (step.run_id) {
             linkNode.innerHTML = `<a href="/runs/${step.run_id}" class="font-medium text-indigo-600 hover:underline">${step.run_id}</a>`;
         } else {
             linkNode.innerHTML = '<span class="text-gray-400">대기 중</span>';

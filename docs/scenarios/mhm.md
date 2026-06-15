@@ -11,6 +11,7 @@
 - 대상 사이트: `https://m.hwgeneralins.com` (고정값)
 - **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()`(executor `build_runtime()` 단계) → `app/systems/mhm/steps/main_access.py` 의 `run()` 순서를 따른다.
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
+- **전체 순차 점검(SUITE)**: 홈 SUITE 카드에서 시스템 체크박스로 포함 여부를 선택할 수 있다. SUITE에 포함되면 이 시스템의 **전체 모듈**이 순차 실행되며, 인증 정보는 SUITE 카드의 MHM 전용 패널에서 설정한다.
 
 ## 2. 모듈 목록
 
