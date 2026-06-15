@@ -683,6 +683,12 @@ function createRunListItem(run) {
         waitingBadge.textContent = "⚠ 입력 대기 중";
         titleRow.appendChild(waitingBadge);
     }
+    if (run.triggered_by === "suite") {
+        const suiteBadge = document.createElement("span");
+        suiteBadge.className = "inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700";
+        suiteBadge.textContent = "전체 점검";
+        titleRow.appendChild(suiteBadge);
+    }
     info.appendChild(titleRow);
 
     const meta = document.createElement("p");
@@ -1609,6 +1615,581 @@ async function rerunRun(button) {
     }
 }
 
+function collectInputFromContainer(container) {
+    const inputData = {};
+    if (!container) {
+        return inputData;
+    }
+    const fields = container.querySelectorAll("input, select, textarea");
+    for (const field of fields) {
+        if (field.disabled || !field.name) {
+            continue;
+        }
+        inputData[field.name] = String(field.value ?? "").trim();
+    }
+    return inputData;
+}
+
+function collectSuiteRequest(form) {
+    const browserMode = String(form.querySelector('[name="browser_mode"]')?.value ?? "headed").trim();
+    const systems = {};
+    for (const panel of form.querySelectorAll(".suite-system-panel")) {
+        const systemCode = panel.dataset.systemCode;
+        if (!systemCode) {
+            continue;
+        }
+        systems[systemCode] = collectInputFromContainer(panel);
+    }
+    return { browser_mode: browserMode, systems };
+}
+
+async function startSuiteRun(button, form) {
+    const feedback = form.querySelector('[data-role="suite-feedback"]');
+    setInlineFeedback(feedback, "");
+
+    for (const panel of form.querySelectorAll(".suite-system-panel")) {
+        const systemCode = panel.dataset.systemCode;
+        const authMethod = panel.querySelector('[name="auth_method"]')?.value;
+        if (
+            (systemCode === "hom" || systemCode === "mhm")
+            && authMethod
+            && authMethod !== "phone"
+            && authMethod !== "kakao"
+        ) {
+            setInlineFeedback(
+                feedback,
+                `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 실행할 수 있습니다.`,
+            );
+            return;
+        }
+    }
+
+    button.disabled = true;
+    button.textContent = "시작 중...";
+
+    try {
+        const response = await fetch("/api/suites", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(collectSuiteRequest(form)),
+        });
+
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `전체 점검 생성에 실패했습니다. (${response.status})`);
+        }
+
+        const suite = await response.json();
+        window.location.href = `/suites/${suite.suite_id}`;
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = "전체 점검 시작";
+        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "전체 점검 생성에 실패했습니다.");
+        console.error(error);
+    }
+}
+
+function bindSuiteForm() {
+    const form = document.getElementById("suite-form");
+    if (!form) {
+        return;
+    }
+    for (const panel of form.querySelectorAll(".suite-system-panel")) {
+        bindConditionalFields(panel);
+    }
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const button = document.getElementById("suite-start-button");
+        startSuiteRun(button, form);
+    });
+}
+
+const SUITE_ACTIVE_STATUSES = new Set(["pending", "running", "waiting_input"]);
+const SUITE_ACTIVE_MODULE_STATUSES = new Set(["running", "waiting_input"]);
+let suiteRunProgressSocket = null;
+let suiteRunProgressRunId = null;
+
+function orderedSelectedRunModules(run) {
+    const modules = [...(run?.modules ?? [])].sort((left, right) => left.order - right.order);
+    const selectedIds = new Set(
+        run?.selected_module_ids?.length
+            ? run.selected_module_ids
+            : modules
+                .filter((module) => String(module.status).toLowerCase() !== "skipped")
+                .map((module) => module.module_id),
+    );
+    return modules.filter((module) => selectedIds.has(module.module_id));
+}
+
+function computeRunModuleProgress(run) {
+    const modules = orderedSelectedRunModules(run);
+    const total = modules.length || run?.selected_module_ids?.length || 0;
+    if (total === 0) {
+        return { current: 0, total: 0, label: "", moduleName: "", tone: "muted" };
+    }
+
+    const activeIndex = modules.findIndex((module) =>
+        SUITE_ACTIVE_MODULE_STATUSES.has(String(module.status).toLowerCase()),
+    );
+    if (activeIndex >= 0) {
+        const module = modules[activeIndex];
+        return {
+            current: activeIndex + 1,
+            total,
+            label: `${activeIndex + 1}/${total}`,
+            moduleName: module.name ?? "",
+            tone: String(module.status).toLowerCase() === "waiting_input" ? "waiting" : "active",
+        };
+    }
+
+    const passedCount = modules.filter((module) => String(module.status).toLowerCase() === "passed").length;
+    const failedIndex = modules.findIndex((module) => String(module.status).toLowerCase() === "failed");
+    const runStatus = String(run?.status ?? "").toLowerCase();
+
+    if (failedIndex >= 0) {
+        return {
+            current: failedIndex + 1,
+            total,
+            label: `${failedIndex + 1}/${total}`,
+            moduleName: modules[failedIndex].name ?? "",
+            tone: "failed",
+        };
+    }
+
+    if (ACTIVE_RUN_STATUSES.has(runStatus) && passedCount < total) {
+        return {
+            current: passedCount + 1,
+            total,
+            label: `${passedCount + 1}/${total}`,
+            moduleName: "",
+            tone: "active",
+        };
+    }
+
+    if (runStatus === "passed") {
+        return {
+            current: total,
+            total,
+            label: `${total}/${total}`,
+            moduleName: "",
+            tone: "passed",
+        };
+    }
+
+    return {
+        current: passedCount,
+        total,
+        label: passedCount > 0 ? `${passedCount}/${total}` : "",
+        moduleName: "",
+        tone: "muted",
+    };
+}
+
+function moduleProgressClassName(tone) {
+    if (tone === "failed") {
+        return "mt-1 text-xs font-semibold text-red-600";
+    }
+    if (tone === "passed") {
+        return "mt-1 text-xs font-semibold text-emerald-600";
+    }
+    if (tone === "waiting") {
+        return "mt-1 text-xs font-semibold text-amber-700";
+    }
+    if (tone === "active") {
+        return "mt-1 text-xs font-semibold text-indigo-600";
+    }
+    return "mt-1 text-xs font-medium text-gray-400 is-hidden";
+}
+
+function formatStepModuleProgressText(progress, stepStatus) {
+    if (!progress.label) {
+        return "";
+    }
+    const status = String(stepStatus ?? "").toLowerCase();
+    if (status === "pending") {
+        return "";
+    }
+    if (progress.tone === "failed") {
+        return `모듈 ${progress.label} 실패${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
+    }
+    if (progress.tone === "passed" || status === "passed") {
+        return `모듈 ${progress.label} 완료`;
+    }
+    if (progress.tone === "waiting") {
+        return `모듈 ${progress.label} · OTP 대기${progress.moduleName ? ` (${progress.moduleName})` : ""}`;
+    }
+    return `모듈 ${progress.label} 실행 중${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
+}
+
+function findSuiteStepCardByRunId(runId) {
+    if (!runId) {
+        return null;
+    }
+    return document.querySelector(`.suite-step-card[data-run-id="${runId}"]`);
+}
+
+function updateSuiteStepModuleProgress(run) {
+    const card = findSuiteStepCardByRunId(run?.run_id);
+    if (!card) {
+        return;
+    }
+    const progressNode = card.querySelector('[data-role="step-module-progress"]');
+    if (!progressNode) {
+        return;
+    }
+    const stepStatus = card.querySelector('[data-role="step-status"]')?.textContent ?? "";
+    const progress = computeRunModuleProgress(run);
+    const text = formatStepModuleProgressText(progress, stepStatus);
+    progressNode.textContent = text;
+    progressNode.className = moduleProgressClassName(text ? progress.tone : "muted");
+    progressNode.classList.toggle("is-hidden", !text);
+
+    if (run.run_id === suiteRunProgressRunId) {
+        updateSuiteProgressDetailWithModule(run);
+    }
+}
+
+function updateSuiteProgressDetailWithModule(run) {
+    const detail = document.getElementById("suite-progress-detail");
+    if (!detail || !run) {
+        return;
+    }
+    const progress = computeRunModuleProgress(run);
+    const systemLabel = `${run.system_name} (${String(run.system_code ?? "").toUpperCase()})`;
+    if (!progress.label) {
+        detail.textContent = `현재: ${systemLabel}`;
+        return;
+    }
+    if (progress.tone === "waiting") {
+        detail.textContent = `현재: ${systemLabel} · 모듈 ${progress.label} · OTP 대기`;
+        return;
+    }
+    detail.textContent = `현재: ${systemLabel} · 모듈 ${progress.label}`;
+}
+
+async function refreshSuiteRunProgress(runId) {
+    if (!runId) {
+        return;
+    }
+    try {
+        const response = await fetch(`/api/runs/${runId}`);
+        if (!response.ok) {
+            return;
+        }
+        const run = await response.json();
+        updateSuiteStepModuleProgress(run);
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+function closeSuiteRunProgressSocket() {
+    if (suiteRunProgressSocket) {
+        suiteRunProgressSocket.close();
+        suiteRunProgressSocket = null;
+    }
+    suiteRunProgressRunId = null;
+}
+
+function resolveActiveSuiteRunId(suite) {
+    if (suite?.awaiting_input_run_id) {
+        return suite.awaiting_input_run_id;
+    }
+    const activeStep = (suite?.steps ?? []).find((step) => {
+        const status = String(step.status).toLowerCase();
+        return step.run_id && (status === "running" || status === "waiting_input");
+    });
+    return activeStep?.run_id ?? null;
+}
+
+const SUITE_RUN_PROGRESS_REFRESH_EVENTS = new Set([
+    "snapshot",
+    "module_queued",
+    "module_started",
+    "module_finished",
+    "module_waiting_input",
+    "run_waiting_input",
+    "run_resumed",
+    "run_finished",
+    "run_started",
+]);
+
+function syncSuiteRunProgressSocket(suite) {
+    const runId = resolveActiveSuiteRunId(suite);
+    if (!runId) {
+        closeSuiteRunProgressSocket();
+        return;
+    }
+    if (runId === suiteRunProgressRunId && suiteRunProgressSocket) {
+        refreshSuiteRunProgress(runId);
+        return;
+    }
+
+    closeSuiteRunProgressSocket();
+    suiteRunProgressRunId = runId;
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    suiteRunProgressSocket = new WebSocket(`${protocol}://${window.location.host}/ws/runs/${runId}`);
+
+    suiteRunProgressSocket.addEventListener("message", (event) => {
+        const message = JSON.parse(event.data);
+        if (message.event_type === "snapshot") {
+            updateSuiteStepModuleProgress(message.payload);
+            return;
+        }
+        if (SUITE_RUN_PROGRESS_REFRESH_EVENTS.has(message.event_type)) {
+            refreshSuiteRunProgress(runId);
+        }
+    });
+
+    suiteRunProgressSocket.addEventListener("close", () => {
+        if (suiteRunProgressRunId === runId) {
+            suiteRunProgressRunId = null;
+            suiteRunProgressSocket = null;
+        }
+    });
+
+    refreshSuiteRunProgress(runId);
+}
+
+function refreshFinishedSuiteStepProgress(suite) {
+    for (const step of suite?.steps ?? []) {
+        const status = String(step.status).toLowerCase();
+        if (!step.run_id) {
+            continue;
+        }
+        if (status === "passed" || status === "failed" || status === "cancelled") {
+            refreshSuiteRunProgress(step.run_id);
+        }
+    }
+}
+
+function currentSuiteId() {
+    return document.getElementById("suite-step-grid")?.dataset.suiteId ?? "";
+}
+
+function updateSuiteActions(status) {
+    const normalized = String(status ?? "").toLowerCase();
+    const isActive = SUITE_ACTIVE_STATUSES.has(normalized);
+    const cancelButton = document.getElementById("suite-cancel");
+    if (cancelButton) {
+        cancelButton.classList.toggle("hidden", !isActive);
+        if (!isActive) {
+            cancelButton.disabled = false;
+            cancelButton.textContent = "전체 점검 취소";
+        }
+    }
+}
+
+function updateSuiteProgress(suite) {
+    const steps = suite.steps ?? [];
+    const passed = steps.filter((step) => String(step.status).toLowerCase() === "passed").length;
+    const total = steps.length;
+    const label = document.getElementById("suite-progress-label");
+    const bar = document.getElementById("suite-progress-bar");
+    const detail = document.getElementById("suite-progress-detail");
+    if (label) {
+        label.textContent = `통과 ${passed}/${total}`;
+    }
+    if (bar) {
+        bar.style.width = total > 0 ? `${Math.round((passed / total) * 100)}%` : "0%";
+    }
+    if (detail) {
+        const currentIndex = suite.current_step_index ?? 0;
+        const currentStep = steps.find((step) => step.order === currentIndex) ?? steps[currentIndex];
+        if (String(suite.status).toLowerCase() === "waiting_input") {
+            const waitingStep = steps.find((step) => step.run_id && step.run_id === suite.awaiting_input_run_id);
+            if (waitingStep) {
+                detail.textContent = `현재: ${waitingStep.system_name} (${waitingStep.system_code?.toUpperCase() ?? ""}) · OTP 대기`;
+            } else {
+                detail.textContent = "OTP 입력 대기 중입니다.";
+            }
+        } else if (currentStep && SUITE_ACTIVE_STATUSES.has(String(suite.status).toLowerCase())) {
+            detail.textContent = `현재: ${currentStep.system_name} (${currentStep.system_code?.toUpperCase() ?? ""})`;
+        } else {
+            detail.textContent = "";
+        }
+    }
+}
+
+function updateSuiteStepCard(step) {
+    const card = document.querySelector(`.suite-step-card[data-step-index="${step.order}"]`);
+    if (!card) {
+        return;
+    }
+    const status = String(step.status ?? "").toLowerCase();
+    card.dataset.runId = step.run_id ?? "";
+    card.className = `suite-step-card rounded-2xl border border-gray-200 bg-white p-5 shadow-sm status-${status}`;
+    const statusNode = card.querySelector('[data-role="step-status"]');
+    if (statusNode) {
+        statusNode.textContent = step.status ?? "";
+        statusNode.className = `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClassName(step.status)}`;
+    }
+    const linkNode = card.querySelector('[data-role="step-run-link"]');
+    if (linkNode) {
+        if (step.run_id) {
+            linkNode.innerHTML = `<a href="/runs/${step.run_id}" class="font-medium text-indigo-600 hover:underline">${step.run_id}</a>`;
+        } else {
+            linkNode.innerHTML = '<span class="text-gray-400">대기 중</span>';
+        }
+    }
+    if (status === "running" || status === "waiting_input") {
+        card.classList.add("ring-2", "ring-indigo-200");
+    } else {
+        card.classList.remove("ring-2", "ring-indigo-200");
+    }
+
+    if (!step.run_id) {
+        const progressNode = card.querySelector('[data-role="step-module-progress"]');
+        if (progressNode) {
+            progressNode.textContent = "";
+            progressNode.className = "mt-1 text-xs font-medium text-gray-400 is-hidden";
+        }
+    }
+}
+
+function updateSuiteOtpPanel(suite) {
+    const panel = document.getElementById("suite-otp-panel");
+    if (!panel) {
+        return;
+    }
+    const awaitingRunId = suite.awaiting_input_run_id ?? "";
+    const prompt = suite.awaiting_input_prompt ?? "현재 시스템 로그인에서 OTP 입력이 필요합니다.";
+    panel.dataset.runId = awaitingRunId;
+    const promptNode = document.getElementById("suite-otp-prompt");
+    if (promptNode) {
+        promptNode.textContent = prompt;
+    }
+    panel.classList.toggle("is-hidden", !awaitingRunId);
+}
+
+function renderSuiteSnapshot(suite) {
+    const statusNode = document.getElementById("suite-status");
+    if (statusNode) {
+        statusNode.textContent = suite.status ?? "";
+        statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
+    }
+    updateSuiteActions(suite.status);
+    updateSuiteProgress(suite);
+    updateSuiteOtpPanel(suite);
+    for (const step of suite.steps ?? []) {
+        updateSuiteStepCard(step);
+    }
+    syncSuiteRunProgressSocket(suite);
+    refreshFinishedSuiteStepProgress(suite);
+}
+
+async function cancelSuite(button) {
+    if (!window.confirm("진행 중인 전체 점검을 취소하시겠습니까? 현재 시스템 Run도 함께 중단됩니다.")) {
+        return;
+    }
+    button.disabled = true;
+    button.textContent = "취소 요청됨...";
+    try {
+        const response = await fetch(`/api/suites/${currentSuiteId()}/cancel`, { method: "POST" });
+        if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+        }
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = "전체 점검 취소";
+        showToast(`취소에 실패했습니다: ${error.message}`);
+        console.error(error);
+    }
+}
+
+function bindSuiteActions() {
+    const cancelButton = document.getElementById("suite-cancel");
+    if (cancelButton) {
+        cancelButton.addEventListener("click", () => cancelSuite(cancelButton));
+    }
+    updateSuiteActions(document.getElementById("suite-status")?.textContent);
+}
+
+async function submitSuiteOtp(suiteId, otpCode, form) {
+    const button = form.querySelector("button[type='submit']");
+    const feedback = document.querySelector('[data-role="suite-otp-feedback"]');
+    setInlineFeedback(feedback, "");
+    button.disabled = true;
+    button.textContent = "제출 중...";
+
+    try {
+        const response = await fetch(`/api/suites/${suiteId}/otp`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ otp_code: otpCode }),
+        });
+
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `OTP 제출에 실패했습니다. (${response.status})`);
+        }
+
+        form.reset();
+        setInlineFeedback(feedback, "OTP가 제출되었습니다. 인증 완료까지 잠시 기다려 주세요.", "success");
+    } catch (error) {
+        setInlineFeedback(feedback, `OTP 제출에 실패했습니다: ${error.message.replace(/^Error:\s*/, "")}`);
+        console.error(error);
+    } finally {
+        button.disabled = false;
+        button.textContent = "OTP 제출";
+    }
+}
+
+function bindSuiteOtpForm() {
+    const form = document.getElementById("suite-otp-form");
+    const panel = document.getElementById("suite-otp-panel");
+    if (!form || !panel) {
+        return;
+    }
+
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const suiteId = panel.dataset.suiteId;
+        const otpCode = String(new FormData(form).get("otp_code") || "").trim();
+        if (!otpCode) {
+            setInlineFeedback(document.querySelector('[data-role="suite-otp-feedback"]'), "OTP 코드를 입력하세요.");
+            return;
+        }
+        submitSuiteOtp(suiteId, otpCode, form);
+    });
+}
+
+function bindSuiteSocket() {
+    const grid = document.getElementById("suite-step-grid");
+    if (!grid) {
+        return;
+    }
+
+    const suiteId = grid.dataset.suiteId;
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/suites/${suiteId}`);
+
+    socket.addEventListener("message", (event) => {
+        const message = JSON.parse(event.data);
+        const suite = message.payload ?? message;
+
+        if (message.event_type === "snapshot") {
+            renderSuiteSnapshot(suite);
+            return;
+        }
+
+        if (suite.status) {
+            const statusNode = document.getElementById("suite-status");
+            if (statusNode) {
+                statusNode.textContent = suite.status;
+                statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
+            }
+            updateSuiteActions(suite.status);
+        }
+
+        renderSuiteSnapshot(suite);
+    });
+}
+
 function bindRunActions() {
     const cancelButton = document.getElementById("run-cancel");
     const rerunButton = document.getElementById("run-rerun");
@@ -1721,11 +2302,15 @@ function updateComparisonPanel(runPayload) {
 document.addEventListener("DOMContentLoaded", () => {
     bindModuleSelectors();
     bindSystemButtons();
+    bindSuiteForm();
     bindRunsOverview();
     bindSchedulesOverview();
     bindLogControls();
     startRuntimeTicker();
     bindRunActions();
     bindOtpForm();
+    bindSuiteActions();
+    bindSuiteOtpForm();
+    bindSuiteSocket();
     bindRunSocket();
 });

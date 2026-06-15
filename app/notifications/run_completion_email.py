@@ -21,8 +21,8 @@ from app.core.env_utils import (
     resolve_env_value,
     resolve_env_with_source,
 )
-from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.models import Run, SuiteRun
 from app.runner.artifact_manager import ArtifactManager
 
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
@@ -200,11 +200,14 @@ class RunArtifact:
     path: Path
     relative_path: str
     size_bytes: int
+    system_code: str = ""
+    run_id: str = ""
 
     @property
     def attachment_name(self) -> str:
         safe_module_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", self.module_id)
-        return f"{safe_module_id}-{self.path.name}"
+        prefix = f"{self.system_code}_" if self.system_code else ""
+        return f"{prefix}{safe_module_id}-{self.path.name}"
 
 
 @dataclass(frozen=True)
@@ -250,7 +253,7 @@ class GeminiEmailHtmlComposer:
         self._verify_ssl = verify_ssl
 
     def compose(self, context: dict, gemini_parts: list[dict]) -> str:
-        prompt = self._build_prompt(context)
+        prompt = self._build_suite_prompt(context) if context.get("report_type") == "suite" else self._build_prompt(context)
         payload = {
             "contents": [
                 {
@@ -339,6 +342,55 @@ class GeminiEmailHtmlComposer:
             ]
         )
 
+    def _build_suite_prompt(self, context: dict) -> str:
+        prompt_context = {
+            "suite": context["suite"],
+            "step_summary": context["step_summary"],
+            "system_runs": context["system_runs"],
+            "email_attachment_summary": context["email_attachment_summary"],
+            "gemini_input_summary": context["gemini_input_summary"],
+        }
+        return "\n".join(
+            [
+                "# 역할",
+                "당신은 여러 시스템을 순차 실행한 E2E 전체 점검(Suite) 결과를 보고하는 시니어 QA 엔지니어이자 한국어 Gmail HTML 이메일 작성기다.",
+                "운영 담당자가 이 메일 하나만 읽어도 전체 점검 결과와 각 시스템·모듈별 실행 결과를 완전히 파악할 수 있는 공식 보고서 HTML 본문을 작성하라.",
+                "",
+                "# 입력 자료",
+                "1. Suite 메타데이터 JSON (suite)",
+                "2. 시스템별 Run 결과 JSON (system_runs) — 각 항목에 modules 배열(모듈별 seq/이름/상태/소요시간/비고)이 포함됨",
+                "3. 모듈별 스크린샷·실행 로그(레이블에 system_code, run_id, module_id 포함)",
+                "",
+                "# 보고서 구성 (순서 준수)",
+                "1. 제목 헤더: '[E2E] 전체 시스템 순차 점검 결과 보고서' + Suite 최종 상태 배지",
+                "2. Suite 개요 표: suite_id, 요청/시작/종료(KST), 총 소요, 통과/실패 시스템 수, browser_mode",
+                "3. 시스템 요약 표: 순서, 시스템명, Run ID, 시스템 상태, 모듈 통과 수(예: 8/8)",
+                "4. 시스템별 상세 섹션 (필수, system_runs 순서대로 각각 작성):",
+                "   - 섹션 제목: '{순번}. {system_name} ({system_code})' + 시스템 상태 배지",
+                "   - Run ID, 시스템 Run 상태, 소요시간(있으면) 한 줄 요약",
+                "   - **모듈별 실행 결과 표 (필수)**: 해당 system_runs[].modules 전체를 빠짐없이 표로 작성.",
+                "     컬럼: 순번(seq), 모듈명, 모듈 ID, 상태(색상 구분), 소요시간, 비고(message).",
+                "     PASSED=녹색, FAILED=적색, BLOCKED/CANCELLED/SKIPPED=회색·주황.",
+                "   - 실패 모듈이 있으면 failed_modules 기반으로 원인·권장 조치 소절 추가",
+                "   - comparison.has_baseline 이 true 면 해당 시스템 직전 Run 대비 변화 요약",
+                "5. 화면·로그 분석: 제공된 스크린샷/로그만 근거로, 시스템·모듈 단위로 관찰 내용 기술(추측 금지)",
+                "6. 첨부 안내 및 제외 파일 경고(있을 때)",
+                "7. 푸터: 자동 발송 안내",
+                "",
+                "# HTML 작성 규칙",
+                "- inline style, max-width 760px, Gmail 안전 태그만(div/table/thead/tbody/tr/td/th/p/h2/h3/ul/li/span/strong/code/hr/br)",
+                "- script/style/iframe/form/외부 리소스 금지",
+                "- system_runs[].modules 의 seq 를 표 순번으로 그대로 사용 (manifest order 값은 순번으로 쓰지 마라)",
+                "- 모듈 표는 각 시스템 섹션 안에 반드시 포함. 요약 표만으로 대체하지 마라.",
+                "",
+                "# 출력 형식",
+                "응답은 JSON 하나만 반환하고 html 필드에 HTML 문자열을 넣어라.",
+                "",
+                "## 실행 메타데이터",
+                json.dumps(prompt_context, ensure_ascii=False, indent=2),
+            ]
+        )
+
     def _post_generate_content(self, payload: dict) -> dict:
         return post_gemini_generate_content(
             api_key=self._api_key,
@@ -408,17 +460,53 @@ class RunCompletionEmailBuilder:
             )
         return message
 
+    def build_suite(
+        self,
+        suite: SuiteRun,
+        runs: list[Run],
+        recipients: list[str],
+        email_selection: AttachmentSelection,
+        gemini_selection: GeminiPromptSelection,
+    ) -> EmailMessage:
+        context = _build_suite_email_context(suite, runs, email_selection, gemini_selection)
+        html_body = self._build_html_body(context, gemini_selection.parts)
+        text_body = self._build_plain_text(context)
+
+        message = EmailMessage()
+        message["Subject"] = _build_suite_subject(suite)
+        message["From"] = self._config.gmail_account
+        message["To"] = "undisclosed-recipients:;"
+        message.set_content(text_body)
+        message.add_alternative(html_body, subtype="html")
+
+        for artifact in email_selection.included:
+            mime_type = mimetypes.guess_type(artifact.path.name)[0] or "application/octet-stream"
+            maintype, subtype = mime_type.split("/", 1)
+            message.add_attachment(
+                artifact.path.read_bytes(),
+                maintype=maintype,
+                subtype=subtype,
+                filename=artifact.attachment_name,
+            )
+        return message
+
     def _build_html_body(self, context: dict, gemini_parts: list[dict]) -> str:
         if self._composer is None:
+            if context.get("report_type") == "suite":
+                return self._build_suite_fallback_html(context)
             return self._build_fallback_html(context)
         try:
             return self._composer.compose(context, gemini_parts)
         except Exception as exc:
             print(f"[email] Gemini HTML 생성 실패: {exc}")
+            if context.get("report_type") == "suite":
+                return self._build_suite_fallback_html(context)
             return self._build_fallback_html(context)
 
     @staticmethod
     def _build_plain_text(context: dict) -> str:
+        if context.get("report_type") == "suite":
+            return _build_suite_plain_text(context)
         run_info = context["run"]
         lines = [
             f"[E2E] {run_info['system_code']} 테스트 {run_info['status_label']}",
@@ -587,6 +675,168 @@ class RunCompletionEmailBuilder:
             + "</div></div>"
         )
 
+    @staticmethod
+    def _build_suite_fallback_html(context: dict) -> str:
+        suite_info = context["suite"]
+        tone_color = "#17804b" if suite_info["status"] == SuiteStatus.PASSED.value else "#c44536"
+        step_rows = "".join(
+            (
+                "<tr>"
+                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{item['order'] + 1}</td>"
+                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{escape(item['system_name'])} "
+                f"(<code>{escape(item['system_code'])}</code>)</td>"
+                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\"><code>{escape(item['run_id'] or '-')}</code></td>"
+                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{escape(item['status'])}</td>"
+                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{item['module_passed']}/{item['module_total']}</td>"
+                "</tr>"
+            )
+            for item in context["step_summary"]
+        )
+
+        system_sections: list[str] = []
+        for index, system_run in enumerate(context["system_runs"], start=1):
+            system_tone = "#17804b" if system_run["status"] == RunStatus.PASSED.value else "#c44536"
+            if system_run["status"] == RunStatus.CANCELLED.value:
+                system_tone = "#71717a"
+
+            module_rows = "".join(
+                (
+                    "<tr>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:center;\">{module['seq']}</td>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\">{escape(module['module_name'])}</td>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\"><code>{escape(module['module_id'])}</code></td>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;"
+                    f"color:{_suite_module_status_color(module['status'])};font-weight:600;\">"
+                    f"{escape(module['status_label'])}</td>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\">{escape(module['duration_text'])}</td>"
+                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;color:#555;\">{escape(module['message'])}</td>"
+                    "</tr>"
+                )
+                for module in system_run.get("modules", [])
+            )
+            if not module_rows:
+                module_rows = (
+                    "<tr><td colspan=\"6\" style=\"padding:12px 6px;color:#888;\">"
+                    f"{escape(system_run.get('note', '실행된 모듈이 없습니다.'))}"
+                    "</td></tr>"
+                )
+
+            failed_block = ""
+            if system_run.get("failed_modules"):
+                failed_items = "".join(
+                    (
+                        "<li style=\"margin-bottom:8px;\">"
+                        f"<strong>{escape(item['module_name'])}</strong> "
+                        f"(<code>{escape(item['module_id'])}</code>)<br>"
+                        f"<span>{escape(item['message'])}</span>"
+                        + (
+                            f"<br><span>AI 요약: {escape(item['analysis_summary'])}</span>"
+                            if item.get("analysis_summary")
+                            else ""
+                        )
+                        + (
+                            f"<br><span>권장 조치: {escape(item['recommended_action'])}</span>"
+                            if item.get("recommended_action")
+                            else ""
+                        )
+                        + "</li>"
+                    )
+                    for item in system_run["failed_modules"]
+                )
+                failed_block = (
+                    "<div style=\"margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff5f5;"
+                    "border:1px solid rgba(196,69,54,0.2);\">"
+                    "<strong style=\"color:#c44536;\">실패 모듈</strong>"
+                    f"<ul style=\"margin:8px 0 0;padding-left:18px;\">{failed_items}</ul>"
+                    "</div>"
+                )
+
+            comparison = system_run.get("comparison") or {}
+            comparison_block = ""
+            if comparison.get("has_baseline"):
+                comparison_block = (
+                    "<div style=\"margin-top:12px;padding:12px 14px;border-radius:12px;background:#f1f5ff;"
+                    "border:1px solid rgba(37,99,235,0.18);font-size:13px;\">"
+                    f"<strong>직전 실행 대비</strong> (기준 Run: <code>{escape(str(comparison.get('baseline_run_id') or '-'))}</code>)"
+                    + (
+                        f"<div style=\"margin-top:6px;color:#c44536;\">새로 실패: {escape(', '.join(comparison.get('newly_failed') or []))}</div>"
+                        if comparison.get("newly_failed")
+                        else ""
+                    )
+                    + (
+                        f"<div style=\"margin-top:4px;color:#17804b;\">복구됨: {escape(', '.join(comparison.get('recovered') or []))}</div>"
+                        if comparison.get("recovered")
+                        else ""
+                    )
+                    + (
+                        f"<div style=\"margin-top:4px;color:#9a6700;\">계속 실패: {escape(', '.join(comparison.get('still_failing') or []))}</div>"
+                        if comparison.get("still_failing")
+                        else ""
+                    )
+                    + "</div>"
+                )
+
+            system_sections.append(
+                (
+                    "<div style=\"margin-top:20px;padding:16px;border:1px solid rgba(30,26,22,0.08);"
+                    "border-radius:16px;background:#fff;\">"
+                    f"<h3 style=\"margin:0 0 8px;font-size:17px;color:{system_tone};\">"
+                    f"{index}. {escape(system_run['system_name'])} "
+                    f"(<code>{escape(system_run['system_code'])}</code>)</h3>"
+                    f"<p style=\"margin:0 0 12px;font-size:13px;color:#665f57;\">"
+                    f"Run ID: <code>{escape(system_run.get('run_id') or '-')}</code> · "
+                    f"상태: <strong>{escape(system_run.get('status_label', system_run['status']))}</strong> · "
+                    f"모듈 통과: {system_run.get('module_passed', 0)}/{system_run.get('module_total', 0)} · "
+                    f"소요: {escape(system_run.get('duration_text', '-'))}"
+                    "</p>"
+                    "<table style=\"width:100%;border-collapse:collapse;font-size:12px;\">"
+                    "<thead><tr style=\"background:#f9fafb;\">"
+                    "<th style=\"text-align:center;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:40px;\">#</th>"
+                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">모듈명</th>"
+                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">모듈 ID</th>"
+                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:72px;\">상태</th>"
+                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:80px;\">소요</th>"
+                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">비고</th>"
+                    "</tr></thead>"
+                    f"<tbody>{module_rows}</tbody></table>"
+                    f"{failed_block}{comparison_block}"
+                    "</div>"
+                )
+            )
+
+        return (
+            "<div style=\"font-family:Arial,'Noto Sans KR',sans-serif;color:#1e1a16;line-height:1.6;\">"
+            "<div style=\"max-width:760px;margin:0 auto;padding:24px;background:#fffaf4;border:1px solid rgba(30,26,22,0.08);"
+            "border-radius:20px;\">"
+            f"<h2 style=\"margin:0 0 12px;font-size:24px;color:{tone_color};\">"
+            f"[E2E] 전체 시스템 순차 점검 {escape(suite_info['status_label'])}</h2>"
+            "<table style=\"width:100%;border-collapse:collapse;font-size:14px;margin-bottom:18px;\">"
+            f"<tr><td style=\"padding:6px 0;color:#665f57;\">Suite ID</td><td style=\"padding:6px 0;\"><code>{escape(suite_info['suite_id'])}</code></td></tr>"
+            f"<tr><td style=\"padding:6px 0;color:#665f57;\">요청 시각</td><td style=\"padding:6px 0;\">{escape(suite_info['requested_at_kst'])}</td></tr>"
+            f"<tr><td style=\"padding:6px 0;color:#665f57;\">종료 시각</td><td style=\"padding:6px 0;\">{escape(suite_info['ended_at_kst'])}</td></tr>"
+            f"<tr><td style=\"padding:6px 0;color:#665f57;\">총 소요시간</td><td style=\"padding:6px 0;\">{escape(suite_info['duration_text'])}</td></tr>"
+            f"<tr><td style=\"padding:6px 0;color:#665f57;\">시스템 통과</td><td style=\"padding:6px 0;\">{suite_info['step_passed']}/{suite_info['step_total']}</td></tr>"
+            "</table>"
+            "<h3 style=\"margin:0 0 10px;font-size:16px;\">시스템 요약</h3>"
+            "<table style=\"width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;\">"
+            "<thead><tr>"
+            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">#</th>"
+            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">시스템</th>"
+            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">Run ID</th>"
+            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">상태</th>"
+            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">모듈</th>"
+            "</tr></thead>"
+            f"<tbody>{step_rows}</tbody></table>"
+            "<h3 style=\"margin:24px 0 12px;font-size:16px;\">시스템별 모듈 실행 결과</h3>"
+            + "".join(system_sections)
+            + "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f6f3ef;\">"
+            "<strong style=\"display:block;margin-bottom:8px;\">첨부 요약</strong>"
+            f"<div>스크린샷 {context['email_attachment_summary']['screenshot_count']}건 / "
+            f"로그 {context['email_attachment_summary']['log_count']}건</div>"
+            "</div>"
+            "</div></div>"
+        )
+
 
 class RunCompletionEmailNotifier:
     def __init__(self, config: EmailNotificationConfig) -> None:
@@ -607,6 +857,8 @@ class RunCompletionEmailNotifier:
         return EmailNotificationConfig.inspect_env_status(system_codes)
 
     def send_run_completion(self, run: Run) -> None:
+        if run.suite_id:
+            return
         recipients = list(self._config.recipients_by_system.get(run.system_code, ()))
         if not recipients:
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: {run.system_code}")
@@ -620,6 +872,147 @@ class RunCompletionEmailNotifier:
             f"[email] run={run.run_id} recipients={len(recipients)} "
             f"attachments={len(email_selection.included)} status={run.status}"
         )
+
+    def send_suite_completion(self, suite: SuiteRun, runs: list[Run]) -> None:
+        recipients = self._resolve_suite_recipients(suite)
+        if not recipients:
+            raise RuntimeError(f"메일 수신자를 찾지 못했습니다: suite={suite.suite_id}")
+
+        ordered_runs = self._order_runs_for_suite(suite, runs)
+        artifacts = self._collect_artifacts_for_runs(ordered_runs)
+        email_selection = self._select_suite_email_attachments(suite, ordered_runs, artifacts)
+        gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
+        message = self._builder.build_suite(suite, ordered_runs, recipients, email_selection, gemini_selection)
+        self._sender.send(message, recipients)
+        print(
+            f"[email] suite={suite.suite_id} recipients={len(recipients)} "
+            f"attachments={len(email_selection.included)} status={suite.status}"
+        )
+
+    def _resolve_suite_recipients(self, suite: SuiteRun) -> list[str]:
+        seen: set[str] = set()
+        recipients: list[str] = []
+        for step in suite.steps:
+            for address in self._config.recipients_by_system.get(step.system_code, ()):
+                if address in seen:
+                    continue
+                seen.add(address)
+                recipients.append(address)
+        return recipients
+
+    @staticmethod
+    def _order_runs_for_suite(suite: SuiteRun, runs: list[Run]) -> list[Run]:
+        run_by_id = {run.run_id: run for run in runs}
+        ordered: list[Run] = []
+        for step in sorted(suite.steps, key=lambda item: item.order):
+            if step.run_id and step.run_id in run_by_id:
+                ordered.append(run_by_id[step.run_id])
+        return ordered
+
+    def _collect_artifacts_for_runs(self, runs: list[Run]) -> list[RunArtifact]:
+        collected: list[RunArtifact] = []
+        seen_paths: set[str] = set()
+        for run in runs:
+            for artifact in self._collect_artifacts(run):
+                if artifact.relative_path in seen_paths:
+                    continue
+                seen_paths.add(artifact.relative_path)
+                collected.append(artifact)
+        return collected
+
+    def _select_suite_email_attachments(
+        self,
+        suite: SuiteRun,
+        runs: list[Run],
+        artifacts: list[RunArtifact],
+    ) -> AttachmentSelection:
+        failed_run_ids = {run.run_id for run in runs if run.status == RunStatus.FAILED}
+        wanted_logs = suite.status == SuiteStatus.FAILED
+        included: list[RunArtifact] = []
+        omitted: list[OmittedArtifact] = []
+        total_bytes = 0
+        for artifact in artifacts:
+            if artifact.kind == "screenshot":
+                accept = True
+            elif artifact.kind == "log":
+                accept = wanted_logs and artifact.run_id in failed_run_ids
+            else:
+                accept = False
+            if not accept:
+                continue
+            if total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
+                omitted.append(
+                    OmittedArtifact(
+                        relative_path=artifact.relative_path,
+                        reason=f"Gmail 첨부 한도({self._config.max_email_attachment_bytes} bytes)를 초과합니다.",
+                    )
+                )
+                continue
+            included.append(artifact)
+            total_bytes += artifact.size_bytes
+        return AttachmentSelection(included=included, omitted=omitted, total_bytes=total_bytes)
+
+    def _select_gemini_prompt_inputs_for_artifacts(self, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
+        parts: list[dict] = []
+        omitted: list[OmittedArtifact] = []
+        included_labels: list[str] = []
+        total_bytes = 0
+
+        for artifact in artifacts:
+            system_prefix = f"system_code={artifact.system_code} run_id={artifact.run_id} " if artifact.system_code else ""
+            label = (
+                f"{system_prefix}seq={artifact.seq} module_id={artifact.module_id} "
+                f"module_name={artifact.module_name} order={artifact.order} path={artifact.relative_path}"
+            )
+            if artifact.kind == "screenshot":
+                if artifact.size_bytes > self._config.max_gemini_inline_image_bytes:
+                    omitted.append(
+                        OmittedArtifact(
+                            relative_path=artifact.relative_path,
+                            reason=f"이미지 파일이 Gemini inline 한도({self._config.max_gemini_inline_image_bytes} bytes)를 초과합니다.",
+                        )
+                    )
+                    continue
+                if total_bytes + artifact.size_bytes > self._config.max_gemini_attachment_bytes:
+                    omitted.append(
+                        OmittedArtifact(
+                            relative_path=artifact.relative_path,
+                            reason=f"Gemini 입력 한도({self._config.max_gemini_attachment_bytes} bytes)를 초과합니다.",
+                        )
+                    )
+                    continue
+                mime_type = mimetypes.guess_type(artifact.path.name)[0] or "image/png"
+                parts.append({"text": f"[screenshot] {label}"})
+                parts.append(
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": base64.b64encode(artifact.path.read_bytes()).decode("ascii"),
+                        }
+                    }
+                )
+                included_labels.append(f"image:{artifact.relative_path}")
+                total_bytes += artifact.size_bytes
+                continue
+
+            log_bytes = min(artifact.size_bytes, self._config.max_gemini_log_bytes)
+            if total_bytes + log_bytes > self._config.max_gemini_attachment_bytes:
+                omitted.append(
+                    OmittedArtifact(
+                        relative_path=artifact.relative_path,
+                        reason=f"Gemini 입력 한도({self._config.max_gemini_attachment_bytes} bytes)를 초과합니다.",
+                    )
+                )
+                continue
+            log_text = artifact.path.read_text(encoding="utf-8", errors="ignore")
+            if len(log_text.encode("utf-8")) > self._config.max_gemini_log_bytes:
+                log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode("utf-8", errors="ignore")
+                log_text = "[truncated_tail]\n" + log_text.lstrip()
+            parts.append({"text": f"[execution_log] {label}\n{log_text}"})
+            included_labels.append(f"log:{artifact.relative_path}")
+            total_bytes += min(len(log_text.encode("utf-8")), self._config.max_gemini_log_bytes)
+
+        return GeminiPromptSelection(parts=parts, omitted=omitted, included_labels=included_labels)
 
     def _collect_artifacts(self, run: Run) -> list[RunArtifact]:
         collected: list[RunArtifact] = []
@@ -646,6 +1039,8 @@ class RunCompletionEmailNotifier:
                         path=path,
                         relative_path=relative_path,
                         size_bytes=path.stat().st_size,
+                        system_code=run.system_code,
+                        run_id=run.run_id,
                     )
                 )
         return collected
@@ -737,6 +1132,268 @@ class RunCompletionEmailNotifier:
 def _build_subject(run: Run) -> str:
     status_label = "테스트 완료" if run.status == RunStatus.PASSED else "테스트 중단"
     return f"[E2E][{run.system_code.upper()}][{run.status.value}] {run.run_id} {status_label}"
+
+
+def _build_suite_subject(suite: SuiteRun) -> str:
+    status_label = "전체 점검 완료" if suite.status == SuiteStatus.PASSED else "전체 점검 중단"
+    return f"[E2E][SUITE][{suite.status.value}] {suite.suite_id} {status_label}"
+
+
+def _format_suite_duration(suite: SuiteRun) -> str:
+    if suite.started_at is None or suite.ended_at is None:
+        return "-"
+    seconds = int((suite.ended_at - suite.started_at).total_seconds())
+    if seconds < 60:
+        return f"{seconds}초"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}분 {remainder}초"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}시간 {minutes}분"
+
+
+def _module_status_label(status: str) -> str:
+    labels = {
+        ModuleStatus.PASSED.value: "성공",
+        ModuleStatus.FAILED.value: "실패",
+        ModuleStatus.BLOCKED.value: "차단",
+        ModuleStatus.SKIPPED.value: "제외",
+        ModuleStatus.CANCELLED.value: "취소",
+        ModuleStatus.RUNNING.value: "실행 중",
+        ModuleStatus.QUEUED.value: "대기",
+        ModuleStatus.PENDING.value: "대기",
+        ModuleStatus.WAITING_INPUT.value: "입력 대기",
+    }
+    return labels.get(status, status)
+
+
+def _suite_module_status_color(status: str) -> str:
+    colors = {
+        ModuleStatus.PASSED.value: "#17804b",
+        ModuleStatus.FAILED.value: "#c44536",
+        ModuleStatus.BLOCKED.value: "#f97316",
+        ModuleStatus.SKIPPED.value: "#64748b",
+        ModuleStatus.CANCELLED.value: "#71717a",
+        ModuleStatus.WAITING_INPUT.value: "#d97706",
+        RunStatus.PASSED.value: "#17804b",
+        RunStatus.FAILED.value: "#c44536",
+        RunStatus.CANCELLED.value: "#71717a",
+    }
+    return colors.get(status, "#6b7280")
+
+
+def _build_comparison_context(run: Run) -> dict:
+    comparison = run.comparison
+    return {
+        "has_baseline": bool(comparison and comparison.has_baseline),
+        "baseline_run_id": comparison.baseline_run_id if comparison else None,
+        "baseline_requested_at": (
+            _format_datetime(comparison.baseline_requested_at)
+            if comparison and comparison.baseline_requested_at
+            else "-"
+        ),
+        "newly_failed": list(comparison.newly_failed) if comparison else [],
+        "recovered": list(comparison.recovered) if comparison else [],
+        "still_failing": list(comparison.still_failing) if comparison else [],
+    }
+
+
+def _serialize_run_for_suite_report(run: Run) -> dict:
+    selected_ids = set(run.selected_module_ids) or {
+        module.module_id for module in run.modules if module.status != ModuleStatus.SKIPPED
+    }
+    ordered_modules = sorted(run.modules, key=lambda item: item.order)
+    modules: list[dict] = []
+    failed_modules: list[dict] = []
+    module_summary: dict[str, int] = {}
+    seq = 0
+    for module in ordered_modules:
+        if module.module_id not in selected_ids:
+            continue
+        seq += 1
+        status_value = module.status.value
+        module_summary[status_value] = module_summary.get(status_value, 0) + 1
+        modules.append(
+            {
+                "seq": seq,
+                "order": module.order,
+                "module_id": module.module_id,
+                "module_name": module.name,
+                "group": module.group,
+                "status": status_value,
+                "status_label": _module_status_label(status_value),
+                "message": module.message,
+                "duration_text": _format_module_duration(module.duration_ms),
+                "retry_count": module.retry_count,
+            }
+        )
+        if module.status == ModuleStatus.FAILED:
+            failed_modules.append(
+                {
+                    "module_id": module.module_id,
+                    "module_name": module.name,
+                    "message": module.message,
+                    "analysis_summary": module.failure_analysis.user_summary if module.failure_analysis else "",
+                    "recommended_action": module.failure_analysis.recommended_action if module.failure_analysis else "",
+                }
+            )
+    module_passed = sum(1 for module in modules if module["status"] == ModuleStatus.PASSED.value)
+    return {
+        "modules": modules,
+        "module_summary": module_summary,
+        "failed_modules": failed_modules,
+        "comparison": _build_comparison_context(run),
+        "module_passed": module_passed,
+        "module_total": len(modules),
+        "duration_text": _format_duration(run),
+    }
+
+
+def _build_suite_email_context(
+    suite: SuiteRun,
+    runs: list[Run],
+    email_selection: AttachmentSelection,
+    gemini_selection: GeminiPromptSelection,
+) -> dict:
+    run_by_id = {run.run_id: run for run in runs}
+    step_passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
+    step_failed = sum(1 for step in suite.steps if step.status == SuiteStatus.FAILED)
+    step_summary = []
+    system_runs = []
+    for step in sorted(suite.steps, key=lambda item: item.order):
+        run = run_by_id.get(step.run_id or "")
+        module_passed = 0
+        module_total = step.module_total
+        if run is not None:
+            report = _serialize_run_for_suite_report(run)
+            module_passed = report["module_passed"]
+            module_total = report["module_total"]
+            system_runs.append(
+                {
+                    "order": step.order,
+                    "system_code": run.system_code.upper(),
+                    "system_name": run.system_name,
+                    "run_id": run.run_id,
+                    "status": run.status.value,
+                    "status_label": "성공" if run.status == RunStatus.PASSED else "실패",
+                    "duration_text": report["duration_text"],
+                    "module_passed": module_passed,
+                    "module_total": module_total,
+                    "module_summary": report["module_summary"],
+                    "modules": report["modules"],
+                    "failed_modules": report["failed_modules"],
+                    "comparison": report["comparison"],
+                }
+            )
+        else:
+            note = "Run이 생성되지 않았습니다." if step.status == SuiteStatus.FAILED else "실행되지 않음"
+            system_runs.append(
+                {
+                    "order": step.order,
+                    "system_code": step.system_code.upper(),
+                    "system_name": step.system_name,
+                    "run_id": step.run_id,
+                    "status": step.status.value,
+                    "status_label": _module_status_label(step.status.value),
+                    "duration_text": "-",
+                    "module_passed": 0,
+                    "module_total": module_total,
+                    "module_summary": {},
+                    "modules": [],
+                    "failed_modules": [],
+                    "comparison": {"has_baseline": False},
+                    "note": note,
+                }
+            )
+        step_summary.append(
+            {
+                "order": step.order,
+                "system_code": step.system_code.upper(),
+                "system_name": step.system_name,
+                "run_id": step.run_id,
+                "status": step.status.value,
+                "module_passed": module_passed,
+                "module_total": module_total,
+            }
+        )
+
+    return {
+        "report_type": "suite",
+        "suite": {
+            "suite_id": suite.suite_id,
+            "status": suite.status.value,
+            "status_label": "성공" if suite.status == SuiteStatus.PASSED else "실패",
+            "requested_at_kst": _format_datetime(suite.requested_at),
+            "started_at_kst": _format_datetime(suite.started_at),
+            "ended_at_kst": _format_datetime(suite.ended_at),
+            "duration_text": _format_suite_duration(suite),
+            "step_total": len(suite.steps),
+            "step_passed": step_passed,
+            "step_failed": step_failed,
+            "browser_mode": suite.browser_mode,
+        },
+        "step_summary": step_summary,
+        "system_runs": system_runs,
+        "email_attachment_summary": {
+            "screenshot_count": sum(1 for artifact in email_selection.included if artifact.kind == "screenshot"),
+            "log_count": sum(1 for artifact in email_selection.included if artifact.kind == "log"),
+            "omitted": [
+                {"path": item.relative_path, "reason": item.reason}
+                for item in email_selection.omitted
+            ],
+        },
+        "gemini_input_summary": {
+            "included": list(gemini_selection.included_labels),
+            "omitted": [
+                {"path": item.relative_path, "reason": item.reason}
+                for item in gemini_selection.omitted
+            ],
+        },
+    }
+
+
+def _build_suite_plain_text(context: dict) -> str:
+    suite_info = context["suite"]
+    lines = [
+        f"[E2E] 전체 시스템 순차 점검 {suite_info['status_label']}",
+        f"Suite ID: {suite_info['suite_id']}",
+        f"요청 시각(KST): {suite_info['requested_at_kst']}",
+        f"종료 시각(KST): {suite_info['ended_at_kst']}",
+        f"총 소요시간: {suite_info['duration_text']}",
+        f"시스템 통과: {suite_info['step_passed']}/{suite_info['step_total']}",
+        "",
+        "=== 시스템 요약 ===",
+    ]
+    for step in context["step_summary"]:
+        lines.append(
+            f"- {step['order'] + 1}. {step['system_name']} ({step['system_code']}): {step['status']} "
+            f"run={step['run_id'] or '-'} modules={step['module_passed']}/{step['module_total']}"
+        )
+    lines.append("")
+    lines.append("=== 시스템별 모듈 실행 결과 ===")
+    for system_run in context["system_runs"]:
+        lines.append("")
+        lines.append(
+            f"[{system_run['order'] + 1}] {system_run['system_name']} ({system_run['system_code']}) "
+            f"- {system_run.get('status_label', system_run['status'])} "
+            f"run={system_run.get('run_id') or '-'}"
+        )
+        if not system_run.get("modules"):
+            lines.append(f"  ({system_run.get('note', '모듈 없음')})")
+            continue
+        for module in system_run["modules"]:
+            lines.append(
+                f"  {module['seq']}. {module['module_name']} [{module['status_label']}] "
+                f"{module['duration_text']} - {module['message']}"
+            )
+    attachment_summary = context["email_attachment_summary"]
+    lines.extend(
+        [
+            "",
+            f"첨부 파일: 스크린샷 {attachment_summary['screenshot_count']}건, 로그 {attachment_summary['log_count']}건",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_selection: GeminiPromptSelection) -> dict:

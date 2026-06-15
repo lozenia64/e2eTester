@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.models import (
     DashboardEvent,
     FailureAnalysisRequest,
@@ -16,6 +16,7 @@ from app.core.models import (
     Run,
     RunComparison,
     RunModule,
+    SuiteRun,
     SystemDefinition,
 )
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
@@ -114,6 +115,8 @@ class RunService:
             ),
             "current_module_name": current_module.name if current_module else None,
             "failed_module_name": failed_module.name if failed_module else None,
+            "triggered_by": run.triggered_by,
+            "suite_id": run.suite_id,
         }
 
     def get_system(self, system_code: str):
@@ -235,6 +238,7 @@ class RunService:
         selected_module_ids: list[str] | None = None,
         triggered_by: str = "manual",
         schedule_id: str | None = None,
+        suite_id: str | None = None,
     ) -> Run:
         system = self.get_system(system_code)
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
@@ -251,6 +255,7 @@ class RunService:
             selected_module_ids=resolved_selected_module_ids,
             triggered_by=triggered_by,
             schedule_id=schedule_id,
+            suite_id=suite_id,
         )
         self._run_inputs[run_id] = dict(sanitized_input)
         await self._repository.create_run(run)
@@ -618,7 +623,12 @@ class RunService:
         self._cancel_requested.discard(run.run_id)
         await self._publish_run_event("run_finished", run)
         # 사용자가 취소한 Run은 결과 보고서 메일을 보내지 않는다. (PASSED/FAILED 만 발송)
-        if self._run_completion_notifier is not None and run.status in {RunStatus.PASSED, RunStatus.FAILED}:
+        # Suite 소속 Run은 Suite 종료 시 통합 메일 1통만 발송한다.
+        if (
+            self._run_completion_notifier is not None
+            and run.status in {RunStatus.PASSED, RunStatus.FAILED}
+            and not run.suite_id
+        ):
             asyncio.create_task(self._notify_run_completion(run.model_copy(deep=True)))
 
     async def _compute_comparison(self, run: Run) -> RunComparison:
@@ -671,6 +681,24 @@ class RunService:
             await asyncio.to_thread(self._run_completion_notifier.send_run_completion, run)
         except Exception as exc:
             print(f"[email] run={run.run_id} 종료 메일 발송 실패: {exc}")
+
+    async def notify_suite_completion(self, suite: SuiteRun) -> None:
+        if self._run_completion_notifier is None:
+            return
+        if suite.status not in {SuiteStatus.PASSED, SuiteStatus.FAILED}:
+            return
+        runs: list[Run] = []
+        for step in suite.steps:
+            if not step.run_id:
+                continue
+            try:
+                runs.append(await self.get_run(step.run_id))
+            except KeyError:
+                continue
+        try:
+            await asyncio.to_thread(self._run_completion_notifier.send_suite_completion, suite, runs)
+        except Exception as exc:
+            print(f"[email] suite={suite.suite_id} 종료 메일 발송 실패: {exc}")
 
     async def _mark_unexpected_run_failure(
         self,
