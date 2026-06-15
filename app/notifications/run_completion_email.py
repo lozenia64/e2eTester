@@ -195,6 +195,7 @@ class RunArtifact:
     module_id: str
     module_name: str
     order: int
+    seq: int
     kind: str
     path: Path
     relative_path: str
@@ -300,8 +301,8 @@ class GeminiEmailHtmlComposer:
                 "# 입력 자료",
                 "이 프롬프트와 함께 다음 자료가 제공된다. 모든 자료를 실제로 읽고 분석한 뒤 보고서에 반영하라.",
                 "1. 실행 메타데이터 JSON(아래 첨부): 실행(run) 정보, 모듈별 실행 결과(modules), 실패 모듈 분석(failed_modules), 첨부/제외 파일 요약.",
-                "2. 모듈별 스크린샷 이미지: 각 이미지 바로 앞에 '[screenshot] module_id=... module_name=... order=... path=...' 형식의 레이블 텍스트가 붙어 있다.",
-                "3. 모듈별 실행 로그 텍스트: '[execution_log] module_id=... module_name=... order=... path=...' 레이블 뒤에 로그 본문이 이어진다.",
+                "2. 모듈별 스크린샷 이미지: 각 이미지 바로 앞에 '[screenshot] seq=... module_id=... module_name=... order=... path=...' 형식의 레이블 텍스트가 붙어 있다. seq 가 모듈별 결과 표의 순번과 동일한 1부터 시작하는 실행 순서다.",
+                "3. 모듈별 실행 로그 텍스트: '[execution_log] seq=... module_id=... module_name=... order=... path=...' 레이블 뒤에 로그 본문이 이어진다.",
                 "",
                 "# 분석 지침",
                 "- 스크린샷: 레이블의 module_id 로 어느 모듈의 최종 화면인지 식별하고, 화면에 실제로 무엇이 보이는지(페이지 제목, 주요 UI 상태, 조회 결과, 완료 표시, 오류 팝업/빈 화면 등 이상 징후) 직접 확인하라.",
@@ -315,7 +316,7 @@ class GeminiEmailHtmlComposer:
                 "1. 제목 헤더: '[E2E] {시스템명} 테스트 결과 보고서' 형태의 제목과 상태 배지(성공/실패). 성공은 #17804b, 실패는 #c44536 계열 색상 사용.",
                 "2. 실행 개요: Run ID, 시스템, 요청/시작/종료 시각(KST), 총 소요시간, 최종 상태를 표(table)로 정리.",
                 "3. 핵심 요약: 전체 결과를 2~3문장으로 요약. 실패 시 어떤 모듈에서 무엇이 실패했는지, 성공 시 어떤 업무 흐름이 검증되었는지 서술.",
-                "4. 모듈별 결과: modules 배열 전체를 순번/모듈명/상태/소요시간/비고 컬럼의 표로 정리. 상태는 색상으로 구분(성공 녹색, 실패 적색, 그 외 회색).",
+                "4. 모듈별 결과: modules 배열 전체를 순번/모듈명/상태/소요시간/비고 컬럼의 표로 정리. 순번 컬럼은 각 모듈의 seq 값(1부터 시작하는 실제 실행 순서: 1, 2, 3, ...)을 그대로 사용하고, manifest의 order 값(10, 20, 40 등)은 순번으로 쓰거나 표에 노출하지 마라. 상태는 색상으로 구분(성공 녹색, 실패 적색, 그 외 회색).",
                 "5. 화면 검증(스크린샷 분석): 제공된 스크린샷을 모듈 순서대로 분석한 관찰 결과. 각 항목에 모듈명과 관찰 내용을 기술.",
                 "6. 로그 분석: 로그에서 확인한 주요 진행 이벤트와 특이사항 요약. 로그가 제공되지 않았으면 이 섹션은 생략.",
                 "7. 실패 상세 분석(실패 시에만): 실패 모듈별로 증상, 로그/화면 근거, 추정 원인, 권장 조치를 정리. failed_modules 의 AI 분석 내용이 있으면 함께 반영.",
@@ -623,7 +624,7 @@ class RunCompletionEmailNotifier:
     def _collect_artifacts(self, run: Run) -> list[RunArtifact]:
         collected: list[RunArtifact] = []
         seen_paths: set[str] = set()
-        for module in sorted(run.modules, key=lambda item: item.order):
+        for seq, module in enumerate(sorted(run.modules, key=lambda item: item.order), start=1):
             for relative_path in module.artifacts:
                 path = self._artifact_manager.path_from_relative(relative_path)
                 if not path.exists() or not path.is_file():
@@ -640,6 +641,7 @@ class RunCompletionEmailNotifier:
                         module_id=module.module_id,
                         module_name=module.name,
                         order=module.order,
+                        seq=seq,
                         kind=kind,
                         path=path,
                         relative_path=relative_path,
@@ -678,7 +680,7 @@ class RunCompletionEmailNotifier:
 
         for artifact in artifacts:
             label = (
-                f"module_id={artifact.module_id} module_name={artifact.module_name} "
+                f"seq={artifact.seq} module_id={artifact.module_id} module_name={artifact.module_name} "
                 f"order={artifact.order} path={artifact.relative_path}"
             )
             if artifact.kind == "screenshot":
@@ -742,6 +744,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
     ordered_modules = sorted(run.modules, key=lambda item: item.order)
     modules = [
         {
+            "seq": index,
             "order": module.order,
             "module_id": module.module_id,
             "module_name": module.name,
@@ -751,7 +754,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
             "duration_text": _format_module_duration(module.duration_ms),
             "retry_count": module.retry_count,
         }
-        for module in ordered_modules
+        for index, module in enumerate(ordered_modules, start=1)
     ]
     failed_modules = []
     for module in ordered_modules:
