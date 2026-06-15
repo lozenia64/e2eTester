@@ -529,8 +529,8 @@ def _click_silsom24_dismiss_via_dom(page) -> str:
                 return '';
             }
             const selectors = [
-                'a.link_txt[title*="안볼"]',
                 'a.dialog_close.ui_dialog_close',
+                'a.link_txt[title*="안볼"]',
             ];
             for (const selector of selectors) {
                 const element = dialog.querySelector(selector);
@@ -546,15 +546,26 @@ def _click_silsom24_dismiss_via_dom(page) -> str:
     )
 
 
+def _wait_for_silsom24_popup(page, wait_ms: int = 3000) -> bool:
+    print(f"[wait] 실손24 알림 팝업 노출 대기 ({wait_ms} ms)")
+    for _ in range(max(1, wait_ms // 200)):
+        if _silsom24_dialog_open(page):
+            print("[wait] 실손24 알림 팝업 표시됨")
+            return True
+        common.wait_timeout_with_log(page, 200, "실손24 팝업 표시 대기")
+    return _silsom24_dialog_open(page)
+
+
 def _dismiss_silsom24_popup(page, timeout_ms: int) -> None:
+    _wait_for_silsom24_popup(page, 3000)
     for _ in range(max(5, timeout_ms // 400)):
         if not _silsom24_dialog_open(page):
             return
 
         dismissed_label = ""
         for selector, description in (
-            (SILSOM24_DISMISS_LINK_SELECTOR, "오늘 더이상 안볼래요"),
             (SILSOM24_CLOSE_LINK_SELECTOR, "팝업창 닫기"),
+            (SILSOM24_DISMISS_LINK_SELECTOR, "오늘 더이상 안볼래요"),
         ):
             target = page.locator(selector).first
             try:
@@ -653,7 +664,19 @@ def _scroll_target_to_center(target) -> None:
     target.evaluate("element => element.scrollIntoView({ block: 'center', inline: 'nearest' })")
 
 
-def _click_selection_label(page, *, label_selector: str, input_selector: str, description: str) -> None:
+def _is_native_css_selector(selector: str) -> bool:
+    playwright_tokens = (":has(", ":text-is(", ":text(", ">>", "nth-match")
+    return not any(token in selector for token in playwright_tokens)
+
+
+def _click_selection_label(
+    page,
+    *,
+    label_selector: str,
+    input_selector: str,
+    description: str,
+    label_text: str | None = None,
+) -> None:
     main = page.locator("main")
     input_id = input_selector.lstrip("#") if input_selector.startswith("#") else ""
     candidates = [
@@ -680,19 +703,39 @@ def _click_selection_label(page, *, label_selector: str, input_selector: str, de
 
     clicked = page.evaluate(
         """
-        ([labelSelector, inputSelector]) => {
+        ([labelSelector, inputSelector, labelText, useLabelSelector]) => {
             const scrollAndClick = (element) => {
                 element.scrollIntoView({ block: 'center', inline: 'nearest' });
                 element.click();
             };
-            const label = document.querySelector(`main ${labelSelector}`)
-                || (inputSelector.startsWith('#')
-                    ? document.querySelector(`label[for="${inputSelector.slice(1)}"]`)
-                    : null);
-            if (label) {
-                scrollAndClick(label);
-                return 'label';
+            const normalize = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+
+            if (useLabelSelector) {
+                const label = document.querySelector(`main ${labelSelector}`);
+                if (label) {
+                    scrollAndClick(label);
+                    return 'label';
+                }
             }
+
+            if (inputSelector.startsWith('#')) {
+                const inputId = inputSelector.slice(1);
+                const byFor = document.querySelector(`label[for="${inputId}"]`);
+                if (byFor) {
+                    scrollAndClick(byFor);
+                    return 'label';
+                }
+            }
+
+            if (labelText) {
+                for (const label of document.querySelectorAll('main label')) {
+                    if (normalize(label.innerText).includes(labelText)) {
+                        scrollAndClick(label);
+                        return 'label';
+                    }
+                }
+            }
+
             const input = document.querySelector(inputSelector);
             if (input) {
                 scrollAndClick(input);
@@ -702,7 +745,7 @@ def _click_selection_label(page, *, label_selector: str, input_selector: str, de
             return '';
         }
         """,
-        [label_selector, input_selector],
+        [label_selector, input_selector, label_text or "", _is_native_css_selector(label_selector)],
     )
     if clicked:
         print(f"[click] {description} (DOM fallback: {clicked})")
@@ -795,12 +838,18 @@ def _start_claim_from_intro(page, timeout_ms: int) -> None:
 def _complete_target_selection(page, timeout_ms: int) -> None:
     _dismiss_claim_entry_popups(page, timeout_ms)
     _click_self_claim_target(page, timeout_ms)
+    _dismiss_claim_entry_popups(page, timeout_ms)
     _wait_for_loading_overlay_gone(page, timeout_ms)
     common.wait_timeout_with_log(page, 600, "청구 유형 섹션 노출 대기")
     _click_new_claim_type(page, timeout_ms)
+    _dismiss_claim_entry_popups(page, timeout_ms)
     _click_next_target_selection(page, timeout_ms)
+    _dismiss_claim_entry_popups(page, timeout_ms)
     _wait_for_loading_overlay_gone(page, timeout_ms)
     for _ in range(max(1, timeout_ms // 400)):
+        if _silsom24_dialog_open(page):
+            _dismiss_silsom24_popup(page, timeout_ms)
+            continue
         if _dismiss_claim_confirm_modals(page, timeout_ms):
             continue
         if CLAIM_REASON_URL_FRAGMENT in page.url:
@@ -816,6 +865,7 @@ def _click_accident_type_etc(page) -> None:
         label_selector=ACCIDENT_TYPE_ETC_LABEL_SELECTOR,
         input_selector=ACCIDENT_TYPE_ETC_INPUT_SELECTOR,
         description="사고 유형: 기타",
+        label_text="기타",
     )
 
 
@@ -1128,6 +1178,7 @@ def _ensure_checkbox_checked(
     label_selector: str,
     input_selector: str,
     description: str,
+    label_text: str | None = None,
 ) -> None:
     try:
         checkbox = page.locator(input_selector).first
@@ -1141,6 +1192,7 @@ def _ensure_checkbox_checked(
         label_selector=label_selector,
         input_selector=input_selector,
         description=description,
+        label_text=label_text,
     )
 
 
@@ -1369,12 +1421,14 @@ def _complete_detail_step(page, timeout_ms: int) -> None:
         label_selector=CLAIM_TYPE_DIAGNOSIS_LABEL_SELECTOR,
         input_selector=CLAIM_TYPE_DIAGNOSIS_INPUT_SELECTOR,
         description="청구 유형: 진단비",
+        label_text="진단비",
     )
     _ensure_checkbox_checked(
         page,
         label_selector=CLAIM_DETAIL_OTHER_DIAGNOSIS_LABEL_SELECTOR,
         input_selector=CLAIM_DETAIL_OTHER_DIAGNOSIS_INPUT_SELECTOR,
         description="청구 상세 유형: 기타 진단",
+        label_text="기타 진단",
     )
     _fill_claim_content(page)
     _select_saved_bank_account(page, timeout_ms)
