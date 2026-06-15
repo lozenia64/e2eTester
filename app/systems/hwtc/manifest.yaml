@@ -1,6 +1,7 @@
 system_code: hwtc
 name: 연수원(PC)
 description: 연수원(SLS) 사이트 메인화면 접속 점검
+display_order: 50
 supported_auth_methods: []
 run_form:
   - key: browser_mode

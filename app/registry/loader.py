@@ -22,7 +22,7 @@ class ModuleRegistry:
             raise KeyError(f"Unknown system code: {system_code}") from exc
 
     def _load_systems(self) -> dict[str, SystemDefinition]:
-        systems: dict[str, SystemDefinition] = {}
+        loaded: list[SystemDefinition] = []
         for manifest_path in sorted(self._manifest_dir.glob("*/manifest.yaml")):
             raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
             modules = [ModuleDefinition(**module_data) for module_data in raw.get("modules", [])]
@@ -33,10 +33,13 @@ class ModuleRegistry:
                 modules=modules,
                 run_form=[RunFormField(**field_data) for field_data in raw.get("run_form", [])],
                 supported_auth_methods=raw.get("supported_auth_methods", []),
+                display_order=raw.get("display_order", 1000),
             )
             self._validate_system_definition(system, manifest_path)
-            systems[system.system_code] = system
-        return systems
+            loaded.append(system)
+        # 홈 화면 노출 순서는 manifest 의 display_order(작을수록 먼저), 동률은 system_code 순서로 고정한다.
+        loaded.sort(key=lambda system: (system.display_order, system.system_code))
+        return {system.system_code: system for system in loaded}
 
     @staticmethod
     def _validate_system_definition(system: SystemDefinition, manifest_path: Path) -> None:
