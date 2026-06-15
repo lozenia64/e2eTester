@@ -1012,13 +1012,16 @@ function createScheduleActionButton(label, action, scheduleId, extraClasses) {
 function createScheduleListItem(schedule) {
     const card = document.createElement("div");
     card.className = "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm";
+    const isSuite = String(schedule.schedule_kind ?? "system").toLowerCase() === "suite";
 
     const left = document.createElement("div");
     left.className = "flex min-w-0 items-center gap-4";
 
     const codeChip = document.createElement("span");
-    codeChip.className = "inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200";
-    codeChip.textContent = String(schedule.system_code ?? "").toUpperCase();
+    codeChip.className = isSuite
+        ? "inline-flex shrink-0 items-center rounded-md bg-violet-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200"
+        : "inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200";
+    codeChip.textContent = isSuite ? "SUITE" : String(schedule.system_code ?? "").toUpperCase();
     left.appendChild(codeChip);
 
     const info = document.createElement("div");
@@ -1048,11 +1051,16 @@ function createScheduleListItem(schedule) {
     if (schedule.enabled && schedule.next_run_at) {
         metaParts.push(`다음 ${formatRunTimestamp(schedule.next_run_at)}`);
     }
-    if (schedule.module_count != null) {
+    if (isSuite && schedule.step_total != null) {
+        metaParts.push(`시스템 ${schedule.step_total}개`);
+    } else if (schedule.module_count != null) {
         metaParts.push(`모듈 ${schedule.module_count}개`);
     }
-    if (schedule.auth_method) {
+    if (!isSuite && schedule.auth_method) {
         metaParts.push(schedule.auth_method);
+    }
+    if (isSuite && schedule.browser_mode) {
+        metaParts.push(schedule.browser_mode);
     }
     if (schedule.timezone) {
         metaParts.push(schedule.timezone);
@@ -1060,7 +1068,20 @@ function createScheduleListItem(schedule) {
     meta.textContent = metaParts.filter(Boolean).join(" · ");
     info.appendChild(meta);
 
-    if (schedule.last_run_id) {
+    if (isSuite && schedule.last_suite_id) {
+        const last = document.createElement("p");
+        last.className = "mt-0.5 truncate text-xs text-gray-400";
+        last.append("최근 실행: ");
+        const link = document.createElement("a");
+        link.href = `/suites/${schedule.last_suite_id}`;
+        link.className = "font-medium text-violet-600 hover:underline";
+        link.textContent = schedule.last_suite_status || schedule.last_suite_id;
+        last.appendChild(link);
+        if (schedule.last_run_at) {
+            last.append(` · ${formatRunTimestamp(schedule.last_run_at)}`);
+        }
+        info.appendChild(last);
+    } else if (schedule.last_run_id) {
         const last = document.createElement("p");
         last.className = "mt-0.5 truncate text-xs text-gray-400";
         last.append("최근 실행: ");
@@ -1137,8 +1158,12 @@ async function handleScheduleAction(event) {
             throw new Error(response ? await readErrorMessage(response) : "알 수 없는 동작입니다.");
         }
         if (action === "run-now") {
-            const run = await response.json();
-            window.location.href = `/runs/${run.run_id}`;
+            const result = await response.json();
+            if (String(result.schedule_kind ?? "").toLowerCase() === "suite" && result.suite_id) {
+                window.location.href = `/suites/${result.suite_id}`;
+            } else if (result.run_id) {
+                window.location.href = `/runs/${result.run_id}`;
+            }
             return;
         }
         refreshScheduleList();
@@ -1691,6 +1716,65 @@ async function startSuiteRun(button, form) {
     }
 }
 
+async function registerSuiteSchedule(form, button) {
+    const feedback = form.querySelector('[data-role="suite-schedule-feedback"]');
+    setInlineFeedback(feedback, "");
+
+    const name = (form.querySelector('[data-role="schedule-name"]')?.value ?? "").trim();
+    const built = buildScheduleCron(form);
+    if (built.error) {
+        setInlineFeedback(feedback, built.error);
+        return;
+    }
+
+    for (const panel of form.querySelectorAll(".suite-system-panel")) {
+        const systemCode = panel.dataset.systemCode;
+        const authMethod = panel.querySelector('[name="auth_method"]')?.value;
+        if (
+            (systemCode === "hom" || systemCode === "mhm")
+            && authMethod
+            && authMethod !== "phone"
+            && authMethod !== "kakao"
+        ) {
+            setInlineFeedback(
+                feedback,
+                `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 예약할 수 있습니다.`,
+            );
+            return;
+        }
+    }
+
+    button.disabled = true;
+    button.textContent = "등록 중...";
+    try {
+        const response = await fetch("/api/schedules/suites", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                cron: built.cron,
+                name,
+                ...collectSuiteRequest(form),
+            }),
+        });
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `예약 등록에 실패했습니다. (${response.status})`);
+        }
+        setInlineFeedback(feedback, "전체 점검 예약이 등록되었습니다.", "success");
+        const nameInput = form.querySelector('[data-role="schedule-name"]');
+        if (nameInput) {
+            nameInput.value = "";
+        }
+        refreshScheduleList();
+    } catch (error) {
+        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "예약 등록에 실패했습니다.");
+        console.error(error);
+    } finally {
+        button.disabled = false;
+        button.textContent = "예약 등록";
+    }
+}
+
 function bindSuiteForm() {
     const form = document.getElementById("suite-form");
     if (!form) {
@@ -1698,6 +1782,13 @@ function bindSuiteForm() {
     }
     for (const panel of form.querySelectorAll(".suite-system-panel")) {
         bindConditionalFields(panel);
+    }
+    bindScheduleBuilder(form);
+    const scheduleButton = form.querySelector('[data-role="suite-schedule-register"]');
+    if (scheduleButton) {
+        scheduleButton.addEventListener("click", () => {
+            registerSuiteSchedule(form, scheduleButton);
+        });
     }
     form.addEventListener("submit", (event) => {
         event.preventDefault();

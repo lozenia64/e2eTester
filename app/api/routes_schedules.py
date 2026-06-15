@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.core.models import CreateScheduleRequest
+from app.core.models import CreateScheduleRequest, CreateSuiteScheduleRequest
 
 
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])
@@ -24,6 +24,15 @@ async def create_schedule(request: Request, system_code: str, payload: CreateSch
     return schedule.to_summary()
 
 
+@router.post("/suites")
+async def create_suite_schedule(request: Request, payload: CreateSuiteScheduleRequest):
+    try:
+        schedule = await request.app.state.schedule_service.create_suite_schedule(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return schedule.to_summary()
+
+
 @router.post("/{schedule_id}/toggle")
 async def toggle_schedule(request: Request, schedule_id: str):
     try:
@@ -38,12 +47,12 @@ async def toggle_schedule(request: Request, schedule_id: str):
 @router.post("/{schedule_id}/run-now")
 async def run_schedule_now(request: Request, schedule_id: str):
     try:
-        run = await request.app.state.schedule_service.run_now(schedule_id)
+        result = await request.app.state.schedule_service.run_now(schedule_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Schedule not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return run.model_dump(mode="json")
+    return result
 
 
 @router.delete("/{schedule_id}")

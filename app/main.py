@@ -51,7 +51,11 @@ async def lifespan(app: FastAPI):
     app.state.run_service = run_service
     app.state.suite_service = suite_service
 
-    scheduler = SchedulerService(run_service=run_service, repository=InMemoryScheduleRepository())
+    scheduler = SchedulerService(
+        run_service=run_service,
+        suite_service=suite_service,
+        repository=InMemoryScheduleRepository(),
+    )
     app.state.schedule_service = scheduler
     scheduler_task = asyncio.create_task(scheduler.run_forever())
     try:

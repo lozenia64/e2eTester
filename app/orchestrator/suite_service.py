@@ -62,19 +62,30 @@ class SuiteService:
         merged.update(systems_input.get(system_code, {}))
         return merged
 
+    def validate_suite_request(self, browser_mode: str, systems: dict[str, dict[str, str]]) -> tuple[str, dict[str, dict[str, str]]]:
+        registered = self._registry.list_systems()
+        if not registered:
+            raise ValueError("등록된 시스템이 없습니다.")
+
+        normalized_mode = (browser_mode or "headed").strip()
+        if normalized_mode not in {"headed", "headless"}:
+            raise ValueError("browser_mode는 headed 또는 headless 여야 합니다.")
+
+        normalized_systems = {key: dict(value) for key, value in (systems or {}).items()}
+        for system in registered:
+            merged_input = self._merge_input(normalized_mode, system.system_code, normalized_systems)
+            self._run_service.validate_run_request(system.system_code, merged_input, selected_module_ids=None)
+        return normalized_mode, normalized_systems
+
     async def start_suite(self, request: StartSuiteRequest) -> SuiteRun:
         systems = self._registry.list_systems()
         if not systems:
             raise ValueError("등록된 시스템이 없습니다.")
 
-        browser_mode = (request.browser_mode or "headed").strip()
-        if browser_mode not in {"headed", "headless"}:
-            raise ValueError("browser_mode는 headed 또는 headless 여야 합니다.")
+        browser_mode, normalized_systems = self.validate_suite_request(request.browser_mode, request.systems)
 
         steps: list[SuiteStep] = []
         for index, system in enumerate(systems):
-            merged_input = self._merge_input(browser_mode, system.system_code, request.systems)
-            self._run_service.validate_run_request(system.system_code, merged_input, selected_module_ids=None)
             steps.append(
                 SuiteStep(
                     system_code=system.system_code,
@@ -94,7 +105,7 @@ class SuiteService:
         )
         await self._repository.create_suite(suite)
         await self._publish_event("suite_created", suite)
-        asyncio.create_task(self._execute_suite(suite_id, request.systems))
+        asyncio.create_task(self._execute_suite(suite_id, normalized_systems))
         return suite
 
     async def cancel_suite(self, suite_id: str) -> SuiteRun:
