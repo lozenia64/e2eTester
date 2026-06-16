@@ -91,11 +91,14 @@ def _text(value: object, fallback: str = "") -> str:
 
 # --- 공통 컴포넌트 ----------------------------------------------------------------
 def _shell(title_html: str, body_html: str) -> str:
-    """페이지 배경 + 가운데 정렬된 760px 카드로 본문을 감싼다."""
+    """페이지 배경 + 가운데 정렬된 960px 카드로 본문을 감싼다.
+
+    모듈명/비고 같은 표 내용이 가로로 충분히 펼쳐지도록 카드 폭을 넓게 잡는다.
+    """
     return (
         f"<div style=\"margin:0;padding:24px 12px;background:{PAGE_BG};"
         f"font-family:{FONT_STACK};color:{INK};line-height:1.6;\">"
-        f"<div style=\"max-width:760px;margin:0 auto;background:{CARD_BG};"
+        f"<div style=\"max-width:960px;margin:0 auto;background:{CARD_BG};"
         f"border:1px solid {BORDER};border-radius:18px;overflow:hidden;\">"
         f"<div style=\"padding:28px 28px 8px;\">{title_html}</div>"
         f"<div style=\"padding:0 28px 28px;\">{body_html}</div>"
@@ -197,7 +200,7 @@ def _module_table(modules: list[dict]) -> str:
             f"font-size:12px;color:{MUTED};font-weight:700;{extra}\">{escape(label)}</th>"
             for label, align, extra in (
                 ("순번", "center", "width:48px;"),
-                ("모듈명", "left", ""),
+                ("모듈명", "left", "white-space:nowrap;"),
                 ("상태", "center", "width:72px;"),
                 ("소요시간", "right", "width:88px;"),
                 ("비고", "left", ""),
@@ -216,13 +219,13 @@ def _module_table(modules: list[dict]) -> str:
             f"<td style=\"padding:10px 12px;border-bottom:1px solid {BORDER};text-align:center;"
             f"font-size:13px;{dim}\">{module['seq']}</td>"
             f"<td style=\"padding:10px 12px;border-bottom:1px solid {BORDER};font-size:13px;"
-            f"font-weight:600;{dim}\">{_text(module['module_name'])}</td>"
+            f"font-weight:600;white-space:nowrap;{dim}\">{_text(module['module_name'])}</td>"
             f"<td style=\"padding:10px 12px;border-bottom:1px solid {BORDER};text-align:center;"
             f"font-size:13px;font-weight:700;color:{color};\">{escape(label)}</td>"
             f"<td style=\"padding:10px 12px;border-bottom:1px solid {BORDER};text-align:right;"
-            f"font-size:13px;{dim}\">{_text(module.get('duration_text'), '-')}</td>"
+            f"font-size:13px;white-space:nowrap;{dim}\">{_text(module.get('duration_text'), '-')}</td>"
             f"<td style=\"padding:10px 12px;border-bottom:1px solid {BORDER};font-size:13px;"
-            f"color:{MUTED};\">{_text(module.get('message'), '-')}</td>"
+            f"color:{MUTED};word-break:break-all;\">{_text(module.get('message'), '-')}</td>"
             "</tr>"
         )
     return (
@@ -452,9 +455,9 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
         summary_rows.append(
             "<tr>"
             f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};text-align:center;font-size:13px;\">{step['order'] + 1}</td>"
-            f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};font-size:13px;font-weight:600;\">"
+            f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};font-size:13px;font-weight:600;white-space:nowrap;\">"
             f"{_text(step['system_name'])} <span style=\"color:{MUTED};font-weight:400;font-size:12px;\">({escape(step['system_code'])})</span></td>"
-            f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};font-size:13px;\"><code>{_text(step.get('run_id'), '-')}</code></td>"
+            f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};font-size:13px;word-break:break-all;\"><code>{_text(step.get('run_id'), '-')}</code></td>"
             f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};text-align:center;font-size:13px;font-weight:700;color:{color};\">{escape(_status_label(step['status']))}</td>"
             f"<td style=\"padding:9px 12px;border-bottom:1px solid {BORDER};text-align:center;font-size:13px;\">{step['module_passed']}/{step['module_total']}</td>"
             "</tr>"
