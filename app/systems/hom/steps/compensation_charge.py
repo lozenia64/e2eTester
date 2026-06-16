@@ -6,6 +6,9 @@ from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
+# 청구 본문 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
+from app.scenarios.rep_homepage.constants import CLAIM_CONTENT_TEXT
+
 from . import login_common as common
 
 CHARGE00_FRAGMENT = "/fplaza/compensation/charge00.do"
@@ -17,7 +20,6 @@ STEP06_HEADING_PATTERN = re.compile(r"청구완료|접수가\s*완료|등록되�
 CLAIM_GUIDE_POPUP_ROOT = "#uiPOPBcgah00"
 POP_LOADING_SELECTOR = "#popLoading"
 VISIBLE_MODAL_SELECTOR = ".modal_popup:visible, .modal_wrap:visible, .pop_wrap:visible, .popup_wrap:visible, .pop_modal1:visible, .pop_modal2:visible, [role='dialog']:visible"
-CLAIM_CONTENT_TEXT = "IT직원 테스트입니다. 바로 취소할 예정입니다."
 DESKTOP_SCREENSHOT_GLOB_PATTERNS = (
     "스크린샷*.PNG",
     "스크린샷*.png",

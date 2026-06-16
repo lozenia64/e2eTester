@@ -65,7 +65,7 @@
 
 역할:
 
-- **선행 조건**: `MhmWorkflowExecutor.build_runtime()` 에서 브라우저 기동 후 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()` 로 모바일 모드 적용 완료
+- **선행 조건**: 공용 `RepHomepageExecutor.build_runtime()` 가 모바일 채널 프로파일(`MOBILE_CHANNEL`, `mobile=True`)로 브라우저 기동 후 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()` 로 모바일 모드 적용 완료
 - 모바일 모드 적용 확인(`ensure_mobile_mode_before_navigation`) 후 메인 URL 직접 진입 (`page.goto`)
 - 메인화면 전용 `20000ms` timeout 적용
 - 랜딩 팝업 정리
