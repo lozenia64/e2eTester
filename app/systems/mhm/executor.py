@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable
 
-from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
+from app.runner.workflow_common import StepExecutionResult
+from app.runner.workflow_engine import WAITING_INPUT_PREFIX, BaseWorkflowExecutor
 from app.systems.mhm.steps import (
     compensation_cancel,
     compensation_charge,
@@ -39,16 +37,8 @@ class MhmWorkflowRuntime:
     closed: bool = False
 
 
-class MhmWorkflowExecutor:
+class MhmWorkflowExecutor(BaseWorkflowExecutor):
     execution_mode = "mhm_workflow_step"
-
-    def __init__(self, artifact_manager: ArtifactManager) -> None:
-        self._artifact_manager = artifact_manager
-
-    @staticmethod
-    def _resolve_headless(input_data: dict[str, str]) -> bool:
-        browser_mode = (input_data.get("browser_mode") or "headed").strip().lower()
-        return browser_mode not in {"headed", "visible", "ui", "false", "0", "no"}
 
     def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> MhmWorkflowRuntime:
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module_id)
@@ -94,75 +84,8 @@ class MhmWorkflowExecutor:
             dialog_messages=dialog_messages,
         )
 
-    def execute_step(
-        self,
-        runtime: MhmWorkflowRuntime,
-        run_id: str,
-        module: ModuleDefinition,
-        emit_log: Callable[[str], None],
-    ) -> StepExecutionResult:
-        log_path = self._artifact_manager.log_path(run_id, module.module_id)
-        screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
-        artifacts: list[str] = []
-        writer = LineWriter(emit_log)
-        dialog_index = len(runtime.dialog_messages)
-
-        try:
-            with log_path.open("w", encoding="utf-8") as log_file:
-                tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
-                with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
-                    message = self._run_step(runtime, module, screenshot_path)
-            if isinstance(message, str) and message.startswith("WAITING_INPUT::"):
-                artifacts.append(self._artifact_manager.relative_path(log_path))
-                if screenshot_path.exists():
-                    artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-                return StepExecutionResult(
-                    status=ModuleStatus.WAITING_INPUT,
-                    message=message.split("::", 1)[1],
-                    artifacts=artifacts,
-                    current_url=self._safe_page_url(runtime),
-                    dialog_messages=runtime.dialog_messages[dialog_index:],
-                    screenshot_path=screenshot_path if screenshot_path.exists() else None,
-                )
-            artifacts.append(self._artifact_manager.relative_path(log_path))
-            if screenshot_path.exists():
-                artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return StepExecutionResult(
-                status=ModuleStatus.PASSED,
-                message=message,
-                artifacts=artifacts,
-                current_url=self._safe_page_url(runtime),
-                dialog_messages=runtime.dialog_messages[dialog_index:],
-                screenshot_path=screenshot_path if screenshot_path.exists() else None,
-            )
-        except Exception as exc:
-            writer.flush()
-            if not log_path.exists():
-                log_path.write_text("", encoding="utf-8")
-            with log_path.open("a", encoding="utf-8") as log_file:
-                log_file.write(f"[error] {exc}\n")
-            emit_log(f"[error] {exc}")
-            artifacts.append(self._artifact_manager.relative_path(log_path))
-            if screenshot_path.exists():
-                artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return StepExecutionResult(
-                status=ModuleStatus.FAILED,
-                message=str(exc),
-                artifacts=artifacts,
-                current_url=self._safe_page_url(runtime),
-                dialog_messages=runtime.dialog_messages[dialog_index:],
-                last_error=str(exc),
-                screenshot_path=screenshot_path if screenshot_path.exists() else None,
-            )
-
-    def close_runtime(self, runtime: MhmWorkflowRuntime) -> None:
-        if runtime.closed:
-            return
-        try:
-            common.shutdown_browser(runtime.page, runtime.context, runtime.browser)
-        finally:
-            runtime.playwright_manager.__exit__(None, None, None)
-            runtime.closed = True
+    def _shutdown_browser(self, runtime: MhmWorkflowRuntime) -> None:
+        common.shutdown_browser(runtime.page, runtime.context, runtime.browser)
 
     def _run_step(self, runtime: MhmWorkflowRuntime, module: ModuleDefinition, screenshot_path: Path) -> str:
         if module.workflow_step == "main_access":
@@ -182,7 +105,7 @@ class MhmWorkflowExecutor:
                 message = phone_login.request_sms(runtime.page, runtime.config, runtime.dialog_messages)
                 runtime.phone_login_sms_requested = True
                 if not runtime.config.otp_code:
-                    return f"WAITING_INPUT::{message}"
+                    return f"{WAITING_INPUT_PREFIX}{message}"
             return phone_login.submit_otp_and_login(
                 runtime.page,
                 runtime.config,
@@ -215,16 +138,8 @@ class MhmWorkflowExecutor:
 
         raise RuntimeError(f"Unsupported MHM workflow step: {module.workflow_step}")
 
-    @staticmethod
-    def update_otp_code(runtime: MhmWorkflowRuntime, otp_code: str) -> None:
+    def update_otp_code(self, runtime: MhmWorkflowRuntime, otp_code: str) -> None:
         runtime.config = replace(runtime.config, otp_code=otp_code)
-
-    @staticmethod
-    def _safe_page_url(runtime: MhmWorkflowRuntime) -> str | None:
-        try:
-            return str(runtime.page.url)
-        except Exception:
-            return None
 
 
 def create_executor(artifact_manager: ArtifactManager) -> MhmWorkflowExecutor:
