@@ -96,6 +96,7 @@ e2eTester/
     runner/
       artifact_manager.py
       workflow_common.py
+      workflow_engine.py         # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
       hom_workflow_executor.py   # app.systems.hom.executor 재노출
       mhm_workflow_executor.py   # app.systems.mhm.executor 재노출
     systems/
@@ -370,8 +371,10 @@ manifest 에 들어 있는 정보:
 현재 구현:
 
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
-- `app/systems/hom/executor.py` (`HomWorkflowExecutor`, `execution_mode = "hom_workflow_step"`)
-- `app/systems/mhm/executor.py` (`MhmWorkflowExecutor`, `execution_mode = "mhm_workflow_step"`)
+- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·OTP 일시정지(`WAITING_INPUT_PREFIX`) 해석·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol)
+- `app/systems/hom/executor.py` (`HomWorkflowExecutor(BaseWorkflowExecutor)`, `execution_mode = "hom_workflow_step"`)
+- `app/systems/mhm/executor.py` (`MhmWorkflowExecutor(BaseWorkflowExecutor)`, `execution_mode = "mhm_workflow_step"`)
+- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, 접속 점검 공용 실행기)
 - `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
 - `app/runner/artifact_manager.py`
 - `app/runner/hom_workflow_executor.py` / `app/runner/mhm_workflow_executor.py` (각 시스템 executor 재노출 모듈)
