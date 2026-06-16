@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from . import login_common as common
 
@@ -273,10 +272,8 @@ def submit_otp_and_login(
     page,
     config: common.LoginConfig,
     dialog_messages: list[str],
-    screenshot_path: Path,
 ) -> str:
     otp_code = common.resolve_otp_code(config)
     submit_mobile_otp(page, otp_code, dialog_messages, config.timeout_ms, post_login_fragment=config.post_login_fragment)
     common.wait_for_login_success(page, config, dialog_messages)
-    common.save_screenshot(page, screenshot_path)
     return f"휴대폰 로그인 성공: {page.url}"

@@ -9,6 +9,7 @@ from playwright.sync_api import sync_playwright
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
+from app.runner.screenshot import capture_screenshot
 from app.systems.hom.steps import kakao_login, login_common as common, login_move, main_access, phone_login
 
 
@@ -84,10 +85,11 @@ def main() -> int:
             main_access.run(page, config)
             login_move.run(page)
             if config.auth_method == "kakao":
-                kakao_login.run(page, config, dialog_messages, config.screenshot_path)
+                kakao_login.run(page, config, dialog_messages)
             else:
                 phone_login.request_sms(page, config, dialog_messages)
-                phone_login.submit_otp_and_login(page, config, dialog_messages, config.screenshot_path)
+                phone_login.submit_otp_and_login(page, config, dialog_messages)
+            capture_screenshot(page, config.screenshot_path)
             print(f"[result] Login successful. Current URL: {page.url}")
             if dialog_messages:
                 print(f"[result] Dialogs seen: {dialog_messages}")

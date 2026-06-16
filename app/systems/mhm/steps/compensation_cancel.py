@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 
 from . import compensation_result_common as result_common
@@ -114,19 +113,14 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
     _assert_cancelled_detail(page, timeout_ms)
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
-    try:
-        result_common.goto_result01(page, config)
-        result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms)
-        row = result_common.find_processing_claim_row(page, config.timeout_ms)
-        receipt_number = result_common.receipt_number_from_row(row)
-        result_common.open_claim_detail(page, row, config.timeout_ms)
-        result_common.wait_for_result02_detail_ready(page, config.timeout_ms, receipt_number)
-        _cancel_claim_and_return_list(page, config.timeout_ms)
-        _assert_receipt_absent_in_processing(page, config.timeout_ms, receipt_number)
-        _assert_cancelled_in_finished_tab(page, config.timeout_ms, receipt_number)
-        common.save_screenshot(page, screenshot_path)
-        return f"보험금청구 취소 성공 ({receipt_number})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+def run(page, config: common.LoginConfig) -> str:
+    result_common.goto_result01(page, config)
+    result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms)
+    row = result_common.find_processing_claim_row(page, config.timeout_ms)
+    receipt_number = result_common.receipt_number_from_row(row)
+    result_common.open_claim_detail(page, row, config.timeout_ms)
+    result_common.wait_for_result02_detail_ready(page, config.timeout_ms, receipt_number)
+    _cancel_claim_and_return_list(page, config.timeout_ms)
+    _assert_receipt_absent_in_processing(page, config.timeout_ms, receipt_number)
+    _assert_cancelled_in_finished_tab(page, config.timeout_ms, receipt_number)
+    return f"보험금청구 취소 성공 ({receipt_number})"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from . import login_common as common
 
@@ -198,7 +197,6 @@ def complete_after_background_wait(
     page,
     config: common.LoginConfig,
     dialog_messages: list[str],
-    screenshot_path: Path,
 ) -> str:
     common.wait_timeout_with_log(
         page,
@@ -207,13 +205,12 @@ def complete_after_background_wait(
     )
     click_kakao_auth_complete(page, dialog_messages, config.timeout_ms)
     common.wait_for_login_success(page, config, dialog_messages)
-    common.save_screenshot(page, screenshot_path)
     return f"카카오 로그인 성공: {page.url}"
 
 
-def run(page, config: common.LoginConfig, dialog_messages: list[str], screenshot_path: Path) -> str:
+def run(page, config: common.LoginConfig, dialog_messages: list[str]) -> str:
     open_kakao_login_page(page)
     fill_kakao_form(page, config)
     _ensure_kakao_consents(page)
     submit_kakao_auth_request(page, dialog_messages, config.timeout_ms)
-    return complete_after_background_wait(page, config, dialog_messages, screenshot_path)
+    return complete_after_background_wait(page, config, dialog_messages)

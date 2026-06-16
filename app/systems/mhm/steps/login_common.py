@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import os
 import re
 import sys
@@ -18,9 +17,6 @@ DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("mhwgeneralins-login-result.png")
 DEFAULT_ENV_FILE_PATH: Final[Path] = Path(".env")
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 MAX_TIMEOUT_MS: Final[int] = 15000
-SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
-SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
-SCREENSHOT_PRE_CAPTURE_WAIT_MS: Final[int] = 3000
 POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/myh/mai/MySubMain")
 # 보안프로그램(키보드보안/백신류 로컬 에이전트 + 브라우저 확장)을 일반 브라우저나
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
@@ -651,18 +647,6 @@ def scroll_to_page_bottom(page: Page) -> None:
     wait_timeout_with_log(page, 300, "Scroll settle delay")
 
 
-def scroll_to_page_top(page: Page) -> None:
-    print("[step] Scroll to page top")
-    page.evaluate(
-        """
-        () => {
-            window.scrollTo({ top: 0, behavior: 'instant' });
-        }
-        """
-    )
-    wait_timeout_with_log(page, 300, "Scroll-to-top settle delay")
-
-
 def request_sms_code(page: Page, dialog_messages: list[str], timeout_ms: int) -> None:
     print("[step] Request SMS verification code")
     dialog_index = len(dialog_messages)
@@ -778,71 +762,6 @@ def wait_for_login_success(page: Page, config: LoginConfig, dialog_messages: lis
     maybe_close_post_login_popup(page, config.timeout_ms)
     ensure_no_failure_dialogs(dialog_messages, dialog_index, "post-login")
     print("[wait] End login success wait via main page URL")
-
-
-def _apply_screenshot_font_fallback(page: Page) -> None:
-    page.evaluate(
-        """
-        () => {
-            if (document.getElementById('e2e-screenshot-font-fallback')) {
-                return;
-            }
-            const style = document.createElement('style');
-            style.id = 'e2e-screenshot-font-fallback';
-            style.textContent = `
-                *, *::before, *::after {
-                    font-family: Arial, sans-serif !important;
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        """
-    )
-    page.wait_for_timeout(150)
-
-
-def _capture_screenshot_with_playwright(page: Page, output_path: Path, timeout_ms: int) -> None:
-    page.screenshot(path=str(output_path), full_page=False, timeout=timeout_ms)
-
-
-def _capture_screenshot_with_cdp(page: Page, output_path: Path) -> None:
-    session = page.context.new_cdp_session(page)
-    result = session.send("Page.captureScreenshot", {"format": "png", "fromSurface": True})
-    output_path.write_bytes(base64.b64decode(result["data"]))
-
-
-def save_screenshot(page: Page, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        scroll_to_page_top(page)
-    except Exception as exc:
-        print(f"[warn] Failed to scroll before screenshot: {exc}")
-
-    wait_timeout_with_log(page, SCREENSHOT_PRE_CAPTURE_WAIT_MS, "Pre-screenshot settle delay")
-
-    try:
-        _capture_screenshot_with_playwright(page, output_path, SCREENSHOT_TIMEOUT_MS)
-        print(f"[artifact] Screenshot saved to {output_path}")
-        return
-    except PlaywrightTimeoutError as exc:
-        print(f"[warn] Standard screenshot timed out, retry with font fallback: {exc}")
-    except Exception as exc:
-        print(f"[warn] Standard screenshot failed, retry with fallbacks: {exc}")
-
-    try:
-        _apply_screenshot_font_fallback(page)
-        _capture_screenshot_with_playwright(page, output_path, SCREENSHOT_RETRY_TIMEOUT_MS)
-        print(f"[artifact] Screenshot saved to {output_path} (font fallback)")
-        return
-    except Exception as exc:
-        print(f"[warn] Font-fallback screenshot failed, trying CDP capture: {exc}")
-
-    try:
-        _capture_screenshot_with_cdp(page, output_path)
-        print(f"[artifact] Screenshot saved to {output_path} (CDP fallback)")
-        return
-    except Exception as exc:
-        print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
 
 
 def dismiss_coach_mark_if_present(page: Page, timeout_ms: int = 8000) -> None:

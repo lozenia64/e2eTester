@@ -908,35 +908,30 @@ def _click_bottom_claim_apply_and_wait_charge04(page, timeout_ms: int) -> None:
     _wait_url_contains(page, "charge04.do", timeout_ms)
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
-    try:
-        _goto_charge00(page, config)
-        _click_first_visible_href(
-            page,
-            "charge01.do",
-            "charge00 → charge01 (보험금청구신청 단계 진입)",
-            config.timeout_ms,
-        )
-        _open_document_check_popup(page, config.timeout_ms)
-        _confirm_ready_and_go_charge02(page, config.timeout_ms)
-        _assert_charge02_landed(page, config.timeout_ms)
-        _select_self_claimant_and_open_contracts(page, config.timeout_ms)
-        _maybe_dismiss_claim_guide_popup(page, config.timeout_ms)
-        _open_new_reception_and_confirm_layer(page, config.timeout_ms)
-        _wait_url_contains(page, "charge03.do", config.timeout_ms)
-        _agree_entire_summary_consent_and_apply(page, config.timeout_ms)
-        _click_bottom_claim_apply_and_wait_charge04(page, config.timeout_ms)
-        _select_claim_type_other(page)
-        _set_accident_date_one_month_ago(page)
-        _click_lookup_and_prepare_claim_content(page, config.timeout_ms)
-        _click_next_and_go_charge05(page, config.timeout_ms)
-        _assert_charge05_landed(page, config.timeout_ms)
-        _maybe_close_upload_notice_popup(page)
-        _upload_claim_documents(page)
-        _submit_documents_and_wait_charge06(page, config.timeout_ms)
-        _assert_charge06_landed(page, config.timeout_ms)
-        common.save_screenshot(page, screenshot_path)
-        return f"보험금청구 접수 프로세스 charge06 도달 성공 ({page.url})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+def run(page, config: common.LoginConfig) -> str:
+    _goto_charge00(page, config)
+    _click_first_visible_href(
+        page,
+        "charge01.do",
+        "charge00 → charge01 (보험금청구신청 단계 진입)",
+        config.timeout_ms,
+    )
+    _open_document_check_popup(page, config.timeout_ms)
+    _confirm_ready_and_go_charge02(page, config.timeout_ms)
+    _assert_charge02_landed(page, config.timeout_ms)
+    _select_self_claimant_and_open_contracts(page, config.timeout_ms)
+    _maybe_dismiss_claim_guide_popup(page, config.timeout_ms)
+    _open_new_reception_and_confirm_layer(page, config.timeout_ms)
+    _wait_url_contains(page, "charge03.do", config.timeout_ms)
+    _agree_entire_summary_consent_and_apply(page, config.timeout_ms)
+    _click_bottom_claim_apply_and_wait_charge04(page, config.timeout_ms)
+    _select_claim_type_other(page)
+    _set_accident_date_one_month_ago(page)
+    _click_lookup_and_prepare_claim_content(page, config.timeout_ms)
+    _click_next_and_go_charge05(page, config.timeout_ms)
+    _assert_charge05_landed(page, config.timeout_ms)
+    _maybe_close_upload_notice_popup(page)
+    _upload_claim_documents(page)
+    _submit_documents_and_wait_charge06(page, config.timeout_ms)
+    _assert_charge06_landed(page, config.timeout_ms)
+    return f"보험금청구 접수 프로세스 charge06 도달 성공 ({page.url})"

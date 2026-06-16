@@ -309,20 +309,15 @@ def _issue_certificate(page, dialog_messages: list[str], timeout_ms: int, artifa
     return "browser-managed download"
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path, dialog_messages: list[str]) -> str:
-    try:
-        _navigate_to_certificate_list(page, config.timeout_ms)
-        _open_long_term_policy_certificate(page, config.timeout_ms)
-        selected_policy = _select_first_contract(page, config.timeout_ms)
-        _select_download_method(page, config.timeout_ms)
-        download_result = _issue_certificate(
-            page,
-            dialog_messages,
-            config.timeout_ms,
-            screenshot_path.parent,
-        )
-        common.save_screenshot(page, screenshot_path)
-        return f"장기보험증권 증명서 발급 성공: {selected_policy} ({download_result})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+def run(page, config: common.LoginConfig, dialog_messages: list[str], artifact_dir: Path) -> str:
+    _navigate_to_certificate_list(page, config.timeout_ms)
+    _open_long_term_policy_certificate(page, config.timeout_ms)
+    selected_policy = _select_first_contract(page, config.timeout_ms)
+    _select_download_method(page, config.timeout_ms)
+    download_result = _issue_certificate(
+        page,
+        dialog_messages,
+        config.timeout_ms,
+        artifact_dir,
+    )
+    return f"장기보험증권 증명서 발급 성공: {selected_policy} ({download_result})"
