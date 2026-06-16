@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import UTC
 from email.message import EmailMessage
 from email.utils import parseaddr
-from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -33,6 +32,7 @@ from app.core.env_utils import (
 )
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.models import Run, SuiteRun
+from app.notifications.report_renderer import render_run_report_html, render_suite_report_html
 from app.runner.artifact_manager import ArtifactManager
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
@@ -42,21 +42,6 @@ MAX_EMAIL_ATTACHMENT_BYTES = 17_500_000
 MAX_GEMINI_ATTACHMENT_BYTES = 7_500_000
 MAX_GEMINI_INLINE_IMAGE_BYTES = 2_500_000
 MAX_GEMINI_LOG_BYTES = 180_000
-HTML_FORBIDDEN_PATTERNS = (
-    "<script",
-    "<iframe",
-    "<object",
-    "<embed",
-    "<form",
-    "<input",
-    "<button",
-    "<textarea",
-    "<link",
-    "<meta",
-    "<style",
-    "javascript:",
-    "data:text/html",
-)
 
 
 @dataclass(frozen=True)
@@ -255,7 +240,66 @@ class GmailEmailSender:
         return re.sub(r"\s+", "", raw_password)
 
 
-class GeminiEmailHtmlComposer:
+class GeminiReportContentComposer:
+    """Gemini 로 보고서 '콘텐츠'(분석 텍스트)만 구조화 JSON 으로 생성한다.
+
+    HTML/CSS 는 일절 생성하지 않는다. 레이아웃은 `report_renderer` 가 결정적으로
+    찍어내고, 여기서 받은 콘텐츠(핵심 요약/화면·로그 관찰/실패 분석)만 그 안에 채워
+    넣는다. 그래서 응답이 매번 달라도 메일 디자인은 항상 동일하게 유지된다.
+    """
+
+    # Run/Suite 콘텐츠 응답 스키마 — 모든 텍스트 필드. module_id 로 모듈을 식별한다.
+    _MODULE_FINDING_SCHEMA = {
+        "type": "OBJECT",
+        "properties": {
+            "module_id": {"type": "STRING"},
+            "screen_observation": {"type": "STRING"},
+            "log_observation": {"type": "STRING"},
+        },
+        "required": ["module_id"],
+    }
+    _FAILURE_DETAIL_SCHEMA = {
+        "type": "OBJECT",
+        "properties": {
+            "module_id": {"type": "STRING"},
+            "symptom": {"type": "STRING"},
+            "evidence": {"type": "STRING"},
+            "probable_cause": {"type": "STRING"},
+            "recommended_action": {"type": "STRING"},
+        },
+        "required": ["module_id"],
+    }
+    _RUN_SCHEMA = {
+        "type": "OBJECT",
+        "properties": {
+            "headline": {"type": "STRING"},
+            "comparison_comment": {"type": "STRING"},
+            "module_findings": {"type": "ARRAY", "items": _MODULE_FINDING_SCHEMA},
+            "failure_details": {"type": "ARRAY", "items": _FAILURE_DETAIL_SCHEMA},
+        },
+        "required": ["headline", "module_findings"],
+    }
+    _SUITE_SCHEMA = {
+        "type": "OBJECT",
+        "properties": {
+            "headline": {"type": "STRING"},
+            "systems": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "system_code": {"type": "STRING"},
+                        "summary": {"type": "STRING"},
+                        "module_findings": {"type": "ARRAY", "items": _MODULE_FINDING_SCHEMA},
+                        "failure_details": {"type": "ARRAY", "items": _FAILURE_DETAIL_SCHEMA},
+                    },
+                    "required": ["system_code"],
+                },
+            },
+        },
+        "required": ["headline", "systems"],
+    }
+
     def __init__(
         self,
         api_key: str,
@@ -269,8 +313,10 @@ class GeminiEmailHtmlComposer:
         self._endpoint = "https://generativelanguage.googleapis.com/v1beta"
         self._verify_ssl = verify_ssl
 
-    def compose(self, context: dict, gemini_parts: list[dict]) -> str:
-        prompt = self._build_suite_prompt(context) if context.get("report_type") == "suite" else self._build_prompt(context)
+    def compose(self, context: dict, gemini_parts: list[dict]) -> dict:
+        is_suite = context.get("report_type") == "suite"
+        prompt = self._build_suite_prompt(context) if is_suite else self._build_prompt(context)
+        schema = self._SUITE_SCHEMA if is_suite else self._RUN_SCHEMA
         payload = {
             "contents": [
                 {
@@ -281,18 +327,10 @@ class GeminiEmailHtmlComposer:
             "generationConfig": {
                 "temperature": 0.2,
                 "responseMimeType": "application/json",
-                "responseSchema": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "html": {
-                            "type": "STRING",
-                        }
-                    },
-                    "required": ["html"],
-                },
+                "responseSchema": schema,
             },
         }
-        html, _model = post_gemini_generate_content_with_fallback(
+        content, _model = post_gemini_generate_content_with_fallback(
             api_key=self._api_key,
             models=list(self._models),
             payload=payload,
@@ -300,18 +338,15 @@ class GeminiEmailHtmlComposer:
             verify_ssl=self._verify_ssl,
             endpoint=self._endpoint,
             log_prefix="[email]",
-            transform=self._parse_html_response,
+            transform=self._parse_content_response,
         )
-        return html
+        return content
 
-    def _parse_html_response(self, response_json: dict, _model: str) -> str:
+    def _parse_content_response(self, response_json: dict, _model: str) -> dict:
         parsed = self._extract_response_json(response_json)
         if parsed is None:
-            raise RuntimeError("Gemini HTML 응답을 JSON으로 파싱하지 못했습니다.")
-        html = str(parsed.get("html") or "").strip()
-        if not _html_looks_safe(html):
-            raise RuntimeError("Gemini HTML 응답이 Gmail용 안전 규칙을 만족하지 않습니다.")
-        return html
+            raise RuntimeError("Gemini 콘텐츠 응답을 JSON으로 파싱하지 못했습니다.")
+        return parsed
 
     def _build_prompt(self, context: dict) -> str:
         prompt_context = {
@@ -320,51 +355,38 @@ class GeminiEmailHtmlComposer:
             "module_summary": context["module_summary"],
             "modules": context["modules"],
             "failed_modules": context["failed_modules"],
-            "email_attachment_summary": context["email_attachment_summary"],
             "gemini_input_summary": context["gemini_input_summary"],
         }
         return "\n".join(
             [
                 "# 역할",
-                "당신은 웹 브라우저 기반 E2E 자동화 테스트 결과를 보고하는 시니어 QA 엔지니어이자 한국어 Gmail HTML 이메일 작성기다.",
-                "운영 담당자가 이 메일 하나만 읽어도 테스트가 무엇을 검증했고 결과가 어떠했는지 완전히 파악할 수 있는,",
-                "공식 문서 수준의 '테스트 결과 보고서' HTML 본문을 작성하라.",
+                "당신은 웹 브라우저 기반 E2E 자동화 테스트 결과를 분석하는 시니어 QA 엔지니어다.",
+                "운영 담당자에게 보낼 한국어 '테스트 결과 보고서'에 들어갈 분석 '내용'만 작성한다.",
+                "중요: HTML, CSS, 마크다운, 표, 레이아웃은 절대 만들지 마라. 보고서의 시각 디자인은 별도 시스템이",
+                "고정 템플릿으로 렌더링하므로, 당신은 정해진 JSON 스키마의 텍스트 필드만 정확히 채우면 된다.",
                 "",
                 "# 입력 자료",
-                "이 프롬프트와 함께 다음 자료가 제공된다. 모든 자료를 실제로 읽고 분석한 뒤 보고서에 반영하라.",
-                "1. 실행 메타데이터 JSON(아래 첨부): 실행(run) 정보, 모듈별 실행 결과(modules), 실패 모듈 분석(failed_modules), 첨부/제외 파일 요약.",
-                "2. 모듈별 스크린샷 이미지: 각 이미지 바로 앞에 '[screenshot] seq=... module_id=... module_name=... order=... path=...' 형식의 레이블 텍스트가 붙어 있다. seq 가 모듈별 결과 표의 순번과 동일한 1부터 시작하는 실행 순서다.",
+                "1. 실행 메타데이터 JSON(아래 첨부): run 정보, modules(모듈별 결과), failed_modules, comparison.",
+                "2. 모듈별 스크린샷 이미지: 각 이미지 앞에 '[screenshot] seq=... module_id=... module_name=... order=... path=...' 레이블이 붙어 있다.",
                 "3. 모듈별 실행 로그 텍스트: '[execution_log] seq=... module_id=... module_name=... order=... path=...' 레이블 뒤에 로그 본문이 이어진다.",
                 "",
                 "# 분석 지침",
-                "- 스크린샷: 레이블의 module_id 로 어느 모듈의 최종 화면인지 식별하고, 화면에 실제로 무엇이 보이는지(페이지 제목, 주요 UI 상태, 조회 결과, 완료 표시, 오류 팝업/빈 화면 등 이상 징후) 직접 확인하라.",
-                "  모듈 상태(PASSED/FAILED)와 화면 내용이 일치하는지 검증하고, 관찰한 내용을 보고서의 화면 검증 섹션에 모듈별로 1~2문장으로 기술하라.",
-                "- 실행 로그: 시간 흐름에 따라 어떤 단계가 수행되었는지 파악하고, 경고/오류/재시도/타임아웃 등 특이 이벤트를 추출하라.",
-                "  실패가 있으면 실패 직전 로그를 근거로 원인을 분석하고, 근거가 된 로그 메시지를 보고서에 짧게 인용하라.",
-                "- 추측 금지: 스크린샷이나 로그에서 직접 확인되지 않는 사실을 만들어내지 마라. 자료가 제공되지 않은 모듈은 '자료 없음'으로 표기하라.",
-                "- 직전 실행 대비: comparison 자료의 newly_failed(이번에 새로 실패)/recovered(이번에 복구)/still_failing(계속 실패) 모듈명을 활용하라. has_baseline 이 true 면 '직전 실행 대비 변화' 섹션을 만들어 새로 실패한 모듈을 가장 눈에 띄게 강조하고 복구·지속 실패도 정리하라. false 면 비교 대상이 없다고만 적어라.",
+                "- 스크린샷: 레이블의 module_id 로 어느 모듈의 최종 화면인지 식별하고, 화면에 실제로 무엇이 보이는지(페이지 제목, 주요 UI 상태, 조회 결과, 완료 표시, 오류 팝업/빈 화면 등)를 직접 확인하라. 모듈 상태와 화면 내용이 일치하는지 검증하라.",
+                "- 실행 로그: 시간 흐름상 어떤 단계가 수행됐는지 파악하고, 경고/오류/재시도/타임아웃 등 특이 이벤트를 추출하라. 실패 시 실패 직전 로그를 근거로 원인을 좁혀라.",
+                "- 추측 금지: 스크린샷·로그에서 직접 확인되지 않는 사실을 지어내지 마라. 자료가 없는 모듈은 해당 필드를 빈 문자열로 두어라.",
+                "- 개인정보(이름, 생년월일, 전화번호, OTP, 계약번호 등)는 새로 추론하거나 본문에 옮기지 마라. 일부만 보이면 마스킹된 형태 그대로만 언급하라.",
                 "",
-                "# 보고서 구성 (아래 순서를 따르라)",
-                "1. 제목 헤더: '[E2E] {시스템명} 테스트 결과 보고서' 형태의 제목과 상태 배지(성공/실패). 성공은 #17804b, 실패는 #c44536 계열 색상 사용.",
-                "2. 실행 개요: Run ID, 시스템, 요청/시작/종료 시각(KST), 총 소요시간, 최종 상태를 표(table)로 정리.",
-                "3. 핵심 요약: 전체 결과를 2~3문장으로 요약. 실패 시 어떤 모듈에서 무엇이 실패했는지, 성공 시 어떤 업무 흐름이 검증되었는지 서술.",
-                "4. 모듈별 결과: modules 배열 전체를 순번/모듈명/상태/소요시간/비고 컬럼의 표로 정리. 순번 컬럼은 각 모듈의 seq 값(1부터 시작하는 실제 실행 순서: 1, 2, 3, ...)을 그대로 사용하고, manifest의 order 값(10, 20, 40 등)은 순번으로 쓰거나 표에 노출하지 마라. 상태는 색상으로 구분(성공 녹색, 실패 적색, 그 외 회색).",
-                "5. 화면 검증(스크린샷 분석): 제공된 스크린샷을 모듈 순서대로 분석한 관찰 결과. 각 항목에 모듈명과 관찰 내용을 기술.",
-                "6. 로그 분석: 로그에서 확인한 주요 진행 이벤트와 특이사항 요약. 로그가 제공되지 않았으면 이 섹션은 생략.",
-                "7. 실패 상세 분석(실패 시에만): 실패 모듈별로 증상, 로그/화면 근거, 추정 원인, 권장 조치를 정리. failed_modules 의 AI 분석 내용이 있으면 함께 반영.",
-                "8. 첨부 안내: 메일에 첨부된 스크린샷/로그 건수. 용량 한도로 제외된 파일이 있으면 눈에 띄는 경고 박스로 목록과 사유를 표시.",
-                "9. 푸터: 시스템 자동 발송 메일이라는 안내 문구를 작은 회색 글씨로 추가.",
+                "# 채워야 할 JSON 필드",
+                "- headline: 전체 결과를 2~3문장으로 요약한 핵심 요약. 실패 시 어떤 모듈에서 무엇이 실패했는지, 성공 시 어떤 업무 흐름이 검증되었는지 서술.",
+                "- comparison_comment: comparison.has_baseline 이 true 일 때만, 직전 실행 대비 변화를 1~2문장으로 서술(newly_failed/recovered/still_failing 활용). baseline 이 없으면 빈 문자열.",
+                "- module_findings: 자료가 있는 모듈마다 한 항목. module_id 는 입력의 module_id 와 정확히 일치시킬 것.",
+                "    screen_observation: 해당 모듈 스크린샷에서 관찰한 내용 1~2문장(자료 없으면 빈 문자열).",
+                "    log_observation: 해당 모듈 로그에서 확인한 주요 진행/특이 이벤트 1~2문장(자료 없으면 빈 문자열).",
+                "- failure_details: status 가 FAILED 인 모듈마다 한 항목(없으면 빈 배열). symptom(증상), evidence(로그/화면 근거), probable_cause(추정 원인), recommended_action(운영자가 바로 해볼 단일 조치). failed_modules 의 기존 AI 분석이 있으면 반영해 보강하라.",
                 "",
-                "# HTML 작성 규칙",
-                "- Gmail에서 바로 렌더링 가능한 HTML 본문 조각만 작성하라(html/head/body 태그 없이 최상위 div 하나로 시작).",
-                "- 허용 태그: div, table, thead, tbody, tr, td, th, p, h2, h3, ul, li, span, strong, code, hr, br 만 사용하라.",
-                "- 모든 스타일은 inline style 로 작성하고, 전체를 max-width:760px 의 카드형 레이아웃으로 구성하라.",
-                "- 글꼴은 Arial,'Noto Sans KR',sans-serif 를 사용하고 본문 line-height 는 1.6 정도로 유지하라.",
-                "- script, style, iframe, form, input, button, 외부 이미지(src), 외부 CSS, 외부 링크(href)를 절대 사용하지 마라.",
-                "- 개인정보(이름, 생년월일, 전화번호, OTP, 계약번호 등)를 새로 추론하거나 노출하지 마라. 화면에 보이더라도 보고서에는 옮기지 마라.",
-                "",
-                "# 출력 형식",
-                "응답은 JSON 하나만 반환하고 html 필드에 완성된 HTML 문자열을 넣어라.",
+                "# 작성 규칙",
+                "- 순번은 modules 의 seq 값(1부터)을 기준으로 말하고, manifest order 값(10,20,40)은 언급하지 마라.",
+                "- 모든 텍스트는 한국어 존댓말, 간결한 보고서 문체로 작성하라.",
                 "",
                 "## 실행 메타데이터",
                 json.dumps(prompt_context, ensure_ascii=False, indent=2),
@@ -376,44 +398,33 @@ class GeminiEmailHtmlComposer:
             "suite": context["suite"],
             "step_summary": context["step_summary"],
             "system_runs": context["system_runs"],
-            "email_attachment_summary": context["email_attachment_summary"],
             "gemini_input_summary": context["gemini_input_summary"],
         }
         return "\n".join(
             [
                 "# 역할",
-                "당신은 여러 시스템을 순차 실행한 E2E 전체 점검(Suite) 결과를 보고하는 시니어 QA 엔지니어이자 한국어 Gmail HTML 이메일 작성기다.",
-                "운영 담당자가 이 메일 하나만 읽어도 전체 점검 결과와 각 시스템·모듈별 실행 결과를 완전히 파악할 수 있는 공식 보고서 HTML 본문을 작성하라.",
+                "당신은 여러 시스템을 순차 실행한 E2E 전체 점검(Suite) 결과를 분석하는 시니어 QA 엔지니어다.",
+                "운영 담당자에게 보낼 한국어 전체 점검 보고서에 들어갈 분석 '내용'만 작성한다.",
+                "중요: HTML, CSS, 마크다운, 표, 레이아웃은 절대 만들지 마라. 시각 디자인은 고정 템플릿이 렌더링하므로",
+                "당신은 정해진 JSON 스키마의 텍스트 필드만 정확히 채운다.",
                 "",
                 "# 입력 자료",
                 "1. Suite 메타데이터 JSON (suite)",
-                "2. 시스템별 Run 결과 JSON (system_runs) — 각 항목에 modules 배열(모듈별 seq/이름/상태/소요시간/비고)이 포함됨",
+                "2. 시스템별 Run 결과 JSON (system_runs) — 각 항목에 system_code, modules(seq/이름/상태/소요/비고), failed_modules, comparison 포함.",
                 "3. 모듈별 스크린샷·실행 로그(레이블에 system_code, run_id, module_id 포함)",
                 "",
-                "# 보고서 구성 (순서 준수)",
-                "1. 제목 헤더: '[E2E] 전체 시스템 순차 점검 결과 보고서' + Suite 최종 상태 배지",
-                "2. Suite 개요 표: suite_id, 요청/시작/종료(KST), 총 소요, 통과/실패 시스템 수, browser_mode",
-                "3. 시스템 요약 표: 순서, 시스템명, Run ID, 시스템 상태, 모듈 통과 수(예: 8/8)",
-                "4. 시스템별 상세 섹션 (필수, system_runs 순서대로 각각 작성):",
-                "   - 섹션 제목: '{순번}. {system_name} ({system_code})' + 시스템 상태 배지",
-                "   - Run ID, 시스템 Run 상태, 소요시간(있으면) 한 줄 요약",
-                "   - **모듈별 실행 결과 표 (필수)**: 해당 system_runs[].modules 전체를 빠짐없이 표로 작성.",
-                "     컬럼: 순번(seq), 모듈명, 모듈 ID, 상태(색상 구분), 소요시간, 비고(message).",
-                "     PASSED=녹색, FAILED=적색, BLOCKED/CANCELLED/SKIPPED=회색·주황.",
-                "   - 실패 모듈이 있으면 failed_modules 기반으로 원인·권장 조치 소절 추가",
-                "   - comparison.has_baseline 이 true 면 해당 시스템 직전 Run 대비 변화 요약",
-                "5. 화면·로그 분석: 제공된 스크린샷/로그만 근거로, 시스템·모듈 단위로 관찰 내용 기술(추측 금지)",
-                "6. 첨부 안내 및 제외 파일 경고(있을 때)",
-                "7. 푸터: 자동 발송 안내",
+                "# 채워야 할 JSON 필드",
+                "- headline: 전체 점검 결과를 2~3문장으로 요약(통과/실패 시스템 수, 두드러진 실패 시스템 등).",
+                "- systems: system_runs 의 각 시스템마다 한 항목. system_code 는 입력값과 정확히 일치시킬 것.",
+                "    summary: 해당 시스템 결과 1~2문장 요약.",
+                "    module_findings: 자료가 있는 모듈마다 {module_id, screen_observation, log_observation}. 자료 없는 필드는 빈 문자열.",
+                "    failure_details: FAILED 모듈마다 {module_id, symptom, evidence, probable_cause, recommended_action}. 없으면 빈 배열.",
                 "",
-                "# HTML 작성 규칙",
-                "- inline style, max-width 760px, Gmail 안전 태그만(div/table/thead/tbody/tr/td/th/p/h2/h3/ul/li/span/strong/code/hr/br)",
-                "- script/style/iframe/form/외부 리소스 금지",
-                "- system_runs[].modules 의 seq 를 표 순번으로 그대로 사용 (manifest order 값은 순번으로 쓰지 마라)",
-                "- 모듈 표는 각 시스템 섹션 안에 반드시 포함. 요약 표만으로 대체하지 마라.",
-                "",
-                "# 출력 형식",
-                "응답은 JSON 하나만 반환하고 html 필드에 HTML 문자열을 넣어라.",
+                "# 분석 지침",
+                "- 스크린샷·로그 레이블의 system_code/module_id 로 어느 시스템·모듈인지 식별하라.",
+                "- 추측 금지: 직접 확인되지 않은 사실은 지어내지 말고 빈 문자열로 두어라.",
+                "- 개인정보는 새로 추론·노출하지 마라. 순번은 modules 의 seq 기준으로만 말하라.",
+                "- 모든 텍스트는 한국어 존댓말, 간결한 보고서 문체.",
                 "",
                 "## 실행 메타데이터",
                 json.dumps(prompt_context, ensure_ascii=False, indent=2),
@@ -440,7 +451,7 @@ class RunCompletionEmailBuilder:
     def __init__(self, config: EmailNotificationConfig) -> None:
         self._config = config
         self._composer = (
-            GeminiEmailHtmlComposer(
+            GeminiReportContentComposer(
                 config.gemini_api_key,
                 config.gemini_models,
                 timeout_seconds=config.gemini_timeout_seconds,
@@ -510,17 +521,21 @@ class RunCompletionEmailBuilder:
         return message
 
     def _build_html_body(self, context: dict, gemini_parts: list[dict]) -> str:
+        # 레이아웃은 report_renderer 가 결정적으로 찍어내고, Gemini 는 분석 콘텐츠만 채운다.
+        # Gemini 가 비활성/실패면 ai_content=None 으로 동일 템플릿이 AI 서술 없이 렌더링된다.
+        ai_content = self._compose_ai_content(context, gemini_parts)
+        if context.get("report_type") == "suite":
+            return render_suite_report_html(context, ai_content)
+        return render_run_report_html(context, ai_content)
+
+    def _compose_ai_content(self, context: dict, gemini_parts: list[dict]) -> dict | None:
         if self._composer is None:
-            if context.get("report_type") == "suite":
-                return self._build_suite_fallback_html(context)
-            return self._build_fallback_html(context)
+            return None
         try:
             return self._composer.compose(context, gemini_parts)
         except Exception as exc:
-            print(f"[email] Gemini HTML 생성 실패: {exc}")
-            if context.get("report_type") == "suite":
-                return self._build_suite_fallback_html(context)
-            return self._build_fallback_html(context)
+            print(f"[email] Gemini 보고서 콘텐츠 생성 실패(기본 템플릿으로 발송): {exc}")
+            return None
 
     @staticmethod
     def _build_plain_text(context: dict) -> str:
@@ -579,282 +594,6 @@ class RunCompletionEmailBuilder:
             for omitted in context["gemini_input_summary"]["omitted"]:
                 lines.append(f"- {omitted['path']}: {omitted['reason']}")
         return "\n".join(lines)
-
-    @staticmethod
-    def _build_fallback_html(context: dict) -> str:
-        run_info = context["run"]
-        tone_color = "#17804b" if run_info["status"] == RunStatus.PASSED.value else "#c44536"
-        failed_items = "".join(
-            [
-                (
-                    "<li style=\"margin-bottom:12px;\">"
-                    f"<strong>{escape(item['module_name'])}</strong> "
-                    f"(<code>{escape(item['module_id'])}</code>)<br>"
-                    f"<span>{escape(item['message'])}</span>"
-                    + (
-                        f"<br><span>AI 요약: {escape(item['analysis_summary'])}</span>"
-                        if item["analysis_summary"]
-                        else ""
-                    )
-                    + (
-                        f"<br><span>권장 조치: {escape(item['recommended_action'])}</span>"
-                        if item["recommended_action"]
-                        else ""
-                    )
-                    + "</li>"
-                )
-                for item in context["failed_modules"]
-            ]
-        )
-        omitted_sections: list[str] = []
-        for section_title, omitted_entries in (
-            ("메일 첨부에서 제외된 파일", context["email_attachment_summary"]["omitted"]),
-            ("Gemini HTML 생성에서 제외된 파일", context["gemini_input_summary"]["omitted"]),
-        ):
-            if not omitted_entries:
-                continue
-            items = "".join(
-                f"<li><code>{escape(entry['path'])}</code> - {escape(entry['reason'])}</li>" for entry in omitted_entries
-            )
-            omitted_sections.append(
-                (
-                    "<div style=\"margin-top:16px;padding:14px 16px;border-radius:14px;"
-                    "background:#fff6dd;border:1px solid rgba(196,127,25,0.25);\">"
-                    f"<strong style=\"display:block;margin-bottom:8px;\">{escape(section_title)}</strong>"
-                    f"<ul style=\"margin:0;padding-left:18px;\">{items}</ul>"
-                    "</div>"
-                )
-            )
-
-        comparison = context["comparison"]
-        comparison_section = ""
-        if comparison["has_baseline"]:
-            def _comparison_rows(title: str, names: list[str], color: str) -> str:
-                if not names:
-                    return ""
-                items = "".join(f"<li>{escape(name)}</li>" for name in names)
-                return (
-                    f"<div style=\"margin-top:8px;\"><strong style=\"color:{color};\">{escape(title)}</strong>"
-                    f"<ul style=\"margin:4px 0 0;padding-left:18px;\">{items}</ul></div>"
-                )
-
-            comparison_body = (
-                _comparison_rows(f"새로 실패 {len(comparison['newly_failed'])}건", comparison["newly_failed"], "#c44536")
-                + _comparison_rows(f"복구됨 {len(comparison['recovered'])}건", comparison["recovered"], "#17804b")
-                + _comparison_rows(f"계속 실패 {len(comparison['still_failing'])}건", comparison["still_failing"], "#9a6700")
-            ) or "<div style=\"margin-top:8px;\">직전 실행과 비교해 모듈 상태 변화가 없습니다.</div>"
-            comparison_section = (
-                "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f1f5ff;"
-                "border:1px solid rgba(37,99,235,0.18);\">"
-                "<h3 style=\"margin:0 0 6px;font-size:16px;\">직전 실행 대비 변화</h3>"
-                f"<div style=\"font-size:13px;color:#555;\">기준 Run: <code>{escape(str(comparison['baseline_run_id'] or '-'))}</code> "
-                f"({escape(comparison['baseline_requested_at'])})</div>"
-                f"{comparison_body}"
-                "</div>"
-            )
-
-        module_rows = "".join(
-            f"<li><strong>{escape(status)}</strong>: {count}</li>"
-            for status, count in context["module_summary"].items()
-        )
-        failed_section = (
-            "<div style=\"margin-top:20px;\">"
-            "<h3 style=\"margin:0 0 10px;font-size:16px;\">실패 모듈</h3>"
-            f"<ul style=\"margin:0;padding-left:18px;\">{failed_items}</ul>"
-            "</div>"
-            if failed_items
-            else ""
-        )
-        return (
-            "<div style=\"font-family:Arial,'Noto Sans KR',sans-serif;color:#1e1a16;line-height:1.6;\">"
-            "<div style=\"max-width:760px;margin:0 auto;padding:24px;background:#fffaf4;border:1px solid rgba(30,26,22,0.08);"
-            "border-radius:20px;\">"
-            f"<h2 style=\"margin:0 0 12px;font-size:24px;color:{tone_color};\">"
-            f"[E2E] {escape(run_info['system_code'])} 테스트 {escape(run_info['status_label'])}</h2>"
-            f"<p style=\"margin:0 0 18px;\">{escape(run_info['system_name'])} 테스트가 {escape(run_info['status_label'])} 상태로 종료되었습니다.</p>"
-            "<table style=\"width:100%;border-collapse:collapse;font-size:14px;\">"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">Run ID</td><td style=\"padding:6px 0;\"><code>{escape(run_info['run_id'])}</code></td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">요청 시각</td><td style=\"padding:6px 0;\">{escape(run_info['requested_at_kst'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">시작 시각</td><td style=\"padding:6px 0;\">{escape(run_info['started_at_kst'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">종료 시각</td><td style=\"padding:6px 0;\">{escape(run_info['ended_at_kst'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">총 소요시간</td><td style=\"padding:6px 0;\">{escape(run_info['duration_text'])}</td></tr>"
-            "</table>"
-            "<div style=\"margin-top:20px;\">"
-            "<h3 style=\"margin:0 0 10px;font-size:16px;\">모듈 요약</h3>"
-            f"<ul style=\"margin:0;padding-left:18px;\">{module_rows}</ul>"
-            "</div>"
-            f"{failed_section}"
-            f"{comparison_section}"
-            "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f6f3ef;\">"
-            "<strong style=\"display:block;margin-bottom:8px;\">첨부 요약</strong>"
-            f"<div>스크린샷 {context['email_attachment_summary']['screenshot_count']}건 / "
-            f"로그 {context['email_attachment_summary']['log_count']}건</div>"
-            "</div>"
-            + "".join(omitted_sections)
-            + "</div></div>"
-        )
-
-    @staticmethod
-    def _build_suite_fallback_html(context: dict) -> str:
-        suite_info = context["suite"]
-        tone_color = "#17804b" if suite_info["status"] == SuiteStatus.PASSED.value else "#c44536"
-        step_rows = "".join(
-            (
-                "<tr>"
-                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{item['order'] + 1}</td>"
-                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{escape(item['system_name'])} "
-                f"(<code>{escape(item['system_code'])}</code>)</td>"
-                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\"><code>{escape(item['run_id'] or '-')}</code></td>"
-                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{escape(item['status'])}</td>"
-                f"<td style=\"padding:8px 6px;border-bottom:1px solid #eee;\">{item['module_passed']}/{item['module_total']}</td>"
-                "</tr>"
-            )
-            for item in context["step_summary"]
-        )
-
-        system_sections: list[str] = []
-        for index, system_run in enumerate(context["system_runs"], start=1):
-            system_tone = "#17804b" if system_run["status"] == RunStatus.PASSED.value else "#c44536"
-            if system_run["status"] == RunStatus.CANCELLED.value:
-                system_tone = "#71717a"
-
-            module_rows = "".join(
-                (
-                    "<tr>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;text-align:center;\">{module['seq']}</td>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\">{escape(module['module_name'])}</td>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\"><code>{escape(module['module_id'])}</code></td>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;"
-                    f"color:{_suite_module_status_color(module['status'])};font-weight:600;\">"
-                    f"{escape(module['status_label'])}</td>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;\">{escape(module['duration_text'])}</td>"
-                    f"<td style=\"padding:8px 6px;border-bottom:1px solid #f0f0f0;color:#555;\">{escape(module['message'])}</td>"
-                    "</tr>"
-                )
-                for module in system_run.get("modules", [])
-            )
-            if not module_rows:
-                module_rows = (
-                    "<tr><td colspan=\"6\" style=\"padding:12px 6px;color:#888;\">"
-                    f"{escape(system_run.get('note', '실행된 모듈이 없습니다.'))}"
-                    "</td></tr>"
-                )
-
-            failed_block = ""
-            if system_run.get("failed_modules"):
-                failed_items = "".join(
-                    (
-                        "<li style=\"margin-bottom:8px;\">"
-                        f"<strong>{escape(item['module_name'])}</strong> "
-                        f"(<code>{escape(item['module_id'])}</code>)<br>"
-                        f"<span>{escape(item['message'])}</span>"
-                        + (
-                            f"<br><span>AI 요약: {escape(item['analysis_summary'])}</span>"
-                            if item.get("analysis_summary")
-                            else ""
-                        )
-                        + (
-                            f"<br><span>권장 조치: {escape(item['recommended_action'])}</span>"
-                            if item.get("recommended_action")
-                            else ""
-                        )
-                        + "</li>"
-                    )
-                    for item in system_run["failed_modules"]
-                )
-                failed_block = (
-                    "<div style=\"margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff5f5;"
-                    "border:1px solid rgba(196,69,54,0.2);\">"
-                    "<strong style=\"color:#c44536;\">실패 모듈</strong>"
-                    f"<ul style=\"margin:8px 0 0;padding-left:18px;\">{failed_items}</ul>"
-                    "</div>"
-                )
-
-            comparison = system_run.get("comparison") or {}
-            comparison_block = ""
-            if comparison.get("has_baseline"):
-                comparison_block = (
-                    "<div style=\"margin-top:12px;padding:12px 14px;border-radius:12px;background:#f1f5ff;"
-                    "border:1px solid rgba(37,99,235,0.18);font-size:13px;\">"
-                    f"<strong>직전 실행 대비</strong> (기준 Run: <code>{escape(str(comparison.get('baseline_run_id') or '-'))}</code>)"
-                    + (
-                        f"<div style=\"margin-top:6px;color:#c44536;\">새로 실패: {escape(', '.join(comparison.get('newly_failed') or []))}</div>"
-                        if comparison.get("newly_failed")
-                        else ""
-                    )
-                    + (
-                        f"<div style=\"margin-top:4px;color:#17804b;\">복구됨: {escape(', '.join(comparison.get('recovered') or []))}</div>"
-                        if comparison.get("recovered")
-                        else ""
-                    )
-                    + (
-                        f"<div style=\"margin-top:4px;color:#9a6700;\">계속 실패: {escape(', '.join(comparison.get('still_failing') or []))}</div>"
-                        if comparison.get("still_failing")
-                        else ""
-                    )
-                    + "</div>"
-                )
-
-            system_sections.append(
-                (
-                    "<div style=\"margin-top:20px;padding:16px;border:1px solid rgba(30,26,22,0.08);"
-                    "border-radius:16px;background:#fff;\">"
-                    f"<h3 style=\"margin:0 0 8px;font-size:17px;color:{system_tone};\">"
-                    f"{index}. {escape(system_run['system_name'])} "
-                    f"(<code>{escape(system_run['system_code'])}</code>)</h3>"
-                    f"<p style=\"margin:0 0 12px;font-size:13px;color:#665f57;\">"
-                    f"Run ID: <code>{escape(system_run.get('run_id') or '-')}</code> · "
-                    f"상태: <strong>{escape(system_run.get('status_label', system_run['status']))}</strong> · "
-                    f"모듈 통과: {system_run.get('module_passed', 0)}/{system_run.get('module_total', 0)} · "
-                    f"소요: {escape(system_run.get('duration_text', '-'))}"
-                    "</p>"
-                    "<table style=\"width:100%;border-collapse:collapse;font-size:12px;\">"
-                    "<thead><tr style=\"background:#f9fafb;\">"
-                    "<th style=\"text-align:center;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:40px;\">#</th>"
-                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">모듈명</th>"
-                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">모듈 ID</th>"
-                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:72px;\">상태</th>"
-                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;width:80px;\">소요</th>"
-                    "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #e5e7eb;\">비고</th>"
-                    "</tr></thead>"
-                    f"<tbody>{module_rows}</tbody></table>"
-                    f"{failed_block}{comparison_block}"
-                    "</div>"
-                )
-            )
-
-        return (
-            "<div style=\"font-family:Arial,'Noto Sans KR',sans-serif;color:#1e1a16;line-height:1.6;\">"
-            "<div style=\"max-width:760px;margin:0 auto;padding:24px;background:#fffaf4;border:1px solid rgba(30,26,22,0.08);"
-            "border-radius:20px;\">"
-            f"<h2 style=\"margin:0 0 12px;font-size:24px;color:{tone_color};\">"
-            f"[E2E] 전체 시스템 순차 점검 {escape(suite_info['status_label'])}</h2>"
-            "<table style=\"width:100%;border-collapse:collapse;font-size:14px;margin-bottom:18px;\">"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">Suite ID</td><td style=\"padding:6px 0;\"><code>{escape(suite_info['suite_id'])}</code></td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">요청 시각</td><td style=\"padding:6px 0;\">{escape(suite_info['requested_at_kst'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">종료 시각</td><td style=\"padding:6px 0;\">{escape(suite_info['ended_at_kst'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">총 소요시간</td><td style=\"padding:6px 0;\">{escape(suite_info['duration_text'])}</td></tr>"
-            f"<tr><td style=\"padding:6px 0;color:#665f57;\">시스템 통과</td><td style=\"padding:6px 0;\">{suite_info['step_passed']}/{suite_info['step_total']}</td></tr>"
-            "</table>"
-            "<h3 style=\"margin:0 0 10px;font-size:16px;\">시스템 요약</h3>"
-            "<table style=\"width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;\">"
-            "<thead><tr>"
-            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">#</th>"
-            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">시스템</th>"
-            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">Run ID</th>"
-            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">상태</th>"
-            "<th style=\"text-align:left;padding:8px 6px;border-bottom:2px solid #ddd;\">모듈</th>"
-            "</tr></thead>"
-            f"<tbody>{step_rows}</tbody></table>"
-            "<h3 style=\"margin:24px 0 12px;font-size:16px;\">시스템별 모듈 실행 결과</h3>"
-            + "".join(system_sections)
-            + "<div style=\"margin-top:20px;padding:14px 16px;border-radius:14px;background:#f6f3ef;\">"
-            "<strong style=\"display:block;margin-bottom:8px;\">첨부 요약</strong>"
-            f"<div>스크린샷 {context['email_attachment_summary']['screenshot_count']}건 / "
-            f"로그 {context['email_attachment_summary']['log_count']}건</div>"
-            "</div>"
-            "</div></div>"
-        )
 
 
 class RunCompletionEmailNotifier:
@@ -1191,22 +930,6 @@ def _module_status_label(status: str) -> str:
         SuiteStatus.WAITING_INPUT.value: "입력 대기",
     }
     return labels.get(status, status)
-
-
-def _suite_module_status_color(status: str) -> str:
-    colors = {
-        ModuleStatus.PASSED.value: "#17804b",
-        ModuleStatus.FAILED.value: "#c44536",
-        ModuleStatus.BLOCKED.value: "#f97316",
-        ModuleStatus.SKIPPED.value: "#64748b",
-        ModuleStatus.CANCELLED.value: "#71717a",
-        ModuleStatus.WAITING_INPUT.value: "#d97706",
-        RunStatus.PASSED.value: "#17804b",
-        RunStatus.FAILED.value: "#c44536",
-        RunStatus.CANCELLED.value: "#71717a",
-        SuiteStatus.SKIPPED.value: "#64748b",
-    }
-    return colors.get(status, "#6b7280")
 
 
 def _build_comparison_context(run: Run) -> dict:
@@ -1633,15 +1356,3 @@ def _gmail_app_password_looks_valid(password: str) -> bool:
     if normalized.lower() in {"yourapppassword", "your_actual_app_password"}:
         return False
     return len(normalized) >= 16
-
-
-def _html_looks_safe(html: str) -> bool:
-    candidate = html.strip()
-    if not candidate.startswith("<"):
-        return False
-    lowered = candidate.lower()
-    if any(pattern in lowered for pattern in HTML_FORBIDDEN_PATTERNS):
-        return False
-    if re.search(r"""(?:src|href)\s*=\s*['"]https?://""", lowered):
-        return False
-    return True
