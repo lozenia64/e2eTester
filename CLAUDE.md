@@ -15,9 +15,12 @@ python3 -m playwright install chromium   # fallback browser; local Chrome channe
 
 # Run the server (then open http://127.0.0.1:8000)
 python3 -m uvicorn app.main:app --reload
+
+# Docs ↔ source consistency guard (run before opening a PR; CI also runs this)
+python3 scripts/check_docs_consistency.py
 ```
 
-There is no test suite, linter, or build step. Verification is manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
+There is no unit-test suite, linter, or build step. The one automated check is the docs consistency guard (`scripts/check_docs_consistency.py`), which asserts machine-checkable facts (manifest module ids, API routes, env var names, default model chain) match the docs. Behavioral verification is manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
 
 Optional features (AI failure analysis via Gemini, end-of-run Gmail notifications) are configured via env vars / `.env` (see `.env.example`); real env vars take precedence over `.env`. Both are disabled by default and the app must keep working when they are unset or misconfigured.
 
@@ -55,6 +58,6 @@ Key points that span multiple files:
 
 - `app/systems/{system_code}/steps/*.py` files are stateful, ordered automation steps against a live external website, full of carefully tuned selectors and Korean UI text matching — selector changes should follow the patterns already in `app/systems/hom/steps/login_common.py`. `app/systems/hom/scripts/login_phone.py` is a manual CLI entry point, not part of the manifest workflow.
 - The claim-filing step (`app/systems/hom/steps/compensation_charge.py`) submits a real test claim (uploads PNGs found on the local Desktop, claim text `IT직원 테스트입니다. 바로 취소할 예정입니다.`); `app/systems/hom/steps/compensation_result.py` then verifies that claim's detail/submitted documents and `app/systems/hom/steps/compensation_cancel.py` finds and cancels exactly that claim (both share `app/systems/hom/steps/compensation_result_common.py` for list entry / row lookup / detail navigation) — all three are coupled by that literal claim text and "today" date matching. MHM has the parallel set under `app/systems/mhm/steps/` with the same coupling against the mobile UI.
-- When adding a new system or changing an existing system's flow/selectors, update (or create) its scenario doc in `docs/scenarios/{system_code}.md` alongside the manifest — scenario details do not belong in `E2E_ARCHITECTURE.md`.
+- When adding a new system or changing an existing system's flow/selectors, update (or create) its scenario doc in `docs/scenarios/{system_code}.md` alongside the manifest — scenario details do not belong in `E2E_ARCHITECTURE.md`. Documentation ownership (which doc is the single source of truth for which fact) and the per-PR documentation checklist are defined in `docs/DOCS_GOVERNANCE.md`; the consistency guard (`scripts/check_docs_consistency.py`) enforces the machine-checkable parts.
 - `research/` contains throwaway probe scripts, not part of the app.
 - User-facing strings (UI labels, log messages, README) are in Korean; keep that consistent.
