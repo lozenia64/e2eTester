@@ -81,6 +81,7 @@ e2eTester/
       models.py
     notifications/
       run_completion_email.py
+      report_renderer.py
     orchestrator/
       run_service.py
       suite_service.py
@@ -423,7 +424,8 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/notifications/run_completion_email.py` (`RunCompletionEmailNotifier`)
+- `app/notifications/run_completion_email.py` (`RunCompletionEmailNotifier`, `GeminiReportContentComposer`)
+- `app/notifications/report_renderer.py` (고정 디자인 HTML 렌더러)
 
 역할:
 
@@ -431,7 +433,7 @@ manifest 에 들어 있는 정보:
 - **Suite** 가 최종 종료되면 포함 시스템 Run 결과를 통합한 메일 1통을 보낸다. `SKIPPED` 시스템은 제외로 표시한다.
 - 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, `E2E_EMAIL_RECIPIENTS_FP`, … — 여러 명은 `|` 로 구분)
 - Suite 메일 수신자는 실행된(선택된) 시스템들의 수신자 집합을 합친다.
-- 메일 본문 HTML은 Gemini로 생성하고, 실패하면 기본 템플릿으로 fallback 한다.
+- **메일 본문 HTML은 항상 `report_renderer` 의 고정 템플릿으로 결정적으로 렌더링한다.** 디자인(레이아웃·색·간격)은 코드에 박혀 있어 매 실행 동일하다. Gemini(`GeminiReportContentComposer`)는 HTML 이 아니라 분석 '콘텐츠'(핵심 요약·모듈별 화면/로그 관찰·실패 분석)만 구조화 JSON 으로 생성해 템플릿에 채운다. Gemini 가 비활성/실패면 동일 템플릿이 AI 서술 없이(결정적 기본 문구로) 렌더링되므로 디자인은 그대로 유지된다.
 - 홈 화면에 현재 메일 알림 설정 상태(`inspect_env_status`)를 표시한다.
 
 제약:
@@ -456,7 +458,7 @@ manifest 에 들어 있는 정보:
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
-- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunService._compute_comparison` 가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(Gemini 프롬프트·폴백 HTML·평문)에 반영된다.
+- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunService._compute_comparison` 가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
 
 제약:
 
