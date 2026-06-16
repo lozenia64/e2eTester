@@ -235,6 +235,7 @@ class SuiteRun(BaseModel):
     requested_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
+    active_run_id: str | None = None
     awaiting_input_run_id: str | None = None
     awaiting_input_prompt: str | None = None
     browser_mode: str = "headed"

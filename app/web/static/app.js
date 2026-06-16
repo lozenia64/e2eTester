@@ -2075,6 +2075,9 @@ function resolveActiveSuiteRunId(suite) {
     if (suite?.awaiting_input_run_id) {
         return suite.awaiting_input_run_id;
     }
+    if (suite?.active_run_id) {
+        return suite.active_run_id;
+    }
     const activeStep = (suite?.steps ?? []).find((step) => {
         const status = String(step.status).toLowerCase();
         return step.run_id && (status === "running" || status === "waiting_input");

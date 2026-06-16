@@ -24,7 +24,6 @@ class SuiteService:
         self._run_service = run_service
         self._repository = repository
         self._cancel_requested: set[str] = set()
-        self._active_run_by_suite: dict[str, str] = {}
 
     async def get_suite(self, suite_id: str) -> SuiteRun:
         return await self._repository.get_suite(suite_id)
@@ -52,6 +51,7 @@ class SuiteService:
             "step_failed": failed,
             "step_skipped": skipped,
             "current_step_index": suite.current_step_index,
+            "active_run_id": suite.active_run_id,
             "awaiting_input_run_id": suite.awaiting_input_run_id,
         }
 
@@ -164,10 +164,9 @@ class SuiteService:
         if suite.status in {SuiteStatus.PASSED, SuiteStatus.FAILED, SuiteStatus.CANCELLED}:
             raise ValueError("이미 종료된 전체 점검은 취소할 수 없습니다.")
         self._cancel_requested.add(suite_id)
-        active_run_id = self._active_run_by_suite.get(suite_id)
-        if active_run_id:
+        if suite.active_run_id:
             try:
-                await self._run_service.cancel_run(active_run_id)
+                await self._run_service.cancel_run(suite.active_run_id)
             except (KeyError, ValueError):
                 pass
         return suite
@@ -200,6 +199,7 @@ class SuiteService:
 
             suite.current_step_index = index
             step.status = SuiteStatus.RUNNING
+            suite.active_run_id = None
             await self._repository.save_suite(suite)
             await self._publish_event("suite_step_started", suite, {"step_index": index})
 
@@ -224,14 +224,22 @@ class SuiteService:
                 continue
 
             step.run_id = run.run_id
-            self._active_run_by_suite[suite_id] = run.run_id
+            suite.active_run_id = run.run_id
             await self._repository.save_suite(suite)
+            await self._publish_event(
+                "suite_step_run_linked",
+                suite,
+                {"step_index": index, "run_id": run.run_id},
+            )
 
             final_status = await self._wait_for_run_terminal(suite, run.run_id)
 
             if suite_id in self._cancel_requested or final_status == RunStatus.CANCELLED:
                 cancelled = True
                 step.status = SuiteStatus.CANCELLED
+                suite.active_run_id = None
+                suite.awaiting_input_run_id = None
+                suite.awaiting_input_prompt = None
                 await self._repository.save_suite(suite)
                 await self._publish_event("suite_step_finished", suite, {"step_index": index})
                 await self._mark_remaining_cancelled(suite, index + 1)
@@ -243,12 +251,12 @@ class SuiteService:
                 step.status = SuiteStatus.FAILED
                 any_failed = True
 
+            suite.active_run_id = None
             suite.awaiting_input_run_id = None
             suite.awaiting_input_prompt = None
             await self._repository.save_suite(suite)
             await self._publish_event("suite_step_finished", suite, {"step_index": index})
 
-        self._active_run_by_suite.pop(suite_id, None)
         self._cancel_requested.discard(suite_id)
 
         if cancelled:
@@ -260,6 +268,7 @@ class SuiteService:
 
         suite.status = final_suite_status
         suite.ended_at = datetime.now(UTC)
+        suite.active_run_id = None
         suite.awaiting_input_run_id = None
         suite.awaiting_input_prompt = None
         await self._repository.save_suite(suite)

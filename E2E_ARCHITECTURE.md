@@ -572,6 +572,7 @@ Suite (`/ws/suites/{suite_id}`):
 - `suite_created`
 - `suite_started`
 - `suite_step_started`
+- `suite_step_run_linked` — 단계 Run 생성 직후 (`active_run_id`, `step.run_id` 확정). Suite UI가 Run WebSocket에 연결해 모듈 진행률을 실시간 표시하는 시점
 - `suite_step_finished`
 - `suite_waiting_input`
 - `suite_resumed`
