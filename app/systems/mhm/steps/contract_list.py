@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 
 from . import login_common as common
@@ -149,8 +148,7 @@ def _read_contract_count(page, timeout_ms: int) -> int:
     raise RuntimeError("계약목록 건수를 확인하지 못했습니다.")
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
+def run(page, config: common.LoginConfig) -> str:
     _navigate_to_contract_list(page, config.timeout_ms, config.base_url)
     contract_count = _read_contract_count(page, config.timeout_ms)
-    common.save_screenshot(page, screenshot_path)
     return f"계약목록 조회 성공: {contract_count}건 확인 ({page.url})"

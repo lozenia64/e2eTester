@@ -1625,19 +1625,14 @@ def _assert_claim_complete(page, timeout_ms: int) -> None:
     raise RuntimeError("보험금청구 완료 화면(IbnfDmRcp1090)을 확인하지 못했습니다.")
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
-    try:
-        _navigate_to_claim_entry(page, config.timeout_ms, config.base_url)
-        _start_claim_from_intro(page, config.timeout_ms)
-        _complete_target_selection(page, config.timeout_ms)
-        _complete_claim_reason_step(page, config.timeout_ms)
-        _complete_detail_step(page, config.timeout_ms)
-        _upload_claim_documents(page)
-        _submit_documents(page, config.timeout_ms)
-        _assert_claim_complete(page, config.timeout_ms)
-        _dismiss_service_satisfaction_popup(page, config.timeout_ms)
-        common.save_screenshot(page, screenshot_path)
-        return f"보험금청구 접수 프로세스 완료 성공 ({page.url})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+def run(page, config: common.LoginConfig) -> str:
+    _navigate_to_claim_entry(page, config.timeout_ms, config.base_url)
+    _start_claim_from_intro(page, config.timeout_ms)
+    _complete_target_selection(page, config.timeout_ms)
+    _complete_claim_reason_step(page, config.timeout_ms)
+    _complete_detail_step(page, config.timeout_ms)
+    _upload_claim_documents(page)
+    _submit_documents(page, config.timeout_ms)
+    _assert_claim_complete(page, config.timeout_ms)
+    _dismiss_service_satisfaction_popup(page, config.timeout_ms)
+    return f"보험금청구 접수 프로세스 완료 성공 ({page.url})"

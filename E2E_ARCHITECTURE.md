@@ -95,6 +95,7 @@ e2eTester/
       scheduler.py
     runner/
       artifact_manager.py
+      screenshot.py              # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
       workflow_common.py
       workflow_engine.py         # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
       hom_workflow_executor.py   # app.systems.hom.executor 재노출
@@ -136,7 +137,7 @@ e2eTester/
           compensation_cancel.py
           long_term_policy_certificate.py
       access_common/
-        browser.py                 # 공용 브라우저 기동/팝업/모바일 모드/스크린샷 헬퍼
+        browser.py                 # 공용 브라우저 기동/팝업/모바일 모드 헬퍼
         executor.py                # AccessWorkflowExecutor
         main_access.py             # 단일 main_access 단계
       fp/
@@ -535,13 +536,16 @@ artifacts/
 현재 구현 내용:
 
 - 워크플로 단계 모듈(`hom_workflow_step` / `mhm_workflow_step`)은 로그를 `execution.log` 로 남긴다.
-- 워크플로 단계 모듈은 스크린샷을 `final.png` 로 남긴다.
+- 스크린샷(`final.png`)은 **공용 실행 엔진**이 책임진다. 개별 단계 함수는 스크린샷을 직접 찍지 않으며, `BaseWorkflowExecutor.execute_step` 이 각 모듈 종료 시점(성공·실패 공통)에 `runtime.page` 로 한 번 캡처한다(`app/runner/screenshot.py`의 `capture_screenshot`). 모든 시스템(HOM/MHM/접속 점검)에 동일하게 적용된다.
+- 캡처는 로그 리다이렉트 안에서 수행되므로 스크린샷 관련 로그도 `execution.log` / WebSocket 으로 함께 남는다.
+- 표준 캡처 → 폰트 폴백 재시도 → CDP 폴백 순으로 시도하며, 캡처가 모두 실패해도 단계 성공/실패 판정에는 영향을 주지 않는다(예외를 삼킨다).
 - Run 화면에서 아티팩트 링크 노출
 - 링크 경로는 `/artifacts/{run_id}/{module_id}/{filename}` 형식이다.
 
 주의:
 
-- 초기 단계에서 실패하면 스크린샷이 없을 수 있다.
+- 사용자 입력 대기(`WAITING_INPUT`, 예: 휴대폰 OTP 대기)는 모듈 종료가 아니라 일시정지이므로 그 시점에는 스크린샷을 찍지 않는다. OTP 제출 후 모듈이 실제로 끝날 때 캡처된다.
+- 초기 단계에서 페이지/브라우저 자체가 깨지면 스크린샷이 없을 수 있다.
 - `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 HOM·MHM manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. (등록된 executor가 없는 `execution_mode` 일 때만 시뮬레이션으로 동작하며, 이 경우 아티팩트가 생성되지 않는다.)
 
 아직 없는 것:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 
 from . import contract_list
@@ -107,20 +106,15 @@ def _wait_for_detail_sections(page, timeout_ms: int) -> list[str]:
     return missing_sections
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
-    try:
-        _ensure_contract_list_context(page, config.timeout_ms)
-        product_name = _select_first_contract_detail(page)
-        _wait_for_contract_detail(page, config.timeout_ms)
-        policy_number = _read_policy_number(page, config.timeout_ms)
-        missing_sections = _wait_for_detail_sections(page, config.timeout_ms)
-        if missing_sections:
-            joined = ", ".join(missing_sections)
-            raise RuntimeError(f"계약상세 화면의 필수 정보영역을 확인하지 못했습니다: {joined}")
+def run(page, config: common.LoginConfig) -> str:
+    _ensure_contract_list_context(page, config.timeout_ms)
+    product_name = _select_first_contract_detail(page)
+    _wait_for_contract_detail(page, config.timeout_ms)
+    policy_number = _read_policy_number(page, config.timeout_ms)
+    missing_sections = _wait_for_detail_sections(page, config.timeout_ms)
+    if missing_sections:
+        joined = ", ".join(missing_sections)
+        raise RuntimeError(f"계약상세 화면의 필수 정보영역을 확인하지 못했습니다: {joined}")
 
-        common.save_screenshot(page, screenshot_path)
-        detail_label = product_name or policy_number
-        return f"계약상세 조회 성공: {detail_label} ({policy_number}, {page.url})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+    detail_label = product_name or policy_number
+    return f"계약상세 조회 성공: {detail_label} ({policy_number}, {page.url})"

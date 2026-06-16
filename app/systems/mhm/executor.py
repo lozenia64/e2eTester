@@ -41,7 +41,6 @@ class MhmWorkflowExecutor(BaseWorkflowExecutor):
     execution_mode = "mhm_workflow_step"
 
     def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> MhmWorkflowRuntime:
-        screenshot_path = self._artifact_manager.screenshot_path(run_id, module_id)
         headless = self._resolve_headless(input_data)
         args = argparse.Namespace(
             env_file=str(common.DEFAULT_ENV_FILE_PATH),
@@ -61,7 +60,9 @@ class MhmWorkflowExecutor(BaseWorkflowExecutor):
             success_stabilization_ms=common.MAX_TIMEOUT_MS,
             keep_open=False,
             post_login_fragment="/myh/mai/MySubMain1000",
-            screenshot=str(screenshot_path),
+            # 스크린샷은 공용 엔진이 모듈 종료 시 책임지므로 워크플로에서는 쓰이지 않는다.
+            # build_config 가 요구하는 값만 기본값으로 채운다(LoginConfig.screenshot_path 는 CLI 전용).
+            screenshot=str(common.DEFAULT_SCREENSHOT_PATH),
         )
         config = common.build_config(args)
         from playwright.sync_api import sync_playwright
@@ -87,7 +88,7 @@ class MhmWorkflowExecutor(BaseWorkflowExecutor):
     def _shutdown_browser(self, runtime: MhmWorkflowRuntime) -> None:
         common.shutdown_browser(runtime.page, runtime.context, runtime.browser)
 
-    def _run_step(self, runtime: MhmWorkflowRuntime, module: ModuleDefinition, screenshot_path: Path) -> str:
+    def _run_step(self, runtime: MhmWorkflowRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
         if module.workflow_step == "main_access":
             return main_access.run(runtime.page, runtime.config)
 
@@ -98,7 +99,6 @@ class MhmWorkflowExecutor(BaseWorkflowExecutor):
                     runtime.page,
                     runtime.config,
                     runtime.dialog_messages,
-                    screenshot_path,
                 )
             if not runtime.phone_login_sms_requested:
                 login_move.run(runtime.page)
@@ -110,29 +110,28 @@ class MhmWorkflowExecutor(BaseWorkflowExecutor):
                 runtime.page,
                 runtime.config,
                 runtime.dialog_messages,
-                screenshot_path,
             )
 
         if module.workflow_step == "contract_list":
-            return contract_list.run(runtime.page, runtime.config, screenshot_path)
+            return contract_list.run(runtime.page, runtime.config)
 
         if module.workflow_step == "contract_detail":
-            return contract_detail.run(runtime.page, runtime.config, screenshot_path)
+            return contract_detail.run(runtime.page, runtime.config)
 
         if module.workflow_step == "compensation_charge":
-            return compensation_charge.run(runtime.page, runtime.config, screenshot_path)
+            return compensation_charge.run(runtime.page, runtime.config)
 
         if module.workflow_step == "compensation_result":
-            return compensation_result.run(runtime.page, runtime.config, screenshot_path)
+            return compensation_result.run(runtime.page, runtime.config)
 
         if module.workflow_step == "compensation_cancel":
-            return compensation_cancel.run(runtime.page, runtime.config, screenshot_path)
+            return compensation_cancel.run(runtime.page, runtime.config)
 
         if module.workflow_step == "long_term_policy_certificate":
             return long_term_policy_certificate.run(
                 runtime.page,
                 runtime.config,
-                screenshot_path,
+                artifact_dir,
                 runtime.dialog_messages,
             )
 

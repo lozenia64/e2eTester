@@ -74,11 +74,9 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
     def _shutdown_browser(self, runtime: AccessRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
 
-    def _run_step(self, runtime: AccessRuntime, module: ModuleDefinition, screenshot_path: Path) -> str:
+    def _run_step(self, runtime: AccessRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
         if module.workflow_step == "main_access":
-            message = main_access.run(runtime.page, runtime.base_url)
-            browser.save_screenshot(runtime.page, screenshot_path)
-            return message
+            return main_access.run(runtime.page, runtime.base_url)
         raise RuntimeError(f"Unsupported {self._system_code} workflow step: {module.workflow_step}")
 
 
