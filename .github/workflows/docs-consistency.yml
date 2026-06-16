@@ -1,0 +1,27 @@
+name: docs-consistency
+
+# 문서-코드 정합성 가드. PR / push 마다 실행해 문서 표류(drift)를 차단한다.
+# 규칙: docs/DOCS_GOVERNANCE.md
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML
+        run: python3 -m pip install "pyyaml>=6.0,<7.0"
+
+      - name: Run docs ↔ source consistency guard
+        run: python3 scripts/check_docs_consistency.py --verbose

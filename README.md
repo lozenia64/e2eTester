@@ -1,5 +1,7 @@
 # E2E Tester
 
+> **문서 소유권(SSOT):** 이 문서는 **설치·실행 방법, 선택 기능(AI/메일/예약) 사용법, 환경변수 카탈로그**의 단일 진실원천입니다. 플랫폼 아키텍처·API 목록은 [E2E_ARCHITECTURE.md](E2E_ARCHITECTURE.md), 시스템별 시나리오는 `docs/scenarios/{code}.md` 가 소유합니다. 문서 거버넌스 규칙과 정합성 가드는 [docs/DOCS_GOVERNANCE.md](docs/DOCS_GOVERNANCE.md) 를 참고하세요.
+
 사내 임직원이 본인 로컬 PC에서 웹 애플리케이션을 점검하기 위해 사용하는 내부용 E2E 테스터입니다.
 
 이 프로젝트를 내려받아 실행하면 브라우저 기반 테스트를 웹 화면에서 시작할 수 있고, 실행 상태와 로그를 확인할 수 있습니다.
