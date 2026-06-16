@@ -67,6 +67,7 @@ e2eTester/
     ai/
       failure_analyzer.py
       gemini_http.py
+      gemini_models.py
     api/
       routes_dashboard.py
       routes_runs.py
@@ -132,9 +133,9 @@ e2eTester/
           compensation_cancel.py
           long_term_policy_certificate.py
       access_common/
-        executor.py
-        steps/
-          main_access.py
+        browser.py                 # 공용 브라우저 기동/팝업/모바일 모드/스크린샷 헬퍼
+        executor.py                # AccessWorkflowExecutor
+        main_access.py             # 단일 main_access 단계
       fp/
       hrp/
       hwtc/
@@ -406,6 +407,7 @@ manifest 에 들어 있는 정보:
 
 - `app/ai/failure_analyzer.py` (`GeminiFailureAnalyzer`)
 - `app/ai/gemini_http.py` (Gemini HTTP 호출 / SSL 검증 모드 처리)
+- `app/ai/gemini_models.py` (기본 Gemini 모델 체인 `DEFAULT_GEMINI_MODEL_CHAIN`·`GEMINI_MODELS` 파싱/검증)
 - `app/core/env_utils.py` (환경 변수·`.env` 우선순위 해석)
 
 역할:
