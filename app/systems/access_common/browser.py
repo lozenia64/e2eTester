@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import os
 import re
 from pathlib import Path
@@ -13,9 +12,6 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 MAX_TIMEOUT_MS: Final[int] = 20000
 MAIN_ACCESS_TIMEOUT_MS: Final[int] = 20000
-SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
-SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
-SCREENSHOT_PRE_CAPTURE_WAIT_MS: Final[int] = 2000
 DEFAULT_USER_DATA_ROOT: Final[Path] = Path.home() / ".e2etester"
 MOBILE_DEVICE_NAME: Final[str] = "iPhone 14 Pro"
 
@@ -185,25 +181,6 @@ def maybe_close_popup(page: Page) -> None:
         return
     except Exception as exc:
         print(f"[warn] Landing popup close skipped: {exc}")
-
-
-def save_screenshot(page: Page, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[wait] Pre-screenshot settle delay ({SCREENSHOT_PRE_CAPTURE_WAIT_MS} ms)")
-    page.wait_for_timeout(SCREENSHOT_PRE_CAPTURE_WAIT_MS)
-    try:
-        page.screenshot(path=str(output_path), full_page=False, timeout=SCREENSHOT_TIMEOUT_MS)
-        print(f"[artifact] Screenshot saved to {output_path}")
-        return
-    except Exception as exc:
-        print(f"[warn] Standard screenshot failed, trying CDP capture: {exc}")
-    try:
-        session = page.context.new_cdp_session(page)
-        result = session.send("Page.captureScreenshot", {"format": "png", "fromSurface": True})
-        output_path.write_bytes(base64.b64decode(result["data"]))
-        print(f"[artifact] Screenshot saved to {output_path} (CDP fallback)")
-    except Exception as exc:
-        print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
 
 
 def shutdown_browser(page: Page, context) -> None:

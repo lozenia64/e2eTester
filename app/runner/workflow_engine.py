@@ -8,6 +8,7 @@ from typing import Callable, Protocol, runtime_checkable
 from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
+from app.runner.screenshot import capture_screenshot
 from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
 
 # 단계 모듈이 OTP 등 사용자 입력 대기로 Run 을 일시정지시킬 때 쓰는 in-band 표식.
@@ -39,6 +40,11 @@ class BaseWorkflowExecutor(ABC):
     아티팩트 수집, 예외→`StepExecutionResult` 변환, OTP 일시정지 해석,
     브라우저 종료 보호 — 을 한곳에서 소유한다.
 
+    모듈 종료 시 스크린샷 캡처도 이 골격이 시스템 무관하게 책임진다. 각 단계 함수는
+    스크린샷을 직접 찍지 않으며, `execute_step` 이 단계 종료(성공·실패 공통) 직후
+    `runtime.page` 로 `final.png` 를 남긴다(`app/runner/screenshot.py`). 사용자 입력
+    대기(`WAITING_INPUT`)는 모듈 종료가 아니므로 캡처하지 않는다.
+
     시스템별 차이는 추상 메서드로만 표현한다.
     - `execution_mode` : manifest 의 `execution_mode` 와 매칭되는 식별자
     - `build_runtime`   : 브라우저/페이지 기동 (시스템 전용)
@@ -65,57 +71,51 @@ class BaseWorkflowExecutor(ABC):
     ) -> StepExecutionResult:
         log_path = self._artifact_manager.log_path(run_id, module.module_id)
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
-        artifacts: list[str] = []
-        writer = LineWriter(emit_log)
+        artifact_dir = self._artifact_manager.module_dir(run_id, module.module_id)
         dialog_index = len(runtime.dialog_messages)
 
-        try:
-            with log_path.open("w", encoding="utf-8") as log_file:
-                tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
-                with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
-                    message = self._run_step(runtime, module, screenshot_path)
-            if isinstance(message, str) and message.startswith(WAITING_INPUT_PREFIX):
-                artifacts.append(self._artifact_manager.relative_path(log_path))
-                if screenshot_path.exists():
-                    artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-                return StepExecutionResult(
-                    status=ModuleStatus.WAITING_INPUT,
-                    message=message.split("::", 1)[1],
-                    artifacts=artifacts,
-                    current_url=self._safe_page_url(runtime),
-                    dialog_messages=runtime.dialog_messages[dialog_index:],
-                    screenshot_path=screenshot_path if screenshot_path.exists() else None,
-                )
-            artifacts.append(self._artifact_manager.relative_path(log_path))
-            if screenshot_path.exists():
-                artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return StepExecutionResult(
-                status=ModuleStatus.PASSED,
-                message=message,
-                artifacts=artifacts,
-                current_url=self._safe_page_url(runtime),
-                dialog_messages=runtime.dialog_messages[dialog_index:],
-                screenshot_path=screenshot_path if screenshot_path.exists() else None,
-            )
-        except Exception as exc:
-            writer.flush()
-            if not log_path.exists():
-                log_path.write_text("", encoding="utf-8")
-            with log_path.open("a", encoding="utf-8") as log_file:
-                log_file.write(f"[error] {exc}\n")
-            emit_log(f"[error] {exc}")
-            artifacts.append(self._artifact_manager.relative_path(log_path))
-            if screenshot_path.exists():
-                artifacts.append(self._artifact_manager.relative_path(screenshot_path))
-            return StepExecutionResult(
-                status=ModuleStatus.FAILED,
-                message=str(exc),
-                artifacts=artifacts,
-                current_url=self._safe_page_url(runtime),
-                dialog_messages=runtime.dialog_messages[dialog_index:],
-                last_error=str(exc),
-                screenshot_path=screenshot_path if screenshot_path.exists() else None,
-            )
+        status = ModuleStatus.PASSED
+        message = ""
+        last_error: str | None = None
+
+        # 단계 실행 → 모듈 종료 시 스크린샷까지 모두 로그 리다이렉트 안에서 처리해
+        # 캡처 과정의 로그도 execution.log / WebSocket 으로 함께 흘려보낸다.
+        with log_path.open("w", encoding="utf-8") as log_file:
+            tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
+            with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
+                try:
+                    raw_message = self._run_step(runtime, module, artifact_dir)
+                    if isinstance(raw_message, str) and raw_message.startswith(WAITING_INPUT_PREFIX):
+                        status = ModuleStatus.WAITING_INPUT
+                        message = raw_message.split("::", 1)[1]
+                    else:
+                        status = ModuleStatus.PASSED
+                        message = raw_message
+                except Exception as exc:
+                    status = ModuleStatus.FAILED
+                    message = str(exc)
+                    last_error = str(exc)
+                    print(f"[error] {exc}")
+
+                # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
+                # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
+                if status is not ModuleStatus.WAITING_INPUT:
+                    capture_screenshot(runtime.page, screenshot_path)
+                tee.flush()
+
+        artifacts = [self._artifact_manager.relative_path(log_path)]
+        if screenshot_path.exists():
+            artifacts.append(self._artifact_manager.relative_path(screenshot_path))
+
+        return StepExecutionResult(
+            status=status,
+            message=message,
+            artifacts=artifacts,
+            current_url=self._safe_page_url(runtime),
+            dialog_messages=runtime.dialog_messages[dialog_index:],
+            last_error=last_error,
+            screenshot_path=screenshot_path if screenshot_path.exists() else None,
+        )
 
     def close_runtime(self, runtime: WorkflowRuntime) -> None:
         if runtime.closed:
@@ -146,7 +146,13 @@ class BaseWorkflowExecutor(ABC):
         ...
 
     @abstractmethod
-    def _run_step(self, runtime: WorkflowRuntime, module: ModuleDefinition, screenshot_path: Path) -> str:
+    def _run_step(self, runtime: WorkflowRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
+        """workflow_step 을 실제 단계 함수로 디스패치한다.
+
+        `artifact_dir` 은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며,
+        다운로드 등 파일 산출물이 필요한 단계만 사용한다. 스크린샷은 공용 엔진이 책임지므로
+        단계 함수에 스크린샷 경로를 넘기지 않는다.
+        """
         ...
 
     @abstractmethod

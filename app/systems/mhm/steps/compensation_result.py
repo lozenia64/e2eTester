@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 
 from . import compensation_result_common as result_common
@@ -261,17 +260,12 @@ def _verify_preview_sheet(page, timeout_ms: int) -> None:
     print("[step] 제출 서류 확인 시트 검증 완료")
 
 
-def run(page, config: common.LoginConfig, screenshot_path: Path) -> str:
-    try:
-        result_common.goto_result01(page, config)
-        result_common.select_results_tab(page, "", "진행중", config.timeout_ms)
-        row = result_common.find_processing_claim_row(page, config.timeout_ms)
-        receipt_number = result_common.receipt_number_from_row(row)
-        result_common.open_claim_detail(page, row, config.timeout_ms)
-        _assert_result_detail(page, config.timeout_ms, receipt_number)
-        _verify_preview_sheet(page, config.timeout_ms)
-        common.save_screenshot(page, screenshot_path)
-        return f"보험금청구 결과 조회 성공 ({receipt_number})"
-    except Exception:
-        common.save_screenshot(page, screenshot_path)
-        raise
+def run(page, config: common.LoginConfig) -> str:
+    result_common.goto_result01(page, config)
+    result_common.select_results_tab(page, "", "진행중", config.timeout_ms)
+    row = result_common.find_processing_claim_row(page, config.timeout_ms)
+    receipt_number = result_common.receipt_number_from_row(row)
+    result_common.open_claim_detail(page, row, config.timeout_ms)
+    _assert_result_detail(page, config.timeout_ms, receipt_number)
+    _verify_preview_sheet(page, config.timeout_ms)
+    return f"보험금청구 결과 조회 성공 ({receipt_number})"
