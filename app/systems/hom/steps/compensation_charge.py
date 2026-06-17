@@ -581,6 +581,7 @@ def _dismiss_modal_with_close_like_button(page, modal_text_pattern: re.Pattern[s
 
 
 def _maybe_close_upload_notice_popup(page) -> None:
+    common.wait_timeout_with_log(page, 3000, "서류제출 시 유의사항 팝업 표시 대기")
     modal_pattern = re.compile(r"서류제출\s*시\s*유의사항|유의사항")
     if _maybe_click_modal_action(
         page,
