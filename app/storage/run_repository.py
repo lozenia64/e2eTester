@@ -4,12 +4,19 @@ import asyncio
 from collections import defaultdict
 
 from app.core.models import DashboardEvent, Run
+from app.storage.listener_registry import ListenerRegistry
 
 
 class InMemoryRunRepository:
+    """``RunRepositoryPort`` 의 인메모리 어댑터(서버 재시작 시 휘발).
+
+    영속이 필요하면 ``SqliteRunRepository`` 로 교체한다(동일 포트). 단위 테스트나 영속이
+    필요 없는 실행에서는 이 구현을 쓴다.
+    """
+
     def __init__(self) -> None:
         self._runs: dict[str, Run] = {}
-        self._listeners: dict[str, list[asyncio.Queue[DashboardEvent]]] = defaultdict(list)
+        self._listeners: ListenerRegistry[DashboardEvent] = ListenerRegistry()
         self._logs: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
         self._lock = asyncio.Lock()
 
@@ -40,18 +47,10 @@ class InMemoryRunRepository:
             return list(self._runs.values())
 
     async def publish(self, event: DashboardEvent) -> None:
-        listeners = list(self._listeners.get(event.run_id, []))
-        for queue in listeners:
-            await queue.put(event)
+        await self._listeners.publish(event.run_id, event)
 
     async def subscribe(self, run_id: str) -> asyncio.Queue[DashboardEvent]:
-        queue: asyncio.Queue[DashboardEvent] = asyncio.Queue()
-        self._listeners[run_id].append(queue)
-        return queue
+        return await self._listeners.subscribe(run_id)
 
     async def unsubscribe(self, run_id: str, queue: asyncio.Queue[DashboardEvent]) -> None:
-        listeners = self._listeners.get(run_id, [])
-        if queue in listeners:
-            listeners.remove(queue)
-        if not listeners and run_id in self._listeners:
-            del self._listeners[run_id]
+        await self._listeners.unsubscribe(run_id, queue)

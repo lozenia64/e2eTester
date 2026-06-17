@@ -18,7 +18,7 @@ from app.core.models import (
     SuiteRun,
 )
 from app.scheduling.cron import next_run_after, parse_cron
-from app.storage.schedule_repository import InMemoryScheduleRepository
+from app.storage.ports import ScheduleRepositoryPort
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"
 DEFAULT_TICK_SECONDS = 20
@@ -48,7 +48,7 @@ class SchedulerService:
         self,
         run_service,
         suite_service,
-        repository: InMemoryScheduleRepository,
+        repository: ScheduleRepositoryPort,
         tick_seconds: int = DEFAULT_TICK_SECONDS,
     ) -> None:
         self._run_service = run_service
@@ -152,6 +152,7 @@ class SchedulerService:
 
     async def run_forever(self) -> None:
         self._running = True
+        await self._reconcile_due_schedules_on_start()
         print(f"[scheduler] 시작 (tz={self._timezone_name}, tick={self._tick_seconds}s)")
         while self._running:
             try:
@@ -166,6 +167,23 @@ class SchedulerService:
 
     def stop(self) -> None:
         self._running = False
+
+    async def _reconcile_due_schedules_on_start(self) -> None:
+        """재기동 시 과거(``next_run_at`` ≤ now)로 밀린 활성 예약을 다음 cron 시각으로 재계산한다.
+
+        영속 저장소(SQLite)를 쓰면 서버가 내려가 있는 동안 지나간 예약이 그대로 남아, 시작
+        직후 한꺼번에 실행될 수 있다. 무인 예약 실행이 OTP 대기로 쌓이는 것을 막기 위해 누락분은
+        catch-up 하지 않고 다음 예정 시각으로 미룬다.
+        """
+        now = datetime.now(UTC)
+        rescheduled = 0
+        for schedule in await self._repository.list():
+            if schedule.enabled and schedule.next_run_at is not None and schedule.next_run_at <= now:
+                schedule.next_run_at = self._next_run_from_now(schedule.cron)
+                await self._repository.save(schedule)
+                rescheduled += 1
+        if rescheduled:
+            print(f"[scheduler] 재기동: 과거로 밀린 예약 {rescheduled}건의 다음 실행 시각을 재계산했습니다.")
 
     async def _tick(self) -> None:
         now = datetime.now(UTC)

@@ -6,10 +6,9 @@ from app.core.models import Schedule
 
 
 class InMemoryScheduleRepository:
-    """메모리 기반 예약(Schedule) 저장소.
+    """``ScheduleRepositoryPort`` 의 인메모리 어댑터(서버 재시작 시 휘발).
 
-    RunRepository 와 마찬가지로 서버 재시작 시 사라진다. 영구 저장소가 도입되면
-    동일 인터페이스로 교체할 수 있도록 분리해 두었다.
+    영속이 필요하면 ``SqliteScheduleRepository`` 로 교체한다(동일 포트).
     """
 
     def __init__(self) -> None:

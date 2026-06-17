@@ -4,3 +4,7 @@ artifacts/
 .vscode/
 .env
 .playwright-mcp/
+data/
+*.db
+*.db-wal
+*.db-shm
