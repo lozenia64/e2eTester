@@ -422,7 +422,13 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
     ai = ai_content or {}
     suite = context["suite"]
     system_runs = context["system_runs"]
-    ai_systems = {item.get("system_code"): item for item in (ai.get("systems") or []) if item.get("system_code")}
+    ai_systems: dict[str, dict] = {}
+    for item in ai.get("systems") or []:
+        if not isinstance(item, dict):
+            continue
+        system_code = str(item.get("system_code") or "").strip().upper()
+        if system_code:
+            ai_systems[system_code] = item
     accent = PASS_COLOR if _is_passed(suite["status"]) else FAIL_COLOR
 
     title = _title_block(
