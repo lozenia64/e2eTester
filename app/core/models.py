@@ -78,6 +78,10 @@ class RunModule(BaseModel):
     artifact_count: int = 0
     artifacts: list[str] = Field(default_factory=list)
     logs: list[str] = Field(default_factory=list)
+    # 모듈 종료 시점의 진단 컨텍스트. Run 종료 후 AI 실패 분석 구독자가 실행 컨텍스트
+    # 없이 분석을 재구성할 수 있도록 모듈에 영속한다.
+    current_url: str | None = None
+    dialog_messages: list[str] = Field(default_factory=list)
     failure_analysis: FailureAnalysis | None = None
 
 

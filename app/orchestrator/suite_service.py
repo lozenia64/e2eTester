@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.core.enums import RunStatus, SuiteStatus
-from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep, SystemDefinition
+from app.core.models import Run, StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep, SystemDefinition
+from app.events.bus import EventBus, SuiteFinished
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.suite_repository import InMemorySuiteRepository
@@ -19,10 +20,12 @@ class SuiteService:
         registry: ModuleRegistry,
         run_service: RunService,
         repository: InMemorySuiteRepository,
+        event_bus: EventBus,
     ) -> None:
         self._registry = registry
         self._run_service = run_service
         self._repository = repository
+        self._event_bus = event_bus
         self._cancel_requested: set[str] = set()
 
     async def get_suite(self, suite_id: str) -> SuiteRun:
@@ -274,7 +277,20 @@ class SuiteService:
         await self._repository.save_suite(suite)
         await self._publish_event("suite_finished", suite)
         if suite.status in {SuiteStatus.PASSED, SuiteStatus.FAILED}:
-            await self._run_service.notify_suite_completion(suite.model_copy(deep=True))
+            await self._event_bus.publish(
+                SuiteFinished(suite=suite.model_copy(deep=True), runs=await self._collect_step_runs(suite))
+            )
+
+    async def _collect_step_runs(self, suite: SuiteRun) -> list[Run]:
+        runs: list[Run] = []
+        for step in suite.steps:
+            if not step.run_id:
+                continue
+            try:
+                runs.append(await self._run_service.get_run(step.run_id))
+            except KeyError:
+                continue
+        return runs
 
     async def _wait_for_run_terminal(self, suite: SuiteRun, run_id: str) -> RunStatus:
         queue = await self._run_service.subscribe(run_id)

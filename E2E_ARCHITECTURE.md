@@ -54,9 +54,10 @@ FastAPI app
 
 현재 구조의 핵심 특징:
 
-- 웹 요청과 실행 orchestration은 같은 프로세스에 있다.
-- 워크플로 실행기는 `execution_mode`(`hom_workflow_step` / `mhm_workflow_step`) 기준으로 `app/systems/loader.py` 가 동적으로 로드한다. HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
-- 실제 Playwright sync API 실행은 Run마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)에서 수행한다. 같은 Run의 build/step/close 호출이 모두 이 스레드에서 돈다. (실행기에 thread executor가 없으면 `asyncio.to_thread(...)` 로 폴백)
+- 웹 요청과 실행 orchestration은 같은 프로세스에 있다. 단, **오케스트레이션(상태머신)과 브라우저 실행(부작용)은 `ExecutionGateway` 포트(`app/execution/gateway.py`)로 분리**되어 있다. `RunService` 는 불투명한 `ExecutionHandle` 만 들고 `open_session`/`run_step`/`submit_input`/`close_session` 을 호출할 뿐, Playwright 도 스레드 풀도 직접 다루지 않는다.
+- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다(이벤트 루프 ↔ 실행 스레드 로그 브리지도 어댑터 안에 캡슐화). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
+- 이 포트가 곧 "워커 경계"의 in-process 구현이다. 동일 포트로 별도 워커 프로세스/Playwright MCP 구현체를 끼우면 오케스트레이터를 손대지 않고 실행을 격리할 수 있다.
+- AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
 - 모듈 로그와 상태 이벤트는 repository를 통해 WebSocket에 전파된다.
@@ -82,11 +83,23 @@ e2eTester/
       enums.py
       env_utils.py
       models.py
+    execution/
+      gateway.py                 # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
+      local_gateway.py           # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
+    events/
+      bus.py                     # EventBus + RunFinished/SuiteFinished 도메인 이벤트
+      subscribers/
+        failure_analysis.py      # FailureAnalysisSubscriber (AI 실패 분석)
+        email_notification.py    # EmailNotificationSubscriber (종료 메일)
     notifications/
       run_completion_email.py
       report_renderer.py
     orchestrator/
-      run_service.py
+      run_service.py             # RunService: Run 생명주기 상태머신(부작용은 포트/구독자에 위임)
+      run_planner.py             # RunPlanner: 요청 검증 + 모듈 실행 계획(순수)
+      run_comparator.py          # RunComparator: 직전 Run 대비 비교(저장소 의존)
+      run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
+      run_summary.py             # summarize_run: 최근 Run 요약 뷰
       suite_service.py
     registry/
       loader.py
@@ -266,21 +279,24 @@ e2eTester/
 
 ### 5.3 Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/run_service.py` 다.
+현재 구현 핵심은 `app/orchestrator/run_service.py` 다. `RunService` 는 **Run 생명주기 상태머신**으로만 한정되며("무엇을, 어떤 순서로, 어떤 상태로"), 나머지는 동일 계층의 협력자에게 위임한다. Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다(브라우저 없이 단위 테스트 가능).
 
-역할:
+위임 구조:
 
-- Run 생성 시 입력값 검증 (시스템 manifest의 `supported_auth_methods` 기준으로 `auth_method`를 검증하며, HOM·MHM은 `phone`/`kakao`만 허용하고 그 외 값은 요청 단계에서 거절)
-- `selected_module_ids` 검증 (미지정 시 전체 선택, 알 수 없는 모듈·선행 모듈 누락 조합은 거절, 선택되지 않은 모듈은 `SKIPPED`)
-- manifest 기준 모듈 리스트 생성
-- 모듈 상태 전이 관리
-- 의존성 실패 시 `BLOCKED` 처리
-- OTP 대기 상태 저장(`PendingOtpState`, 공유 runtime 유지)
-- OTP 제출 후 중단된 단계부터 재개
-- Run 취소(`cancel_run`): 취소 플래그(`_cancel_requested`)를 세팅하고, 실행 루프가 모듈 사이에서 이를 확인해 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 runtime 을 정리하고 종료한다.
+- `RunPlanner`(`run_planner.py`): 입력값 검증·모듈 선택·인증 수단 검증, manifest 기준 모듈 리스트 생성(순수 로직).
+- `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
+- `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
+- `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사).
+- `EventBus` 구독자: AI 실패 분석·종료 메일(부수 관심사).
+- `summarize_run`(`run_summary.py`): 최근 Run 요약 뷰.
+
+상태머신이 직접 담당하는 책임:
+
+- 모듈 상태 전이 관리, 의존성 실패 시 `BLOCKED` 처리
+- OTP 대기 상태 저장(`PendingOtpState`, 공유 세션 `ExecutionHandle` 유지)·OTP 제출 후 중단된 단계부터 재개
+- Run 취소(`cancel_run`): 취소 플래그(`_cancel_requested`)를 세팅하고, 실행 루프가 모듈 사이에서 이를 확인해 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
 - 동일 입력 재실행(`rerun_run`): Run 생성 시 보관한 입력값(otp_code 제외, `_run_inputs`)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII를 포함할 수 있어 메모리에만 보관하며 응답/WebSocket payload 로는 직렬화하지 않는다.
-- 최근 Run 요약 생성(`list_run_summaries`)
-- 이벤트 publish
+- Run 종료(finalize) 시 `RunFinished` 도메인 이벤트 발행
 
 현재 상태 전이:
 
@@ -375,8 +391,12 @@ manifest 에 들어 있는 정보:
 
 ### 5.5 Runtime / Runner 계층
 
+이 계층은 `ExecutionGateway` 포트 뒤에 있다. 오케스트레이터는 포트만 보고, 아래 구현은 `LocalExecutionGateway` 어댑터가 캡슐화한다.
+
 현재 구현:
 
+- `app/execution/gateway.py` (`ExecutionGateway` 포트 + `ExecutionHandle`: 오케스트레이션 ↔ 실행 경계)
+- `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터: `app/systems/loader.py` 로 executor 로딩, 세션별 단일 스레드 풀·런타임 수명·이벤트 루프↔실행 스레드 로그 브리지 소유)
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
 - `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·OTP 일시정지(`WAITING_INPUT_PREFIX`) 해석·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol)
 - `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)와 `_run_step` 디스패치가 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
@@ -425,6 +445,7 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
+- `app/events/subscribers/failure_analysis.py` (`FailureAnalysisSubscriber` — `EventBus` 의 `RunFinished` 구독자)
 - `app/ai/failure_analyzer.py` (`GeminiFailureAnalyzer`)
 - `app/ai/gemini_http.py` (Gemini HTTP 호출 / SSL 검증 모드 처리)
 - `app/ai/gemini_models.py` (기본 Gemini 모델 체인 `DEFAULT_GEMINI_MODEL_CHAIN`·`GEMINI_MODELS` 파싱/검증)
@@ -433,7 +454,8 @@ manifest 에 들어 있는 정보:
 역할:
 
 - 환경 변수와 `.env` 기준으로 Gemini 설정을 읽는다. (터미널 환경 변수 우선, 없으면 `.env`)
-- 실패한 모듈의 최근 로그, 다이얼로그, 현재 URL, 스크린샷을 바탕으로 원인 요약을 시도한다.
+- **부수 관심사로 분리됨**: 오케스트레이터가 인라인으로 호출하지 않고, Run 종료(`RunFinished`) 이벤트를 받은 구독자가 실패 모듈을 사후 분석한다. 분석에 필요한 진단 정보(현재 URL·다이얼로그·스크린샷)는 단계 실행 시점에 `RunModule`(`current_url`/`dialog_messages`/아티팩트)에 영속되므로, 구독자는 실행 컨텍스트 없이 종료된 Run 만으로 분석을 재구성한다.
+- 분석 결과가 준비되면 해당 모듈을 갱신·저장하고 `module_finished` 이벤트를 다시 발행해 대시보드가 반영하도록 한다(계약상세는 PII 보호를 위해 URL/로그/다이얼로그/스크린샷을 보내지 않음).
 - 홈 화면에 현재 AI 분석 설정 상태(`inspect_env_status`)를 표시한다.
 
 제약:
@@ -446,11 +468,13 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
+- `app/events/subscribers/email_notification.py` (`EmailNotificationSubscriber` — `EventBus` 의 `RunFinished`/`SuiteFinished` 구독자)
 - `app/notifications/run_completion_email.py` (`RunCompletionEmailNotifier`, `GeminiReportContentComposer`)
 - `app/notifications/report_renderer.py` (고정 디자인 HTML 렌더러)
 
 역할:
 
+- **부수 관심사로 분리됨**: 오케스트레이터/Suite 서비스가 인라인으로 보내지 않고, `RunFinished`/`SuiteFinished` 이벤트를 받은 구독자가 발송 정책(취소 Run 제외, Suite 소속 Run 은 통합 메일로 갈음)까지 소유한다.
 - Run이 최종 종료(`PASSED`/`FAILED`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
 - **Suite** 가 최종 종료되면 포함 시스템 Run 결과를 통합한 메일 1통을 보낸다. `SKIPPED` 시스템은 제외로 표시한다.
 - 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, `E2E_EMAIL_RECIPIENTS_FP`, … — 여러 명은 `|` 로 구분)
@@ -480,7 +504,7 @@ manifest 에 들어 있는 정보:
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
-- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunService._compute_comparison` 가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
+- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
 
 제약:
 
@@ -606,11 +630,10 @@ Suite (`/ws/suites/{suite_id}`):
 ### 10.1 아직 구현되지 않은 것
 
 - SQLite 또는 Postgres 기반 영구 저장소
-- 별도 worker process
-- Playwright MCP 게이트웨이 추상화
-- 표준 `BrowserGateway`
+- 별도 worker process (단, `ExecutionGateway` 포트로 **교체 지점은 이미 마련됨** — `LocalExecutionGateway` 를 out-of-process 구현체로 바꾸면 됨)
+- Playwright MCP 게이트웨이 구현체 (포트는 `ExecutionGateway` 로 이미 존재)
 - `ModuleContext`, `ModuleResult` 표준화
-- 병렬 실행 스케줄러
+- 병렬 실행 스케줄러 (영속 프로파일 단일 잠금 때문에 현재는 순차 전제)
 - 재시도 정책
 - 실패 모듈만 부분 재실행 (취소·동일 입력 전체 재실행은 구현됨)
 - 오류 분류 체계
@@ -624,6 +647,9 @@ Suite (`/ws/suites/{suite_id}`):
 - 아티팩트 분리 저장
 - 모놀리식 스크립트의 단계 모듈 분리
 - 로그인 세션 공유형 워크플로우
+- **오케스트레이션 ↔ 브라우저 실행 분리** (`ExecutionGateway` 포트 + `LocalExecutionGateway` 어댑터; 워커 경계의 in-process 구현)
+- **부수 관심사(AI 분석·메일) 이벤트 구독자 분리** (`EventBus` + 구독자)
+- **상태머신 단위 테스트 가능** (`RunService` 가 Playwright/스레드/Gemini/SMTP 비의존)
 
 ## 11. 왜 현재 구조가 합리적인가
 
@@ -650,17 +676,17 @@ Suite (`/ws/suites/{suite_id}`):
 - OTP 대기 상태를 영구 저장
 - 서버 재시작 복구 시나리오 고려
 
-### Phase 3. 런타임 추상화
+### Phase 3. 런타임 추상화 — (대부분 완료)
 
-- `BrowserGateway` 도입
-- 현재 sync API 호출을 gateway 뒤로 이동
-- 이후 Playwright MCP 구현체 추가
+- ✅ `ExecutionGateway` 포트 도입 (`BrowserGateway` 역할)
+- ✅ sync API 호출·스레드 모델·런타임 수명을 gateway(`LocalExecutionGateway`) 뒤로 이동
+- 남은 작업: Playwright MCP 구현체 추가 (포트는 이미 존재하므로 새 어댑터만 작성)
 
 ### Phase 4. 실행 분리
 
-- Web 프로세스와 Worker 프로세스 분리
+- Web 프로세스와 Worker 프로세스 분리 (`ExecutionGateway` 의 out-of-process 구현체로 교체; 오케스트레이터 무수정)
 - timeout, kill, concurrency 정책 추가
-- 시스템/계정 단위 동시 실행 제어
+- 시스템/계정 단위 동시 실행 제어 (영속 프로파일 격리 필요)
 
 ## 13. 목표 아키텍처
 
@@ -685,13 +711,15 @@ Backend
   -> Module Registry
 ```
 
+> **진행 상태:** 위 목표 중 `Run Orchestrator → BrowserGateway → Browser` 경계는 이미 `ExecutionGateway` 포트(+`LocalExecutionGateway`)로 구현되었고, `Worker Process` 만 아직 in-process 다(동일 포트로 교체 가능). 부수 관심사 분리(`EventBus`)도 완료. 남은 큰 축은 `Persistent Run State Store`(영속 저장소)와 out-of-process 워커다.
+
 이 목표 구조로 가면 아래가 가능해진다.
 
 - 서버 재시작 후 Run 상태 유지
 - 실행 격리
 - 병렬도 제어
-- 테스트 모듈과 브라우저 구현 분리
-- Playwright MCP 기반 이관
+- 테스트 모듈과 브라우저 구현 분리 (✅ `ExecutionGateway` 로 달성)
+- Playwright MCP 기반 이관 (포트 준비 완료)
 
 ## 14. 결론
 
