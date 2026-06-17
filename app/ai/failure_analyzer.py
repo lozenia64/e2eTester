@@ -45,7 +45,7 @@ class GeminiFailureAnalyzer:
     models: tuple[str, ...]
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
     enabled: bool = True
-    timeout_seconds: int = 30
+    timeout_seconds: int = 20
     max_inline_image_bytes: int = 2_500_000
     verify_ssl: bool = True
 

@@ -68,7 +68,7 @@ class EmailNotificationConfig:
     smtp_host: str = GMAIL_SMTP_HOST
     smtp_port: int = GMAIL_SMTP_PORT
     timeout_seconds: int = 20
-    gemini_timeout_seconds: int = 180
+    gemini_timeout_seconds: int = 60
     max_email_attachment_bytes: int = MAX_EMAIL_ATTACHMENT_BYTES
     max_gemini_attachment_bytes: int = MAX_GEMINI_ATTACHMENT_BYTES
     max_gemini_inline_image_bytes: int = MAX_GEMINI_INLINE_IMAGE_BYTES
