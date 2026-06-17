@@ -6,6 +6,9 @@ from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
+# 청구 본문 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
+from app.scenarios.rep_homepage.constants import CLAIM_CONTENT_TEXT
+
 from . import login_common as common
 
 CLAIM_INTRO_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1020"
@@ -44,7 +47,6 @@ ACCIDENT_TYPE_ETC_LABEL_SELECTOR = 'label:has(em.sel_lb_tit:text-is("기타"))'
 ACCIDENT_TYPE_ETC_INPUT_SELECTOR = 'main input[type="radio"][value="05"]'
 CLAIM_REASON_COMPLETE_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("청구사유 입력완료")'
 ACCIDENT_TYPE_CONFIRM_TEXT = re.compile(r"사고\s*유형")
-CLAIM_CONTENT_TEXT = "IT직원 테스트입니다. 바로 취소할 예정입니다."
 DESKTOP_SCREENSHOT_GLOB_PATTERNS = (
     "스크린샷*.PNG",
     "스크린샷*.png",

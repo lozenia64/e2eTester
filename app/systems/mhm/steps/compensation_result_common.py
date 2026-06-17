@@ -3,14 +3,15 @@ from __future__ import annotations
 from datetime import date
 import re
 
+# 청구 식별 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT, TARGET_CLAIM_TEXT_TRUNCATED
+
 from . import login_common as common
 
 RESULT_INTRO_URL_FRAGMENT = "/cmp/dii/IbnfDmRstInq1000"
 RESULT_LIST_URL_FRAGMENT = "/cmp/dii/IbnfDmRstInq1010"
 RESULT_DETAIL_URL_FRAGMENT = "/cmp/dii/IbnfDmRstInq1020"
 RESULT_ENTRY_MENU_SELECTOR = "#code03020300"
-TARGET_CLAIM_TEXT = "IT직원 테스트입니다. 바로 취소할 예정입니다."
-TARGET_CLAIM_TEXT_TRUNCATED = "IT직원 테스트입니다. 바로 취소할"
 PROCESSING_STATUS_HINT = re.compile(r"서류\s*추가|진행중|담당자\s*배정")
 RESULT_DATE_PATTERN = re.compile(r"\d{4}\.\d{2}\.\d{2}")
 CLAIM_CARD_SELECTOR = 'main a:has(h3), main a[role="link"]:has(h3)'

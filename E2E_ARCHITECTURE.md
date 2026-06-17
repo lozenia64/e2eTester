@@ -34,9 +34,9 @@ Browser
       -> RunService
           -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml)
           -> InMemoryRunRepository
-          -> WorkflowExecutor         (execution_mode -> HOM / MHM / access_common executor)
+          -> WorkflowExecutor         (execution_mode -> RepHomepageExecutor(+ChannelProfile) / access_common executor)
               -> Shared Playwright browser session
-                  -> Split system modules (app/systems/{code}/steps/*.py)
+                  -> Channel step adapters (app/systems/{code}/steps/*.py)
                       -> Site
 
 Browser
@@ -55,7 +55,7 @@ FastAPI app
 현재 구조의 핵심 특징:
 
 - 웹 요청과 실행 orchestration은 같은 프로세스에 있다.
-- 워크플로 실행기는 `execution_mode`(`hom_workflow_step` / `mhm_workflow_step`) 기준으로 `app/systems/loader.py` 가 동적으로 로드한다.
+- 워크플로 실행기는 `execution_mode`(`hom_workflow_step` / `mhm_workflow_step`) 기준으로 `app/systems/loader.py` 가 동적으로 로드한다. HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
 - 실제 Playwright sync API 실행은 Run마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)에서 수행한다. 같은 Run의 build/step/close 호출이 모두 이 스레드에서 돈다. (실행기에 thread executor가 없으면 `asyncio.to_thread(...)` 로 폴백)
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
@@ -98,12 +98,17 @@ e2eTester/
       screenshot.py              # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
       workflow_common.py
       workflow_engine.py         # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
-      hom_workflow_executor.py   # app.systems.hom.executor 재노출
-      mhm_workflow_executor.py   # app.systems.mhm.executor 재노출
+    scenarios/
+      rep_homepage/              # 대표홈페이지(PC·모바일) 공용 시나리오 (채널 무관 1벌)
+        constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
+        channel.py               # ChannelProfile / ChannelSteps (채널 어댑터 계약)
+        runtime.py               # RepHomepageRuntime (PC·모바일 단일 런타임)
+        executor.py              # RepHomepageExecutor (단일 _run_step 시나리오 디스패치)
     systems/
       loader.py                  # execution_mode -> 시스템별 executor 로딩
       hom/
-        executor.py
+        channel.py               # PC 채널 프로파일(PC_CHANNEL): hom.steps 어댑터 주입
+        executor.py              # 얇은 팩토리 (RepHomepageExecutor + PC_CHANNEL)
         manifest.yaml
         scripts/
           login_phone.py         # 수동 실행용 CLI (manifest 워크플로 아님)
@@ -121,9 +126,10 @@ e2eTester/
           compensation_cancel.py
           long_term_policy_certificate.py
       mhm/
-        executor.py
+        channel.py               # 모바일 채널 프로파일(MOBILE_CHANNEL): mhm.steps 어댑터 주입(mobile=True)
+        executor.py              # 얇은 팩토리 (RepHomepageExecutor + MOBILE_CHANNEL)
         manifest.yaml
-        steps/                   # hom 과 동일한 단계 구성 (모바일 selector)
+        steps/                   # hom 과 동일한 시나리오 계약을 구현하는 모바일 셀렉터 어댑터
           login_common.py
           main_access.py
           login_move.py
@@ -373,20 +379,21 @@ manifest 에 들어 있는 정보:
 
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
 - `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·OTP 일시정지(`WAITING_INPUT_PREFIX`) 해석·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol)
-- `app/systems/hom/executor.py` (`HomWorkflowExecutor(BaseWorkflowExecutor)`, `execution_mode = "hom_workflow_step"`)
-- `app/systems/mhm/executor.py` (`MhmWorkflowExecutor(BaseWorkflowExecutor)`, `execution_mode = "mhm_workflow_step"`)
+- `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)와 `_run_step` 디스패치가 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
+- `app/scenarios/rep_homepage/channel.py` (`ChannelProfile` / `ChannelSteps`) — 채널(드라이버) 기술서와 셀렉터 어댑터 계약. `app/scenarios/rep_homepage/constants.py` 는 청구 본문 문구 등 charge↔result↔cancel 도메인 결합 규칙의 SSOT.
+- `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/hom/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "hom_workflow_step"`) — PC 채널 어댑터(`hom.steps`) 주입.
+- `app/systems/mhm/channel.py` (`MOBILE_CHANNEL`, `mobile=True`) / `app/systems/mhm/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "mhm_workflow_step"`) — 모바일 채널 어댑터(`mhm.steps`) 주입.
 - `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, 접속 점검 공용 실행기)
 - `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
 - `app/runner/artifact_manager.py`
-- `app/runner/hom_workflow_executor.py` / `app/runner/mhm_workflow_executor.py` (각 시스템 executor 재노출 모듈)
-- `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들
+- `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들 — 각 채널이 공용 시나리오에 주입하는 셀렉터 어댑터
 
 실행 모델:
 
 - Run 단위로 Playwright 런타임 생성 (영속 프로파일 persistent context)
 - 하나의 browser/context/page를 공유
-- MHM은 `build_runtime()` 에서 페이지 생성 직후 `apply_mobile_device_mode()` 로 모바일 디바이스 모드를 먼저 적용한 뒤 접속
-- 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → executor의 `_run_step` 디스패치)
+- 모바일 채널(`ChannelProfile.mobile=True`, 예: MHM)은 공용 `build_runtime()` 에서 페이지 생성 직후 `apply_mobile_device_mode()` 로 모바일 디바이스 모드를 먼저 적용한 뒤 접속
+- 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → 공용 시나리오 실행기의 `_run_step` 디스패치, 채널은 `ChannelProfile.steps` 어댑터로 주입)
 - 표준 출력/표준 에러를 가로채 모듈별 `execution.log` 와 라이브 WebSocket 로그로 저장
 - 휴대폰인증 단계는 OTP 미입력 시 `WAITING_INPUT::` 표식을 반환해 Run을 일시정지시킴
 
