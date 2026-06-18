@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
+from app.orchestrator.run_actor import load_actor_context
 from app.auth.dependencies import require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
 from app.core.models import ModuleSettings
@@ -21,8 +22,16 @@ async def admin_list_runs(
     limit: int = Query(default=100, ge=1, le=1000),
     current_user: User = Depends(require_admin),
 ) -> list[dict[str, Any]]:
-    summaries = await request.app.state.run_service.list_run_summaries()
-    return summaries[:limit]
+    actor_context = await load_actor_context(
+        request.app.state.user_service,
+        request.app.state.suite_service._repository,
+        request.app.state.schedule_service._repository,
+    )
+    summaries = await request.app.state.run_service.list_run_summaries(
+        limit=limit,
+        actor_context=actor_context,
+    )
+    return summaries
 
 
 @router.get("/stats/usage")

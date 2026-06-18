@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
     app.state.module_settings_repo = module_settings_repository
 
     suite_repository = SqliteSuiteRepository(db_path)
+    schedule_repository = SqliteScheduleRepository(db_path)
     suite_service = SuiteService(
         registry=registry,
         run_service=run_service,
@@ -95,6 +96,8 @@ async def lifespan(app: FastAPI):
         suite_repo=suite_repository,
         registry=registry,
         module_settings_repo=module_settings_repository,
+        user_service=user_service,
+        schedule_repo=schedule_repository,
     )
 
     # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.
@@ -109,7 +112,7 @@ async def lifespan(app: FastAPI):
     scheduler = SchedulerService(
         run_service=run_service,
         suite_service=suite_service,
-        repository=SqliteScheduleRepository(db_path),
+        repository=schedule_repository,
     )
     app.state.schedule_service = scheduler
     scheduler_task = asyncio.create_task(scheduler.run_forever())

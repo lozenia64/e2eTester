@@ -244,6 +244,8 @@ class SuiteService:
                     selected_module_ids=None,
                     triggered_by="suite",
                     suite_id=suite_id,
+                    user_id=suite.created_by_user_id,
+                    user_name=suite.created_by_user_name,
                 )
             except (KeyError, ValueError) as exc:
                 step.status = SuiteStatus.FAILED

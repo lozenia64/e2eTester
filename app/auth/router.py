@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.auth.dependencies import get_current_user
 from app.auth.jwt import create_access_token
-from app.auth.models import TokenResponse, UserPublic
+from app.auth.models import TokenResponse, User, UserPublic
 
 router = APIRouter(tags=["auth"])
 templates = Jinja2Templates(directory="app/web/templates")
@@ -57,3 +57,53 @@ async def logout():
 @router.get("/auth/me", response_model=UserPublic)
 async def me(current_user=Depends(get_current_user)):
     return UserPublic(**current_user.model_dump())
+
+
+@router.get("/account/password", response_class=HTMLResponse)
+async def password_page(request: Request, current_user: User = Depends(get_current_user)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "account/password.html",
+        {"current_user": current_user},
+    )
+
+
+@router.post("/auth/change-password")
+async def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+    current_user: User = Depends(get_current_user),
+):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+
+    if new_password != new_password_confirm:
+        return RedirectResponse(
+            url="/account/password?error=mismatch",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    user_service = request.app.state.user_service
+    try:
+        await user_service.change_password(current_user.user_id, current_password, new_password)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_400_BAD_REQUEST:
+            code = "wrong" if "현재" in str(exc.detail) else "weak"
+            return RedirectResponse(
+                url=f"/account/password?error={code}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        raise
+
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        return JSONResponse(content={"ok": True})
+
+    return RedirectResponse(
+        url="/account/password?success=1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

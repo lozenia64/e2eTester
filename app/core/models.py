@@ -155,6 +155,8 @@ class Schedule(BaseModel):
     selected_system_codes: list[str] | None = None
     step_total: int | None = None
     created_at: datetime
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
     next_run_at: datetime | None = None
     last_run_at: datetime | None = None
     last_run_id: str | None = None
