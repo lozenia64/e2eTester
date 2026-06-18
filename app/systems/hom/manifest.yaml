@@ -115,6 +115,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: main_access
+    estimated_manual_seconds: 60
   - module_id: hom.login
     system_code: hom
     name: 로그인
@@ -127,6 +128,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: login
+    estimated_manual_seconds: 300
   - module_id: hom.contract.list
     system_code: hom
     name: 계약목록 조회
@@ -139,6 +141,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: contract_list
+    estimated_manual_seconds: 180
   - module_id: hom.contract.detail
     system_code: hom
     name: 계약상세 조회
@@ -151,6 +154,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: contract_detail
+    estimated_manual_seconds: 180
   - module_id: hom.compensation.charge
     system_code: hom
     name: 보험금청구 접수(질병/상해)
@@ -163,6 +167,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_charge
+    estimated_manual_seconds: 600
   - module_id: hom.compensation.result
     system_code: hom
     name: 보험금청구 결과 조회
@@ -175,6 +180,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_result
+    estimated_manual_seconds: 180
   - module_id: hom.compensation.cancel
     system_code: hom
     name: 보험금청구 취소
@@ -187,6 +193,7 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: compensation_cancel
+    estimated_manual_seconds: 300
   - module_id: hom.proof.long_term_policy
     system_code: hom
     name: 장기보험증권 증명서 발급
@@ -199,3 +206,4 @@ modules:
     execution_mode: hom_workflow_step
     workflow_name: hom_login
     workflow_step: long_term_policy_certificate
+    estimated_manual_seconds: 300

@@ -22,6 +22,7 @@ class ModuleDefinition(BaseModel):
     script_path: str | None = None
     workflow_name: str | None = None
     workflow_step: str | None = None
+    estimated_manual_seconds: int = 0
 
 
 class RunFormOption(BaseModel):
@@ -130,6 +131,8 @@ class Run(BaseModel):
     schedule_id: str | None = None
     suite_id: str | None = None
     comparison: RunComparison | None = None
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
 
 SUITE_SCHEDULE_SYSTEM_CODE = "suite"
@@ -158,6 +161,8 @@ class Schedule(BaseModel):
     last_run_status: RunStatus | None = None
     last_suite_id: str | None = None
     last_suite_status: SuiteStatus | None = None
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
     def to_summary(self) -> dict:
         """API/UI 노출용 요약. input_data 는 PII 가 있을 수 있어 직렬화하지 않는다."""
@@ -186,6 +191,44 @@ class Schedule(BaseModel):
             "last_suite_id": self.last_suite_id,
             "last_suite_status": self.last_suite_status.value if self.last_suite_status else None,
         }
+
+
+class SystemUsageStat(BaseModel):
+    system_code: str
+    system_name: str
+    runs: int
+    modules_passed: int
+    modules_failed: int
+    total_duration_ms: int
+    manual_minutes_saved: int
+
+
+class UserUsageStat(BaseModel):
+    user_id: str | None
+    user_name: str | None
+    email: str | None
+    total_runs: int
+    total_modules_passed: int
+    total_modules_failed: int
+    total_duration_ms: int
+    manual_minutes_saved: int
+    by_system: list[SystemUsageStat]
+
+
+class UsageStats(BaseModel):
+    period_from: datetime | None
+    period_to: datetime | None
+    generated_at: datetime
+    total_runs: int
+    total_users: int
+    by_user: list[UserUsageStat]
+    by_system: list[SystemUsageStat]
+
+
+class ModuleSettings(BaseModel):
+    module_id: str
+    estimated_manual_seconds: int
+    updated_at: datetime
 
 
 class DashboardEvent(BaseModel):
@@ -244,6 +287,8 @@ class SuiteRun(BaseModel):
     awaiting_input_prompt: str | None = None
     browser_mode: str = "headed"
     selected_system_codes: list[str] = Field(default_factory=list)
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
 
 class SuiteEvent(BaseModel):

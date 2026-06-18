@@ -35,6 +35,9 @@ class SqliteSuiteRepository:
     async def list_suites(self) -> list[SuiteRun]:
         return [SuiteRun.model_validate_json(data) for data in await self._store.list_all()]
 
+    async def list_suites_by_user(self, user_id: str) -> list[SuiteRun]:
+        return [suite for suite in await self.list_suites() if suite.created_by_user_id == user_id]
+
     async def publish(self, event: SuiteEvent) -> None:
         await self._listeners.publish(event.suite_id, event)
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.auth.dependencies import get_current_user, require_admin
+from app.auth.models import User
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 
 router = APIRouter()
@@ -12,9 +14,15 @@ templates = Jinja2Templates(directory="app/web/templates")
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard_home(request: Request):
+async def dashboard_home(request: Request, current_user: User = Depends(get_current_user)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    if current_user.role == "admin":
+        return RedirectResponse(url="/admin", status_code=302)
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
+    if current_user.role != "admin":
+        systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
     systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
     system_codes = [system.system_code for system in systems]
     analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
@@ -27,12 +35,59 @@ async def dashboard_home(request: Request):
             "systems_payload": systems_payload,
             "analyzer_status": analyzer_status,
             "email_status": email_status,
+            "current_user": current_user,
         },
     )
 
 
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_index(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/index.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/users.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/modules", response_class=HTMLResponse)
+async def admin_modules(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/modules.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/stats", response_class=HTMLResponse)
+async def admin_stats(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/stats.html",
+        {"current_user": current_user},
+    )
+
+
 @router.get("/suites/{suite_id}", response_class=HTMLResponse)
-async def suite_dashboard(request: Request, suite_id: str):
+async def suite_dashboard(request: Request, suite_id: str, current_user: User = Depends(get_current_user)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
     try:
         suite = await request.app.state.suite_service.get_suite(suite_id)
     except KeyError as exc:
@@ -42,12 +97,15 @@ async def suite_dashboard(request: Request, suite_id: str):
         "suite.html",
         {
             "suite": suite,
+            "current_user": current_user,
         },
     )
 
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
-async def run_dashboard(request: Request, run_id: str):
+async def run_dashboard(request: Request, run_id: str, current_user: User = Depends(get_current_user)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
     try:
         run = await request.app.state.run_service.get_run(run_id)
     except KeyError as exc:
@@ -57,5 +115,6 @@ async def run_dashboard(request: Request, run_id: str):
         "run.html",
         {
             "run": run,
+            "current_user": current_user,
         },
     )

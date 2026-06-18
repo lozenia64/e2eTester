@@ -46,6 +46,9 @@ class InMemoryRunRepository:
         async with self._lock:
             return list(self._runs.values())
 
+    async def list_runs_by_user(self, user_id: str) -> list[Run]:
+        return [run for run in await self.list_runs() if run.created_by_user_id == user_id]
+
     async def publish(self, event: DashboardEvent) -> None:
         await self._listeners.publish(event.run_id, event)
 

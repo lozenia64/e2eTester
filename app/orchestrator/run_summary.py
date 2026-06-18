@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.core.enums import ModuleStatus
 from app.core.models import Run
 
+if TYPE_CHECKING:
+    from app.orchestrator.run_actor import ActorContext
 
-def summarize_run(run: Run) -> dict:
+
+def summarize_run(run: Run, actor_context: ActorContext | None = None) -> dict:
     """홈 화면 "진행 중 / 최근 Run" 패널용 Run 요약(읽기 전용 뷰).
 
     PII 가 섞일 수 있는 입력값은 포함하지 않고, 진행률·현재/실패 모듈명 등 표시용
@@ -31,6 +36,11 @@ def summarize_run(run: Run) -> dict:
         ),
         None,
     )
+    created_by_user_id = run.created_by_user_id
+    created_by_user_name = run.created_by_user_name
+    if actor_context is not None:
+        created_by_user_id, created_by_user_name = actor_context.resolve(run)
+
     return {
         "run_id": run.run_id,
         "system_code": run.system_code,
@@ -53,4 +63,6 @@ def summarize_run(run: Run) -> dict:
         "failed_module_name": failed_module.name if failed_module else None,
         "triggered_by": run.triggered_by,
         "suite_id": run.suite_id,
+        "created_by_user_id": created_by_user_id,
+        "created_by_user_name": created_by_user_name,
     }

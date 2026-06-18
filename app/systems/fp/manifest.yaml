@@ -27,3 +27,4 @@ modules:
     execution_mode: fp_workflow_step
     workflow_name: fp_access
     workflow_step: main_access
+    estimated_manual_seconds: 120

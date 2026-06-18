@@ -8,3 +8,6 @@ data/
 *.db
 *.db-wal
 *.db-shm
+.claude/
+.oracleCloud/*.key
+.oracleCloud/

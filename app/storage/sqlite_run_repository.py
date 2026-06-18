@@ -49,6 +49,9 @@ class SqliteRunRepository:
     async def list_runs(self) -> list[Run]:
         return [Run.model_validate_json(data) for data in await self._store.list_all()]
 
+    async def list_runs_by_user(self, user_id: str) -> list[Run]:
+        return [run for run in await self.list_runs() if run.created_by_user_id == user_id]
+
     async def publish(self, event: DashboardEvent) -> None:
         await self._listeners.publish(event.run_id, event)
 

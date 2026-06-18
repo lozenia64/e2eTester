@@ -1,0 +1,19 @@
+[Unit]
+Description=e2eTester E2E test platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/e2eTester
+Environment=PATH=/home/ubuntu/e2eTester/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/home/ubuntu/e2eTester/.env
+ExecStart=/home/ubuntu/e2eTester/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

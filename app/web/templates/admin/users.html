@@ -1,0 +1,248 @@
+{% extends "admin/base.html" %}
+{% block title %}사용자 관리{% endblock %}
+{% block nav_users %}bg-red-50 text-red-700 font-semibold{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between">
+    <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
+        <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">사용자 관리</h1>
+    </div>
+    <button id="btn-add-user" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        사용자 추가
+    </button>
+</div>
+
+<!-- 사용자 테이블 -->
+<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">이름</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">이메일</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">역할</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">상태</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">접근 시스템</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">생성일</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">작업</th>
+                </tr>
+            </thead>
+            <tbody id="users-tbody" class="divide-y divide-gray-100">
+                <tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">불러오는 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 사용자 추가 모달 -->
+<div id="modal-add-user" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
+    <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">사용자 추가</h2>
+        <form id="form-add-user" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">이름</label>
+                <input name="name" type="text" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+                <input name="email" type="email" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+                <input name="password" type="password" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">역할</label>
+                <select name="role" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="user">일반 사용자</option>
+                    <option value="admin">관리자</option>
+                </select>
+            </div>
+            <div id="form-error" class="hidden text-sm text-red-600"></div>
+            <div class="flex gap-3 pt-2">
+                <button type="submit" class="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700">추가</button>
+                <button type="button" id="btn-cancel-modal" class="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 시스템 관리 모달 -->
+<div id="modal-systems" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
+    <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 class="text-lg font-bold text-gray-900 mb-1">시스템 접근 관리</h2>
+        <p id="modal-systems-username" class="text-sm text-gray-500 mb-4"></p>
+        <p class="text-xs text-gray-400 mb-3">체크하지 않으면 모든 시스템에 접근 가능합니다.</p>
+        <div id="systems-checklist" class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3"></div>
+        <div id="systems-error" class="hidden mt-2 text-sm text-red-600"></div>
+        <div class="flex gap-3 pt-4">
+            <button id="btn-save-systems" class="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700">저장</button>
+            <button id="btn-cancel-systems" class="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">취소</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let usersData = [];
+let allSystems = [];
+let editingUserId = null;
+
+async function loadUsers() {
+    const res = await fetch('/api/admin/users');
+    usersData = await res.json();
+    renderUsers();
+}
+
+async function loadSystems() {
+    const res = await fetch('/api/admin/systems');
+    allSystems = await res.json();
+}
+
+function renderUsers() {
+    const tbody = document.getElementById('users-tbody');
+    if (usersData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">사용자 없음</td></tr>';
+        return;
+    }
+    tbody.innerHTML = usersData.map(u => {
+        const roleCls = u.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700';
+        const roleLabel = u.role === 'admin' ? '관리자' : '사용자';
+        const activeCls = u.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500';
+        const activeLabel = u.is_active ? '활성' : '비활성';
+        const at = u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '—';
+        const toggleLabel = u.is_active ? '비활성화' : '활성화';
+        const sysCodes = u.allowed_system_codes || [];
+        const sysLabel = sysCodes.length === 0
+            ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500">제한 없음</span>'
+            : sysCodes.map(c => `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700">${c}</span>`).join(' ');
+        return `<tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 font-medium">${u.name}</td>
+            <td class="px-4 py-3 text-gray-600">${u.email}</td>
+            <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${roleCls}">${roleLabel}</span></td>
+            <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${activeCls}">${activeLabel}</span></td>
+            <td class="px-4 py-3">${sysLabel}</td>
+            <td class="px-4 py-3 text-xs text-gray-500">${at}</td>
+            <td class="px-4 py-3 flex flex-wrap gap-2">
+                <button onclick="toggleActive('${u.user_id}', ${!u.is_active})" class="text-xs text-indigo-600 hover:underline">${toggleLabel}</button>
+                <button onclick="openSystemsModal('${u.user_id}')" class="text-xs text-green-600 hover:underline">시스템 관리</button>
+                <button onclick="deleteUser('${u.user_id}', '${u.name}')" class="text-xs text-red-500 hover:underline">삭제</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function deleteUser(userId, userName) {
+    if (!confirm(`'${userName}' 사용자를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    if (res.ok) {
+        await loadUsers();
+    } else {
+        const data = await res.json();
+        alert(data.detail || '삭제 중 오류가 발생했습니다.');
+    }
+}
+
+async function toggleActive(userId, isActive) {
+    const res = await fetch(`/api/admin/users/${userId}/active`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({is_active: isActive}),
+    });
+    if (res.ok) {
+        await loadUsers();
+    } else {
+        const data = await res.json();
+        alert(data.detail || '오류가 발생했습니다.');
+    }
+}
+
+function openSystemsModal(userId) {
+    editingUserId = userId;
+    const user = usersData.find(u => u.user_id === userId);
+    document.getElementById('modal-systems-username').textContent = `${user.name} (${user.email})`;
+    const allowed = user.allowed_system_codes || [];
+    const checklist = document.getElementById('systems-checklist');
+    checklist.innerHTML = allSystems.map(s => `
+        <label class="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-gray-50">
+            <input type="checkbox" value="${s.system_code}" ${allowed.includes(s.system_code) ? 'checked' : ''}
+                class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            <span class="text-sm font-medium text-gray-800">${s.system_name}</span>
+            <span class="text-xs text-gray-400 font-mono">${s.system_code}</span>
+        </label>
+    `).join('');
+    document.getElementById('systems-error').classList.add('hidden');
+    const modal = document.getElementById('modal-systems');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+document.getElementById('btn-save-systems').addEventListener('click', async () => {
+    const checks = document.querySelectorAll('#systems-checklist input[type=checkbox]:checked');
+    const codes = Array.from(checks).map(c => c.value);
+    const errEl = document.getElementById('systems-error');
+    errEl.classList.add('hidden');
+    const res = await fetch(`/api/admin/users/${editingUserId}/systems`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({allowed_system_codes: codes}),
+    });
+    if (res.ok) {
+        document.getElementById('modal-systems').classList.add('hidden');
+        document.getElementById('modal-systems').classList.remove('flex');
+        await loadUsers();
+    } else {
+        const data = await res.json();
+        errEl.textContent = data.detail || '저장 실패';
+        errEl.classList.remove('hidden');
+    }
+});
+
+document.getElementById('btn-cancel-systems').addEventListener('click', () => {
+    document.getElementById('modal-systems').classList.add('hidden');
+    document.getElementById('modal-systems').classList.remove('flex');
+});
+
+const modal = document.getElementById('modal-add-user');
+document.getElementById('btn-add-user').addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+});
+document.getElementById('btn-cancel-modal').addEventListener('click', () => {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+});
+
+document.getElementById('form-add-user').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const errEl = document.getElementById('form-error');
+    errEl.classList.add('hidden');
+    const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: fd.get('name'),
+            email: fd.get('email'),
+            password: fd.get('password'),
+            role: fd.get('role'),
+        }),
+    });
+    if (res.ok) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        e.target.reset();
+        await loadUsers();
+    } else {
+        const data = await res.json();
+        errEl.textContent = data.detail || '오류가 발생했습니다.';
+        errEl.classList.remove('hidden');
+    }
+});
+
+Promise.all([loadUsers(), loadSystems()]);
+</script>
+{% endblock %}
