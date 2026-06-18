@@ -53,4 +53,6 @@ def summarize_run(run: Run) -> dict:
         "failed_module_name": failed_module.name if failed_module else None,
         "triggered_by": run.triggered_by,
         "suite_id": run.suite_id,
+        "created_by_user_id": run.created_by_user_id,
+        "created_by_user_name": run.created_by_user_name,
     }
