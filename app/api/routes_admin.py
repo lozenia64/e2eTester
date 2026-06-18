@@ -133,6 +133,35 @@ async def admin_savings_csv(
     )
 
 
+@router.get("/systems")
+async def admin_list_systems(
+    request: Request,
+    current_user: User = Depends(require_admin),
+) -> list[dict]:
+    registry = request.app.state.stats_service._registry
+    return [
+        {"system_code": s.system_code, "system_name": s.name}
+        for s in registry.list_systems()
+    ]
+
+
+@router.put("/users/{user_id}/systems")
+async def admin_update_user_systems(
+    request: Request,
+    user_id: str,
+    payload: dict,
+    current_user: User = Depends(require_admin),
+) -> UserPublic:
+    codes = payload.get("allowed_system_codes")
+    if not isinstance(codes, list):
+        raise HTTPException(status_code=400, detail="allowed_system_codes 목록이 필요합니다.")
+    try:
+        user = await request.app.state.user_service.update_user_systems(user_id, codes)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.") from exc
+    return UserPublic(**user.model_dump())
+
+
 @router.get("/module-settings")
 async def admin_list_module_settings(
     request: Request,
@@ -144,19 +173,19 @@ async def admin_list_module_settings(
     overrides: dict[str, int] = {}
     if repo is not None:
         for s in await repo.list():
-            overrides[s.module_id] = s.estimated_manual_minutes
+            overrides[s.module_id] = s.estimated_manual_seconds
 
     result = []
     for system in registry.list_systems():
         modules = []
         for m in system.modules:
             is_overridden = m.module_id in overrides
-            minutes = overrides[m.module_id] if is_overridden else m.estimated_manual_minutes
+            seconds = overrides[m.module_id] if is_overridden else m.estimated_manual_seconds
             modules.append({
                 "module_id": m.module_id,
                 "name": m.name,
-                "estimated_manual_minutes": minutes,
-                "manifest_default": m.estimated_manual_minutes,
+                "estimated_manual_seconds": seconds,
+                "manifest_default": m.estimated_manual_seconds,
                 "is_overridden": is_overridden,
             })
         result.append({
@@ -174,9 +203,9 @@ async def admin_update_module_settings(
     payload: dict,
     current_user: User = Depends(require_admin),
 ) -> dict:
-    minutes = payload.get("estimated_manual_minutes")
-    if not isinstance(minutes, int) or minutes < 0:
-        raise HTTPException(status_code=400, detail="estimated_manual_minutes 값이 필요합니다.")
+    seconds = payload.get("estimated_manual_seconds")
+    if not isinstance(seconds, int) or seconds < 0:
+        raise HTTPException(status_code=400, detail="estimated_manual_seconds 값이 필요합니다.")
 
     repo = request.app.state.module_settings_repo
     if repo is None:
@@ -185,8 +214,8 @@ async def admin_update_module_settings(
     from datetime import datetime, timezone
     settings = ModuleSettings(
         module_id=module_id,
-        estimated_manual_minutes=minutes,
+        estimated_manual_seconds=seconds,
         updated_at=datetime.now(timezone.utc),
     )
     await repo.save(settings)
-    return {"ok": True, "module_id": module_id, "estimated_manual_minutes": minutes}
+    return {"ok": True, "module_id": module_id, "estimated_manual_seconds": seconds}

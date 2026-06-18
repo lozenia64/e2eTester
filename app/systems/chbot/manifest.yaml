@@ -27,4 +27,4 @@ modules:
     execution_mode: chbot_workflow_step
     workflow_name: chbot_access
     workflow_step: main_access
-    estimated_manual_minutes: 2
+    estimated_manual_seconds: 120

@@ -14,6 +14,7 @@ class User(BaseModel):
     hashed_password: str
     is_active: bool = True
     created_at: datetime
+    allowed_system_codes: list[str] = []
 
 
 class UserPublic(BaseModel):
@@ -23,6 +24,7 @@ class UserPublic(BaseModel):
     role: Literal["admin", "user"]
     is_active: bool
     created_at: datetime
+    allowed_system_codes: list[str] = []
 
 
 class CreateUserRequest(BaseModel):

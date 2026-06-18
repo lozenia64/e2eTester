@@ -21,6 +21,8 @@ async def dashboard_home(request: Request, current_user: User = Depends(get_curr
         return RedirectResponse(url="/admin", status_code=302)
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
+    if current_user.allowed_system_codes:
+        systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
     systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
     system_codes = [system.system_code for system in systems]
     analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
@@ -95,6 +97,7 @@ async def suite_dashboard(request: Request, suite_id: str, current_user: User = 
         "suite.html",
         {
             "suite": suite,
+            "current_user": current_user,
         },
     )
 
@@ -112,5 +115,6 @@ async def run_dashboard(request: Request, run_id: str, current_user: User = Depe
         "run.html",
         {
             "run": run,
+            "current_user": current_user,
         },
     )

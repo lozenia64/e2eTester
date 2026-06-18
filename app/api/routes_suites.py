@@ -20,6 +20,16 @@ async def start_suite(
     payload: StartSuiteRequest,
     current_user: User = Depends(get_current_user),
 ):
+    allowed = current_user.allowed_system_codes
+    if allowed and payload.selected_system_codes:
+        blocked = [c for c in payload.selected_system_codes if c not in allowed]
+        if blocked:
+            raise HTTPException(status_code=403, detail=f"접근 권한이 없는 시스템: {', '.join(blocked)}")
+    elif allowed:
+        payload = payload.model_copy(update={"selected_system_codes": [
+            c for c in (payload.selected_system_codes or [s.system_code for s in request.app.state.run_service._registry.list_systems()])
+            if c in allowed
+        ]})
     try:
         suite = await request.app.state.suite_service.start_suite(
             payload,

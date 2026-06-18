@@ -23,6 +23,9 @@ async def start_system_run(
     payload: StartRunRequest,
     current_user: User = Depends(get_current_user),
 ):
+    allowed = current_user.allowed_system_codes
+    if allowed and system_code not in allowed:
+        raise HTTPException(status_code=403, detail="해당 시스템에 대한 접근 권한이 없습니다.")
     try:
         run = await request.app.state.run_service.start_run(
             system_code,

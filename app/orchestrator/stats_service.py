@@ -42,10 +42,10 @@ class StatsService:
 
         system_defs = {s.system_code: s.name for s in self._registry.list_systems()}
 
-        module_minutes: dict[str, dict[str, int]] = {}
+        module_seconds: dict[str, dict[str, int]] = {}
         for system in self._registry.list_systems():
-            module_minutes[system.system_code] = {
-                m.module_id: m.estimated_manual_minutes for m in system.modules
+            module_seconds[system.system_code] = {
+                m.module_id: m.estimated_manual_seconds for m in system.modules
             }
 
         if self._module_settings_repo is not None:
@@ -54,19 +54,20 @@ class StatsService:
                 parts = override.module_id.split(".", 1)
                 if len(parts) == 2:
                     sys_code = parts[0]
-                    if sys_code in module_minutes:
-                        module_minutes[sys_code][override.module_id] = override.estimated_manual_minutes
+                    if sys_code in module_seconds:
+                        module_seconds[sys_code][override.module_id] = override.estimated_manual_seconds
 
         for run in all_runs:
             passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
             failed = sum(1 for m in run.modules if m.status == ModuleStatus.FAILED)
             duration = sum(m.duration_ms or 0 for m in run.modules)
-            sys_minutes = module_minutes.get(run.system_code, {})
-            saved = sum(
-                sys_minutes.get(m.module_id, 0)
+            sys_seconds = module_seconds.get(run.system_code, {})
+            saved_seconds = sum(
+                sys_seconds.get(m.module_id, 0)
                 for m in run.modules
                 if m.status == ModuleStatus.PASSED
             )
+            saved = saved_seconds // 60
 
             code = run.system_code
             if code not in system_map:

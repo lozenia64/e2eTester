@@ -59,6 +59,11 @@ class UserService:
     async def list_users(self) -> list[User]:
         return await self._repo.list()
 
+    async def update_user_systems(self, user_id: str, allowed_system_codes: list[str]) -> User:
+        user = await self._repo.get(user_id)
+        updated = user.model_copy(update={"allowed_system_codes": allowed_system_codes})
+        return await self._repo.save(updated)
+
     async def update_user_active(self, user_id: str, is_active: bool) -> User:
         user = await self._repo.get(user_id)
         updated = user.model_copy(update={"is_active": is_active})

@@ -115,7 +115,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: main_access
-    estimated_manual_minutes: 1
+    estimated_manual_seconds: 60
   - module_id: mhm.login
     system_code: mhm
     name: 로그인
@@ -128,7 +128,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: login
-    estimated_manual_minutes: 5
+    estimated_manual_seconds: 300
   - module_id: mhm.contract.list
     system_code: mhm
     name: 계약목록 조회
@@ -141,7 +141,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: contract_list
-    estimated_manual_minutes: 3
+    estimated_manual_seconds: 180
   - module_id: mhm.contract.detail
     system_code: mhm
     name: 계약상세 조회
@@ -154,7 +154,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: contract_detail
-    estimated_manual_minutes: 3
+    estimated_manual_seconds: 180
   - module_id: mhm.compensation.charge
     system_code: mhm
     name: 보험금청구 접수(질병/상해)
@@ -167,7 +167,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: compensation_charge
-    estimated_manual_minutes: 10
+    estimated_manual_seconds: 600
   - module_id: mhm.compensation.result
     system_code: mhm
     name: 보험금청구 결과 조회
@@ -180,7 +180,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: compensation_result
-    estimated_manual_minutes: 3
+    estimated_manual_seconds: 180
   - module_id: mhm.compensation.cancel
     system_code: mhm
     name: 보험금청구 취소
@@ -193,7 +193,7 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: compensation_cancel
-    estimated_manual_minutes: 5
+    estimated_manual_seconds: 300
   - module_id: mhm.proof.long_term_policy
     system_code: mhm
     name: 장기보험증권 증명서 발급
@@ -206,4 +206,4 @@ modules:
     execution_mode: mhm_workflow_step
     workflow_name: mhm_login
     workflow_step: long_term_policy_certificate
-    estimated_manual_minutes: 5
+    estimated_manual_seconds: 300

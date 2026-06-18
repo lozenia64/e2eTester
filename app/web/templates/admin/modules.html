@@ -6,7 +6,7 @@
 <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
     <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">모듈 설정</h1>
-    <p class="mt-1.5 text-sm text-gray-500">시스템·모듈별 수동 업무 예상 시간(분)을 관리합니다. 저장된 값이 통계 절감 시간 계산에 사용됩니다.</p>
+    <p class="mt-1.5 text-sm text-gray-500">시스템·모듈별 수동 업무 예상 시간(초)을 관리합니다. 저장된 값이 통계 절감 시간 계산에 사용됩니다.</p>
 </div>
 
 <div id="systems-container" class="space-y-6">
@@ -33,7 +33,7 @@ async function loadSettings() {
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">모듈</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">모듈 ID</th>
-                            <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">수동 업무 시간(분)</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">수동 업무 시간(초)</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500"></th>
                         </tr>
                     </thead>
@@ -43,12 +43,15 @@ async function loadSettings() {
                             <td class="px-4 py-3 font-medium">${m.name}</td>
                             <td class="px-4 py-3 text-xs text-gray-400 font-mono">${m.module_id}</td>
                             <td class="px-4 py-3 text-right">
-                                <input type="number" min="0" max="999"
-                                    value="${m.estimated_manual_minutes}"
-                                    data-module-id="${m.module_id}"
-                                    data-original="${m.estimated_manual_minutes}"
-                                    class="w-20 rounded-lg border px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500 ${m.is_overridden ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-300'}"
-                                    title="${m.is_overridden ? 'DB 오버라이드 값 (manifest 기본값: ' + m.manifest_default + '분)' : 'manifest 기본값'}">
+                                <div class="flex items-center justify-end gap-1">
+                                    <input type="number" min="0" max="99999"
+                                        value="${m.estimated_manual_seconds}"
+                                        data-module-id="${m.module_id}"
+                                        data-original="${m.estimated_manual_seconds}"
+                                        class="w-24 rounded-lg border px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500 ${m.is_overridden ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-300'}"
+                                        title="${m.is_overridden ? 'DB 오버라이드 값 (manifest 기본값: ' + m.manifest_default + '초)' : 'manifest 기본값'}">
+                                    <span class="text-xs text-gray-400">초</span>
+                                </div>
                             </td>
                             <td class="px-4 py-3">
                                 <button onclick="saveModule('${m.module_id}')"
@@ -65,11 +68,11 @@ async function loadSettings() {
 
 async function saveModule(moduleId) {
     const input = document.querySelector(`input[data-module-id="${moduleId}"]`);
-    const minutes = parseInt(input.value, 10);
+    const seconds = parseInt(input.value, 10);
     const msgId = 'msg-' + moduleId.replace('.', '-');
     const msgEl = document.getElementById(msgId);
 
-    if (isNaN(minutes) || minutes < 0) {
+    if (isNaN(seconds) || seconds < 0) {
         msgEl.textContent = '올바른 숫자를 입력하세요.';
         msgEl.className = 'ml-2 text-xs text-red-600';
         return;
@@ -78,7 +81,7 @@ async function saveModule(moduleId) {
     const res = await fetch(`/api/admin/module-settings/${moduleId}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({estimated_manual_minutes: minutes}),
+        body: JSON.stringify({estimated_manual_seconds: seconds}),
     });
 
     if (res.ok) {
@@ -86,7 +89,7 @@ async function saveModule(moduleId) {
         msgEl.className = 'ml-2 text-xs text-green-600';
         input.classList.remove('border-gray-300');
         input.classList.add('border-indigo-300', 'bg-indigo-50', 'text-indigo-700', 'font-semibold');
-        input.dataset.original = minutes;
+        input.dataset.original = seconds;
         setTimeout(() => { msgEl.textContent = ''; }, 2000);
     } else {
         msgEl.textContent = '저장 실패';
