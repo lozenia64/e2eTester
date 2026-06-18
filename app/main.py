@@ -35,6 +35,7 @@ from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
 from app.storage.sqlite_support import DEFAULT_DB_PATH
+from app.core.env_utils import load_dotenv_file, resolve_env_value
 
 
 ARTIFACTS_DIR = Path("artifacts")
@@ -44,14 +45,15 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     registry = ModuleRegistry()
+    dotenv = load_dotenv_file()
     # 영속 저장소(SQLite): Run/Suite/예약이 서버 재시작 후에도 남는다. 경로는 E2E_DB_PATH.
-    db_path = os.getenv("E2E_DB_PATH", DEFAULT_DB_PATH)
+    db_path = resolve_env_value("E2E_DB_PATH", dotenv) or DEFAULT_DB_PATH
 
     user_repository = SqliteUserRepository(db_path)
     user_service = UserService(user_repository)
     app.state.user_service = user_service
-    admin_email = os.getenv("E2E_ADMIN_EMAIL", "admin@example.com")
-    admin_password = os.getenv("E2E_ADMIN_PASSWORD", "admin1234")
+    admin_email = resolve_env_value("E2E_ADMIN_EMAIL", dotenv) or "admin@example.com"
+    admin_password = resolve_env_value("E2E_ADMIN_PASSWORD", dotenv) or "admin1234"
     await user_service.seed_admin(admin_email, admin_password)
 
     repository = SqliteRunRepository(db_path)
