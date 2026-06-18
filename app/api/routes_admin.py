@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
+from app.core.models import ModuleSettings
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -130,3 +131,62 @@ async def admin_savings_csv(
         media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": f"attachment; filename=savings_{date_str}.csv"},
     )
+
+
+@router.get("/module-settings")
+async def admin_list_module_settings(
+    request: Request,
+    current_user: User = Depends(require_admin),
+) -> list[dict]:
+    registry = request.app.state.stats_service._registry
+    repo = request.app.state.module_settings_repo
+
+    overrides: dict[str, int] = {}
+    if repo is not None:
+        for s in await repo.list():
+            overrides[s.module_id] = s.estimated_manual_minutes
+
+    result = []
+    for system in registry.list_systems():
+        modules = []
+        for m in system.modules:
+            is_overridden = m.module_id in overrides
+            minutes = overrides[m.module_id] if is_overridden else m.estimated_manual_minutes
+            modules.append({
+                "module_id": m.module_id,
+                "name": m.name,
+                "estimated_manual_minutes": minutes,
+                "manifest_default": m.estimated_manual_minutes,
+                "is_overridden": is_overridden,
+            })
+        result.append({
+            "system_code": system.system_code,
+            "system_name": system.name,
+            "modules": modules,
+        })
+    return result
+
+
+@router.put("/module-settings/{module_id:path}")
+async def admin_update_module_settings(
+    request: Request,
+    module_id: str,
+    payload: dict,
+    current_user: User = Depends(require_admin),
+) -> dict:
+    minutes = payload.get("estimated_manual_minutes")
+    if not isinstance(minutes, int) or minutes < 0:
+        raise HTTPException(status_code=400, detail="estimated_manual_minutes 값이 필요합니다.")
+
+    repo = request.app.state.module_settings_repo
+    if repo is None:
+        raise HTTPException(status_code=503, detail="모듈 설정 저장소가 초기화되지 않았습니다.")
+
+    from datetime import datetime, timezone
+    settings = ModuleSettings(
+        module_id=module_id,
+        estimated_manual_minutes=minutes,
+        updated_at=datetime.now(timezone.utc),
+    )
+    await repo.save(settings)
+    return {"ok": True, "module_id": module_id, "estimated_manual_minutes": minutes}

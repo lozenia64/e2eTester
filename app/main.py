@@ -31,6 +31,7 @@ from app.orchestrator.suite_service import SuiteService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import SchedulerService
+from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
@@ -77,6 +78,9 @@ async def lifespan(app: FastAPI):
         execution_gateway=execution_gateway,
         event_bus=event_bus,
     )
+    module_settings_repository = SqliteModuleSettingsRepository(db_path)
+    app.state.module_settings_repo = module_settings_repository
+
     suite_repository = SqliteSuiteRepository(db_path)
     suite_service = SuiteService(
         registry=registry,
@@ -90,6 +94,7 @@ async def lifespan(app: FastAPI):
         run_repo=repository,
         suite_repo=suite_repository,
         registry=registry,
+        module_settings_repo=module_settings_repository,
     )
 
     # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.

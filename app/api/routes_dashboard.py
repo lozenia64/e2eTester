@@ -17,6 +17,8 @@ templates = Jinja2Templates(directory="app/web/templates")
 async def dashboard_home(request: Request, current_user: User = Depends(get_current_user)):
     if isinstance(current_user, RedirectResponse):
         return current_user
+    if current_user.role == "admin":
+        return RedirectResponse(url="/admin", status_code=302)
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
     systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
@@ -54,6 +56,17 @@ async def admin_users(request: Request, current_user: User = Depends(require_adm
     return templates.TemplateResponse(
         request,
         "admin/users.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/modules", response_class=HTMLResponse)
+async def admin_modules(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/modules.html",
         {"current_user": current_user},
     )
 

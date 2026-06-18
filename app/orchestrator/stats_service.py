@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from app.core.enums import ModuleStatus
 from app.core.models import UsageStats, UserUsageStat, SystemUsageStat
 from app.storage.ports import RunRepositoryPort, SuiteRepositoryPort
+from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
 
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry
@@ -17,10 +18,12 @@ class StatsService:
         run_repo: RunRepositoryPort,
         suite_repo: SuiteRepositoryPort,
         registry: "ModuleRegistry",
+        module_settings_repo: ModuleSettingsRepositoryPort | None = None,
     ) -> None:
         self._run_repo = run_repo
         self._suite_repo = suite_repo
         self._registry = registry
+        self._module_settings_repo = module_settings_repo
 
     async def get_usage_stats(
         self,
@@ -44,6 +47,15 @@ class StatsService:
             module_minutes[system.system_code] = {
                 m.module_id: m.estimated_manual_minutes for m in system.modules
             }
+
+        if self._module_settings_repo is not None:
+            overrides = await self._module_settings_repo.list()
+            for override in overrides:
+                parts = override.module_id.split(".", 1)
+                if len(parts) == 2:
+                    sys_code = parts[0]
+                    if sys_code in module_minutes:
+                        module_minutes[sys_code][override.module_id] = override.estimated_manual_minutes
 
         for run in all_runs:
             passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)

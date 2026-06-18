@@ -223,6 +223,12 @@ class UsageStats(BaseModel):
     by_system: list[SystemUsageStat]
 
 
+class ModuleSettings(BaseModel):
+    module_id: str
+    estimated_manual_minutes: int
+    updated_at: datetime
+
+
 class DashboardEvent(BaseModel):
     event_type: str
     run_id: str

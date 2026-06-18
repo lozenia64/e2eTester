@@ -1,0 +1,99 @@
+{% extends "admin/base.html" %}
+{% block title %}모듈 설정{% endblock %}
+{% block nav_modules %}bg-red-50 text-red-700 font-semibold{% endblock %}
+
+{% block content %}
+<div>
+    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">모듈 설정</h1>
+    <p class="mt-1.5 text-sm text-gray-500">시스템·모듈별 수동 업무 예상 시간(분)을 관리합니다. 저장된 값이 통계 절감 시간 계산에 사용됩니다.</p>
+</div>
+
+<div id="systems-container" class="space-y-6">
+    <p class="text-sm text-gray-400">불러오는 중...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadSettings() {
+    const res = await fetch('/api/admin/module-settings');
+    if (!res.ok) { document.getElementById('systems-container').innerHTML = '<p class="text-sm text-red-500">불러오기 실패</p>'; return; }
+    const systems = await res.json();
+
+    const container = document.getElementById('systems-container');
+    container.innerHTML = systems.map(sys => `
+        <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-b border-gray-100 px-6 py-4">
+                <h2 class="text-sm font-semibold text-gray-900">${sys.system_name} <span class="text-xs text-gray-400 font-normal">(${sys.system_code})</span></h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">모듈</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">모듈 ID</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">수동 업무 시간(분)</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        ${sys.modules.map(m => `
+                        <tr class="hover:bg-gray-50" id="row-${m.module_id.replace('.', '-')}">
+                            <td class="px-4 py-3 font-medium">${m.name}</td>
+                            <td class="px-4 py-3 text-xs text-gray-400 font-mono">${m.module_id}</td>
+                            <td class="px-4 py-3 text-right">
+                                <input type="number" min="0" max="999"
+                                    value="${m.estimated_manual_minutes}"
+                                    data-module-id="${m.module_id}"
+                                    data-original="${m.estimated_manual_minutes}"
+                                    class="w-20 rounded-lg border px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500 ${m.is_overridden ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-gray-300'}"
+                                    title="${m.is_overridden ? 'DB 오버라이드 값 (manifest 기본값: ' + m.manifest_default + '분)' : 'manifest 기본값'}">
+                            </td>
+                            <td class="px-4 py-3">
+                                <button onclick="saveModule('${m.module_id}')"
+                                    class="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700">저장</button>
+                                <span id="msg-${m.module_id.replace('.', '-')}" class="ml-2 text-xs"></span>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function saveModule(moduleId) {
+    const input = document.querySelector(`input[data-module-id="${moduleId}"]`);
+    const minutes = parseInt(input.value, 10);
+    const msgId = 'msg-' + moduleId.replace('.', '-');
+    const msgEl = document.getElementById(msgId);
+
+    if (isNaN(minutes) || minutes < 0) {
+        msgEl.textContent = '올바른 숫자를 입력하세요.';
+        msgEl.className = 'ml-2 text-xs text-red-600';
+        return;
+    }
+
+    const res = await fetch(`/api/admin/module-settings/${moduleId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({estimated_manual_minutes: minutes}),
+    });
+
+    if (res.ok) {
+        msgEl.textContent = '저장됨';
+        msgEl.className = 'ml-2 text-xs text-green-600';
+        input.classList.remove('border-gray-300');
+        input.classList.add('border-indigo-300', 'bg-indigo-50', 'text-indigo-700', 'font-semibold');
+        input.dataset.original = minutes;
+        setTimeout(() => { msgEl.textContent = ''; }, 2000);
+    } else {
+        msgEl.textContent = '저장 실패';
+        msgEl.className = 'ml-2 text-xs text-red-600';
+    }
+}
+
+loadSettings();
+</script>
+{% endblock %}
