@@ -69,6 +69,10 @@ class UserService:
         updated = user.model_copy(update={"is_active": is_active})
         return await self._repo.save(updated)
 
+    async def delete_user(self, user_id: str) -> None:
+        await self._repo.get(user_id)
+        await self._repo.delete(user_id)
+
     async def seed_admin(self, email: str, password: str, name: str = "관리자") -> None:
         existing = await self._repo.get_by_email(email)
         if existing is not None:
