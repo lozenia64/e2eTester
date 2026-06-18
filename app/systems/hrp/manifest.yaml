@@ -27,3 +27,4 @@ modules:
     execution_mode: hrp_workflow_step
     workflow_name: hrp_access
     workflow_step: main_access
+    estimated_manual_minutes: 2

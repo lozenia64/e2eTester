@@ -22,6 +22,7 @@ class ModuleDefinition(BaseModel):
     script_path: str | None = None
     workflow_name: str | None = None
     workflow_step: str | None = None
+    estimated_manual_minutes: int = 0
 
 
 class RunFormOption(BaseModel):

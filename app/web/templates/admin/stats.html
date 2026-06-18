@@ -21,11 +21,12 @@
     </div>
     <button id="btn-load" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
     <button id="btn-reset" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
+    <button id="btn-csv" class="rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100">CSV 내보내기</button>
     <span id="stats-meta" class="text-xs text-gray-400 ml-auto"></span>
 </div>
 
 <!-- 요약 카드 -->
-<div class="grid gap-3 md:grid-cols-3">
+<div class="grid gap-3 md:grid-cols-4">
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">전체 Run</p>
         <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-runs">—</p>
@@ -37,6 +38,10 @@
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">통과 모듈</p>
         <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-passed">—</p>
+    </div>
+    <div class="rounded-xl border border-green-100 bg-green-50 p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</p>
+        <p class="mt-2 text-3xl font-bold text-green-700" id="stat-total-saved">—</p>
     </div>
 </div>
 
@@ -54,6 +59,7 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</th>
                 </tr>
             </thead>
             <tbody id="user-stats-tbody" class="divide-y divide-gray-100">
@@ -77,6 +83,7 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</th>
                 </tr>
             </thead>
             <tbody id="sys-stats-tbody" class="divide-y divide-gray-100">
@@ -115,6 +122,8 @@ async function loadStats() {
     document.getElementById('stat-total-users').textContent = data.total_users;
     const totalPassed = (data.by_system || []).reduce((s, x) => s + x.modules_passed, 0);
     document.getElementById('stat-total-passed').textContent = totalPassed;
+    const totalSaved = (data.by_system || []).reduce((s, x) => s + (x.manual_minutes_saved || 0), 0);
+    document.getElementById('stat-total-saved').textContent = totalSaved;
 
     const gen = data.generated_at ? new Date(data.generated_at).toLocaleString('ko-KR') : '';
     document.getElementById('stats-meta').textContent = gen ? `생성: ${gen}` : '';
@@ -129,6 +138,7 @@ async function loadStats() {
             <td class="px-4 py-3 text-right text-green-700">${u.total_modules_passed}</td>
             <td class="px-4 py-3 text-right text-red-600">${u.total_modules_failed}</td>
             <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(u.total_duration_ms)}</td>
+            <td class="px-4 py-3 text-right font-semibold text-green-700">${u.manual_minutes_saved || 0}분</td>
         </tr>`).join('');
     }
 
@@ -142,6 +152,7 @@ async function loadStats() {
             <td class="px-4 py-3 text-right text-green-700">${s.modules_passed}</td>
             <td class="px-4 py-3 text-right text-red-600">${s.modules_failed}</td>
             <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(s.total_duration_ms)}</td>
+            <td class="px-4 py-3 text-right font-semibold text-green-700">${s.manual_minutes_saved || 0}분</td>
         </tr>`).join('');
     }
 }
@@ -151,6 +162,14 @@ document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('filter-from').value = '';
     document.getElementById('filter-to').value = '';
     loadStats();
+});
+document.getElementById('btn-csv').addEventListener('click', () => {
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    const params = new URLSearchParams();
+    if (from) params.set('from', new Date(from).toISOString());
+    if (to) params.set('to', new Date(to).toISOString());
+    window.location.href = '/api/admin/stats/savings/csv?' + params.toString();
 });
 
 loadStats();

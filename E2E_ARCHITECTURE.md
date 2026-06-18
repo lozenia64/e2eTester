@@ -269,6 +269,7 @@ e2eTester/
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/runs` (전체 Run 목록, admin 전용)
 - `GET /api/admin/stats/usage` (사용자·시스템별 사용량 통계, admin 전용)
+- `GET /api/admin/stats/savings/csv` (절감 시간 통계 CSV 다운로드, admin 전용)
 - `GET /api/admin/users` (사용자 목록, admin 전용)
 - `POST /api/admin/users` (사용자 생성, admin 전용)
 - `PATCH /api/admin/users/{user_id}/active` (활성/비활성 전환, admin 전용)

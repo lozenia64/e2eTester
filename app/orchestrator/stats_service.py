@@ -39,10 +39,22 @@ class StatsService:
 
         system_defs = {s.system_code: s.name for s in self._registry.list_systems()}
 
+        module_minutes: dict[str, dict[str, int]] = {}
+        for system in self._registry.list_systems():
+            module_minutes[system.system_code] = {
+                m.module_id: m.estimated_manual_minutes for m in system.modules
+            }
+
         for run in all_runs:
             passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
             failed = sum(1 for m in run.modules if m.status == ModuleStatus.FAILED)
             duration = sum(m.duration_ms or 0 for m in run.modules)
+            sys_minutes = module_minutes.get(run.system_code, {})
+            saved = sum(
+                sys_minutes.get(m.module_id, 0)
+                for m in run.modules
+                if m.status == ModuleStatus.PASSED
+            )
 
             code = run.system_code
             if code not in system_map:
@@ -61,6 +73,7 @@ class StatsService:
                 "modules_passed": s.modules_passed + passed,
                 "modules_failed": s.modules_failed + failed,
                 "total_duration_ms": s.total_duration_ms + duration,
+                "manual_minutes_saved": s.manual_minutes_saved + saved,
             })
 
             uid = run.created_by_user_id
@@ -95,6 +108,7 @@ class StatsService:
                 "modules_passed": us.modules_passed + passed,
                 "modules_failed": us.modules_failed + failed,
                 "total_duration_ms": us.total_duration_ms + duration,
+                "manual_minutes_saved": us.manual_minutes_saved + saved,
             })
 
             user_map[uid] = u.model_copy(update={
@@ -102,6 +116,7 @@ class StatsService:
                 "total_modules_passed": u.total_modules_passed + passed,
                 "total_modules_failed": u.total_modules_failed + failed,
                 "total_duration_ms": u.total_duration_ms + duration,
+                "manual_minutes_saved": u.manual_minutes_saved + saved,
                 "by_system": list(u_sys_map.values()),
             })
 
