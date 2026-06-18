@@ -130,6 +130,8 @@ class Run(BaseModel):
     schedule_id: str | None = None
     suite_id: str | None = None
     comparison: RunComparison | None = None
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
 
 SUITE_SCHEDULE_SYSTEM_CODE = "suite"
@@ -244,6 +246,8 @@ class SuiteRun(BaseModel):
     awaiting_input_prompt: str | None = None
     browser_mode: str = "headed"
     selected_system_codes: list[str] = Field(default_factory=list)
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
 
 class SuiteEvent(BaseModel):

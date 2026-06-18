@@ -146,7 +146,12 @@ class SuiteService:
             self._run_service.validate_run_request(system.system_code, merged_input, selected_module_ids=None)
         return normalized_mode, normalized_systems, resolved_system_codes
 
-    async def start_suite(self, request: StartSuiteRequest) -> SuiteRun:
+    async def start_suite(
+        self,
+        request: StartSuiteRequest,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> SuiteRun:
         systems = self._registry.list_systems()
         if not systems:
             raise ValueError("등록된 시스템이 없습니다.")
@@ -179,6 +184,8 @@ class SuiteService:
             requested_at=datetime.now(UTC),
             browser_mode=browser_mode,
             selected_system_codes=resolved_system_codes,
+            created_by_user_id=user_id,
+            created_by_user_name=user_name,
         )
         await self._repository.create_suite(suite)
         await self._publish_event("suite_created", suite)

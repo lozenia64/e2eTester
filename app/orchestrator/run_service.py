@@ -69,8 +69,11 @@ class RunService:
     async def get_run(self, run_id: str) -> Run:
         return await self._repository.get_run(run_id)
 
-    async def list_run_summaries(self, limit: int = 50) -> list[dict]:
-        runs = await self._repository.list_runs()
+    async def list_run_summaries(self, limit: int = 50, user_id: str | None = None) -> list[dict]:
+        if user_id is not None:
+            runs = await self._repository.list_runs_by_user(user_id)
+        else:
+            runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
         return [summarize_run(run) for run in runs[:limit]]
 
@@ -134,6 +137,8 @@ class RunService:
         triggered_by: str = "manual",
         schedule_id: str | None = None,
         suite_id: str | None = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
     ) -> Run:
         system = self.get_system(system_code)
         run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
@@ -151,6 +156,8 @@ class RunService:
             triggered_by=triggered_by,
             schedule_id=schedule_id,
             suite_id=suite_id,
+            created_by_user_id=user_id,
+            created_by_user_name=user_name,
         )
         self._run_inputs[run_id] = dict(sanitized_input)
         await self._repository.create_run(run)
