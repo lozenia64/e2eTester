@@ -225,7 +225,7 @@ class UsageStats(BaseModel):
 
 class ModuleSettings(BaseModel):
     module_id: str
-    estimated_manual_minutes: int
+    estimated_manual_seconds: int
     updated_at: datetime
 
 
