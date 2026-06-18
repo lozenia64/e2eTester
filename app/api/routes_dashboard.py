@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 
@@ -31,7 +31,41 @@ async def dashboard_home(request: Request, current_user: User = Depends(get_curr
             "systems_payload": systems_payload,
             "analyzer_status": analyzer_status,
             "email_status": email_status,
+            "current_user": current_user,
         },
+    )
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_index(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/index.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/users.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/admin/stats", response_class=HTMLResponse)
+async def admin_stats(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/stats.html",
+        {"current_user": current_user},
     )
 
 
