@@ -60,6 +60,17 @@ async function loadSettings() {
                             </td>
                         </tr>`).join('')}
                     </tbody>
+                    <tfoot class="border-t-2 border-gray-200 bg-gray-50">
+                        ${(() => {
+                            const total = sys.modules.reduce((s, m) => s + m.estimated_manual_seconds, 0);
+                            const mins = Math.floor(total / 60), secs = total % 60;
+                            return `<tr>
+                                <td colspan="2" class="px-4 py-2 text-xs font-semibold text-gray-500 text-right">합계</td>
+                                <td class="px-4 py-2 text-right text-xs font-bold text-gray-700">${total}초 (총 ${mins}분 ${secs}초)</td>
+                                <td></td>
+                            </tr>`;
+                        })()}
+                    </tfoot>
                 </table>
             </div>
         </div>

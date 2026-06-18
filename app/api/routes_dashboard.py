@@ -21,7 +21,7 @@ async def dashboard_home(request: Request, current_user: User = Depends(get_curr
         return RedirectResponse(url="/admin", status_code=302)
     run_service = request.app.state.run_service
     systems = run_service.list_systems()
-    if current_user.allowed_system_codes:
+    if current_user.role != "admin":
         systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
     systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
     system_codes = [system.system_code for system in systems]
