@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
 
-from passlib.context import CryptContext
+import bcrypt
+from datetime import datetime, timezone
 
 from app.auth.models import CreateUserRequest, User
 from app.storage.user_repository import UserRepositoryPort
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 class UserService:
@@ -28,7 +34,7 @@ class UserService:
             email=req.email,
             name=req.name,
             role=req.role,
-            hashed_password=_pwd_ctx.hash(req.password),
+            hashed_password=_hash_password(req.password),
             is_active=True,
             created_at=datetime.now(timezone.utc),
         )
@@ -40,7 +46,7 @@ class UserService:
             return None
         if not user.is_active:
             return None
-        if not _pwd_ctx.verify(password, user.hashed_password):
+        if not _verify_password(password, user.hashed_password):
             return None
         return user
 
