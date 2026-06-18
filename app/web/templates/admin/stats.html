@@ -159,8 +159,7 @@ async function loadStats() {
 
 document.getElementById('btn-load').addEventListener('click', loadStats);
 document.getElementById('btn-reset').addEventListener('click', () => {
-    document.getElementById('filter-from').value = '';
-    document.getElementById('filter-to').value = '';
+    setDefaultDates();
     loadStats();
 });
 document.getElementById('btn-csv').addEventListener('click', () => {
@@ -172,6 +171,19 @@ document.getElementById('btn-csv').addEventListener('click', () => {
     window.location.href = '/api/admin/stats/savings/csv?' + params.toString();
 });
 
+function toLocalDatetimeValue(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function setDefaultDates() {
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0);
+    document.getElementById('filter-from').value = toLocalDatetimeValue(firstOfMonth);
+    document.getElementById('filter-to').value = toLocalDatetimeValue(now);
+}
+
+setDefaultDates();
 loadStats();
 </script>
 {% endblock %}
