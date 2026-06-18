@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -25,9 +26,10 @@ from app.orchestrator.suite_service import SuiteService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import SchedulerService
-from app.storage.run_repository import InMemoryRunRepository
-from app.storage.schedule_repository import InMemoryScheduleRepository
-from app.storage.suite_repository import InMemorySuiteRepository
+from app.storage.sqlite_run_repository import SqliteRunRepository
+from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
+from app.storage.sqlite_suite_repository import SqliteSuiteRepository
+from app.storage.sqlite_support import DEFAULT_DB_PATH
 
 
 ARTIFACTS_DIR = Path("artifacts")
@@ -37,7 +39,9 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     registry = ModuleRegistry()
-    repository = InMemoryRunRepository()
+    # 영속 저장소(SQLite): Run/Suite/예약이 서버 재시작 후에도 남는다. 경로는 E2E_DB_PATH.
+    db_path = os.getenv("E2E_DB_PATH", DEFAULT_DB_PATH)
+    repository = SqliteRunRepository(db_path)
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
 
@@ -58,7 +62,7 @@ async def lifespan(app: FastAPI):
         execution_gateway=execution_gateway,
         event_bus=event_bus,
     )
-    suite_repository = InMemorySuiteRepository()
+    suite_repository = SqliteSuiteRepository(db_path)
     suite_service = SuiteService(
         registry=registry,
         run_service=run_service,
@@ -68,10 +72,19 @@ async def lifespan(app: FastAPI):
     app.state.run_service = run_service
     app.state.suite_service = suite_service
 
+    # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.
+    interrupted_runs = await run_service.reconcile_interrupted_runs()
+    interrupted_suites = await suite_service.reconcile_interrupted_suites()
+    if interrupted_runs or interrupted_suites:
+        print(
+            f"[startup] 재기동으로 중단된 Run {interrupted_runs}건 · "
+            f"Suite {interrupted_suites}건을 CANCELLED 로 정리했습니다."
+        )
+
     scheduler = SchedulerService(
         run_service=run_service,
         suite_service=suite_service,
-        repository=InMemoryScheduleRepository(),
+        repository=SqliteScheduleRepository(db_path),
     )
     app.state.schedule_service = scheduler
     scheduler_task = asyncio.create_task(scheduler.run_forever())

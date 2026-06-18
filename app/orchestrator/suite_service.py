@@ -9,7 +9,7 @@ from app.core.models import Run, StartSuiteRequest, SuiteEvent, SuiteRun, SuiteS
 from app.events.bus import EventBus, SuiteFinished
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
-from app.storage.suite_repository import InMemorySuiteRepository
+from app.storage.ports import SuiteRepositoryPort
 
 _TERMINAL_RUN_STATUSES = {RunStatus.PASSED, RunStatus.FAILED, RunStatus.CANCELLED}
 
@@ -19,7 +19,7 @@ class SuiteService:
         self,
         registry: ModuleRegistry,
         run_service: RunService,
-        repository: InMemorySuiteRepository,
+        repository: SuiteRepositoryPort,
         event_bus: EventBus,
     ) -> None:
         self._registry = registry
@@ -35,6 +35,29 @@ class SuiteService:
         suites = await self._repository.list_suites()
         suites.sort(key=lambda suite: suite.requested_at, reverse=True)
         return [self._summarize_suite(suite) for suite in suites[:limit]]
+
+    async def reconcile_interrupted_suites(self) -> int:
+        """재기동 시 비종료 상태로 남은 Suite 를 CANCELLED 로 정리한다.
+
+        ``RunService.reconcile_interrupted_runs`` 와 같은 이유로, 영속 저장소에서 복원된
+        진행 중 Suite 는 이어받을 수 없으므로 종료로 봉인한다(인메모리에서는 no-op).
+        """
+        active = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
+        count = 0
+        for suite in await self._repository.list_suites():
+            if suite.status not in active:
+                continue
+            suite.status = SuiteStatus.CANCELLED
+            suite.ended_at = suite.ended_at or datetime.now(UTC)
+            suite.active_run_id = None
+            suite.awaiting_input_run_id = None
+            suite.awaiting_input_prompt = None
+            for step in suite.steps:
+                if step.status in active:
+                    step.status = SuiteStatus.CANCELLED
+            await self._repository.save_suite(suite)
+            count += 1
+        return count
 
     @staticmethod
     def _summarize_suite(suite: SuiteRun) -> dict:

@@ -33,7 +33,7 @@ Browser
   -> FastAPI app
       -> RunService
           -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml)
-          -> InMemoryRunRepository
+          -> RunRepositoryPort        (기본 SqliteRunRepository: SQLite 영속 / InMemory 대체 가능)
           -> WorkflowExecutor         (execution_mode -> RepHomepageExecutor(+ChannelProfile) / access_common executor)
               -> Shared Playwright browser session
                   -> Channel step adapters (app/systems/{code}/steps/*.py)
@@ -43,7 +43,7 @@ Browser
   -> FastAPI app
       -> SuiteService
           -> RunService (시스템별 Run 순차 생성·대기)
-          -> InMemorySuiteRepository
+          -> SuiteRepositoryPort (기본 SqliteSuiteRepository: SQLite 영속)
 
 FastAPI app
   -> HTML routes (/, /runs/{id}, /suites/{id})
@@ -164,9 +164,15 @@ e2eTester/
       hwtc/
       chbot/
     storage/
-      run_repository.py
-      schedule_repository.py
-      suite_repository.py
+      ports.py                   # 저장소 포트(Protocol): Run/Suite/Schedule RepositoryPort
+      sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
+      listener_registry.py       # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
+      sqlite_run_repository.py   # SQLite Run 어댑터(기본 사용)
+      sqlite_suite_repository.py # SQLite Suite 어댑터(기본 사용)
+      sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
+      run_repository.py          # 인메모리 Run 어댑터(테스트·영속 불요용)
+      schedule_repository.py     # 인메모리 예약 어댑터
+      suite_repository.py        # 인메모리 Suite 어댑터
     web/
       templates/
         base.html
@@ -425,21 +431,27 @@ manifest 에 들어 있는 정보:
 
 ### 5.6 Storage 계층
 
+저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`SuiteRepositoryPort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다.
+
 현재 구현:
 
-- `app/storage/run_repository.py`
-- `app/storage/suite_repository.py`
+- `app/storage/ports.py` — 저장소 포트(Protocol) 정의
+- `app/storage/sqlite_support.py` — `JsonTableStore`(stdlib `sqlite3` + `asyncio.to_thread`, JSON blob 테이블) · `DEFAULT_DB_PATH`
+- `app/storage/listener_registry.py` — `ListenerRegistry`(run_id/suite_id 별 WebSocket 리스너 큐, 프로세스-로컬 휘발성)
+- `app/storage/sqlite_run_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 사용되는 SQLite 어댑터**(`app/main.py` 에서 주입)
+- `app/storage/run_repository.py` / `suite_repository.py` / `schedule_repository.py` — 인메모리 어댑터(단위 테스트·영속 불요 실행용)
 
 역할:
 
-- Run / Suite 객체 저장
-- 모듈 로그 저장
-- WebSocket listener 큐 관리
+- Run / Suite / 예약(Schedule) 객체 저장 (Pydantic 모델을 JSON 으로 직렬화해 `id` PK 테이블에 저장)
+- 모듈 로그의 라인 버퍼 관리(실행 중 휘발성)
+- WebSocket listener 큐 관리(프로세스-로컬 휘발성)
 
-제약:
+특징과 제약:
 
-- 메모리 기반 저장소다.
-- 서버 재시작 시 Run, Suite, 로그, OTP 대기 상태가 모두 사라진다.
+- **영속:** Run/Suite/예약 본체는 SQLite 파일(`E2E_DB_PATH`, 기본 `data/e2etester.db`)에 저장돼 서버 재시작 후에도 이력·상태·예약이 남는다.
+- **휘발:** 실시간 로그 라인 버퍼와 WebSocket 리스너 큐는 살아있는 연결/실행에 묶인 프로세스-로컬 상태라 영속화하지 않는다. 완료된 모듈의 로그는 모듈 종료 시 `module.logs` 로 복사되어 Run JSON 안에 함께 영속된다.
+- **재기동 정리:** 서버가 내려갈 때 진행 중이던 Run/Suite(RUNNING·WAITING_INPUT)는 브라우저 세션·OTP 핸들이 사라져 이어받을 수 없으므로, 기동 시 `RunService.reconcile_interrupted_runs`/`SuiteService.reconcile_interrupted_suites` 가 이를 `CANCELLED` 로 봉인한다(인메모리 어댑터에서는 복원될 대상이 없어 no-op). 과거로 밀린 예약은 `SchedulerService` 가 다음 cron 시각으로 재계산해 시작 직후 일괄 실행을 막는다.
 
 ### 5.7 AI 실패 분석 계층
 
@@ -493,7 +505,7 @@ manifest 에 들어 있는 정보:
 
 - `app/scheduling/cron.py` — 외부 의존성 없는 최소 cron(5필드 `분 시 일 월 요일`) 파서·다음 실행 시각 계산기. `* , - /` 와 요일 0/7(일요일)을 지원하고, 일·요일이 모두 제한되면 둘 중 하나만 맞아도 실행하는 표준 cron 규칙을 따른다.
 - `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
-- `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 메모리 기반 예약 저장소(RunRepository 와 동일하게 재시작 시 사라짐).
+- `app/storage/sqlite_schedule_repository.py` (`SqliteScheduleRepository`, 기본 사용) / `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 예약 저장소. SQLite 어댑터는 `ScheduleRepositoryPort` 를 구현해 재시작 후에도 예약이 남는다.
 - `app/api/routes_schedules.py` — 예약 REST API.
 
 역할:
@@ -508,7 +520,7 @@ manifest 에 들어 있는 정보:
 
 제약:
 
-- 예약과 비교 기준선 모두 메모리 기반이므로 서버 재시작 시 사라진다(영구 저장소 도입 시 함께 개선 대상).
+- 예약은 SQLite 에 영속되어 재시작 후에도 남는다. 비교 기준선은 같은 시스템의 직전 종료 Run(역시 영속) 을 조회해 계산하므로, 재시작 후에도 이력만 있으면 정상 동작한다. 단, 서버 다운 중 지나간 예약은 catch-up 하지 않고 다음 cron 시각으로 미룬다.
 - 예약 실행은 무인 실행이라, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가 포함되면 해당 Run/Suite 는 `WAITING_INPUT` 에서 멈출 수 있다.
 - 입력값(`input_data`, `suite_systems`)은 PII 를 포함할 수 있어 예약 요약(API/UI)에는 직렬화하지 않는다. Suite 예약 요약에는 `selected_system_count`, `step_total` 등 선택 시스템 수만 노출한다.
 
@@ -629,7 +641,7 @@ Suite (`/ws/suites/{suite_id}`):
 
 ### 10.1 아직 구현되지 않은 것
 
-- SQLite 또는 Postgres 기반 영구 저장소
+- Postgres 등 다중 프로세스/원격 영구 저장소 (SQLite 단일 파일 영속은 **구현됨** — 포트로 분리돼 있어 어댑터만 추가하면 됨)
 - 별도 worker process (단, `ExecutionGateway` 포트로 **교체 지점은 이미 마련됨** — `LocalExecutionGateway` 를 out-of-process 구현체로 바꾸면 됨)
 - Playwright MCP 게이트웨이 구현체 (포트는 `ExecutionGateway` 로 이미 존재)
 - `ModuleContext`, `ModuleResult` 표준화
@@ -645,6 +657,7 @@ Suite (`/ws/suites/{suite_id}`):
 - 모듈별 노드 대시보드
 - 실시간 이벤트 스트림
 - 아티팩트 분리 저장
+- **저장소 포트-어댑터 분리 + SQLite 영속** (`app/storage/ports.py` + `Sqlite*Repository`; Run/Suite/예약이 재시작 후에도 유지, 진행 중 실행은 기동 시 정리)
 - 모놀리식 스크립트의 단계 모듈 분리
 - 로그인 세션 공유형 워크플로우
 - **오케스트레이션 ↔ 브라우저 실행 분리** (`ExecutionGateway` 포트 + `LocalExecutionGateway` 어댑터; 워커 경계의 in-process 구현)
@@ -670,11 +683,11 @@ Suite (`/ws/suites/{suite_id}`):
 - 계약목록·계약상세 조회 selector 보강
 - 실패 시 디버그 아티팩트 확장 (`trace.zip`, `dom.html` 등)
 
-### Phase 2. 저장소와 실행 모델 개선
+### Phase 2. 저장소와 실행 모델 개선 — (대부분 완료)
 
-- `InMemoryRunRepository` 를 SQLite 기반으로 교체
-- OTP 대기 상태를 영구 저장
-- 서버 재시작 복구 시나리오 고려
+- ✅ 저장소 포트(`app/storage/ports.py`) 도입 + `InMemory*Repository` 를 `Sqlite*Repository`(SQLite 영속)로 교체
+- ✅ 서버 재시작 복구 시나리오: 진행 중 Run/Suite 는 기동 시 `CANCELLED` 로 봉인, 과거 예약은 다음 cron 시각으로 재계산
+- 남은 작업: OTP 대기 상태는 살아있는 브라우저 세션에 묶여 영구 저장으로 이어받을 수 없음(재실행으로 대체). 다중 프로세스가 필요하면 Postgres 어댑터 추가
 
 ### Phase 3. 런타임 추상화 — (대부분 완료)
 
@@ -711,7 +724,7 @@ Backend
   -> Module Registry
 ```
 
-> **진행 상태:** 위 목표 중 `Run Orchestrator → BrowserGateway → Browser` 경계는 이미 `ExecutionGateway` 포트(+`LocalExecutionGateway`)로 구현되었고, `Worker Process` 만 아직 in-process 다(동일 포트로 교체 가능). 부수 관심사 분리(`EventBus`)도 완료. 남은 큰 축은 `Persistent Run State Store`(영속 저장소)와 out-of-process 워커다.
+> **진행 상태:** 위 목표 중 `Run Orchestrator → BrowserGateway → Browser` 경계는 이미 `ExecutionGateway` 포트(+`LocalExecutionGateway`)로 구현되었고, `Worker Process` 만 아직 in-process 다(동일 포트로 교체 가능). 부수 관심사 분리(`EventBus`)도 완료. `Persistent Run State Store` 도 저장소 포트(`app/storage/ports.py`) + SQLite 어댑터로 구현됐다(단일 파일; 다중 프로세스용 원격 저장소는 어댑터 추가로 확장). 남은 큰 축은 out-of-process 워커다.
 
 이 목표 구조로 가면 아래가 가능해진다.
 

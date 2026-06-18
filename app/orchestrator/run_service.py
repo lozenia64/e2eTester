@@ -14,7 +14,7 @@ from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
-from app.storage.run_repository import InMemoryRunRepository
+from app.storage.ports import RunRepositoryPort
 
 
 @dataclass
@@ -38,7 +38,7 @@ class RunService:
     def __init__(
         self,
         registry: ModuleRegistry,
-        repository: InMemoryRunRepository,
+        repository: RunRepositoryPort,
         execution_gateway: ExecutionGateway,
         event_bus: EventBus,
         comparator: RunComparator | None = None,
@@ -73,6 +73,37 @@ class RunService:
         runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
         return [summarize_run(run) for run in runs[:limit]]
+
+    async def reconcile_interrupted_runs(self) -> int:
+        """재기동 시 비종료 상태로 남은 Run 을 CANCELLED 로 정리한다.
+
+        영속 저장소(SQLite)를 쓰면 서버가 내려갈 때 RUNNING/WAITING_INPUT 이던 Run 이
+        그대로 복원된다. 하지만 그 Run 이 쓰던 브라우저 세션·OTP 대기 핸들은 프로세스와 함께
+        사라졌으므로 이어받을 수 없다. 좀비 상태를 막기 위해 종료로 봉인한다(필요하면 사용자가
+        ``rerun`` 으로 다시 실행). 인메모리 저장소에서는 복원될 Run 이 없어 no-op 이다.
+        """
+        active = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+        active_modules = {
+            ModuleStatus.PENDING,
+            ModuleStatus.QUEUED,
+            ModuleStatus.RUNNING,
+            ModuleStatus.WAITING_INPUT,
+        }
+        count = 0
+        for run in await self._repository.list_runs():
+            if run.status not in active:
+                continue
+            run.status = RunStatus.CANCELLED
+            run.ended_at = run.ended_at or datetime.now(UTC)
+            run.awaiting_input_module_id = None
+            run.awaiting_input_prompt = None
+            for module in run.modules:
+                if module.status in active_modules:
+                    module.status = ModuleStatus.CANCELLED
+                    module.message = "서버 재시작으로 중단됨"
+            await self._repository.save_run(run)
+            count += 1
+        return count
 
     async def subscribe(self, run_id: str):
         return await self._repository.subscribe(run_id)
