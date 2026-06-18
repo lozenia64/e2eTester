@@ -124,8 +124,10 @@ class SchedulerService:
         await self._repository.save(schedule)
         return schedule
 
-    async def list_schedules(self) -> list[dict]:
+    async def list_schedules(self, user_id: str | None = None) -> list[dict]:
         schedules = sorted(await self._repository.list(), key=lambda item: item.created_at, reverse=True)
+        if user_id is not None:
+            schedules = [schedule for schedule in schedules if schedule.created_by_user_id == user_id]
         summaries: list[dict] = []
         for schedule in schedules:
             await self._refresh_last_execution_status(schedule)
