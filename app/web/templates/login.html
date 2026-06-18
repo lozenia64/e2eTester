@@ -21,9 +21,10 @@
         </div>
 
         {% if request.query_params.get('error') %}
-        <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div id="error-banner" class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             이메일 또는 비밀번호가 올바르지 않습니다.
         </div>
+        <script>history.replaceState(null, '', '/login');</script>
         {% endif %}
 
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 px-6 py-8">
