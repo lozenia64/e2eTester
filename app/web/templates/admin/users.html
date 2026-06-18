@@ -129,9 +129,21 @@ function renderUsers() {
             <td class="px-4 py-3 flex flex-wrap gap-2">
                 <button onclick="toggleActive('${u.user_id}', ${!u.is_active})" class="text-xs text-indigo-600 hover:underline">${toggleLabel}</button>
                 <button onclick="openSystemsModal('${u.user_id}')" class="text-xs text-green-600 hover:underline">시스템 관리</button>
+                <button onclick="deleteUser('${u.user_id}', '${u.name}')" class="text-xs text-red-500 hover:underline">삭제</button>
             </td>
         </tr>`;
     }).join('');
+}
+
+async function deleteUser(userId, userName) {
+    if (!confirm(`'${userName}' 사용자를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    if (res.ok) {
+        await loadUsers();
+    } else {
+        const data = await res.json();
+        alert(data.detail || '삭제 중 오류가 발생했습니다.');
+    }
 }
 
 async function toggleActive(userId, isActive) {
