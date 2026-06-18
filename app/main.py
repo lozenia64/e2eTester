@@ -8,6 +8,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.auth.router import router as auth_router
+from app.auth.service import UserService
+from app.storage.sqlite_user_repository import SqliteUserRepository
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_schedules import router as schedules_router
@@ -41,6 +44,14 @@ async def lifespan(app: FastAPI):
     registry = ModuleRegistry()
     # 영속 저장소(SQLite): Run/Suite/예약이 서버 재시작 후에도 남는다. 경로는 E2E_DB_PATH.
     db_path = os.getenv("E2E_DB_PATH", DEFAULT_DB_PATH)
+
+    user_repository = SqliteUserRepository(db_path)
+    user_service = UserService(user_repository)
+    app.state.user_service = user_service
+    admin_email = os.getenv("E2E_ADMIN_EMAIL", "admin@example.com")
+    admin_password = os.getenv("E2E_ADMIN_PASSWORD", "admin1234")
+    await user_service.seed_admin(admin_email, admin_password)
+
     repository = SqliteRunRepository(db_path)
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
@@ -102,6 +113,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
 app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
+app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
