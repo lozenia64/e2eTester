@@ -267,6 +267,15 @@ e2eTester/
 - `DELETE /api/schedules/{schedule_id}` (예약 삭제)
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
+- `GET /api/admin/runs` (전체 Run 목록, admin 전용)
+- `GET /api/admin/stats/usage` (사용자·시스템별 사용량 통계, admin 전용)
+- `GET /api/admin/users` (사용자 목록, admin 전용)
+- `POST /api/admin/users` (사용자 생성, admin 전용)
+- `PATCH /api/admin/users/{user_id}/active` (활성/비활성 전환, admin 전용)
+- `DELETE /api/admin/users/{user_id}` (사용자 삭제, admin 전용)
+- `GET /admin` (관리자 대시보드 HTML)
+- `GET /admin/users` (사용자 관리 HTML)
+- `GET /admin/stats` (사용량 통계 HTML)
 
 역할:
 

@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.auth.router import router as auth_router
 from app.auth.service import UserService
 from app.storage.sqlite_user_repository import SqliteUserRepository
+from app.api.routes_admin import router as admin_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_schedules import router as schedules_router
@@ -25,6 +26,7 @@ from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.execution.local_gateway import LocalExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
+from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
@@ -82,6 +84,11 @@ async def lifespan(app: FastAPI):
     )
     app.state.run_service = run_service
     app.state.suite_service = suite_service
+    app.state.stats_service = StatsService(
+        run_repo=repository,
+        suite_repo=suite_repository,
+        registry=registry,
+    )
 
     # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.
     interrupted_runs = await run_service.reconcile_interrupted_runs()
@@ -114,6 +121,7 @@ app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
 app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(dashboard_router)
 app.include_router(systems_router)
 app.include_router(runs_router)

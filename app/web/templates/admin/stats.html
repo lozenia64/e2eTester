@@ -1,0 +1,158 @@
+{% extends "admin/base.html" %}
+{% block title %}사용량 통계{% endblock %}
+{% block nav_stats %}bg-red-50 text-red-700 font-semibold{% endblock %}
+
+{% block content %}
+<div>
+    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">사용량 통계</h1>
+    <p class="mt-1.5 text-sm text-gray-500">기간별 사용자·시스템 단위 Run 집계입니다.</p>
+</div>
+
+<!-- 기간 필터 -->
+<div class="flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">시작일</label>
+        <input id="filter-from" type="datetime-local" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">종료일</label>
+        <input id="filter-to" type="datetime-local" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <button id="btn-load" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
+    <button id="btn-reset" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
+    <span id="stats-meta" class="text-xs text-gray-400 ml-auto"></span>
+</div>
+
+<!-- 요약 카드 -->
+<div class="grid gap-3 md:grid-cols-3">
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">전체 Run</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-runs">—</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">활성 사용자</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-users">—</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">통과 모듈</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-passed">—</p>
+    </div>
+</div>
+
+<!-- 사용자별 통계 -->
+<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div class="border-b border-gray-100 px-6 py-4">
+        <h2 class="text-sm font-semibold text-gray-900">사용자별 통계</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">이름</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Run 수</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
+                </tr>
+            </thead>
+            <tbody id="user-stats-tbody" class="divide-y divide-gray-100">
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 시스템별 통계 -->
+<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div class="border-b border-gray-100 px-6 py-4">
+        <h2 class="text-sm font-semibold text-gray-900">시스템별 통계</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">시스템</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Run 수</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
+                </tr>
+            </thead>
+            <tbody id="sys-stats-tbody" class="divide-y divide-gray-100">
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function fmtDuration(ms) {
+    if (!ms) return '—';
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}초`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}분 ${rem}초`;
+}
+
+async function loadStats() {
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    const params = new URLSearchParams();
+    if (from) params.set('from', new Date(from).toISOString());
+    if (to) params.set('to', new Date(to).toISOString());
+    const res = await fetch('/api/admin/stats/usage?' + params.toString());
+    if (!res.ok) {
+        alert('통계 조회에 실패했습니다.');
+        return;
+    }
+    const data = await res.json();
+
+    document.getElementById('stat-total-runs').textContent = data.total_runs;
+    document.getElementById('stat-total-users').textContent = data.total_users;
+    const totalPassed = (data.by_system || []).reduce((s, x) => s + x.modules_passed, 0);
+    document.getElementById('stat-total-passed').textContent = totalPassed;
+
+    const gen = data.generated_at ? new Date(data.generated_at).toLocaleString('ko-KR') : '';
+    document.getElementById('stats-meta').textContent = gen ? `생성: ${gen}` : '';
+
+    const userTbody = document.getElementById('user-stats-tbody');
+    if (!data.by_user || data.by_user.length === 0) {
+        userTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
+    } else {
+        userTbody.innerHTML = data.by_user.map(u => `<tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 font-medium">${u.user_name || '(시스템)'}</td>
+            <td class="px-4 py-3 text-right">${u.total_runs}</td>
+            <td class="px-4 py-3 text-right text-green-700">${u.total_modules_passed}</td>
+            <td class="px-4 py-3 text-right text-red-600">${u.total_modules_failed}</td>
+            <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(u.total_duration_ms)}</td>
+        </tr>`).join('');
+    }
+
+    const sysTbody = document.getElementById('sys-stats-tbody');
+    if (!data.by_system || data.by_system.length === 0) {
+        sysTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
+    } else {
+        sysTbody.innerHTML = data.by_system.map(s => `<tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 font-medium">${s.system_name}</td>
+            <td class="px-4 py-3 text-right">${s.runs}</td>
+            <td class="px-4 py-3 text-right text-green-700">${s.modules_passed}</td>
+            <td class="px-4 py-3 text-right text-red-600">${s.modules_failed}</td>
+            <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(s.total_duration_ms)}</td>
+        </tr>`).join('');
+    }
+}
+
+document.getElementById('btn-load').addEventListener('click', loadStats);
+document.getElementById('btn-reset').addEventListener('click', () => {
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    loadStats();
+});
+
+loadStats();
+</script>
+{% endblock %}
