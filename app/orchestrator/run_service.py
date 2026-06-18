@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
@@ -15,6 +16,9 @@ from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import RunRepositoryPort
+
+if TYPE_CHECKING:
+    from app.orchestrator.run_actor import ActorContext
 
 
 @dataclass
@@ -69,13 +73,18 @@ class RunService:
     async def get_run(self, run_id: str) -> Run:
         return await self._repository.get_run(run_id)
 
-    async def list_run_summaries(self, limit: int = 50, user_id: str | None = None) -> list[dict]:
+    async def list_run_summaries(
+        self,
+        limit: int = 50,
+        user_id: str | None = None,
+        actor_context: ActorContext | None = None,
+    ) -> list[dict]:
         if user_id is not None:
             runs = await self._repository.list_runs_by_user(user_id)
         else:
             runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
-        return [summarize_run(run) for run in runs[:limit]]
+        return [summarize_run(run, actor_context=actor_context) for run in runs[:limit]]
 
     async def reconcile_interrupted_runs(self) -> int:
         """재기동 시 비종료 상태로 남은 Run 을 CANCELLED 로 정리한다.
@@ -200,13 +209,24 @@ class RunService:
         # 협력적으로 중단한다. (진행 중인 단계는 끝나거나 timeout 된 뒤 중단된다.)
         return run
 
-    async def rerun_run(self, run_id: str) -> Run:
+    async def rerun_run(
+        self,
+        run_id: str,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Run:
         original = await self._repository.get_run(run_id)
         stored_input = self._run_inputs.get(run_id)
         if stored_input is None:
             raise ValueError("재실행에 필요한 입력 정보를 찾을 수 없습니다. 홈에서 새로 실행해 주세요.")
         selected_module_ids = list(original.selected_module_ids) or None
-        return await self.start_run(original.system_code, dict(stored_input), selected_module_ids)
+        return await self.start_run(
+            original.system_code,
+            dict(stored_input),
+            selected_module_ids,
+            user_id=user_id or original.created_by_user_id,
+            user_name=user_name or original.created_by_user_name,
+        )
 
     # --- 실행 루프(상태머신) ----------------------------------------------
 

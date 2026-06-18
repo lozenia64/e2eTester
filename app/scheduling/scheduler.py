@@ -60,7 +60,13 @@ class SchedulerService:
 
     # --- CRUD -------------------------------------------------------------
 
-    async def create_schedule(self, system_code: str, request: CreateScheduleRequest) -> Schedule:
+    async def create_schedule(
+        self,
+        system_code: str,
+        request: CreateScheduleRequest,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Schedule:
         system = self._run_service.get_system(system_code)  # KeyError -> 404
         parse_cron(request.cron)  # ValueError -> 400
         sanitized_input, resolved_module_ids = self._run_service.validate_run_request(
@@ -79,11 +85,18 @@ class SchedulerService:
             selected_module_ids=resolved_module_ids,
             created_at=datetime.now(UTC),
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
+            created_by_user_id=user_id,
+            created_by_user_name=user_name,
         )
         await self._repository.save(schedule)
         return schedule
 
-    async def create_suite_schedule(self, request: CreateSuiteScheduleRequest) -> Schedule:
+    async def create_suite_schedule(
+        self,
+        request: CreateSuiteScheduleRequest,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Schedule:
         parse_cron(request.cron)  # ValueError -> 400
         browser_mode, normalized_systems, resolved_system_codes = self._suite_service.validate_suite_request(
             request.browser_mode,
@@ -105,6 +118,8 @@ class SchedulerService:
             step_total=len(resolved_system_codes),
             created_at=datetime.now(UTC),
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
+            created_by_user_id=user_id,
+            created_by_user_name=user_name,
         )
         await self._repository.save(schedule)
         return schedule
@@ -132,17 +147,22 @@ class SchedulerService:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         return await self.set_enabled(schedule_id, not schedule.enabled)
 
-    async def run_now(self, schedule_id: str) -> dict:
+    async def run_now(
+        self,
+        schedule_id: str,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> dict:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         if schedule.schedule_kind == "suite":
-            suite = await self._trigger_suite(schedule)
+            suite = await self._trigger_suite(schedule, user_id=user_id, user_name=user_name)
             await self._repository.save(schedule)
             return {
                 "schedule_kind": "suite",
                 "suite_id": suite.suite_id,
                 "status": suite.status.value,
             }
-        run = await self._trigger_run(schedule)
+        run = await self._trigger_run(schedule, user_id=user_id, user_name=user_name)
         await self._repository.save(schedule)
         payload = run.model_dump(mode="json")
         payload["schedule_kind"] = "system"
@@ -210,20 +230,38 @@ class SchedulerService:
         schedule.next_run_at = self._next_run_from_now(schedule.cron)
         await self._repository.save(schedule)
 
-    async def _trigger_run(self, schedule: Schedule) -> Run:
+    async def _trigger_run(
+        self,
+        schedule: Schedule,
+        *,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Run:
+        actor_id = user_id or schedule.created_by_user_id
+        actor_name = user_name or schedule.created_by_user_name
         run = await self._run_service.start_run(
             schedule.system_code,
             dict(schedule.input_data),
             list(schedule.selected_module_ids) if schedule.selected_module_ids is not None else None,
             triggered_by="schedule",
             schedule_id=schedule.schedule_id,
+            user_id=actor_id,
+            user_name=actor_name,
         )
         schedule.last_run_id = run.run_id
         schedule.last_run_at = datetime.now(UTC)
         schedule.last_run_status = run.status
         return run
 
-    async def _trigger_suite(self, schedule: Schedule) -> SuiteRun:
+    async def _trigger_suite(
+        self,
+        schedule: Schedule,
+        *,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> SuiteRun:
+        actor_id = user_id or schedule.created_by_user_id
+        actor_name = user_name or schedule.created_by_user_name
         suite = await self._suite_service.start_suite(
             StartSuiteRequest(
                 browser_mode=schedule.browser_mode or "headed",
@@ -231,7 +269,9 @@ class SchedulerService:
                 selected_system_codes=list(schedule.selected_system_codes)
                 if schedule.selected_system_codes is not None
                 else None,
-            )
+            ),
+            user_id=actor_id,
+            user_name=actor_name,
         )
         schedule.last_suite_id = suite.suite_id
         schedule.last_run_at = datetime.now(UTC)

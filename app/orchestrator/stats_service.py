@@ -5,10 +5,12 @@ from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
 from app.core.models import UsageStats, UserUsageStat, SystemUsageStat
-from app.storage.ports import RunRepositoryPort, SuiteRepositoryPort
+from app.orchestrator.run_actor import load_actor_context
+from app.storage.ports import RunRepositoryPort, ScheduleRepositoryPort, SuiteRepositoryPort
 from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
 
 if TYPE_CHECKING:
+    from app.auth.service import UserService
     from app.registry.loader import ModuleRegistry
 
 
@@ -19,11 +21,15 @@ class StatsService:
         suite_repo: SuiteRepositoryPort,
         registry: "ModuleRegistry",
         module_settings_repo: ModuleSettingsRepositoryPort | None = None,
+        user_service: UserService | None = None,
+        schedule_repo: ScheduleRepositoryPort | None = None,
     ) -> None:
         self._run_repo = run_repo
         self._suite_repo = suite_repo
         self._registry = registry
         self._module_settings_repo = module_settings_repo
+        self._user_service = user_service
+        self._schedule_repo = schedule_repo
 
     async def get_usage_stats(
         self,
@@ -56,6 +62,14 @@ class StatsService:
                     sys_code = parts[0]
                     if sys_code in module_seconds:
                         module_seconds[sys_code][override.module_id] = override.estimated_manual_seconds
+
+        actor_context = None
+        if self._user_service is not None and self._schedule_repo is not None:
+            actor_context = await load_actor_context(
+                self._user_service,
+                self._suite_repo,
+                self._schedule_repo,
+            )
 
         for run in all_runs:
             passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
@@ -90,11 +104,18 @@ class StatsService:
             })
 
             uid = run.created_by_user_id
+            user_name = run.created_by_user_name
+            email = None
+            if actor_context is not None:
+                uid, user_name = actor_context.resolve(run)
+                if uid and uid in actor_context.users_by_id:
+                    _name, email = actor_context.users_by_id[uid]
+
             if uid not in user_map:
                 user_map[uid] = UserUsageStat(
                     user_id=uid,
-                    user_name=run.created_by_user_name,
-                    email=None,
+                    user_name=user_name,
+                    email=email,
                     total_runs=0,
                     total_modules_passed=0,
                     total_modules_failed=0,

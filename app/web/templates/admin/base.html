@@ -54,6 +54,7 @@
             </a>
             {% if current_user %}
             <p class="text-xs text-gray-500">{{ current_user.name }}</p>
+            <a href="/account/password" class="block text-xs text-gray-600 hover:text-gray-900">비밀번호 변경</a>
             <form method="post" action="/auth/logout">
                 <button type="submit" class="text-xs text-gray-400 hover:text-gray-700">로그아웃</button>
             </form>

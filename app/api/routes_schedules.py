@@ -23,7 +23,12 @@ async def create_schedule(
     current_user: User = Depends(require_admin),
 ):
     try:
-        schedule = await request.app.state.schedule_service.create_schedule(system_code, payload)
+        schedule = await request.app.state.schedule_service.create_schedule(
+            system_code,
+            payload,
+            user_id=current_user.user_id,
+            user_name=current_user.name,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="System not found") from exc
     except ValueError as exc:
@@ -38,7 +43,11 @@ async def create_suite_schedule(
     current_user: User = Depends(require_admin),
 ):
     try:
-        schedule = await request.app.state.schedule_service.create_suite_schedule(payload)
+        schedule = await request.app.state.schedule_service.create_suite_schedule(
+            payload,
+            user_id=current_user.user_id,
+            user_name=current_user.name,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return schedule.to_summary()
@@ -66,7 +75,11 @@ async def run_schedule_now(
     current_user: User = Depends(require_admin),
 ):
     try:
-        result = await request.app.state.schedule_service.run_now(schedule_id)
+        result = await request.app.state.schedule_service.run_now(
+            schedule_id,
+            user_id=current_user.user_id,
+            user_name=current_user.name,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Schedule not found") from exc
     except ValueError as exc:

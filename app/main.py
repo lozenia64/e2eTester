@@ -54,8 +54,7 @@ async def lifespan(app: FastAPI):
     user_service = UserService(user_repository)
     app.state.user_service = user_service
     admin_email = resolve_env_value("E2E_ADMIN_EMAIL", dotenv) or "admin@example.com"
-    admin_password = resolve_env_value("E2E_ADMIN_PASSWORD", dotenv) or "admin1234"
-    await user_service.seed_admin(admin_email, admin_password)
+    await user_service.seed_admin(admin_email)
 
     repository = SqliteRunRepository(db_path)
     artifact_manager = ArtifactManager()
@@ -90,11 +89,14 @@ async def lifespan(app: FastAPI):
     )
     app.state.run_service = run_service
     app.state.suite_service = suite_service
+    schedule_repository = SqliteScheduleRepository(db_path)
     app.state.stats_service = StatsService(
         run_repo=repository,
         suite_repo=suite_repository,
         registry=registry,
         module_settings_repo=module_settings_repository,
+        user_service=user_service,
+        schedule_repo=schedule_repository,
     )
 
     # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.
@@ -109,7 +111,7 @@ async def lifespan(app: FastAPI):
     scheduler = SchedulerService(
         run_service=run_service,
         suite_service=suite_service,
-        repository=SqliteScheduleRepository(db_path),
+        repository=schedule_repository,
     )
     app.state.schedule_service = scheduler
     scheduler_task = asyncio.create_task(scheduler.run_forever())

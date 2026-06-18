@@ -73,10 +73,31 @@ class UserService:
         await self._repo.get(user_id)
         await self._repo.delete(user_id)
 
-    async def seed_admin(self, email: str, password: str, name: str = "관리자") -> None:
+    async def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
+        from fastapi import HTTPException, status
+
+        if len(new_password) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="새 비밀번호는 8자 이상이어야 합니다.",
+            )
+        user = await self._repo.get(user_id)
+        if not _verify_password(current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="현재 비밀번호가 올바르지 않습니다.",
+            )
+        updated = user.model_copy(update={"hashed_password": _hash_password(new_password)})
+        await self._repo.save(updated)
+
+    async def seed_admin(self, email: str, name: str = "관리자") -> None:
         existing = await self._repo.get_by_email(email)
         if existing is not None:
             return
-        req = CreateUserRequest(email=email, name=name, password=password, role="admin")
+        initial_password = secrets.token_urlsafe(12)
+        req = CreateUserRequest(email=email, name=name, password=initial_password, role="admin")
         await self.create_user(req)
-        print(f"[auth] 관리자 계정 생성: {email}")
+        print(
+            f"[auth] 관리자 계정 최초 생성: {email} — "
+            f"초기 비밀번호: {initial_password} (로그인 후 반드시 변경하세요)"
+        )

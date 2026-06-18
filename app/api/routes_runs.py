@@ -76,7 +76,11 @@ async def rerun_run(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        run = await request.app.state.run_service.rerun_run(run_id)
+        run = await request.app.state.run_service.rerun_run(
+            run_id,
+            user_id=current_user.user_id,
+            user_name=current_user.name,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     except ValueError as exc:

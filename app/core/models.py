@@ -161,6 +161,8 @@ class Schedule(BaseModel):
     last_run_status: RunStatus | None = None
     last_suite_id: str | None = None
     last_suite_status: SuiteStatus | None = None
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
 
     def to_summary(self) -> dict:
         """API/UI 노출용 요약. input_data 는 PII 가 있을 수 있어 직렬화하지 않는다."""
