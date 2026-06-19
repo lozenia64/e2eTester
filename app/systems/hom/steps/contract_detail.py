@@ -31,6 +31,7 @@ def _ensure_contract_list_context(page, timeout_ms: int) -> None:
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
     common.maybe_close_post_login_popup(page, timeout_ms)
+    contract_list.assert_inquiry_page_available(page, context="계약상세 조회")
     print(f"[wait] End URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT}")
 
 

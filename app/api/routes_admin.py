@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 async def admin_list_runs(
     request: Request,
     limit: int = Query(default=100, ge=1, le=1000),
+    system_code: str | None = Query(default=None),
+    user_name: str | None = Query(default=None),
     current_user: User = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     actor_context = await load_actor_context(
@@ -29,9 +31,26 @@ async def admin_list_runs(
     )
     summaries = await request.app.state.run_service.list_run_summaries(
         limit=limit,
+        system_code=system_code,
+        user_name_query=user_name,
         actor_context=actor_context,
     )
     return summaries
+
+
+@router.delete("/runs/{run_id}")
+async def admin_delete_run(
+    request: Request,
+    run_id: str,
+    current_user: User = Depends(require_admin),
+) -> dict[str, bool]:
+    try:
+        await request.app.state.run_service.delete_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run을 찾을 수 없습니다.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @router.get("/stats/usage")

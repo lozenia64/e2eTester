@@ -269,7 +269,8 @@ e2eTester/
 - `DELETE /api/schedules/{schedule_id}` (예약 삭제)
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
-- `GET /api/admin/runs` (전체 Run 목록, admin 전용)
+- `GET /api/admin/runs` (전체 Run 목록, admin 전용; `system_code`·`user_name` 필터, `limit` 지원)
+- `DELETE /api/admin/runs/{run_id}` (Run 영구 삭제 — DB·로그·아티팩트, admin 전용)
 - `GET /api/admin/stats/usage` (사용자·시스템별 사용량 통계, admin 전용)
 - `GET /api/admin/stats/savings/csv` (절감 시간 통계 CSV 다운로드, admin 전용)
 - `GET /api/admin/systems` (등록 시스템 코드·이름 목록, admin 전용)

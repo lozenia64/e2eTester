@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
         log_store=run_log_store,
         execution_gateway=execution_gateway,
         event_bus=event_bus,
+        artifact_manager=artifact_manager,
     )
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
     app.state.module_settings_repo = module_settings_repository

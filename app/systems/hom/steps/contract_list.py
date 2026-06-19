@@ -7,6 +7,12 @@ from . import login_common as common
 
 CONTRACT_LIST_URL_FRAGMENT = "/fplaza/inquiry/contract01.do"
 CONTRACT_COUNT_PATTERN = re.compile(r"총\s*([0-9,]+)\s*건")
+CONTRACT_DETAIL_LINK_SELECTOR = 'a[href*="contract02"]'
+SERVICE_INTERRUPTION_MARKERS: tuple[str, ...] = (
+    "서비스 이용 안내",
+    "시스템 점검 작업",
+    "연계 서비스 이용이 중단",
+)
 
 
 def _open_myhanwha_menu(page, timeout_ms: int) -> None:
@@ -71,33 +77,64 @@ def _navigate_to_contract_list(page, timeout_ms: int) -> None:
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
     print(f"[wait] End URL contains wait: {CONTRACT_LIST_URL_FRAGMENT} -> {page.url}")
+    assert_inquiry_page_available(page, context="계약목록 조회")
+
+
+def _page_body_text(page) -> str:
+    return page.locator("body").inner_text()
+
+
+def assert_inquiry_page_available(page, *, context: str) -> None:
+    """URL만 맞고 본문이 시스템 점검 안내인 경우를 실패로 처리한다."""
+    body_text = _page_body_text(page)
+    for marker in SERVICE_INTERRUPTION_MARKERS:
+        if marker in body_text:
+            raise RuntimeError(
+                f"{context} 실패: 시스템 점검 안내 페이지가 표시되어 조회를 진행할 수 없습니다. ({marker})"
+            )
+
+
+def _count_contract_detail_links(page) -> int:
+    links = page.locator(CONTRACT_DETAIL_LINK_SELECTOR)
+    visible_count = 0
+    for index in range(links.count()):
+        link = links.nth(index)
+        try:
+            if link.is_visible(timeout=500):
+                visible_count += 1
+        except Exception:
+            continue
+    return visible_count
 
 
 def _read_contract_count(page, timeout_ms: int) -> int:
-    heading_candidates = [
-        page.get_by_role("heading", name=re.compile(r"개인계약조회")),
-        page.get_by_text(re.compile(r"개인계약조회")).first,
-    ]
-    for candidate in heading_candidates:
-        try:
-            common.wait_locator_visible_with_log(candidate, timeout_ms, "Personal contract inquiry heading")
-            break
-        except Exception:
-            continue
-
     for _ in range(5):
-        body_text = page.locator("body").inner_text().replace(",", "")
+        assert_inquiry_page_available(page, context="계약목록 조회")
+
+        heading_candidates = [
+            page.get_by_role("heading", name=re.compile(r"개인계약\s*조회")),
+            page.locator("h1, h2, h3").filter(has_text=re.compile(r"개인계약\s*조회")).first,
+        ]
+        for candidate in heading_candidates:
+            try:
+                common.wait_locator_visible_with_log(candidate, timeout_ms, "Personal contract inquiry heading")
+                break
+            except Exception:
+                continue
+
+        body_text = _page_body_text(page).replace(",", "")
         match = CONTRACT_COUNT_PATTERN.search(body_text)
         if match:
             return int(match.group(1))
+
+        detail_link_count = _count_contract_detail_links(page)
+        if detail_link_count > 0:
+            return detail_link_count
+
         common.wait_timeout_with_log(page, 400, "Wait for contract count text")
 
-    contract_tables = page.locator("table tbody tr")
-    row_count = contract_tables.count()
-    if row_count >= 0:
-        return row_count
-
-    raise RuntimeError("계약목록 건수를 확인하지 못했습니다.")
+    assert_inquiry_page_available(page, context="계약목록 조회")
+    raise RuntimeError("계약목록 건수를 확인하지 못했습니다. (총 N건 문구 또는 계약 상세 링크 없음)")
 
 
 def run(page, config: common.LoginConfig) -> str:

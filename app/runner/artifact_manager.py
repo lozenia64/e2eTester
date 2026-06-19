@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 
@@ -23,6 +24,11 @@ class ArtifactManager:
 
     def relative_path(self, path: Path) -> str:
         return "/" + path.as_posix()
+
+    def delete_run_artifacts(self, run_id: str) -> None:
+        run_dir = self.run_dir(run_id)
+        if run_dir.exists():
+            shutil.rmtree(run_dir)
 
     @staticmethod
     def path_from_relative(relative_path: str) -> Path:
