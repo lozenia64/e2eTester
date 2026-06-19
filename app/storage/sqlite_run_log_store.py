@@ -72,3 +72,11 @@ class SqliteRunLogStore:
         for module_id, line in cursor.fetchall():
             grouped[module_id].append(line)
         return dict(grouped)
+
+    async def delete_by_run_id(self, run_id: str) -> None:
+        async with self._lock:
+            await asyncio.to_thread(self._delete_by_run_id_sync, run_id)
+
+    def _delete_by_run_id_sync(self, run_id: str) -> None:
+        self._conn.execute("DELETE FROM run_logs WHERE run_id = ?", (run_id,))
+        self._conn.commit()

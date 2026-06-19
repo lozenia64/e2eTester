@@ -22,3 +22,27 @@ TARGET_CLAIM_TEXT: Final[str] = CLAIM_CONTENT_TEXT
 
 # 목록 카드/행에 본문이 잘려 표시될 수 있어, 부분 일치 탐색에 쓰는 앞부분 문구.
 TARGET_CLAIM_TEXT_TRUNCATED: Final[str] = "IT직원 테스트입니다. 바로 취소할"
+
+# 카카오 인증: 인증요청 후 카카오톡 앱 인증을 기다리는 시간(ms).
+KAKAO_AUTH_BACKGROUND_WAIT_MS: Final[int] = 30_000
+
+# 카카오 인증: 인증 미완료 시 인증요청 재시도 최대 횟수.
+KAKAO_AUTH_MAX_ATTEMPTS: Final[int] = 3
+
+# 카카오 인증 미완료 알림 문구 매칭용 (공백 무시 후 포함 여부).
+# PC(HOM) 실측: 「카카오 인증이 진행되지 않았습니다」 + 「확인해 주세요」 안내.
+KAKAO_AUTH_INCOMPLETE_DIALOG_MARKERS: Final[tuple[str, ...]] = (
+    "인증이 완료되지 않",
+    "인증이 완료되지않",
+    "인증을 완료하지 않",
+    "인증이 진행되지 않",
+    "카카오 인증이 진행되지",
+)
+
+
+def is_kakao_auth_incomplete_message(message: str) -> bool:
+    normalized = message.strip().replace(" ", "")
+    return any(
+        marker.replace(" ", "") in normalized
+        for marker in KAKAO_AUTH_INCOMPLETE_DIALOG_MARKERS
+    )

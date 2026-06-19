@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import Literal
+
+from app.scenarios.rep_homepage.constants import (
+    KAKAO_AUTH_BACKGROUND_WAIT_MS,
+    KAKAO_AUTH_MAX_ATTEMPTS,
+    is_kakao_auth_incomplete_message,
+)
 
 from . import login_common as common
-
-# 카카오톡에서 사용자 인증을 마칠 시간을 주기 위해 '인증요청' 후 이 시간만큼 대기한 뒤 '인증확인'을 누른다.
-KAKAO_AUTH_BACKGROUND_WAIT_MS = 40_000
 
 LOGIN_TYPE_SELECT_URL_FRAGMENT = "/lin/fid/LginTyp"
 KAKAO_LOGIN_URL_FRAGMENT = "/lin/kct/KakaoWebLgin"
@@ -21,18 +24,17 @@ KAKAO_ENTRY_XPATH = (
     'xpath=//main//span[contains(@class,"cert_select_text") '
     'and contains(normalize-space(.),"카카오")]/ancestor::a[1]'
 )
-KAKAO_REQUEST_ALERT_CONFIRM_SELECTOR = (
+KAKAO_ALERT_CONFIRM_SELECTOR = (
     ".modal.alert.show button.btn.ui_dialog_close, "
-    ".modal.alert.show button:has-text(\"확인\")"
+    ".modal.alert.show button:has-text(\"확인\"), "
+    ".dialog.modal.alert.show button.btn.ui_dialog_close, "
+    ".dialog.modal.alert.show button:has-text(\"확인\")"
 )
-KAKAO_AUTH_CONFIRM_ENABLED_JS = """
-() => {
-    const btn = Array.from(document.querySelectorAll("main button")).find(
-        (element) => /인증\\s*확인|인증확인/.test((element.innerText || "").replace(/\\s+/g, ""))
-    );
-    return Boolean(btn && !btn.disabled);
-}
-"""
+KAKAO_INCOMPLETE_MODAL_SELECTOR = (
+    ".modal.alert.show, .dialog.modal.alert.show, .dialog.modal.show"
+)
+
+KakaoAuthResult = Literal["success", "incomplete", "fatal"]
 
 
 def _kakao_form_root(page):
@@ -143,21 +145,25 @@ def _kakao_auth_confirm_button(root):
     return root.locator('button.btn.s1.c1:has-text("인증확인"), button:has-text("인증확인")').first
 
 
+def _dismiss_visible_alert(page, timeout_ms: int, reason: str) -> None:
+    alert_confirm = page.locator(KAKAO_ALERT_CONFIRM_SELECTOR).first
+    try:
+        common.wait_locator_visible_with_log(alert_confirm, timeout_ms, reason)
+        common.click_with_log(alert_confirm, f"{reason} — 확인")
+        common.wait_function_with_log(
+            page,
+            "() => !document.querySelector('.modal.alert.show, .dialog.modal.alert.show')",
+            min(timeout_ms, common.MAX_TIMEOUT_MS),
+            f"{reason} 닫힘",
+        )
+    except Exception as exc:
+        print(f"[warn] {reason}을 찾지 못했거나 이미 닫힘: {exc}")
+
+
 def dismiss_kakao_auth_request_alert(page, timeout_ms: int) -> None:
     """인증요청 성공 후 뜨는 '카카오인증 요청 메시지가 발송되었습니다' 알림을 닫는다."""
     print("[step] Kakao 인증요청 발송 알림 닫기")
-    alert_confirm = page.locator(KAKAO_REQUEST_ALERT_CONFIRM_SELECTOR).first
-    try:
-        common.wait_locator_visible_with_log(alert_confirm, timeout_ms, "카카오 인증요청 발송 알림")
-        common.click_with_log(alert_confirm, "카카오 인증요청 발송 알림 — 확인")
-        common.wait_function_with_log(
-            page,
-            "() => !document.querySelector('.modal.alert.show')",
-            min(timeout_ms, common.MAX_TIMEOUT_MS),
-            "카카오 인증요청 알림 닫힘",
-        )
-    except Exception as exc:
-        print(f"[warn] 카카오 인증요청 알림을 찾지 못했거나 이미 닫힘: {exc}")
+    _dismiss_visible_alert(page, timeout_ms, "카카오 인증요청 발송 알림")
 
 
 def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int) -> None:
@@ -175,43 +181,97 @@ def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int)
     common.ensure_no_failure_dialogs(dialog_messages, dialog_index, "Kakao verification request")
 
 
-def click_kakao_auth_complete(page, dialog_messages: list[str], timeout_ms: int) -> None:
-    """카카오톡 인증 완료 후 활성화되는 '인증확인'을 눌러 로그인을 마친다."""
+def _find_incomplete_modal_text(page) -> str | None:
+    for modal in page.locator(KAKAO_INCOMPLETE_MODAL_SELECTOR).all():
+        try:
+            if not modal.is_visible(timeout=500):
+                continue
+            text = modal.inner_text(timeout=1000)
+            if is_kakao_auth_incomplete_message(text):
+                return text
+        except Exception:
+            continue
+    return None
+
+
+def _detect_and_dismiss_incomplete_modal(page, timeout_ms: int) -> bool:
+    incomplete_text = _find_incomplete_modal_text(page)
+    if incomplete_text is None:
+        return False
+    print(f"[dialog] {incomplete_text.strip()}")
+    _dismiss_visible_alert(page, timeout_ms, "카카오 인증 미완료 알림")
+    return True
+
+
+def click_kakao_auth_complete(page, timeout_ms: int) -> bool:
+    """카카오톡 인증 완료 후 '인증확인'을 눌러 로그인을 마친다. 버튼이 비활성이면 False."""
     print("[step] Kakao 인증확인 클릭")
-    dialog_index = len(dialog_messages)
     root = _kakao_form_root(page)
     common.scroll_to_page_bottom(page)
     complete_btn = _kakao_auth_confirm_button(root)
     common.wait_locator_visible_with_log(complete_btn, timeout_ms, "Kakao 인증확인 버튼 표시")
-    common.wait_function_with_log(
-        page,
-        KAKAO_AUTH_CONFIRM_ENABLED_JS,
-        timeout_ms,
-        "Kakao 인증확인 버튼 활성화 (카카오톡 앱 인증 완료 대기)",
-    )
+    if complete_btn.is_disabled():
+        print("[warn] Kakao 인증확인 버튼이 비활성 상태 — 카카오톡 인증 미완료로 간주")
+        return False
     common.click_with_log(complete_btn, "Click Kakao 인증확인")
     common.wait_timeout_with_log(page, 1000, "Post-Kakao-인증확인 settle")
-    common.ensure_no_failure_dialogs(dialog_messages, dialog_index, "Kakao 인증확인")
+    return True
 
 
-def complete_after_background_wait(
+def _check_kakao_auth_result(
     page,
-    config: common.LoginConfig,
     dialog_messages: list[str],
-) -> str:
+    start_index: int,
+    timeout_ms: int,
+) -> KakaoAuthResult:
+    new_dialogs = common.get_new_dialogs(dialog_messages, start_index)
+    incomplete = [message for message in new_dialogs if is_kakao_auth_incomplete_message(message)]
+    if incomplete:
+        return "incomplete"
+    failures = [
+        message
+        for message in new_dialogs
+        if common.is_failure_dialog(message) and not is_kakao_auth_incomplete_message(message)
+    ]
+    if failures:
+        joined = " | ".join(failures)
+        raise RuntimeError(f"Kakao 인증확인 failed: {joined}")
+    if _detect_and_dismiss_incomplete_modal(page, timeout_ms):
+        return "incomplete"
+    return "success"
+
+
+def _try_kakao_auth_attempt(page, config: common.LoginConfig, dialog_messages: list[str]) -> bool:
     common.wait_timeout_with_log(
         page,
         KAKAO_AUTH_BACKGROUND_WAIT_MS,
-        "Kakao톡 인증 진행 시간 (60초) — 인증요청 후 사용자가 앱에서 인증할 때까지 대기",
+        "Kakao톡 인증 진행 시간 (30초) — 인증요청 후 사용자가 앱에서 인증할 때까지 대기",
     )
-    click_kakao_auth_complete(page, dialog_messages, config.timeout_ms)
-    common.wait_for_login_success(page, config, dialog_messages)
-    return f"카카오 로그인 성공: {page.url}"
+    dialog_index = len(dialog_messages)
+    clicked = click_kakao_auth_complete(page, config.timeout_ms)
+    if not clicked:
+        return False
+    result = _check_kakao_auth_result(page, dialog_messages, dialog_index, config.timeout_ms)
+    if result == "incomplete":
+        print("[warn] 카카오 인증 미완료 — 재시도")
+        return False
+    return True
 
 
 def run(page, config: common.LoginConfig, dialog_messages: list[str]) -> str:
     open_kakao_login_page(page)
     fill_kakao_form(page, config)
     _ensure_kakao_consents(page)
-    submit_kakao_auth_request(page, dialog_messages, config.timeout_ms)
-    return complete_after_background_wait(page, config, dialog_messages)
+
+    for attempt in range(1, KAKAO_AUTH_MAX_ATTEMPTS + 1):
+        print(f"[step] Kakao 인증 시도 {attempt}/{KAKAO_AUTH_MAX_ATTEMPTS}")
+        submit_kakao_auth_request(page, dialog_messages, config.timeout_ms)
+        if _try_kakao_auth_attempt(page, config, dialog_messages):
+            break
+        if attempt == KAKAO_AUTH_MAX_ATTEMPTS:
+            raise RuntimeError(
+                f"카카오 인증 {KAKAO_AUTH_MAX_ATTEMPTS}회 실패: 인증이 완료되지 않았습니다."
+            )
+
+    common.wait_for_login_success(page, config, dialog_messages)
+    return f"카카오 로그인 성공: {page.url}"

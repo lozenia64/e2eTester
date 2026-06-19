@@ -26,7 +26,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         "--auth-method",
         default="phone",
         choices=["phone", "kakao"],
-        help="본인인증 수단. kakao는 인증요청 후 60초 대기(카카오톡 인증) 뒤 인증완료 클릭까지 자동화합니다.",
+        help="본인인증 수단. kakao는 인증요청 후 30초 대기(카카오톡 인증) 뒤 인증완료 클릭까지 자동화하며, 미완료 시 최대 3회 재시도합니다.",
     )
     parser.add_argument("--name", default=None, help="Customer name")
     parser.add_argument("--birthdate", default=None, help="Birthdate in YYYYMMDD")

@@ -9,7 +9,7 @@
 - 시스템 코드: `hom`
 - manifest: `app/systems/hom/manifest.yaml`
 - 대상 사이트: `https://www.hwgeneralins.com` (고정값)
-- 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
+- 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(30초 대기·최대 3회 재시도). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 - **전체 순차 점검(SUITE)**: 홈 SUITE 카드에서 시스템 체크박스로 포함 여부를 선택할 수 있다. SUITE에 포함되면 이 시스템의 **전체 모듈**이 순차 실행되며, 인증 정보는 SUITE 카드의 HOM 전용 패널에서 설정한다.
 
 ## 2. 모듈 목록
@@ -17,7 +17,7 @@
 `hom.yaml` `order` 기준:
 
 1. `hom.main.access`
-2. `hom.login` — 로그인 화면 이동(`app/systems/hom/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·60초·`인증완료`) 실행
+2. `hom.login` — 로그인 화면 이동(`app/systems/hom/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·30초·`인증완료`·최대 3회 재시도) 실행
 3. `hom.contract.list`
 4. `hom.contract.detail`
 5. `hom.compensation.charge` — `app/systems/hom/steps/compensation_charge.py` (`compensation_charge` 단계)
@@ -49,7 +49,7 @@
 ```text
 메인화면 접속
   -> 로그인 (로그인 이동 + 본인인증 로그인을 한 단계에서 처리)
-      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증완료 클릭
+      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 30초 대기 → 인증완료 클릭 (미완료 시 인증요청 재시도, 최대 3회)
           -> 로그인 성공 후 팝업 정리
               -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
               -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
@@ -76,7 +76,7 @@
 
 - `app/systems/hom/steps/login_move.py` — 상단 로그인 링크 탐색·로그인 페이지 이동
 - `app/systems/hom/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `app/systems/hom/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증완료)
+- `app/systems/hom/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 30초 대기 → 인증완료, 미완료 시 최대 3회 재시도)
 - `app/systems/hom/steps/login_common.py`
 - `app/systems/hom/scripts/login_phone.py` — 개별 로그인 흐름 수동 실행용 CLI 진입 스크립트 (manifest 워크플로에서 직접 호출되지는 않음)
 
@@ -85,7 +85,7 @@
 - 상단 로그인 링크를 탐색해 로그인 페이지로 이동
 - 인증 수단에 따라 분기
 - **휴대폰**: 휴대폰 인증 페이지 이동, 사용자·통신사 정보 입력, SMS 요청, OTP 제출
-- **카카오**: [`/util/login/login.do`](https://www.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`** → **60초 대기**(카카오톡에서 인증 진행) → **`인증완료`**
+- **카카오**: [`/util/login/login.do`](https://www.hwgeneralins.com/util/login/login.do)에서 **「카카오 인증 로그인」** `listitem`의 **`link` 「로그인」**으로 첫 팝업(`#uiPOPKakaoLogin`) 오픈 → 이름·생년월일·휴대폰 입력·동의 → **`인증요청`**(`#kakaoSignReq`) → **30초 대기**(카카오톡에서 인증 진행) → 결과 모달(`#uiPOPKakaoLoginResult`)에서 **`인증완료`**(`#signReqRes`) → (「카카오 인증이 진행되지 않았습니다」 등 미완료 알림 시 결과 모달의 **`인증재요청`**(`#sendKakaoCertf`)으로 재시도, 최대 3회, 3회 모두 실패 시 로그인 실패)
 - `/my/main.do` 포함 URL 진입 확인
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장
@@ -100,7 +100,8 @@
 
 - `MY한화 > 개인계약 조회` 이동
 - `/fplaza/inquiry/contract01.do` 포함 URL 확인
-- 목록 건수 확인
+- **시스템 점검 안내**(`서비스 이용 안내` 등) 페이지가 표시되면 실패 처리
+- `총 N건` 문구 또는 `contract02` 상세 링크로 목록 건수 확인 (임의 `table tbody tr` 개수는 사용하지 않음)
 - 스크린샷 저장
 
 ### Step 4. 계약상세 조회

@@ -10,7 +10,7 @@
 - manifest: `app/systems/mhm/manifest.yaml`
 - 대상 사이트: `https://m.hwgeneralins.com` (고정값)
 - **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()`(executor `build_runtime()` 단계) → `app/systems/mhm/steps/main_access.py` 의 `run()` 순서를 따른다.
-- 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(60초 대기). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
+- 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(30초 대기·최대 3회 재시도). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 - **전체 순차 점검(SUITE)**: 홈 SUITE 카드에서 시스템 체크박스로 포함 여부를 선택할 수 있다. SUITE에 포함되면 이 시스템의 **전체 모듈**이 순차 실행되며, 인증 정보는 SUITE 카드의 MHM 전용 패널에서 설정한다.
 
 ## 2. 모듈 목록
@@ -18,7 +18,7 @@
 `mhm.yaml` `order` 기준:
 
 1. `mhm.main.access`
-2. `mhm.login` — 로그인 화면 이동(`app/systems/mhm/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·60초·`인증확인`) 실행
+2. `mhm.login` — 로그인 화면 이동(`app/systems/mhm/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·30초·`인증확인`·최대 3회 재시도) 실행
 3. `mhm.contract.list`
 4. `mhm.contract.detail`
 5. `mhm.compensation.charge` — `app/systems/mhm/steps/compensation_charge.py` (`compensation_charge` 단계)
@@ -50,7 +50,7 @@
 ```text
 메인화면 접속
   -> 로그인 (로그인 이동 + 본인인증 로그인을 한 단계에서 처리)
-      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 60초 대기 → 인증확인 클릭
+      -> (휴대폰) OTP 대기/재개 또는 (카카오) 인증요청 → 30초 대기 → 인증확인 클릭 (미완료 시 인증요청 재시도, 최대 3회)
           -> 로그인 성공 후 팝업 정리
               -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
               -> 보상 브랜치: 보험금청구 접수(IbnfDmRcp1020~1090) -> 보험금청구 결과 조회(IbnfDmRstInq1000~1020) -> 보험금청구 취소(IbnfDmRstInq1010~1020, UI 알림 확인)
@@ -78,7 +78,7 @@
 
 - `app/systems/mhm/steps/login_move.py` — 모바일 로그인 진입(햄버거/하단 메뉴 등)·로그인 페이지 이동
 - `app/systems/mhm/steps/phone_login.py` — 휴대폰 인증 (SMS + OTP)
-- `app/systems/mhm/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 60초 대기 → 인증확인)
+- `app/systems/mhm/steps/kakao_login.py` — 카카오 인증 (OTP 없음, 인증요청 → 30초 대기 → 인증확인, 미완료 시 최대 3회 재시도)
 - `app/systems/mhm/steps/login_common.py`
 - MHM은 현재 별도 수동 로그인 CLI 진입 스크립트를 두지 않는다.
 
@@ -87,7 +87,7 @@
 - 모바일 로그인 진입(햄버거/하단 메뉴 등)으로 로그인 페이지로 이동
 - 인증 수단에 따라 분기
 - **휴대폰**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`다른 로그인 방법`**(`main button.btn.btn_more`) 클릭 → **`휴대폰인증`**(`main a[role="button"].c5` / `span.cert_select_text`) 클릭 → [`/lin/fid/LginTypSlc1020`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1020) 폼에서 `#customerName`·`#jumin1`(YYMMDD)·`#jumin2`(성별/내외국인)·`#cellphone0`(통신사)·`#cellphone1`(휴대전화번호) 입력·**`#checkAll` 전체동의** → **`인증요청`**(`button.btn.s3.c4`) → **`.dialog.modal.alert.show` 알림(인증번호가 발송되었습니다.)** 의 **`확인`**(`button.btn.ui_dialog_close`) 클릭 → OTP를 `#reqPhoneCheck`에 입력 후 **`확인`**(`button.btn.s1.c1`, 활성화 후 클릭) → [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 리다이렉트 → (있으면) **`#coachMarkDialog` 코치마크** 단계별 클릭으로 닫기 → (있으면) **모바일 안내장 신청안내** 팝업에서 **`다음에 할게요`**(`button.btn.s1.c2`) 클릭
-- **카카오**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`카카오인증`** 버튼 클릭 → [`/lin/kct/KakaoWebLgin1000`](https://m.hwgeneralins.com/lin/kct/KakaoWebLgin1000) 본인인증 페이지에서 이름·생년월일·휴대전화번호 입력·**전체동의** → **`인증요청`** → 발송 알림 **`확인`** 닫기 → **60초 대기**(카카오톡에서 인증 진행) → **`인증확인`**(버튼 활성화 후 클릭)
+- **카카오**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`카카오인증`** 버튼 클릭 → [`/lin/kct/KakaoWebLgin1000`](https://m.hwgeneralins.com/lin/kct/KakaoWebLgin1000) 본인인증 페이지에서 이름·생년월일·휴대전화번호 입력·**전체동의** → **`인증요청`** → 발송 알림 **`확인`** 닫기 → **30초 대기**(카카오톡에서 인증 진행) → **`인증확인`** 클릭 → (「인증이 완료되지 않았습니다」 등 미완료 알림 시 **`인증요청` 재시도**, 최대 3회, 3회 모두 실패 시 로그인 실패)
 - [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 포함 URL 진입 확인
 - 로그인 후 팝업 정리 시도
 - 스크린샷 저장

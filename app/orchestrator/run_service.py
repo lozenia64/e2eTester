@@ -15,6 +15,7 @@ from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
+from app.runner.artifact_manager import ArtifactManager
 from app.storage.ports import RunLogStorePort, RunRepositoryPort
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ class RunService:
         event_bus: EventBus,
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
+        artifact_manager: ArtifactManager | None = None,
     ) -> None:
         self._registry = registry
         self._repository = repository
@@ -57,6 +59,7 @@ class RunService:
         self._comparator = comparator or RunComparator(repository)
         self._planner = planner or RunPlanner()
         self._events = RunEventPublisher(repository)
+        self._artifact_manager = artifact_manager or ArtifactManager()
         self._pending_otp: dict[str, PendingOtpState] = {}
         # 취소 요청된 run_id 집합. 실행 루프가 모듈 사이에서 확인해 협력적으로 중단한다.
         self._cancel_requested: set[str] = set()
@@ -94,6 +97,8 @@ class RunService:
         self,
         limit: int = 50,
         user_id: str | None = None,
+        system_code: str | None = None,
+        user_name_query: str | None = None,
         actor_context: ActorContext | None = None,
     ) -> list[dict]:
         if user_id is not None:
@@ -101,7 +106,34 @@ class RunService:
         else:
             runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
-        return [summarize_run(run, actor_context=actor_context) for run in runs[:limit]]
+
+        normalized_name_query = (user_name_query or "").strip().casefold()
+        summaries: list[dict] = []
+        for run in runs:
+            summary = summarize_run(run, actor_context=actor_context)
+            if system_code and summary.get("system_code") != system_code:
+                continue
+            if normalized_name_query:
+                actor_name = (summary.get("created_by_user_name") or "").casefold()
+                if normalized_name_query not in actor_name:
+                    continue
+            summaries.append(summary)
+            if len(summaries) >= limit:
+                break
+        return summaries
+
+    async def delete_run(self, run_id: str) -> None:
+        run = await self._repository.get_run(run_id)
+        if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
+            raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
+        if run_id in self._pending_otp:
+            raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
+
+        await self._log_store.delete_by_run_id(run_id)
+        await self._repository.delete_run(run_id)
+        self._artifact_manager.delete_run_artifacts(run_id)
+        self._run_inputs.pop(run_id, None)
+        self._cancel_requested.discard(run_id)
 
     async def reconcile_interrupted_runs(self) -> int:
         """재기동 시 비종료 상태로 남은 Run 을 CANCELLED 로 정리한다.
