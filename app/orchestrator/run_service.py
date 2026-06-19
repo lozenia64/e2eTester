@@ -15,7 +15,7 @@ from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
-from app.storage.ports import RunRepositoryPort
+from app.storage.ports import RunLogStorePort, RunRepositoryPort
 
 if TYPE_CHECKING:
     from app.orchestrator.run_actor import ActorContext
@@ -43,6 +43,7 @@ class RunService:
         self,
         registry: ModuleRegistry,
         repository: RunRepositoryPort,
+        log_store: RunLogStorePort,
         execution_gateway: ExecutionGateway,
         event_bus: EventBus,
         comparator: RunComparator | None = None,
@@ -50,6 +51,7 @@ class RunService:
     ) -> None:
         self._registry = registry
         self._repository = repository
+        self._log_store = log_store
         self._gateway = execution_gateway
         self._event_bus = event_bus
         self._comparator = comparator or RunComparator(repository)
@@ -71,7 +73,22 @@ class RunService:
         return self._registry.get_system(system_code)
 
     async def get_run(self, run_id: str) -> Run:
-        return await self._repository.get_run(run_id)
+        """단일 Run 의 **읽기 모델**(상태 + 로그 하이드레이션)을 돌려준다.
+
+        영속 Run blob 에는 로그가 없으므로(별도 로그 스토어 소유), 여기서 ``RunLogStorePort``
+        의 로그를 모듈에 채워 넣어 스냅샷/상세 화면/실패 분석이 기대하는 형태로 조립한다.
+        내부 쓰기 경로는 이 메서드가 아니라 ``self._repository.get_run`` 을 직접 써서 로그
+        하이드레이션 비용을 치르지 않는다(write-model).
+        """
+        run = await self._repository.get_run(run_id)
+        await self._attach_logs(run)
+        return run
+
+    async def _attach_logs(self, run: Run) -> None:
+        """로그 스토어의 로그를 Run 의 각 모듈에 하이드레이션한다(읽기 모델 조립)."""
+        logs_by_module = await self._log_store.get_all(run.run_id)
+        for module in run.modules:
+            module.logs = logs_by_module.get(module.module_id, [])
 
     async def list_run_summaries(
         self,
@@ -349,7 +366,7 @@ class RunService:
         module.message = execution_result.message
         module.artifacts = execution_result.artifacts
         module.artifact_count = len(execution_result.artifacts)
-        module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
+        # 로그는 별도 스토어가 소유하므로 집합체로 복사하지 않는다(읽기 시 하이드레이션).
         module.current_url = execution_result.current_url
         module.dialog_messages = list(execution_result.dialog_messages)
 
@@ -367,7 +384,6 @@ class RunService:
         await self._handle_module_log(run, module, f"[error] {exc}")
         module.status = ModuleStatus.FAILED
         module.message = str(exc)
-        module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
         module.ended_at = datetime.now(UTC)
         module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
         await self._repository.save_run(run)
@@ -387,7 +403,6 @@ class RunService:
         module.message = f"{execution_result.message}. 웹 화면에서 OTP를 입력해 제출하세요."
         module.artifacts = execution_result.artifacts
         module.artifact_count = len(execution_result.artifacts)
-        module.logs = await self._repository.get_module_logs(run.run_id, module.module_id)
         module.failure_analysis = None
         run.status = RunStatus.WAITING_INPUT
         run.awaiting_input_module_id = module.module_id
@@ -460,7 +475,6 @@ class RunService:
         await self._handle_module_log(run, target_module, f"[fatal] {exc}")
         target_module.status = ModuleStatus.FAILED
         target_module.message = f"예상하지 못한 실행 오류: {exc}"
-        target_module.logs = await self._repository.get_module_logs(run.run_id, target_module.module_id)
         target_module.ended_at = datetime.now(UTC)
         target_module.duration_ms = int((target_module.ended_at - target_module.started_at).total_seconds() * 1000)
         await self._repository.save_run(run)
@@ -483,8 +497,10 @@ class RunService:
         await self._repository.save_run(run)
         self._cancel_requested.discard(run.run_id)
         await self._events.run_event("run_finished", run)
-        # 부수 관심사(AI 실패 분석·종료 메일)는 이벤트 구독자가 처리한다.
-        await self._event_bus.publish(RunFinished(run=run))
+        # 부수 관심사(AI 실패 분석·종료 메일)는 이벤트 구독자가 처리한다. 실패 분석이 모듈
+        # 로그(`module.logs`)를 참조하므로, 로그가 하이드레이션된 읽기 모델을 이벤트로 싣는다.
+        finished = await self.get_run(run.run_id)
+        await self._event_bus.publish(RunFinished(run=finished))
 
     # --- 로그 기록 --------------------------------------------------------
 
@@ -493,9 +509,10 @@ class RunService:
         if not trimmed:
             return
         module.message = trimmed
-        module.logs.append(trimmed)
-        await self._repository.append_module_log(run.run_id, module.module_id, trimmed)
-        await self._repository.save_run(run)
+        # 로그는 별도 append-only 스토어로 한 줄씩 INSERT(O(1)). Run blob 은 여기서 저장하지
+        # 않는다 — 상태 전이 시점에만 save_run 한다(핫패스 full-blob 쓰기 제거). 라이브 전파는
+        # WebSocket ``module_log`` 이벤트가 담당하고, 누적 로그는 읽기 시 하이드레이션한다.
+        await self._log_store.append(run.run_id, module.module_id, trimmed)
         await self._events.module_log(run, module, trimmed)
 
     @staticmethod
