@@ -1,0 +1,27 @@
+{
+  "login_page": {
+    "url": "https://www.eagleprm.co.kr/first.do",
+    "selectors": {
+      "user_id": "#firstId",
+      "password": "#firstPw",
+      "login_button": "#btnRA"
+    }
+  },
+  "auth_popup_parent": {
+    "popup_container": "[id^=\"__POP_ID_\"]",
+    "popup_background": "[id^=\"__BG_ID_\"]",
+    "iframe": "[id^=\"__POP_ID_\"] iframe",
+    "iframe_src": "beforeUrlMaster/A/hrpA080.do"
+  },
+  "auth_popup_frame": {
+    "heading": "h1.popup-title",
+    "close": "button.popup-close",
+    "phone_display": "#hpNo",
+    "timer": "#setTime",
+    "otp_input": "#smsNum",
+    "sms_button": "#btnSMS",
+    "confirm_button": "#btnOk",
+    "cancel_button": "#btnCancel"
+  },
+  "success_url_contains": "amain.do"
+}

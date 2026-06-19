@@ -2433,6 +2433,13 @@ function bindRunSocket() {
             updateRunActions(message.run_status);
         }
 
+        if (message.event_type === "module_waiting_input" && message.payload?.module) {
+            updateOtpPanel({
+                awaiting_input_module_id: message.payload.module.module_id,
+                awaiting_input_prompt: "휴대폰으로 받은 OTP를 입력하세요.",
+            });
+        }
+
         if (message.event_type === "run_waiting_input" || message.event_type === "run_resumed" || message.event_type === "run_finished") {
             updateOtpPanel(message.payload);
         }

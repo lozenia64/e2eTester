@@ -1,0 +1,25 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "한화손보" [level=1] [ref=e4]
+    - group "로그인" [ref=e6]:
+      - generic: 로그인
+      - generic [ref=e7]:
+        - textbox "아이디 입력" [ref=e8]:
+          - /placeholder: 아이디를 입력해주세요.
+        - textbox "비밀번호 입력" [ref=e9]:
+          - /placeholder: 비밀번호를 입력해주세요.
+      - generic [ref=e11] [cursor=pointer]:
+        - checkbox "아이디 저장" [ref=e12]
+        - generic [ref=e13]: 아이디 저장
+      - button "LOGIN" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]:
+        - text: "* 로그인 ID/PW는 한화스마트포털(HSP)와 동일합니다."
+        - paragraph
+        - text: "* 비밀번호 찾기는 한화스마트포털(HSP)를 이용하시기 바랍니다."
+  - contentinfo [ref=e17]:
+    - paragraph [ref=e18]: 2020 © Hanwha Insurance. Allrights Reserved
+  - generic [ref=e20]:
+    - generic [ref=e21]:
+      - heading [level=2] [ref=e22]
+      - button "닫기" [ref=e23] [cursor=pointer]
+    - button "확인" [ref=e26] [cursor=pointer]

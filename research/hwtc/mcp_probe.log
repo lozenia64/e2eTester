@@ -1,0 +1,44 @@
+[mcp] navigate login
+### Ran Playwright code
+```js
+await page.goto('https://sls.hwgeneralins.com/login/loginForm.do');
+```
+### Page
+- Page URL: https://sls.hwgeneralins.com/login/loginForm.do
+- Page Title: 한화손보
+### Snapshot
+- [Snapshot](.playwright-mcp/page-2026-06-19T16-16-24-606Z.yml)
+[mcp] Chrome 창에서 직접 로그인해 주세요 (최대 180초)...
+
+[mcp] snapshot
+Traceback (most recent call last):
+  File "/Users/a8922843/Desktop/e2eTester/research/hwtc/mcp_probe.py", line 197, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/a8922843/Desktop/e2eTester/research/hwtc/mcp_probe.py", line 144, in main
+    snapshot = client.call_tool("browser_snapshot", {"filename": str(OUTPUT_DIR / "post_login_snapshot.md")})
+  File "/Users/a8922843/Desktop/e2eTester/research/hwtc/mcp_probe.py", line 68, in call_tool
+    result = self._post(
+        {
+    ...<4 lines>...
+        }
+    )
+  File "/Users/a8922843/Desktop/e2eTester/research/hwtc/mcp_probe.py", line 38, in _post
+    with urllib.request.urlopen(req, timeout=300) as resp:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 495, in open
+    response = meth(req, response)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 404: Not Found

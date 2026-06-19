@@ -1,8 +1,9 @@
 system_code: hwtc
 name: 연수원(PC)
-description: 연수원(SLS) 사이트 메인화면 접속 점검
+description: 연수원(SLS) 메인 접속, 휴대폰 인증, IT교육 동영상 재생 점검
 display_order: 50
-supported_auth_methods: []
+supported_auth_methods:
+  - phone
 run_form:
   - key: browser_mode
     label: 브라우저 실행 모드
@@ -15,6 +16,17 @@ run_form:
         value: headed
       - label: 백그라운드 실행
         value: headless
+  - key: user_id
+    label: 아이디
+    type: text
+    required: true
+    placeholder: 한화스마트포털(HSP) ID
+    help_text: 로그인 ID는 한화스마트포털(HSP)과 동일합니다.
+  - key: password
+    label: 비밀번호
+    type: password
+    required: true
+    placeholder: 비밀번호
 modules:
   - module_id: hwtc.main.access
     system_code: hwtc
@@ -28,3 +40,29 @@ modules:
     workflow_name: hwtc_access
     workflow_step: main_access
     estimated_manual_seconds: 120
+  - module_id: hwtc.phone.auth
+    system_code: hwtc
+    name: 휴대폰 인증
+    description: 아이디·비밀번호 로그인 후 SMS 인증번호를 발급하고 OTP 입력으로 로그인을 완료합니다.
+    group: login
+    order: 20
+    depends_on:
+      - hwtc.main.access
+    timeout_seconds: 180
+    execution_mode: hwtc_workflow_step
+    workflow_name: hwtc_access
+    workflow_step: phone_auth
+    estimated_manual_seconds: 120
+  - module_id: hwtc.video.playback
+    system_code: hwtc
+    name: 동영상 재생
+    description: IT교육과정 첫 번째 교육영상을 재생하고 30초간 실제 재생 여부를 확인합니다.
+    group: content
+    order: 30
+    depends_on:
+      - hwtc.phone.auth
+    timeout_seconds: 180
+    execution_mode: hwtc_workflow_step
+    workflow_name: hwtc_access
+    workflow_step: video_playback
+    estimated_manual_seconds: 90
