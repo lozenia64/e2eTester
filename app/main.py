@@ -32,6 +32,7 @@ from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import SchedulerService
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
+from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
@@ -58,6 +59,9 @@ async def lifespan(app: FastAPI):
     await user_service.seed_admin(admin_email, admin_password)
 
     repository = SqliteRunRepository(db_path)
+    # 모듈 로그는 Run 상태 집합체와 분리된 append-only 스트림 스토어가 소유한다(핫패스
+    # full-blob 쓰기 제거). Run blob 에는 로그가 담기지 않고, 읽기 시 하이드레이션된다.
+    run_log_store = SqliteRunLogStore(db_path)
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
 
@@ -75,6 +79,7 @@ async def lifespan(app: FastAPI):
     run_service = RunService(
         registry=registry,
         repository=repository,
+        log_store=run_log_store,
         execution_gateway=execution_gateway,
         event_bus=event_bus,
     )

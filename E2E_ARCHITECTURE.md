@@ -164,13 +164,15 @@ e2eTester/
       hwtc/
       chbot/
     storage/
-      ports.py                   # 저장소 포트(Protocol): Run/Suite/Schedule RepositoryPort
+      ports.py                   # 저장소 포트(Protocol): Run/RunLog/Suite/Schedule
       sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py       # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
-      sqlite_run_repository.py   # SQLite Run 어댑터(기본 사용)
+      sqlite_run_repository.py   # SQLite Run 상태 어댑터(기본 사용, blob 에 로그 제외)
+      sqlite_run_log_store.py    # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
       sqlite_suite_repository.py # SQLite Suite 어댑터(기본 사용)
       sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
       run_repository.py          # 인메모리 Run 어댑터(테스트·영속 불요용)
+      run_log_store.py           # 인메모리 모듈 로그 어댑터
       schedule_repository.py     # 인메모리 예약 어댑터
       suite_repository.py        # 인메모리 Suite 어댑터
     web/
@@ -270,12 +272,14 @@ e2eTester/
 - `GET /api/admin/runs` (전체 Run 목록, admin 전용)
 - `GET /api/admin/stats/usage` (사용자·시스템별 사용량 통계, admin 전용)
 - `GET /api/admin/stats/savings/csv` (절감 시간 통계 CSV 다운로드, admin 전용)
+- `GET /api/admin/systems` (등록 시스템 코드·이름 목록, admin 전용)
 - `GET /api/admin/module-settings` (시스템·모듈별 수동 업무 시간 설정 조회, admin 전용)
-- `PUT /api/admin/module-settings/{module_id}` (모듈별 수동 업무 시간 저장, admin 전용)
+- `PUT /api/admin/module-settings/{module_id:path}` (모듈별 수동 업무 시간 저장, admin 전용)
 - `GET /api/admin/users` (사용자 목록, admin 전용)
 - `POST /api/admin/users` (사용자 생성, admin 전용)
 - `PATCH /api/admin/users/{user_id}/active` (활성/비활성 전환, admin 전용)
 - `DELETE /api/admin/users/{user_id}` (사용자 삭제, admin 전용)
+- `PUT /api/admin/users/{user_id}/systems` (사용자 허용 시스템 목록 변경, admin 전용)
 - `GET /admin` (관리자 대시보드 HTML)
 - `GET /admin/users` (사용자 관리 HTML)
 - `GET /admin/stats` (사용량 통계 HTML)
@@ -444,26 +448,30 @@ manifest 에 들어 있는 정보:
 
 ### 5.6 Storage 계층
 
-저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`SuiteRepositoryPort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다.
+저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`SuiteRepositoryPort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다.
+
+**집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않으며**(어댑터의 `save_run` 이 `model_dump_json(exclude=...)` 으로 방어적으로 제외), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
 
 현재 구현:
 
-- `app/storage/ports.py` — 저장소 포트(Protocol) 정의
+- `app/storage/ports.py` — 저장소 포트(Protocol) 정의 (`RunRepositoryPort` 는 Run 상태만, `RunLogStorePort` 는 로그 스트림만 책임)
 - `app/storage/sqlite_support.py` — `JsonTableStore`(stdlib `sqlite3` + `asyncio.to_thread`, JSON blob 테이블) · `DEFAULT_DB_PATH`
 - `app/storage/listener_registry.py` — `ListenerRegistry`(run_id/suite_id 별 WebSocket 리스너 큐, 프로세스-로컬 휘발성)
 - `app/storage/sqlite_run_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 사용되는 SQLite 어댑터**(`app/main.py` 에서 주입)
+- `app/storage/sqlite_run_log_store.py` — **기본 사용되는** 모듈 로그 append-only SQLite 어댑터(`run_logs` 테이블, 한 줄당 한 행, `ORDER BY id` 로 입력 순서 복원)
 - `app/storage/run_repository.py` / `suite_repository.py` / `schedule_repository.py` — 인메모리 어댑터(단위 테스트·영속 불요 실행용)
+- `app/storage/run_log_store.py` — `InMemoryRunLogStore`(로그 스트림 인메모리 어댑터)
 
 역할:
 
-- Run / Suite / 예약(Schedule) 객체 저장 (Pydantic 모델을 JSON 으로 직렬화해 `id` PK 테이블에 저장)
-- 모듈 로그의 라인 버퍼 관리(실행 중 휘발성)
+- Run / Suite / 예약(Schedule) **상태** 객체 저장 (Pydantic 모델을 JSON 으로 직렬화해 `id` PK 테이블에 저장; Run blob 은 모듈 로그를 제외)
+- 모듈 로그 스트림 저장 (`(run_id, module_id)` 키의 append-only)
 - WebSocket listener 큐 관리(프로세스-로컬 휘발성)
 
 특징과 제약:
 
-- **영속:** Run/Suite/예약 본체는 SQLite 파일(`E2E_DB_PATH`, 기본 `data/e2etester.db`)에 저장돼 서버 재시작 후에도 이력·상태·예약이 남는다.
-- **휘발:** 실시간 로그 라인 버퍼와 WebSocket 리스너 큐는 살아있는 연결/실행에 묶인 프로세스-로컬 상태라 영속화하지 않는다. 완료된 모듈의 로그는 모듈 종료 시 `module.logs` 로 복사되어 Run JSON 안에 함께 영속된다.
+- **영속:** Run/Suite/예약 본체는 SQLite 파일(`E2E_DB_PATH`, 기본 `data/e2etester.db`)에 저장돼 서버 재시작 후에도 이력·상태·예약이 남는다. **모듈 로그도 같은 DB 파일의 `run_logs` 테이블에 append-only 로 영속**되며, Run blob 과는 분리돼 있다. 읽기 시 Run 모델에 하이드레이션된다.
+- **휘발:** WebSocket 리스너 큐는 살아있는 연결에 묶인 프로세스-로컬 상태라 영속화하지 않는다(라이브 로그 전파는 `module_log` 이벤트가 담당). 인메모리 어댑터를 쓰면 로그 스트림도 휘발한다.
 - **재기동 정리:** 서버가 내려갈 때 진행 중이던 Run/Suite(RUNNING·WAITING_INPUT)는 브라우저 세션·OTP 핸들이 사라져 이어받을 수 없으므로, 기동 시 `RunService.reconcile_interrupted_runs`/`SuiteService.reconcile_interrupted_suites` 가 이를 `CANCELLED` 로 봉인한다(인메모리 어댑터에서는 복원될 대상이 없어 no-op). 과거로 밀린 예약은 `SchedulerService` 가 다음 cron 시각으로 재계산해 시작 직후 일괄 실행을 막는다.
 
 ### 5.7 AI 실패 분석 계층
