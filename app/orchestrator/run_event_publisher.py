@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.models import DashboardEvent, Run, RunModule
+from app.orchestrator.run_view import RunView
 
 
 class RunEventPublisher:
@@ -8,7 +9,8 @@ class RunEventPublisher:
 
     이벤트 페이로드(``DashboardEvent``)의 모양은 오케스트레이션 로직이 아니라 표현 관심사다.
     상태머신(``RunService``)과 사후 보강 구독자(AI 실패 분석)가 동일한 이벤트 형태를 쓰도록
-    한곳에 모아 중복을 없앤다.
+    한곳에 모아 중복을 없앤다. Run 본문은 엔티티를 직접 직렬화하지 않고 ``RunView`` 프로젝션을
+    거쳐 내보낸다(읽기 모델 경계).
     """
 
     def __init__(self, repository) -> None:
@@ -21,7 +23,7 @@ class RunEventPublisher:
                 run_id=run.run_id,
                 system_code=run.system_code,
                 run_status=run.status,
-                payload=run.model_dump(mode="json"),
+                payload=RunView.dump(run),
             )
         )
 

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import Run, RunModule
+from app.domain.run_aggregate import RunAggregate
 from app.events.bus import EventBus, RunFinished
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.orchestrator.run_comparator import RunComparator
@@ -27,12 +28,15 @@ if TYPE_CHECKING:
 
 
 class RunService:
-    """Run 의 생명주기를 관장하는 오케스트레이터(상태머신).
+    """Run 의 생명주기를 관장하는 오케스트레이터(애플리케이션 서비스).
 
-    책임은 "무엇을, 어떤 순서로, 어떤 상태로" 만으로 한정한다. 실제 브라우저 구동·스레드
-    모델·런타임 수명은 ``ExecutionGateway`` 포트에, 검증·계획은 ``RunPlanner`` 에, 이력
-    비교는 ``RunComparator`` 에, AI 실패 분석·종료 메일 같은 부수 관심사는 ``EventBus``
-    구독자에게 위임한다. 이 클래스는 Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다.
+    책임은 *실행 순서*와 *부작용 조율*(영속·이벤트 발행·게이트웨이 호출)로 한정한다. "무엇이
+    합법한 상태 전이인가"라는 규칙·불변식·상태 변경은 도메인 애그리거트 ``RunAggregate``
+    (``app/domain/run_aggregate.py``)에 위임한다 — 그 결정/변경은 I/O 없이 단독으로 단위
+    테스트된다. 실제 브라우저 구동·스레드 모델·런타임 수명은 ``ExecutionGateway`` 포트에,
+    검증·계획은 ``RunPlanner`` 에, 이력 비교는 ``RunComparator`` 에, AI 실패 분석·종료 메일
+    같은 부수 관심사는 ``EventBus`` 구독자에게 위임한다. 외부로 나가는 Run 본문은 ``RunView``
+    프로젝션을 거친다. 이 클래스는 Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다.
     """
 
     def __init__(
@@ -141,25 +145,10 @@ class RunService:
         사라졌으므로 이어받을 수 없다. 좀비 상태를 막기 위해 종료로 봉인한다(필요하면 사용자가
         ``rerun`` 으로 다시 실행). 인메모리 저장소에서는 복원될 Run 이 없어 no-op 이다.
         """
-        active = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
-        active_modules = {
-            ModuleStatus.PENDING,
-            ModuleStatus.QUEUED,
-            ModuleStatus.RUNNING,
-            ModuleStatus.WAITING_INPUT,
-        }
         count = 0
         for run in await self._repository.list_runs():
-            if run.status not in active:
+            if not RunAggregate(run).seal_interrupted():
                 continue
-            run.status = RunStatus.CANCELLED
-            run.ended_at = run.ended_at or datetime.now(UTC)
-            run.awaiting_input_module_id = None
-            run.awaiting_input_prompt = None
-            for module in run.modules:
-                if module.status in active_modules:
-                    module.status = ModuleStatus.CANCELLED
-                    module.message = "서버 재시작으로 중단됨"
             await self._repository.save_run(run)
             # 재기동으로 죽은 브라우저를 가리키던 dangling 세션 토큰을 정리한다(영속 제어 스토어
             # 사용 시 재기동 후에도 남아 있을 수 있다). 입력값은 보존돼 rerun 에 쓰인다.
@@ -237,12 +226,9 @@ class RunService:
         # 담지 않고 게이트웨이로 런타임에 직접 주입한다(재개 시 OTP 는 runtime.config 에서 읽힘).
         handle = ExecutionHandle(execution_mode=pending.execution_mode, session_id=pending.session_id)
         await self._gateway.submit_input(handle, otp_code.strip())
-        run.status = RunStatus.RUNNING
-        run.awaiting_input_module_id = None
-        run.awaiting_input_prompt = None
-        waiting_module = self._find_run_module(run, pending.module_id)
-        waiting_module.status = ModuleStatus.QUEUED
-        waiting_module.message = "OTP 입력이 접수되어 재개 대기 중"
+        aggregate = RunAggregate(run)
+        waiting_module = aggregate.module(pending.module_id)
+        aggregate.resume_after_input(waiting_module)
         await self._repository.save_run(run)
         await self._events.module_event("module_queued", run, waiting_module)
         await self._events.run_event("run_resumed", run)
@@ -303,15 +289,14 @@ class RunService:
         # 판단을 더 이상 메모리 dict(_pending_otp) 멤버십이 아니라 이 로컬 플래그로 한다.
         paused = False
         current_module: RunModule | None = None
+        aggregate = RunAggregate(run)
         if start_index == 0:
-            run.status = RunStatus.RUNNING
-            run.started_at = datetime.now(UTC)
+            aggregate.begin()
             await self._repository.save_run(run)
             await self._events.run_event("run_started", run)
 
         system = self._registry.get_system(run.system_code)
         definitions = {module.module_id: module for module in system.modules}
-        modules_by_id = {module.module_id: module for module in run.modules}
         ordered_modules = self._planner.ordered_selected_run_modules(run)
 
         forced_status: RunStatus | None = None
@@ -322,9 +307,8 @@ class RunService:
                     forced_status = RunStatus.CANCELLED
                     await self._mark_modules_cancelled(run, ordered_modules[index:])
                     break
-                if any(modules_by_id[dependency].status != ModuleStatus.PASSED for dependency in module.depends_on):
-                    module.status = ModuleStatus.BLOCKED
-                    module.message = "선행 모듈 실패로 인해 실행되지 않음"
+                if not aggregate.dependencies_satisfied(module):
+                    aggregate.block_for_dependencies(module)
                     await self._repository.save_run(run)
                     await self._events.module_event("module_finished", run, module)
                     continue
@@ -367,10 +351,8 @@ class RunService:
                     paused = True
                     return
 
-                await self._record_module_result(run, module, execution_result)
-
-                module.ended_at = datetime.now(UTC)
-                module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
+                self._record_module_result(aggregate, module, execution_result)
+                aggregate.finish_timing(module)
                 await self._repository.save_run(run)
                 await self._events.module_event("module_finished", run, module)
         except Exception as exc:
@@ -394,36 +376,30 @@ class RunService:
     # --- 모듈 상태 전이 보조 ----------------------------------------------
 
     async def _transition_to_queued(self, run: Run, module: RunModule) -> None:
-        module.status = ModuleStatus.QUEUED
-        module.message = "실행 대기열에 등록됨"
-        module.failure_analysis = None
+        RunAggregate(run).mark_queued(module)
         await self._repository.save_run(run)
         await self._events.module_event("module_queued", run, module)
 
     async def _transition_to_running(self, run: Run, module: RunModule) -> None:
-        module.status = ModuleStatus.RUNNING
-        module.started_at = datetime.now(UTC)
-        module.message = "실행 준비 중"
-        module.failure_analysis = None
+        RunAggregate(run).mark_running(module)
         await self._repository.save_run(run)
         await self._events.module_event("module_started", run, module)
 
-    async def _record_module_result(self, run: Run, module: RunModule, execution_result) -> None:
-        module.status = execution_result.status
-        module.message = execution_result.message
-        module.artifacts = execution_result.artifacts
-        module.artifact_count = len(execution_result.artifacts)
+    def _record_module_result(self, aggregate: RunAggregate, module: RunModule, execution_result) -> None:
         # 로그는 별도 스토어가 소유하므로 집합체로 복사하지 않는다(읽기 시 하이드레이션).
-        module.current_url = execution_result.current_url
-        module.dialog_messages = list(execution_result.dialog_messages)
+        aggregate.record_result(
+            module,
+            status=execution_result.status,
+            message=execution_result.message,
+            artifacts=execution_result.artifacts,
+            current_url=execution_result.current_url,
+            dialog_messages=execution_result.dialog_messages,
+        )
 
     async def _fail_module(self, run: Run, module: RunModule, exc: Exception) -> None:
         """세션 기동 실패 등 단계 진입 전에 난 오류로 모듈을 실패 처리한다."""
         await self._handle_module_log(run, module, f"[error] {exc}")
-        module.status = ModuleStatus.FAILED
-        module.message = str(exc)
-        module.ended_at = datetime.now(UTC)
-        module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
+        RunAggregate(run).fail_module(module, str(exc))
         await self._repository.save_run(run)
         await self._events.module_event("module_finished", run, module)
 
@@ -436,14 +412,9 @@ class RunService:
         handle: ExecutionHandle,
         execution_result,
     ) -> None:
-        module.status = ModuleStatus.WAITING_INPUT
-        module.message = f"{execution_result.message}. 웹 화면에서 OTP를 입력해 제출하세요."
-        module.artifacts = execution_result.artifacts
-        module.artifact_count = len(execution_result.artifacts)
-        module.failure_analysis = None
-        run.status = RunStatus.WAITING_INPUT
-        run.awaiting_input_module_id = module.module_id
-        run.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
+        RunAggregate(run).mark_waiting_input(
+            module, execution_result.message, execution_result.artifacts
+        )
         await self._repository.save_run(run)
         await self._events.module_event("module_waiting_input", run, module)
         await self._events.run_event("run_waiting_input", run)
@@ -470,21 +441,8 @@ class RunService:
         await self._finalize_run(run, RunStatus.CANCELLED)
 
     async def _mark_modules_cancelled(self, run: Run, modules: list[RunModule]) -> None:
-        terminal_statuses = {
-            ModuleStatus.PASSED,
-            ModuleStatus.FAILED,
-            ModuleStatus.SKIPPED,
-            ModuleStatus.BLOCKED,
-            ModuleStatus.CANCELLED,
-        }
-        for module in modules:
-            if module.status in terminal_statuses:
-                continue
-            if module.started_at is not None and module.ended_at is None:
-                module.ended_at = datetime.now(UTC)
-                module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
-            module.status = ModuleStatus.CANCELLED
-            module.message = "사용자 요청으로 취소됨"
+        changed = RunAggregate(run).cancel_modules(modules)
+        for module in changed:
             await self._repository.save_run(run)
             await self._events.module_event("module_finished", run, module)
 
@@ -496,42 +454,20 @@ class RunService:
         exc: Exception,
     ) -> None:
         await self._repository.save_run(run)
-        target_module = None
-        if current_module is not None and current_module.status in {ModuleStatus.QUEUED, ModuleStatus.RUNNING}:
-            target_module = current_module
-        else:
-            for module in ordered_modules:
-                if module.status in {ModuleStatus.PENDING, ModuleStatus.QUEUED, ModuleStatus.RUNNING}:
-                    target_module = module
-                    break
-
+        aggregate = RunAggregate(run)
+        target_module = aggregate.select_failure_target(current_module, ordered_modules)
         if target_module is None:
             print(f"[run] run={run.run_id} unexpected execution error: {exc}")
             return
 
-        if target_module.started_at is None:
-            target_module.started_at = datetime.now(UTC)
         await self._handle_module_log(run, target_module, f"[fatal] {exc}")
-        target_module.status = ModuleStatus.FAILED
-        target_module.message = f"예상하지 못한 실행 오류: {exc}"
-        target_module.ended_at = datetime.now(UTC)
-        target_module.duration_ms = int((target_module.ended_at - target_module.started_at).total_seconds() * 1000)
+        aggregate.mark_fatal(target_module, f"예상하지 못한 실행 오류: {exc}")
         await self._repository.save_run(run)
         await self._events.module_event("module_finished", run, target_module)
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
-        run.ended_at = datetime.now(UTC)
-        run.awaiting_input_module_id = None
-        run.awaiting_input_prompt = None
-        if forced_status is not None:
-            run.status = forced_status
-        else:
-            run.status = (
-                RunStatus.FAILED
-                if any(module.status == ModuleStatus.FAILED for module in run.modules)
-                else RunStatus.PASSED
-            )
-        if run.status in {RunStatus.PASSED, RunStatus.FAILED}:
+        final_status = RunAggregate(run).finalize(forced_status)
+        if final_status in {RunStatus.PASSED, RunStatus.FAILED}:
             run.comparison = await self._comparator.compute(run)
         await self._repository.save_run(run)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
@@ -555,10 +491,3 @@ class RunService:
         # WebSocket ``module_log`` 이벤트가 담당하고, 누적 로그는 읽기 시 하이드레이션한다.
         await self._log_store.append(run.run_id, module.module_id, trimmed)
         await self._events.module_log(run, module, trimmed)
-
-    @staticmethod
-    def _find_run_module(run: Run, module_id: str) -> RunModule:
-        for module in run.modules:
-            if module.module_id == module_id:
-                return module
-        raise KeyError(f"Run module not found: {module_id}")

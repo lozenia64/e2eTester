@@ -96,11 +96,14 @@ e2eTester/
     notifications/
       run_completion_email.py
       report_renderer.py
+    domain/
+      run_aggregate.py           # RunAggregate: Run 상태 전이 규칙·불변식(순수 도메인, I/O 무지)
     orchestrator/
-      run_service.py             # RunService: Run 생명주기 상태머신(부작용은 포트/구독자에 위임)
+      run_service.py             # RunService: 실행 순서·부작용 조율(규칙은 RunAggregate 에 위임)
       run_planner.py             # RunPlanner: 요청 검증 + 모듈 실행 계획(순수)
       run_comparator.py          # RunComparator: 직전 Run 대비 비교(저장소 의존)
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
+      run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
       suite_service.py
     registry/
@@ -305,18 +308,20 @@ e2eTester/
 
 ### 5.3 Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/run_service.py` 다. `RunService` 는 **Run 생명주기 상태머신**으로만 한정되며("무엇을, 어떤 순서로, 어떤 상태로"), 나머지는 동일 계층의 협력자에게 위임한다. Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다(브라우저 없이 단위 테스트 가능).
+현재 구현 핵심은 `app/orchestrator/run_service.py` 다. `RunService` 는 **실행 순서와 부작용 조율**(영속·이벤트 발행·게이트웨이 호출)을 담당하는 애플리케이션 서비스이며, "무엇이 합법한 상태 전이인가"라는 규칙·불변식·상태 변경은 도메인 애그리거트 `RunAggregate` 에 위임한다. Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다(브라우저 없이 단위 테스트 가능).
 
 위임 구조:
 
+- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 전이 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 과거 `RunService._execute_run` 에 흩어져 있던 규칙(선행 모듈 차단·결과 기록·종료 상태 판정·취소 마킹·재기동 봉인)을 이 한곳으로 모아 I/O 없이 단독 단위 테스트한다(`tests/test_run_aggregate.py`).
 - `RunPlanner`(`run_planner.py`): 입력값 검증·모듈 선택·인증 수단 검증, manifest 기준 모듈 리스트 생성(순수 로직).
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
-- `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사).
+- `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사). Run 본문은 `RunView` 프로젝션을 거친다.
+- `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다(와이어 필드를 명시 선언 → 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않음). 현재 노출 형태는 기존 `run.model_dump` 와 1:1 동일.
 - `EventBus` 구독자: AI 실패 분석·종료 메일(부수 관심사).
 - `summarize_run`(`run_summary.py`): 최근 Run 요약 뷰.
 
-상태머신이 직접 담당하는 책임:
+오케스트레이터가 (도메인 애그리거트에 위임해) 담당하는 책임:
 
 - 모듈 상태 전이 관리, 의존성 실패 시 `BLOCKED` 처리
 - OTP 대기 상태 저장: 재개 컨텍스트(직렬화 세션 토큰 + resume index + module id)를 `RunControlStorePort`(기본 `SqliteRunControlStore`)에 영속한다. 더 이상 서비스-인스턴스 메모리 dict 가 아니다 — OTP 제출 시 토큰으로 핸들을 복원해 중단된 단계부터 재개한다. OTP 값 자체는 저장하지 않고 게이트웨이가 런타임에 직접 주입한다.

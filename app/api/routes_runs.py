@@ -8,6 +8,7 @@ from app.api.dependencies import get_run_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.models import StartRunRequest, SubmitOtpRequest
+from app.orchestrator.run_view import RunView
 
 if TYPE_CHECKING:
     from app.orchestrator.run_service import RunService
@@ -46,7 +47,7 @@ async def start_system_run(
         raise HTTPException(status_code=404, detail="System not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return run.model_dump(mode="json")
+    return RunView.dump(run)
 
 
 @router.post("/{run_id}/otp")
@@ -60,7 +61,7 @@ async def submit_run_otp(
         run = await run_service.submit_otp(run_id, payload.otp_code)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not waiting for OTP") from exc
-    return run.model_dump(mode="json")
+    return RunView.dump(run)
 
 
 @router.post("/{run_id}/cancel")
@@ -75,7 +76,7 @@ async def cancel_run(
         raise HTTPException(status_code=404, detail="Run not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return run.model_dump(mode="json")
+    return RunView.dump(run)
 
 
 @router.post("/{run_id}/rerun")
@@ -94,7 +95,7 @@ async def rerun_run(
         raise HTTPException(status_code=404, detail="Run not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return run.model_dump(mode="json")
+    return RunView.dump(run)
 
 
 @router.get("/{run_id}")
@@ -107,7 +108,7 @@ async def get_run(
         run = await run_service.get_run(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
-    return run.model_dump(mode="json")
+    return RunView.dump(run)
 
 
 @router.get("/{run_id}/nodes")
