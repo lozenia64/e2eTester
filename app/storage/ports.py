@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 from typing import Protocol
 
-from app.core.models import DashboardEvent, Run, Schedule, SuiteEvent, SuiteRun
+from app.core.models import DashboardEvent, PendingExecution, Run, Schedule, SuiteEvent, SuiteRun
 
 
 class RunRepositoryPort(Protocol):
@@ -49,6 +49,49 @@ class RunLogStorePort(Protocol):
     async def get(self, run_id: str, module_id: str) -> list[str]: ...
     async def get_all(self, run_id: str) -> dict[str, list[str]]: ...
     async def delete_by_run_id(self, run_id: str) -> None: ...
+
+
+class RunControlStorePort(Protocol):
+    """Run 의 **비공개 제어 상태**(클라이언트에 직렬화되지 않음) 저장 경계.
+
+    Run blob 은 ``model_dump`` 로 모든 WebSocket 리스너에 그대로 방송되므로(``RunEventPublisher``),
+    취소 의도·재개 컨텍스트(세션 토큰·resume index) 같은 내부 제어 상태는 Run blob 이 아니라 이
+    형제 스토어가 소유한다 — 모듈 로그를 ``RunLogStorePort`` 로 분리한 것과 같은 이유다. 이로써
+    ``RunService`` 의 서비스-인스턴스 메모리 dict(``_pending_otp``/``_cancel_requested``)가 사라지고
+    제어 상태가 권위 있는 단일 출처로 영속된다.
+
+    취소 플래그와 pending(재개) 컬럼은 **서로 다른 컬럼**이라, 실행 중 취소(컬럼 A 갱신)와
+    OTP 일시정지 기록(컬럼 B 갱신)이 같은 행을 통째로 덮어써 lost-update 를 내지 않는다.
+    구현체는 ``get_pending`` 에서 대기 중이 아니면 ``None`` 을 돌려준다.
+    """
+
+    async def set_cancel_requested(self, run_id: str) -> None: ...
+    async def is_cancel_requested(self, run_id: str) -> bool: ...
+    async def set_pending(
+        self,
+        run_id: str,
+        session_id: str,
+        execution_mode: str,
+        resume_index: int,
+        module_id: str,
+    ) -> None: ...
+    async def get_pending(self, run_id: str) -> PendingExecution | None: ...
+    async def clear_pending(self, run_id: str) -> None: ...
+    async def delete(self, run_id: str) -> None: ...
+
+
+class RunInputStorePort(Protocol):
+    """Run 의 해석된 입력값(이름·전화 등 **PII**) 저장 경계.
+
+    PII 이므로 Run blob/이벤트 payload 에 절대 직렬화하지 않는다(``RunService`` 가 이 포트로만
+    보관·조회). 기본 어댑터는 인메모리(오늘의 ``_run_inputs`` dict 와 동일한 휘발성)이며, 암호화
+    SQLite 어댑터를 끼우면 재기동 후 rerun 까지 가능해진다(Phase 2). rerun 과 OTP 재개가 이
+    입력값을 읽는다. 일시적인 OTP 코드는 담지 않는다(게이트웨이가 런타임에 직접 주입).
+    """
+
+    async def put(self, run_id: str, input_data: dict[str, str]) -> None: ...
+    async def get(self, run_id: str) -> dict[str, str] | None: ...
+    async def delete(self, run_id: str) -> None: ...
 
 
 class SuiteRepositoryPort(Protocol):

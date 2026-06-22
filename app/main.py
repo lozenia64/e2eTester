@@ -31,7 +31,9 @@ from app.orchestrator.suite_service import SuiteService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import SchedulerService
+from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
+from app.storage.sqlite_run_control_store import SqliteRunControlStore
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
@@ -62,6 +64,11 @@ async def lifespan(app: FastAPI):
     # 모듈 로그는 Run 상태 집합체와 분리된 append-only 스트림 스토어가 소유한다(핫패스
     # full-blob 쓰기 제거). Run blob 에는 로그가 담기지 않고, 읽기 시 하이드레이션된다.
     run_log_store = SqliteRunLogStore(db_path)
+    # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 영속(SQLite) — 재기동 후에도 권위 있게 남는다.
+    # PII 입력값은 Phase 1 에서 인메모리(오늘과 동일한 휘발성). 암호화 SQLite 어댑터로 바꾸면
+    # 재기동 후 rerun 까지 가능해진다(Phase 2).
+    run_control_store = SqliteRunControlStore(db_path)
+    run_input_store = InMemoryRunInputStore()
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
 
@@ -82,6 +89,8 @@ async def lifespan(app: FastAPI):
         log_store=run_log_store,
         execution_gateway=execution_gateway,
         event_bus=event_bus,
+        control_store=run_control_store,
+        input_store=run_input_store,
         artifact_manager=artifact_manager,
     )
     module_settings_repository = SqliteModuleSettingsRepository(db_path)

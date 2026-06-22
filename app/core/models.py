@@ -115,6 +115,21 @@ class RunComparison(BaseModel):
     still_failing: list[str] = Field(default_factory=list)
 
 
+class PendingExecution(BaseModel):
+    """OTP 일시정지된 Run 의 **재개 컨텍스트**(비-PII 제어 메타데이터).
+
+    라이브 브라우저는 게이트웨이 ``session_id`` 토큰으로만 가리키며, 이 토큰은 같은 프로세스
+    수명 안에서만 유효하다(재기동하면 dangling → ``reconcile_interrupted_runs`` 가 봉인).
+    PII 입력값은 여기 담지 않고 ``RunInputStorePort`` 가 따로 보관한다. OTP 값도 담지 않는다
+    (재개 시 OTP 는 게이트웨이가 런타임에 주입한 ``runtime.config`` 에서 읽는다).
+    """
+
+    session_id: str
+    execution_mode: str
+    resume_index: int
+    module_id: str
+
+
 class Run(BaseModel):
     run_id: str
     system_code: str

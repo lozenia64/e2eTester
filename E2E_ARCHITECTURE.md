@@ -317,9 +317,9 @@ e2eTester/
 상태머신이 직접 담당하는 책임:
 
 - 모듈 상태 전이 관리, 의존성 실패 시 `BLOCKED` 처리
-- OTP 대기 상태 저장(`PendingOtpState`, 공유 세션 `ExecutionHandle` 유지)·OTP 제출 후 중단된 단계부터 재개
-- Run 취소(`cancel_run`): 취소 플래그(`_cancel_requested`)를 세팅하고, 실행 루프가 모듈 사이에서 이를 확인해 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
-- 동일 입력 재실행(`rerun_run`): Run 생성 시 보관한 입력값(otp_code 제외, `_run_inputs`)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII를 포함할 수 있어 메모리에만 보관하며 응답/WebSocket payload 로는 직렬화하지 않는다.
+- OTP 대기 상태 저장: 재개 컨텍스트(직렬화 세션 토큰 + resume index + module id)를 `RunControlStorePort`(기본 `SqliteRunControlStore`)에 영속한다. 더 이상 서비스-인스턴스 메모리 dict 가 아니다 — OTP 제출 시 토큰으로 핸들을 복원해 중단된 단계부터 재개한다. OTP 값 자체는 저장하지 않고 게이트웨이가 런타임에 직접 주입한다.
+- Run 취소(`cancel_run`): 취소 의도를 `RunControlStorePort` 에 영속(취소 컬럼과 pending 컬럼이 분리돼 동시 갱신 충돌 없음)하고, 실행 루프가 모듈 사이에서 이를 **스토어에서 최신값으로 읽어** 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
+- 동일 입력 재실행(`rerun_run`): Run 생성 시 `RunInputStorePort` 에 보관한 입력값(otp_code 미포함)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII 라 Run blob/이벤트 payload 로 직렬화하지 않고 전용 스토어에만 둔다(Phase 1 기본 인메모리; 암호화 SQLite 어댑터를 끼우면 재기동 후 rerun 까지 가능).
 - Run 종료(finalize) 시 `RunFinished` 도메인 이벤트 발행
 
 현재 상태 전이:
