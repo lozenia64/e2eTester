@@ -384,42 +384,14 @@ def resolve_mobile_device(playwright) -> dict:
 
 
 def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, user_data_dir: Path | None = None):
-    """MHM용 영속 Chrome 프로파일을 연다.
+    """MHM용 브라우저 기동 — Cursor Playwright MCP 와 동일한 프로필·launch 옵션.
 
     사이트 접속 전에 반드시 ``apply_mobile_device_mode()`` 를 호출해야 한다.
-    이 함수는 브라우저만 띄우고 모바일 뷰포트/UA는 고정하지 않는다(``no_viewport``).
     """
-    target_dir = Path(user_data_dir) if user_data_dir else resolve_user_data_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    disabled_features = ",".join(
-        PLAYWRIGHT_DEFAULT_DISABLED_FEATURES + LOCAL_NETWORK_DISABLED_FEATURES
-    )
-    common_args = {
-        "headless": headless,
-        "slow_mo": slow_mo,
-        "no_viewport": True,
-        "locale": "ko-KR",
-        # --enable-automation: navigator.webdriver 를 실제 false 로(스텔스 위조 대신).
-        # --disable-extensions / --disable-component-extensions-with-background-pages:
-        #   Playwright 기본값이라 보안프로그램 브라우저 확장까지 꺼버리므로 제거한다.
-        "ignore_default_args": [
-            "--enable-automation",
-            "--disable-extensions",
-            "--disable-component-extensions-with-background-pages",
-        ],
-        # 로컬 네트워크 차단 해제(+ Playwright 기본 disable feature 들 유지).
-        "args": [f"--disable-features={disabled_features}"],
-    }
-    try:
-        print(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})")
-        return playwright.chromium.launch_persistent_context(
-            str(target_dir),
-            channel=PREFERRED_BROWSER_CHANNEL,
-            **common_args,
-        )
-    except Exception as exc:
-        print(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
-        return playwright.chromium.launch_persistent_context(str(target_dir), **common_args)
+    from app.systems.access_common import browser as access_browser
+
+    target = Path(user_data_dir) if user_data_dir else access_browser.resolve_playwright_mcp_user_data_dir()
+    return access_browser.launch_playwright_mcp_browser_context(playwright, headless, target)
 
 
 def apply_mobile_device_mode(playwright, page: Page) -> None:

@@ -26,18 +26,50 @@ SUBMIT_OTP_BUTTON_SELECTOR = "#sendBtn3"
 
 OTP_PATTERN = re.compile(r"\d{5}")
 
+# MCP 와 동일: goto 직후 dialog 핸들러 + fill/click. 추가 CDP 세션은 금지.
+LOGIN_FORM_SETTLE_MS = 1500
+LOGIN_FORM_SUBMIT_TIMEOUT_MS = 60_000
+LOGIN_FORM_RETRY_INTERVAL_MS = 50
+LOGIN_FIELD_ACTION_TIMEOUT_MS = 5_000
+LOGIN_SECURITY_BLOCK_SUBSTRING = "비정상적인 데이터"
 
-def _login_url(base_url: str) -> str:
+
+def login_entry_url(base_url: str) -> str:
     return f"{browser.normalize_base_url(base_url, base_url)}{LOGIN_FORM_PATH}"
 
 
-def _ensure_login_page(page: Page, base_url: str) -> None:
-    if LOGIN_FORM_PATH in page.url:
-        return
-    login_url = _login_url(base_url)
+def run_main_access(page: Page, base_url: str) -> str:
+    """HWTC 메인 접속: MCP 와 같이 loginForm.do 로 직접 진입한다."""
+    _ensure_login_page(page, base_url)
+    return "메인화면 접속 성공"
+
+
+def _ensure_login_page(page: Page, base_url: str, *, reload: bool = True) -> None:
+    if not reload and LOGIN_FORM_PATH in page.url:
+        try:
+            if page.locator(USER_ID_SELECTOR).is_visible(timeout=500):
+                print(f"[wait] Reuse login form: {page.url}")
+                return
+        except PlaywrightTimeoutError:
+            pass
+    login_url = login_entry_url(base_url)
     print(f"[wait] Navigate to login form: {login_url}")
     page.goto(login_url, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     print(f"[wait] Login form ready: {page.url}")
+    _wait_for_login_form_ready(page)
+
+
+def _wait_for_login_form_ready(page: Page) -> None:
+    deadline = time.monotonic() + LOGIN_FORM_SUBMIT_TIMEOUT_MS / 1000
+    while time.monotonic() < deadline:
+        try:
+            if page.locator(USER_ID_SELECTOR).is_visible(timeout=500):
+                print("[wait] Login form fields ready")
+                return
+        except PlaywrightTimeoutError:
+            pass
+        page.wait_for_timeout(LOGIN_FORM_RETRY_INTERVAL_MS)
+    raise RuntimeError("로그인 화면(/login/loginForm.do) 입력란을 찾지 못했습니다.")
 
 
 def _popup_heading_text(page: Page) -> str:
@@ -82,13 +114,85 @@ def _maybe_confirm_popup(page: Page, *, heading_contains: str | None = None) -> 
     return True
 
 
-def _submit_credentials(page: Page, user_id: str, password: str) -> None:
+def _past_login_form(page: Page) -> bool:
+    url = page.url
+    return SMS_FORM_PATH in url or AUTH_SUCCESS_PATH in url
+
+
+def _latest_security_block_message(dialog_messages: list[str]) -> str | None:
+    for message in reversed(dialog_messages):
+        if LOGIN_SECURITY_BLOCK_SUBSTRING in message:
+            return message
+    return None
+
+
+def _submit_credentials(
+    page: Page,
+    user_id: str,
+    password: str,
+    dialog_messages: list[str],
+) -> None:
+    """MCP browser_run_code 와 동일: settle → fill → click (dialog 는 런타임 핸들러가 accept)."""
+    if _past_login_form(page):
+        print("[step] Skip login form submit (already past login)")
+        return
+
+    start_dialog_count = len(dialog_messages)
     print("[step] Fill login credentials")
-    page.locator(USER_ID_SELECTOR).fill(user_id)
-    page.locator(PASSWORD_SELECTOR).fill(password)
+    page.wait_for_timeout(LOGIN_FORM_SETTLE_MS)
+
+    deadline = time.monotonic() + LOGIN_FORM_SUBMIT_TIMEOUT_MS / 1000
+    filled = False
+    while time.monotonic() < deadline:
+        if _past_login_form(page):
+            print("[step] Login form submit skipped (navigation detected)")
+            return
+
+        blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
+        if blocked:
+            raise RuntimeError(f"로그인 차단: {blocked}")
+
+        try:
+            page.locator(USER_ID_SELECTOR).fill(user_id, timeout=LOGIN_FIELD_ACTION_TIMEOUT_MS)
+            page.locator(PASSWORD_SELECTOR).fill(password, timeout=LOGIN_FIELD_ACTION_TIMEOUT_MS)
+            filled = True
+            break
+        except PlaywrightTimeoutError:
+            page.wait_for_timeout(LOGIN_FORM_RETRY_INTERVAL_MS)
+
+    if not filled:
+        raise RuntimeError(
+            "로그인 화면에서 아이디·비밀번호 입력에 실패했습니다. "
+            "(개발자도구 차단 alert 반복)"
+        )
 
     print("[step] Submit login form")
-    page.locator(LOGIN_BUTTON_SELECTOR).click()
+    page.locator(LOGIN_BUTTON_SELECTOR).click(timeout=LOGIN_FIELD_ACTION_TIMEOUT_MS)
+    print("[step] Login form submitted")
+
+    page.wait_for_timeout(500)
+    blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
+    if blocked:
+        raise RuntimeError(f"로그인 차단: {blocked}")
+
+    nav_deadline = time.monotonic() + browser.MAX_TIMEOUT_MS / 1000
+    while time.monotonic() < nav_deadline:
+        if _past_login_form(page):
+            print(f"[wait] Left login form: {page.url}")
+            return
+        blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
+        if blocked:
+            raise RuntimeError(f"로그인 차단: {blocked}")
+        page.wait_for_timeout(LOGIN_FORM_RETRY_INTERVAL_MS)
+
+    if LOGIN_FORM_PATH in page.url:
+        blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
+        if blocked:
+            raise RuntimeError(f"로그인 차단: {blocked}")
+        raise RuntimeError(
+            "LOGIN 제출 후 휴대폰 인증 화면으로 이동하지 못했습니다. "
+            "개발자도구 차단 alert 또는 로그인 정보를 확인해 주세요."
+        )
 
     try:
         page.locator(".wrap-loading").wait_for(state="hidden", timeout=browser.MAX_TIMEOUT_MS)
@@ -181,11 +285,11 @@ def request_sms(
     user_id: str,
     password: str,
     base_url: str,
+    dialog_messages: list[str],
 ) -> str:
     """아이디·비밀번호 로그인 후 SMS 인증번호를 발급한다."""
-    _ensure_login_page(page, base_url)
-    browser.maybe_close_popup(page)
-    _submit_credentials(page, user_id, password)
+    _ensure_login_page(page, base_url, reload=True)
+    _submit_credentials(page, user_id, password, dialog_messages)
     _ensure_sms_form(page)
 
     if SMS_FORM_PATH not in page.url:

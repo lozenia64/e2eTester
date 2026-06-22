@@ -380,7 +380,7 @@ def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, 
 
     - 시크릿 일회용 컨텍스트가 아닌 persistent context 라서 보안프로그램 확장/프로파일
       상태가 유지된다.
-    - `--enable-automation` 기본 플래그를 제거해 navigator.webdriver 를 (위조가 아니라)
+    - ``--enable-automation`` 기본 플래그를 제거해 navigator.webdriver 를 (위조가 아니라)
       실제로 false 로 만든다. 별도의 스텔스 위조 스크립트는 쓰지 않는다.
     - 동시 실행은 같은 프로파일 디렉터리를 공유할 수 없으므로 지원하지 않는다(순차 실행 전제).
     """

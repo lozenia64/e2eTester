@@ -20,6 +20,17 @@ SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000
 SCREENSHOT_PRE_CAPTURE_WAIT_MS: Final[int] = 3000
 
+# 연수원(SLS) self-defender 는 CDP 세션·DOM 주입을 무결성 위반으로 보고 로그인 AJAX 를 차단한다.
+SELF_DEFENDER_HOST_FRAGMENTS: Final[tuple[str, ...]] = ("sls.hwgeneralins.com",)
+
+
+def _is_self_defender_page(page: Page) -> bool:
+    try:
+        url = page.url
+    except Exception:
+        return False
+    return any(fragment in url for fragment in SELF_DEFENDER_HOST_FRAGMENTS)
+
 
 def _scroll_to_top(page: Page) -> None:
     page.evaluate("() => { window.scrollTo({ top: 0, behavior: 'instant' }); }")
@@ -77,7 +88,8 @@ def capture_screenshot(page: Page, output_path: Path) -> None:
 
     try:
         print(f"[wait] Pre-screenshot settle delay ({SCREENSHOT_PRE_CAPTURE_WAIT_MS} ms)")
-        page.wait_for_timeout(SCREENSHOT_PRE_CAPTURE_WAIT_MS)
+        settle_ms = 500 if _is_self_defender_page(page) else SCREENSHOT_PRE_CAPTURE_WAIT_MS
+        page.wait_for_timeout(settle_ms)
     except Exception as exc:
         print(f"[warn] Pre-screenshot settle delay failed: {exc}")
 
@@ -90,17 +102,23 @@ def capture_screenshot(page: Page, output_path: Path) -> None:
     except Exception as exc:
         print(f"[warn] Standard screenshot failed, retry with fallbacks: {exc}")
 
-    try:
-        _apply_font_fallback(page)
-        _capture_with_playwright(page, output_path, SCREENSHOT_RETRY_TIMEOUT_MS)
-        print(f"[artifact] Screenshot saved to {output_path} (font fallback)")
-        return
-    except Exception as exc:
-        print(f"[warn] Font-fallback screenshot failed, trying CDP capture: {exc}")
+    if not _is_self_defender_page(page):
+        try:
+            _apply_font_fallback(page)
+            _capture_with_playwright(page, output_path, SCREENSHOT_RETRY_TIMEOUT_MS)
+            print(f"[artifact] Screenshot saved to {output_path} (font fallback)")
+            return
+        except Exception as exc:
+            print(f"[warn] Font-fallback screenshot failed, trying CDP capture: {exc}")
 
-    try:
-        _capture_with_cdp(page, output_path)
-        print(f"[artifact] Screenshot saved to {output_path} (CDP fallback)")
-        return
-    except Exception as exc:
-        print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
+        try:
+            _capture_with_cdp(page, output_path)
+            print(f"[artifact] Screenshot saved to {output_path} (CDP fallback)")
+            return
+        except Exception as exc:
+            print(f"[warn] Failed to save screenshot to {output_path}: {exc}")
+    else:
+        print(
+            "[warn] Skipping font-fallback/CDP screenshot on self-defender host "
+            "(would poison subsequent login AJAX)"
+        )
