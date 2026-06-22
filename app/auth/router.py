@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth.dependencies import get_current_user
+from typing import TYPE_CHECKING
+
+from app.auth.dependencies import get_current_user, get_user_service
 from app.auth.jwt import create_access_token
 from app.auth.models import TokenResponse, User, UserPublic
+
+if TYPE_CHECKING:
+    from app.auth.service import UserService
 
 router = APIRouter(tags=["auth"])
 templates = Jinja2Templates(directory="app/web/templates")
@@ -22,8 +27,8 @@ async def login(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    user_service: "UserService" = Depends(get_user_service),
 ):
-    user_service = request.app.state.user_service
     user = await user_service.authenticate(email, password)
     if user is None:
         return RedirectResponse(url="/login?error=1", status_code=status.HTTP_303_SEE_OTHER)
@@ -77,6 +82,7 @@ async def change_password(
     new_password: str = Form(...),
     new_password_confirm: str = Form(...),
     current_user: User = Depends(get_current_user),
+    user_service: "UserService" = Depends(get_user_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
@@ -87,7 +93,6 @@ async def change_password(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    user_service = request.app.state.user_service
     try:
         await user_service.change_password(current_user.user_id, current_password, new_password)
     except HTTPException as exc:

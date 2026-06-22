@@ -21,8 +21,6 @@ from app.storage.ports import (
     RunLogStorePort,
     RunRepositoryPort,
 )
-from app.storage.run_control_store import InMemoryRunControlStore
-from app.storage.run_input_store import InMemoryRunInputStore
 
 if TYPE_CHECKING:
     from app.orchestrator.run_actor import ActorContext
@@ -44,8 +42,8 @@ class RunService:
         log_store: RunLogStorePort,
         execution_gateway: ExecutionGateway,
         event_bus: EventBus,
-        control_store: RunControlStorePort | None = None,
-        input_store: RunInputStorePort | None = None,
+        control_store: RunControlStorePort,
+        input_store: RunInputStorePort,
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
         artifact_manager: ArtifactManager | None = None,
@@ -61,9 +59,11 @@ class RunService:
         self._artifact_manager = artifact_manager or ArtifactManager()
         # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 더 이상 서비스-인스턴스 메모리 dict 가 아니라
         # 영속 스토어(권위 있는 단일 출처)가 소유한다. PII 입력값도 전용 스토어로 분리한다.
-        # 둘 다 Run blob 에 들어가지 않아 WebSocket/응답 payload 로 새지 않는다.
-        self._control_store = control_store or InMemoryRunControlStore()
-        self._input_store = input_store or InMemoryRunInputStore()
+        # 둘 다 Run blob 에 들어가지 않아 WebSocket/응답 payload 로 새지 않는다. 두 스토어 모두
+        # 포트로만 의존하며 구체 어댑터 선택은 컴포지션 루트(app/main.py)가 독점한다(코어는
+        # 어떤 구체 어댑터도 import 하지 않는다).
+        self._control_store = control_store
+        self._input_store = input_store
 
     # --- 조회 -------------------------------------------------------------
 
@@ -334,40 +334,40 @@ class RunService:
                 await self._transition_to_running(run, module)
 
                 definition = definitions[module.module_id]
-                if self._gateway.supports(definition.execution_mode):
-                    if handle is None:
-                        try:
-                            handle = await self._gateway.open_session(
-                                definition.execution_mode,
-                                input_data,
-                                run.run_id,
-                                module.module_id,
-                            )
-                        except Exception as exc:
-                            await self._fail_module(run, module, exc)
-                            continue
+                # 실행은 전적으로 ExecutionGateway 포트 뒤에서 일어난다. 실제 브라우저
+                # 실행과 시뮬레이션의 구분은 더 이상 코어에 없다(합성 게이트웨이가 모드로 라우팅).
+                # 지원하지 않는 execution_mode 면 open_session 이 예외를 던져 모듈이 명확히 실패한다.
+                if handle is None:
+                    try:
+                        handle = await self._gateway.open_session(
+                            definition.execution_mode,
+                            input_data,
+                            run.run_id,
+                            module.module_id,
+                        )
+                    except Exception as exc:
+                        await self._fail_module(run, module, exc)
+                        continue
 
-                    async def on_log(line: str, current_module=module, current_run=run) -> None:
-                        await self._handle_module_log(current_run, current_module, line)
+                async def on_log(line: str, current_module=module, current_run=run) -> None:
+                    await self._handle_module_log(current_run, current_module, line)
 
-                    execution_result = await self._gateway.run_step(
-                        handle, run.run_id, definition, on_log
-                    )
+                execution_result = await self._gateway.run_step(
+                    handle, run.run_id, definition, on_log
+                )
 
-                    if execution_result.status == ModuleStatus.WAITING_INPUT:
-                        if await self._control_store.is_cancel_requested(run.run_id):
-                            # OTP 대기로 멈추려는 순간 취소가 요청된 경우, 일시정지하지 않고 바로 중단한다.
-                            forced_status = RunStatus.CANCELLED
-                            await self._mark_modules_cancelled(run, ordered_modules[index:])
-                            break
-                        await self._pause_for_input(run, module, index, definition, handle, execution_result)
-                        should_finalize = False
-                        paused = True
-                        return
+                if execution_result.status == ModuleStatus.WAITING_INPUT:
+                    if await self._control_store.is_cancel_requested(run.run_id):
+                        # OTP 대기로 멈추려는 순간 취소가 요청된 경우, 일시정지하지 않고 바로 중단한다.
+                        forced_status = RunStatus.CANCELLED
+                        await self._mark_modules_cancelled(run, ordered_modules[index:])
+                        break
+                    await self._pause_for_input(run, module, index, definition, handle, execution_result)
+                    should_finalize = False
+                    paused = True
+                    return
 
-                    await self._record_module_result(run, module, execution_result)
-                else:
-                    await self._run_simulated_module(definition, module)
+                await self._record_module_result(run, module, execution_result)
 
                 module.ended_at = datetime.now(UTC)
                 module.duration_ms = int((module.ended_at - module.started_at).total_seconds() * 1000)
@@ -416,15 +416,6 @@ class RunService:
         # 로그는 별도 스토어가 소유하므로 집합체로 복사하지 않는다(읽기 시 하이드레이션).
         module.current_url = execution_result.current_url
         module.dialog_messages = list(execution_result.dialog_messages)
-
-    async def _run_simulated_module(self, definition, module: RunModule) -> None:
-        await asyncio.sleep(definition.simulated_duration_ms / 1000)
-        if definition.simulated_outcome.upper() == ModuleStatus.FAILED.value:
-            module.status = ModuleStatus.FAILED
-            module.message = "시뮬레이션 실패"
-        else:
-            module.status = ModuleStatus.PASSED
-            module.message = "시뮬레이션 성공"
 
     async def _fail_module(self, run: Run, module: RunModule, exc: Exception) -> None:
         """세션 기동 실패 등 단계 진입 전에 난 오류로 모듈을 실패 처리한다."""

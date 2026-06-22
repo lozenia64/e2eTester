@@ -1,16 +1,31 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
+from starlette.requests import HTTPConnection
 
 from app.auth.jwt import decode_token
 from app.auth.models import User
 
+if TYPE_CHECKING:
+    from app.auth.service import UserService
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
-async def get_current_user(request: Request, token: str | None = Depends(oauth2_scheme)) -> User:
+def get_user_service(connection: HTTPConnection) -> "UserService":
+    """인증/사용자 도메인 서비스 제공자(HTTP·WebSocket 공통)."""
+    return connection.app.state.user_service
+
+
+async def get_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    user_service: "UserService" = Depends(get_user_service),
+) -> User:
     if token is None:
         token = request.cookies.get("access_token")
 
@@ -24,7 +39,6 @@ async def get_current_user(request: Request, token: str | None = Depends(oauth2_
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다.")
 
-    user_service = request.app.state.user_service
     try:
         user = await user_service.get_user(user_id)
     except KeyError:

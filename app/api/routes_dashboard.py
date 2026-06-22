@@ -1,25 +1,35 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.api.dependencies import get_run_service, get_suite_service
 from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+
+if TYPE_CHECKING:
+    from app.orchestrator.run_service import RunService
+    from app.orchestrator.suite_service import SuiteService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard_home(request: Request, current_user: User = Depends(get_current_user)):
+async def dashboard_home(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    run_service: "RunService" = Depends(get_run_service),
+):
     if isinstance(current_user, RedirectResponse):
         return current_user
     if current_user.role == "admin":
         return RedirectResponse(url="/admin", status_code=302)
-    run_service = request.app.state.run_service
     systems = run_service.list_systems()
     if current_user.role != "admin":
         systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
@@ -85,11 +95,16 @@ async def admin_stats(request: Request, current_user: User = Depends(require_adm
 
 
 @router.get("/suites/{suite_id}", response_class=HTMLResponse)
-async def suite_dashboard(request: Request, suite_id: str, current_user: User = Depends(get_current_user)):
+async def suite_dashboard(
+    request: Request,
+    suite_id: str,
+    current_user: User = Depends(get_current_user),
+    suite_service: "SuiteService" = Depends(get_suite_service),
+):
     if isinstance(current_user, RedirectResponse):
         return current_user
     try:
-        suite = await request.app.state.suite_service.get_suite(suite_id)
+        suite = await suite_service.get_suite(suite_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Suite not found") from exc
     return templates.TemplateResponse(
@@ -103,11 +118,16 @@ async def suite_dashboard(request: Request, suite_id: str, current_user: User = 
 
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
-async def run_dashboard(request: Request, run_id: str, current_user: User = Depends(get_current_user)):
+async def run_dashboard(
+    request: Request,
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    run_service: "RunService" = Depends(get_run_service),
+):
     if isinstance(current_user, RedirectResponse):
         return current_user
     try:
-        run = await request.app.state.run_service.get_run(run_id)
+        run = await run_service.get_run(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return templates.TemplateResponse(

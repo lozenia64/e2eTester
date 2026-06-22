@@ -85,7 +85,9 @@ e2eTester/
       models.py
     execution/
       gateway.py                 # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
+      composite_gateway.py       # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       local_gateway.py           # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
+      simulated_gateway.py       # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
     events/
       bus.py                     # EventBus + RunFinished/SuiteFinished 도메인 이벤트
       subscribers/
@@ -415,12 +417,14 @@ manifest 에 들어 있는 정보:
 
 ### 5.5 Runtime / Runner 계층
 
-이 계층은 `ExecutionGateway` 포트 뒤에 있다. 오케스트레이터는 포트만 보고, 아래 구현은 `LocalExecutionGateway` 어댑터가 캡슐화한다.
+이 계층은 `ExecutionGateway` 포트 뒤에 있다. 오케스트레이터는 포트만 보고, 실제 구현은 어댑터들이 캡슐화한다. 오케스트레이터는 실행/시뮬레이션을 구분하지 않고 단일 포트(`CompositeExecutionGateway`)만 호출하며, 합성 게이트웨이가 `execution_mode` 로 담당 어댑터를 고른다.
 
 현재 구현:
 
 - `app/execution/gateway.py` (`ExecutionGateway` 포트 + `ExecutionHandle`: 오케스트레이션 ↔ 실행 경계)
+- `app/execution/composite_gateway.py` (`CompositeExecutionGateway` — 여러 어댑터를 `execution_mode` 로 라우팅하는 합성 게이트웨이. `supports`/`open_session` 은 모드 인자로, 세션 수명 메서드는 핸들의 `execution_mode` 로 어댑터 선택. 어댑터 목록 배선은 컴포지션 루트 `app/main.py` 가 소유)
 - `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터: `app/systems/loader.py` 로 executor 로딩, 세션별 단일 스레드 풀·런타임 수명·이벤트 루프↔실행 스레드 로그 브리지 소유)
+- `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — `execution_mode == "simulated"` 모듈을 브라우저 없이 매니페스트의 `simulated_duration_ms`/`simulated_outcome` 대로 처리하는 테스트 더블 어댑터. 시뮬레이션 로직이 더 이상 오케스트레이터에 인라인되지 않고 같은 포트 뒤의 어댑터로 분리됨)
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
 - `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·OTP 일시정지(`WAITING_INPUT_PREFIX`) 해석·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol)
 - `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)와 `_run_step` 디스패치가 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
@@ -611,7 +615,7 @@ artifacts/
 
 - 사용자 입력 대기(`WAITING_INPUT`, 예: 휴대폰 OTP 대기)는 모듈 종료가 아니라 일시정지이므로 그 시점에는 스크린샷을 찍지 않는다. OTP 제출 후 모듈이 실제로 끝날 때 캡처된다.
 - 초기 단계에서 페이지/브라우저 자체가 깨지면 스크린샷이 없을 수 있다.
-- `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 HOM·MHM manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. (등록된 executor가 없는 `execution_mode` 일 때만 시뮬레이션으로 동작하며, 이 경우 아티팩트가 생성되지 않는다.)
+- `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 등록된 시스템 manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. 시뮬레이션은 `SimulatedExecutionGateway`(포트 어댑터)가 `execution_mode == "simulated"` 모듈에 한해 `simulated_duration_ms`/`simulated_outcome` 대로 처리하며, 아티팩트는 생성되지 않는다. 실제 실행기가 없는 **알 수 없는** `execution_mode` 는 더 이상 조용히 시뮬레이션되지 않고 `open_session` 에서 예외가 나 해당 모듈이 명확히 FAILED 처리된다.
 
 아직 없는 것:
 
