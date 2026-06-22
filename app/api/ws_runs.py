@@ -1,15 +1,25 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from typing import TYPE_CHECKING
 
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+
+from app.api.dependencies import get_run_service
 from app.auth.jwt import decode_token
+
+if TYPE_CHECKING:
+    from app.orchestrator.run_service import RunService
 
 
 router = APIRouter(tags=["ws"])
 
 
 @router.websocket("/ws/runs/{run_id}")
-async def run_updates(websocket: WebSocket, run_id: str):
+async def run_updates(
+    websocket: WebSocket,
+    run_id: str,
+    run_service: "RunService" = Depends(get_run_service),
+):
     token = websocket.cookies.get("access_token")
     if not token:
         await websocket.close(code=1008)
@@ -24,7 +34,6 @@ async def run_updates(websocket: WebSocket, run_id: str):
         return
 
     await websocket.accept()
-    run_service = websocket.app.state.run_service
     queue = await run_service.subscribe(run_id)
     try:
         run = await run_service.get_run(run_id)

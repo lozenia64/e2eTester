@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from typing import TYPE_CHECKING
 
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+
+from app.api.dependencies import get_suite_service
 from app.auth.jwt import decode_token
+
+if TYPE_CHECKING:
+    from app.orchestrator.suite_service import SuiteService
 
 router = APIRouter(tags=["ws"])
 
 
 @router.websocket("/ws/suites/{suite_id}")
-async def suite_updates(websocket: WebSocket, suite_id: str):
+async def suite_updates(
+    websocket: WebSocket,
+    suite_id: str,
+    suite_service: "SuiteService" = Depends(get_suite_service),
+):
     token = websocket.cookies.get("access_token")
     if not token:
         await websocket.close(code=1008)
@@ -23,7 +33,6 @@ async def suite_updates(websocket: WebSocket, suite_id: str):
         return
 
     await websocket.accept()
-    suite_service = websocket.app.state.suite_service
     queue = await suite_service.subscribe(suite_id)
     try:
         suite = await suite_service.get_suite(suite_id)

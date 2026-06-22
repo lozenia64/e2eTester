@@ -5,31 +5,51 @@ import io
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from typing import TYPE_CHECKING
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
+from app.api.dependencies import (
+    get_module_settings_repo,
+    get_registry,
+    get_run_service,
+    get_schedule_repository,
+    get_stats_service,
+    get_suite_repository,
+)
 from app.orchestrator.run_actor import load_actor_context
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
 from app.core.models import ModuleSettings
+
+if TYPE_CHECKING:
+    from app.auth.service import UserService
+    from app.orchestrator.run_service import RunService
+    from app.orchestrator.stats_service import StatsService
+    from app.registry.loader import ModuleRegistry
+    from app.storage.ports import ScheduleRepositoryPort, SuiteRepositoryPort
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/runs")
 async def admin_list_runs(
-    request: Request,
     limit: int = Query(default=100, ge=1, le=1000),
     system_code: str | None = Query(default=None),
     user_name: str | None = Query(default=None),
     current_user: User = Depends(require_admin),
+    run_service: "RunService" = Depends(get_run_service),
+    user_service: "UserService" = Depends(get_user_service),
+    suite_repo: "SuiteRepositoryPort" = Depends(get_suite_repository),
+    schedule_repo: "ScheduleRepositoryPort" = Depends(get_schedule_repository),
 ) -> list[dict[str, Any]]:
     actor_context = await load_actor_context(
-        request.app.state.user_service,
-        request.app.state.suite_service._repository,
-        request.app.state.schedule_service._repository,
+        user_service,
+        suite_repo,
+        schedule_repo,
     )
-    summaries = await request.app.state.run_service.list_run_summaries(
+    summaries = await run_service.list_run_summaries(
         limit=limit,
         system_code=system_code,
         user_name_query=user_name,
@@ -40,12 +60,12 @@ async def admin_list_runs(
 
 @router.delete("/runs/{run_id}")
 async def admin_delete_run(
-    request: Request,
     run_id: str,
     current_user: User = Depends(require_admin),
+    run_service: "RunService" = Depends(get_run_service),
 ) -> dict[str, bool]:
     try:
-        await request.app.state.run_service.delete_run(run_id)
+        await run_service.delete_run(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run을 찾을 수 없습니다.") from exc
     except ValueError as exc:
@@ -55,46 +75,46 @@ async def admin_delete_run(
 
 @router.get("/stats/usage")
 async def admin_usage_stats(
-    request: Request,
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     current_user: User = Depends(require_admin),
+    stats_service: "StatsService" = Depends(get_stats_service),
 ):
-    stats = await request.app.state.stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
+    stats = await stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
     return stats.model_dump(mode="json")
 
 
 @router.get("/users")
 async def admin_list_users(
-    request: Request,
     current_user: User = Depends(require_admin),
+    user_service: "UserService" = Depends(get_user_service),
 ) -> list[UserPublic]:
-    users = await request.app.state.user_service.list_users()
+    users = await user_service.list_users()
     return [UserPublic(**u.model_dump()) for u in users]
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 async def admin_create_user(
-    request: Request,
     payload: CreateUserRequest,
     current_user: User = Depends(require_admin),
+    user_service: "UserService" = Depends(get_user_service),
 ) -> UserPublic:
-    user = await request.app.state.user_service.create_user(payload)
+    user = await user_service.create_user(payload)
     return UserPublic(**user.model_dump())
 
 
 @router.patch("/users/{user_id}/active")
 async def admin_toggle_user_active(
-    request: Request,
     user_id: str,
     payload: dict,
     current_user: User = Depends(require_admin),
+    user_service: "UserService" = Depends(get_user_service),
 ) -> UserPublic:
     is_active = payload.get("is_active")
     if not isinstance(is_active, bool):
         raise HTTPException(status_code=400, detail="is_active 값이 필요합니다.")
     try:
-        user = await request.app.state.user_service.update_user_active(user_id, is_active)
+        user = await user_service.update_user_active(user_id, is_active)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.") from exc
     return UserPublic(**user.model_dump())
@@ -102,12 +122,12 @@ async def admin_toggle_user_active(
 
 @router.delete("/users/{user_id}")
 async def admin_delete_user(
-    request: Request,
     user_id: str,
     current_user: User = Depends(require_admin),
+    user_service: "UserService" = Depends(get_user_service),
 ) -> dict:
     try:
-        await request.app.state.user_service.delete_user(user_id)
+        await user_service.delete_user(user_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.") from exc
     except AttributeError:
@@ -117,12 +137,12 @@ async def admin_delete_user(
 
 @router.get("/stats/savings/csv")
 async def admin_savings_csv(
-    request: Request,
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     current_user: User = Depends(require_admin),
+    stats_service: "StatsService" = Depends(get_stats_service),
 ) -> StreamingResponse:
-    stats = await request.app.state.stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
+    stats = await stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -163,10 +183,9 @@ async def admin_savings_csv(
 
 @router.get("/systems")
 async def admin_list_systems(
-    request: Request,
     current_user: User = Depends(require_admin),
+    registry: "ModuleRegistry" = Depends(get_registry),
 ) -> list[dict]:
-    registry = request.app.state.stats_service._registry
     return [
         {"system_code": s.system_code, "system_name": s.name}
         for s in registry.list_systems()
@@ -175,16 +194,16 @@ async def admin_list_systems(
 
 @router.put("/users/{user_id}/systems")
 async def admin_update_user_systems(
-    request: Request,
     user_id: str,
     payload: dict,
     current_user: User = Depends(require_admin),
+    user_service: "UserService" = Depends(get_user_service),
 ) -> UserPublic:
     codes = payload.get("allowed_system_codes")
     if not isinstance(codes, list):
         raise HTTPException(status_code=400, detail="allowed_system_codes 목록이 필요합니다.")
     try:
-        user = await request.app.state.user_service.update_user_systems(user_id, codes)
+        user = await user_service.update_user_systems(user_id, codes)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.") from exc
     return UserPublic(**user.model_dump())
@@ -192,12 +211,10 @@ async def admin_update_user_systems(
 
 @router.get("/module-settings")
 async def admin_list_module_settings(
-    request: Request,
     current_user: User = Depends(require_admin),
+    registry: "ModuleRegistry" = Depends(get_registry),
+    repo=Depends(get_module_settings_repo),
 ) -> list[dict]:
-    registry = request.app.state.stats_service._registry
-    repo = request.app.state.module_settings_repo
-
     overrides: dict[str, int] = {}
     if repo is not None:
         for s in await repo.list():
@@ -226,16 +243,15 @@ async def admin_list_module_settings(
 
 @router.put("/module-settings/{module_id:path}")
 async def admin_update_module_settings(
-    request: Request,
     module_id: str,
     payload: dict,
     current_user: User = Depends(require_admin),
+    repo=Depends(get_module_settings_repo),
 ) -> dict:
     seconds = payload.get("estimated_manual_seconds")
     if not isinstance(seconds, int) or seconds < 0:
         raise HTTPException(status_code=400, detail="estimated_manual_seconds 값이 필요합니다.")
 
-    repo = request.app.state.module_settings_repo
     if repo is None:
         raise HTTPException(status_code=503, detail="모듈 설정 저장소가 초기화되지 않았습니다.")
 

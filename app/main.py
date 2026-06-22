@@ -23,7 +23,9 @@ from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.events.bus import EventBus
 from app.events.subscribers.email_notification import EmailNotificationSubscriber
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
+from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.local_gateway import LocalExecutionGateway
+from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
@@ -73,7 +75,15 @@ async def lifespan(app: FastAPI):
     system_codes = [system.system_code for system in registry.list_systems()]
 
     # 실행 경계: 오케스트레이터는 이 포트 뒤의 브라우저/스레드/런타임을 모른다.
-    execution_gateway = LocalExecutionGateway(artifact_manager, system_codes)
+    # 실제 실행(LocalExecutionGateway)과 시뮬레이션(SimulatedExecutionGateway)을 합성
+    # 게이트웨이가 execution_mode 로 라우팅한다. 시뮬레이션은 더 이상 코어에 인라인되지 않고
+    # 같은 포트 뒤의 어댑터로 존재한다. 어댑터 선택(배선)은 이 컴포지션 루트가 독점한다.
+    execution_gateway = CompositeExecutionGateway(
+        [
+            LocalExecutionGateway(artifact_manager, system_codes),
+            SimulatedExecutionGateway(),
+        ]
+    )
 
     # 도메인 이벤트 버스 + 부수 관심사 구독자(AI 실패 분석·종료 메일).
     event_bus = EventBus()
@@ -106,6 +116,11 @@ async def lifespan(app: FastAPI):
     )
     app.state.run_service = run_service
     app.state.suite_service = suite_service
+    # API 의존성 주입(app/api/dependencies.py)이 꺼내 쓰는 공유 싱글턴들. 라우트가 서비스의
+    # 비공개 속성(._registry/._repository)을 들춰보지 않고 포트/레지스트리를 직접 주입받게 한다.
+    app.state.registry = registry
+    app.state.suite_repository = suite_repository
+    app.state.schedule_repository = schedule_repository
     app.state.stats_service = StatsService(
         run_repo=repository,
         suite_repo=suite_repository,
