@@ -54,8 +54,8 @@ FastAPI app
 
 현재 구조의 핵심 특징:
 
-- 웹 요청과 실행 orchestration은 같은 프로세스에 있다. 단, **오케스트레이션(상태머신)과 브라우저 실행(부작용)은 `ExecutionGateway` 포트(`app/execution/gateway.py`)로 분리**되어 있다. `RunService` 는 불투명한 `ExecutionHandle` 만 들고 `open_session`/`run_step`/`submit_input`/`close_session` 을 호출할 뿐, Playwright 도 스레드 풀도 직접 다루지 않는다.
-- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다(이벤트 루프 ↔ 실행 스레드 로그 브리지도 어댑터 안에 캡슐화). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
+- 웹 요청과 실행 orchestration은 같은 프로세스에 있다. 단, **오케스트레이션(상태머신)과 브라우저 실행(부작용)은 `ExecutionGateway` 포트(`app/execution/gateway.py`)로 분리**되어 있다. `RunService` 는 불투명하고 **직렬화 가능한** `ExecutionHandle`(frozen `execution_mode` + `session_id` 토큰, 라이브 런타임 참조 없음)만 들고 `open_session`/`run_step`/`submit_input`/`close_session` 을 호출할 뿐, Playwright 도 스레드 풀도 직접 다루지 않는다. 라이브 런타임은 게이트웨이 내부 세션 레지스트리(`_sessions`, `session_id` 키)에만 있어 오케스트레이터/`PendingOtpState` 로 새지 않는다.
+- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다. 실행 스레드 → 이벤트 루프 로그 브리지는 **논블로킹**이다: 실행 스레드는 `loop.call_soon_threadsafe(queue.put_nowait, line)` 로 큐에 넣기만 하고(즉시 반환, 이벤트 루프 완료를 기다리지 않음), `run_step` 안의 async 드레인 태스크가 `asyncio.Queue` 를 FIFO 로 비우며 로그 콜백을 순서대로 호출한다(느린 이벤트 루프가 더는 브라우저 스레드를 라인 단위로 막지 못함; 센티넬로 드레인 완료를 await 하므로 순서·"`module_finished` 이전 로그 flush" 불변식은 유지). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
 - 이 포트가 곧 "워커 경계"의 in-process 구현이다. 동일 포트로 별도 워커 프로세스/Playwright MCP 구현체를 끼우면 오케스트레이터를 손대지 않고 실행을 격리할 수 있다.
 - AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
@@ -317,9 +317,9 @@ e2eTester/
 상태머신이 직접 담당하는 책임:
 
 - 모듈 상태 전이 관리, 의존성 실패 시 `BLOCKED` 처리
-- OTP 대기 상태 저장(`PendingOtpState`, 공유 세션 `ExecutionHandle` 유지)·OTP 제출 후 중단된 단계부터 재개
-- Run 취소(`cancel_run`): 취소 플래그(`_cancel_requested`)를 세팅하고, 실행 루프가 모듈 사이에서 이를 확인해 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
-- 동일 입력 재실행(`rerun_run`): Run 생성 시 보관한 입력값(otp_code 제외, `_run_inputs`)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII를 포함할 수 있어 메모리에만 보관하며 응답/WebSocket payload 로는 직렬화하지 않는다.
+- OTP 대기 상태 저장: 재개 컨텍스트(직렬화 세션 토큰 + resume index + module id)를 `RunControlStorePort`(기본 `SqliteRunControlStore`)에 영속한다. 더 이상 서비스-인스턴스 메모리 dict 가 아니다 — OTP 제출 시 토큰으로 핸들을 복원해 중단된 단계부터 재개한다. OTP 값 자체는 저장하지 않고 게이트웨이가 런타임에 직접 주입한다.
+- Run 취소(`cancel_run`): 취소 의도를 `RunControlStorePort` 에 영속(취소 컬럼과 pending 컬럼이 분리돼 동시 갱신 충돌 없음)하고, 실행 루프가 모듈 사이에서 이를 **스토어에서 최신값으로 읽어** 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
+- 동일 입력 재실행(`rerun_run`): Run 생성 시 `RunInputStorePort` 에 보관한 입력값(otp_code 미포함)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII 라 Run blob/이벤트 payload 로 직렬화하지 않고 전용 스토어에만 둔다(Phase 1 기본 인메모리; 암호화 SQLite 어댑터를 끼우면 재기동 후 rerun 까지 가능).
 - Run 종료(finalize) 시 `RunFinished` 도메인 이벤트 발행
 
 현재 상태 전이:
