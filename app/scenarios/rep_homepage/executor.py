@@ -73,7 +73,8 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
         # 모바일 채널은 페이지 생성 직후, 접속 이전에 모바일 디바이스 모드를 적용한다.
         if profile.mobile:
             common.apply_mobile_device_mode(playwright, page)
-        common.grant_browser_permissions(context, config.base_url)
+        else:
+            common.grant_browser_permissions(context, config.base_url)
         page.set_default_timeout(config.timeout_ms)
         page.set_default_navigation_timeout(config.timeout_ms)
         dialog_messages = common.add_dialog_logger(page)

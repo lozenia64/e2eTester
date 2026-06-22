@@ -32,7 +32,7 @@
 
 ### 3.1 메인화면 접속 (`hwtc.main.access`)
 
-1. Playwright로 Chrome(영속 프로파일 `~/.e2etester/hwtc-chrome-profile`)을 기동한다.
+1. Playwright로 Chrome(Cursor Playwright MCP와 동일한 영속 프로파일 `%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`; `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`로 재정의 가능)을 기동한다.
 2. `https://sls.hwgeneralins.com` 으로 직접 이동(`domcontentloaded`)한다. 사이트 정책상 로그인 화면(`/login/loginForm.do`)으로 리다이렉트될 수 있다.
 3. 초기 안내 팝업이 있으면 `닫기` 형태 버튼으로 정리한다(`app/systems/access_common/browser.py` 의 `maybe_close_popup`).
 4. 메인화면 스크린샷(`final.png`)을 남기고 "메인화면 접속 성공"으로 종료한다.

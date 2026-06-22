@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -14,6 +15,15 @@ MAX_TIMEOUT_MS: Final[int] = 20000
 MAIN_ACCESS_TIMEOUT_MS: Final[int] = 20000
 DEFAULT_USER_DATA_ROOT: Final[Path] = Path.home() / ".e2etester"
 MOBILE_DEVICE_NAME: Final[str] = "iPhone 14 Pro"
+REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
+
+# Playwright MCP(@playwright/mcp) persistent profile root — %LOCALAPPDATA%/ms-playwright-mcp
+PLAYWRIGHT_MCP_PROFILES_ROOT: Final[Path] = Path(
+    os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")
+) / "ms-playwright-mcp"
+PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE: Final[str] = (
+    "--disable-blink-features=AutomationControlled"
+)
 
 # Playwright 가 Chrome 실행 시 끄는 기본 feature 들. 로컬 네트워크 차단 해제를 위해
 # --disable-features 를 직접 넘기면 Chromium 은 마지막 하나만 인식하므로, Playwright
@@ -49,6 +59,11 @@ LOCAL_NETWORK_DISABLED_FEATURES: Final[tuple[str, ...]] = (
     "PrivateNetworkAccessPermissionPrompt",
 )
 
+# 연수원(SLS) self-defender 가 Playwright CDP 연결을 감지하면 alert("개발자 도구…")를 띄운다.
+# window.alert 패치(init script)는 무결성 검사에 걸려 로그인 AJAX 가 차단되므로 쓰지 않는다.
+# → add_dialog_logger 에서만 로그·dialog_messages 수집을 생략하고 accept() 한다.
+DEVTOOLS_BLOCK_ALERT_SUBSTRING: Final[str] = "개발자 도구"
+
 
 def normalize_base_url(raw: str | None, default: str) -> str:
     candidate = (raw or default).strip()
@@ -82,7 +97,45 @@ def resolve_user_data_dir(profile_name: str) -> Path:
     return target
 
 
-def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, user_data_dir: Path):
+def resolve_workspace_dir() -> Path:
+    """Playwright MCP 가 프로필 해시에 쓰는 workspace 경로(cwd)."""
+    override = os.environ.get("E2E_WORKSPACE_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    return REPO_ROOT.resolve()
+
+
+def resolve_playwright_mcp_user_data_dir(
+    *,
+    channel: str = PREFERRED_BROWSER_CHANNEL,
+    workspace_dir: Path | None = None,
+) -> Path:
+    """Cursor Playwright MCP 와 동일한 persistent profile 경로.
+
+    ms-playwright-mcp/mcp-{channel}-{sha256(workspace)[:7]}
+    """
+    override = os.environ.get("E2E_PLAYWRIGHT_MCP_PROFILE_DIR")
+    if override:
+        target = Path(override).expanduser()
+    else:
+        workspace = workspace_dir or resolve_workspace_dir()
+        token = hashlib.sha256(str(workspace).encode()).hexdigest()[:7]
+        target = PLAYWRIGHT_MCP_PROFILES_ROOT / f"mcp-{channel}-{token}"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def is_devtools_block_dialog(message: str) -> bool:
+    return DEVTOOLS_BLOCK_ALERT_SUBSTRING in message
+
+
+def launch_legacy_persistent_browser_context(
+    playwright,
+    headless: bool,
+    slow_mo: int,
+    user_data_dir: Path,
+):
+    """설치형 보안프로그램용 영속 Chrome 프로파일 launch (HOM·FP·HRP)."""
     user_data_dir.mkdir(parents=True, exist_ok=True)
     disabled_features = ",".join(
         PLAYWRIGHT_DEFAULT_DISABLED_FEATURES + LOCAL_NETWORK_DISABLED_FEATURES
@@ -108,6 +161,66 @@ def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, 
         )
     except Exception as exc:
         print(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
+        return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
+
+
+def launch_persistent_browser_context(
+    playwright,
+    headless: bool,
+    slow_mo: int,
+    user_data_dir: Path,
+):
+    """``launch_legacy_persistent_browser_context`` 별칭 (하위 호환)."""
+    return launch_legacy_persistent_browser_context(playwright, headless, slow_mo, user_data_dir)
+
+
+# 설치형 보안프로그램이 필요한 access 시스템 — 시스템별 ``~/.e2etester/{code}-chrome-profile``
+LEGACY_BROWSER_ACCESS_SYSTEMS: Final[frozenset[str]] = frozenset({"fp", "hrp"})
+
+
+def launch_standard_browser_context(playwright, headless: bool):
+    """Cursor Playwright MCP 프로필·launch (HWTC·CHBOT 등)."""
+    return launch_playwright_mcp_browser_context(
+        playwright,
+        headless,
+        resolve_playwright_mcp_user_data_dir(),
+    )
+
+
+def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_dir: Path):
+    """Playwright MCP(createPersistentBrowser) 와 동일한 launch 옵션.
+
+    - ignore --disable-extensions (확장 프로그램 허용)
+    - --disable-blink-features=AutomationControlled
+    - headed: viewport=None / headless: 1280x720
+    - grant_permissions·커스텀 --disable-features 없음
+    """
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    common_args = {
+        "headless": headless,
+        "viewport": {"width": 1280, "height": 720} if headless else None,
+        "ignore_default_args": ["--disable-extensions"],
+        "args": [PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE],
+    }
+    try:
+        print(
+            f"[step] Launch Playwright MCP-style browser: {PREFERRED_BROWSER_CHANNEL} "
+            f"({user_data_dir})"
+        )
+        return playwright.chromium.launch_persistent_context(
+            str(user_data_dir),
+            channel=PREFERRED_BROWSER_CHANNEL,
+            **common_args,
+        )
+    except Exception as exc:
+        message = str(exc)
+        if "ProcessSingleton" in message or "exitCode=21" in message:
+            raise RuntimeError(
+                "Playwright MCP Chrome 프로필이 이미 사용 중입니다. "
+                "Cursor Playwright MCP 브라우저를 닫거나 "
+                "E2E_PLAYWRIGHT_MCP_PROFILE_DIR 로 별도 프로필을 지정하세요."
+            ) from exc
+        print(f"[warn] Falling back to bundled Chromium (MCP-style): {exc}")
         return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
 
 
@@ -162,9 +275,17 @@ def add_dialog_logger(page: Page) -> list[str]:
     messages: list[str] = []
 
     def _handle(dialog) -> None:
-        messages.append(dialog.message)
-        print(f"[dialog] {dialog.message}")
-        dialog.accept()
+        devtools = is_devtools_block_dialog(dialog.message)
+        try:
+            if devtools:
+                dialog.accept()
+                return
+            messages.append(dialog.message)
+            print(f"[dialog] {dialog.message}")
+            dialog.accept()
+        except Exception:
+            if not devtools:
+                raise
 
     page.on("dialog", _handle)
     return messages

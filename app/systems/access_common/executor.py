@@ -46,19 +46,25 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
 
     def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> AccessRuntime:
         headless = self._resolve_headless(input_data)
-        slow_mo = 250 if not headless else 0
         base_url = browser.normalize_base_url(input_data.get("base_url"), self._base_url)
-        user_data_dir = browser.resolve_user_data_dir(f"{self._system_code}-chrome-profile")
 
         from playwright.sync_api import sync_playwright
 
         playwright_manager = sync_playwright()
         playwright = playwright_manager.__enter__()
-        context = browser.launch_persistent_browser_context(playwright, headless, slow_mo, user_data_dir)
+        if self._system_code in browser.LEGACY_BROWSER_ACCESS_SYSTEMS:
+            slow_mo = 250 if not headless else 0
+            user_data_dir = browser.resolve_user_data_dir(f"{self._system_code}-chrome-profile")
+            context = browser.launch_legacy_persistent_browser_context(
+                playwright, headless, slow_mo, user_data_dir
+            )
+        else:
+            context = browser.launch_standard_browser_context(playwright, headless)
         page = context.pages[0] if context.pages else context.new_page()
         if self._mobile:
             browser.apply_mobile_device_mode(playwright, page)
-        browser.grant_browser_permissions(context, base_url)
+        if self._system_code in browser.LEGACY_BROWSER_ACCESS_SYSTEMS:
+            browser.grant_browser_permissions(context, base_url)
         page.set_default_timeout(browser.MAX_TIMEOUT_MS)
         page.set_default_navigation_timeout(browser.MAX_TIMEOUT_MS)
         dialog_messages = browser.add_dialog_logger(page)

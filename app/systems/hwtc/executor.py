@@ -5,8 +5,10 @@ from pathlib import Path
 
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
+from app.runner.screenshot import SELF_DEFENDER_HOST_FRAGMENTS
 from app.runner.workflow_engine import WAITING_INPUT_PREFIX, BaseWorkflowExecutor
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
+from app.systems.access_common import browser
 from app.systems.hwtc.steps import phone_auth, video_playback
 
 DEFAULT_BASE_URL = "https://sls.hwgeneralins.com"
@@ -22,22 +24,51 @@ class HwtcRuntime(AccessRuntime):
 
 class HwtcWorkflowExecutor(AccessWorkflowExecutor):
     def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> HwtcRuntime:
-        base = super().build_runtime(input_data, run_id, module_id)
+        headless = self._resolve_headless(input_data)
+        base_url = browser.normalize_base_url(input_data.get("base_url"), self._base_url)
+
+        from playwright.sync_api import sync_playwright
+
+        playwright_manager = sync_playwright()
+        playwright = playwright_manager.__enter__()
+        context = browser.launch_standard_browser_context(playwright, headless)
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(browser.MAX_TIMEOUT_MS)
+        page.set_default_navigation_timeout(browser.MAX_TIMEOUT_MS)
+        dialog_messages = browser.add_dialog_logger(page)
         return HwtcRuntime(
-            base_url=base.base_url,
-            mobile=base.mobile,
-            playwright_manager=base.playwright_manager,
-            context=base.context,
-            page=base.page,
-            dialog_messages=base.dialog_messages,
-            executor=base.executor,
-            closed=base.closed,
+            base_url=base_url,
+            mobile=self._mobile,
+            playwright_manager=playwright_manager,
+            context=context,
+            page=page,
+            dialog_messages=dialog_messages,
             user_id=(input_data.get("user_id") or "").strip(),
             password=(input_data.get("password") or "").strip(),
             otp_code=(input_data.get("otp_code") or "").strip(),
         )
 
+    def _shutdown_browser(self, runtime: HwtcRuntime) -> None:
+        browser.shutdown_browser(runtime.page, runtime.context)
+
+    def _should_capture_module_screenshot(
+        self,
+        runtime: HwtcRuntime,
+        module: ModuleDefinition,
+    ) -> bool:
+        if module.workflow_step != "main_access":
+            return True
+        if any(fragment in runtime.base_url for fragment in SELF_DEFENDER_HOST_FRAGMENTS):
+            print(
+                "[step] Skip main_access screenshot on SLS "
+                "(self-defender: evaluate/screenshot poisons login AJAX)"
+            )
+            return False
+        return True
+
     def _run_step(self, runtime: HwtcRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
+        if module.workflow_step == "main_access":
+            return phone_auth.run_main_access(runtime.page, runtime.base_url)
         if module.workflow_step == "phone_auth":
             if not runtime.user_id or not runtime.password:
                 raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
@@ -47,6 +78,7 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
                     user_id=runtime.user_id,
                     password=runtime.password,
                     base_url=runtime.base_url,
+                    dialog_messages=runtime.dialog_messages,
                 )
                 runtime.phone_auth_sms_requested = True
                 if not runtime.otp_code:

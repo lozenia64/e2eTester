@@ -61,7 +61,7 @@ python3 -m playwright install chromium
 
 일반 브라우저나 Cursor의 Playwright MCP와 동일하게 보안프로그램(키보드보안/백신류 로컬 에이전트·확장)을 인식시키기 위해, 브라우저를 다음과 같이 띄웁니다.
 
-- **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. 프로파일은 기본 `~/.e2etester/chrome-profile` 에 저장되며 환경변수 `E2E_USER_DATA_DIR` 로 경로를 바꿀 수 있습니다. 이미 보안 확장이 설치된 본인의 Chrome 프로파일을 그대로 쓰려면 해당 경로를 `E2E_USER_DATA_DIR` 로 지정하세요(같은 프로파일을 쓰는 Chrome 창이 떠 있으면 안 되고, 동시 실행도 같은 프로파일을 공유할 수 없습니다).
+- **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. **HOM·FP·HRP**는 설치형 보안프로그램 호환을 위해 시스템별 `~/.e2etester/{chrome-profile|fp-chrome-profile|hrp-chrome-profile}` 프로파일과 기존 launch 옵션을 씁니다(`E2E_USER_DATA_DIR`로 경로 변경 가능). **MHM·HWTC·CHBOT** 등 나머지는 Cursor Playwright MCP와 동일한 프로파일(`%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`, `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`로 재정의)을 씁니다. 같은 프로파일을 쓰는 Chrome/MCP 창이 떠 있으면 Run이 실패할 수 있으며, 동시 실행도 같은 프로파일을 공유할 수 없습니다.
 - **확장 활성화**: Playwright 기본값인 `--disable-extensions`(및 component-extensions) 를 제거해, 보안프로그램의 브라우저 확장이 로드되도록 합니다.
 - **로컬 네트워크 허용**: 보안프로그램은 로컬 에이전트(loopback/사설망)와 통신합니다. Chrome의 Local/Private Network Access 차단 기능을 꺼서(일반 브라우저에서 "로컬 네트워크 허용"을 켠 것과 동일) 페이지가 로컬 에이전트에 접근할 수 있게 합니다.
 

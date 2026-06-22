@@ -62,6 +62,14 @@ class BaseWorkflowExecutor(ABC):
         browser_mode = (input_data.get("browser_mode") or "headed").strip().lower()
         return browser_mode not in {"headed", "visible", "ui", "false", "0", "no"}
 
+    def _should_capture_module_screenshot(
+        self,
+        runtime: WorkflowRuntime,
+        module: ModuleDefinition,
+    ) -> bool:
+        """모듈 종료 스크린샷 캡처 여부. 시스템별로 오버라이드한다."""
+        return True
+
     def execute_step(
         self,
         runtime: WorkflowRuntime,
@@ -99,7 +107,9 @@ class BaseWorkflowExecutor(ABC):
 
                 # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
                 # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
-                if status is not ModuleStatus.WAITING_INPUT:
+                if status is not ModuleStatus.WAITING_INPUT and self._should_capture_module_screenshot(
+                    runtime, module
+                ):
                     capture_screenshot(runtime.page, screenshot_path)
                 tee.flush()
 
