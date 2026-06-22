@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_run_service
 from app.auth.jwt import decode_token
+from app.orchestrator.run_view import RunView
 
 if TYPE_CHECKING:
     from app.orchestrator.run_service import RunService
@@ -43,7 +44,7 @@ async def run_updates(
                 "run_id": run.run_id,
                 "system_code": run.system_code,
                 "run_status": run.status,
-                "payload": run.model_dump(mode="json"),
+                "payload": RunView.dump(run),
             }
         )
         while True:
