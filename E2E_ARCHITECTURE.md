@@ -88,8 +88,9 @@ e2eTester/
       composite_gateway.py       # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       local_gateway.py           # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
       simulated_gateway.py       # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
+      run_queue.py               # RunExecutionQueue(+JobQueue 포트): 감독되는 실행 작업 큐(워커 풀)
     events/
-      bus.py                     # EventBus + RunFinished/SuiteFinished 도메인 이벤트
+      bus.py                     # EventBus + RunFinished/RunWaitingInput/RunResumed/SuiteFinished 도메인 이벤트
       subscribers/
         failure_analysis.py      # FailureAnalysisSubscriber (AI 실패 분석)
         email_notification.py    # EmailNotificationSubscriber (종료 메일)
@@ -105,7 +106,7 @@ e2eTester/
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
-      suite_service.py
+      suite_service.py           # SuiteService: 이벤트 기반 Saga(RunFinished 구동, 폴링 없음)
     registry/
       loader.py
     scheduling/
@@ -169,13 +170,19 @@ e2eTester/
       hwtc/
       chbot/
     storage/
-      ports.py                   # 저장소 포트(Protocol): Run/RunLog/Suite/Schedule
+      ports.py                   # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule
       sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py       # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       sqlite_run_repository.py   # SQLite Run 상태 어댑터(기본 사용, blob 에 로그 제외)
       sqlite_run_log_store.py    # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
+      sqlite_run_control_store.py # SQLite Run 제어 상태 어댑터(취소·OTP 재개, run_control 테이블)
       sqlite_suite_repository.py # SQLite Suite 어댑터(기본 사용)
+      sqlite_suite_control_store.py # SQLite Suite 제어 상태 어댑터(취소 의도, suite_control 테이블)
       sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
+      run_control_store.py       # 인메모리 Run 제어 상태 어댑터
+      run_input_store.py         # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
+      suite_control_store.py     # 인메모리 Suite 제어 상태 어댑터
+      suite_input_store.py       # 인메모리 Suite 시스템별 입력값 어댑터(기본 사용)
       run_repository.py          # 인메모리 Run 어댑터(테스트·영속 불요용)
       run_log_store.py           # 인메모리 모듈 로그 어댑터
       schedule_repository.py     # 인메모리 예약 어댑터
@@ -359,17 +366,20 @@ Module:
 
 ### 5.3.1 Suite Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/suite_service.py` 다.
+현재 구현 핵심은 `app/orchestrator/suite_service.py` 다. **이벤트 기반 Saga(프로세스 매니저)** 로 동작한다 — 과거의 `_execute_suite` 백그라운드 루프(하위 Run 의 WebSocket 이벤트 큐 구독 + `get_run` 2초 폴링으로 종료 감지)는 제거됐다.
 
 역할:
 
 - `selected_system_codes` 검증·정규화 (`_resolve_selected_system_codes`, `None` 이면 전체 선택)
 - 선택된 시스템에 대해서만 `RunService.validate_run_request` 호출 (HOM 해제 시 HOM 인증 입력 불필요)
 - 등록된 모든 시스템에 대해 `SuiteStep` 생성, 미선택 시스템은 `SKIPPED`
-- `display_order` 순으로 시스템별 Run을 순차 생성 (`triggered_by="suite"`, `suite_id` 태깅)
+- `start_suite` 는 첫 스텝의 Run 만 시작한다. 이후 각 스텝은 직전 스텝의 **`RunFinished` 도메인 이벤트**를 받은 `on_run_finished` 핸들러가 시작한다(`display_order` 순차, `triggered_by="suite"`, `suite_id` 태깅). `register(event_bus)` 로 `RunFinished`/`RunWaitingInput`/`RunResumed` 를 구독한다.
 - 한 시스템 Run이 실패해도 다음 선택 시스템은 계속 실행
-- 시스템 Run의 `WAITING_INPUT`(OTP)을 Suite `WAITING_INPUT`으로 승격하고, OTP 제출 후 재개
-- Suite 종료 시 통합 결과 메일 1통 발송 (`RunService.notify_suite_completion`); Suite 소속 개별 Run 종료 메일은 생략
+- 시스템 Run의 OTP 일시정지/재개는 `RunWaitingInput`/`RunResumed` 도메인 이벤트로 Suite `WAITING_INPUT`/`RUNNING` 에 반영한다(폴링·WS 큐 구독 없음). OTP 는 `POST /api/suites/{suite_id}/otp` → `RunService.submit_otp` 로 제출.
+- **취소 의도는 영속**(`SuiteControlStorePort`, 기본 `SqliteSuiteControlStore`): `cancel_suite` 가 플래그를 세우고 활성 Run 을 취소 → `RunFinished(CANCELLED)` → Saga 가 나머지 스텝을 `CANCELLED` 로 마감. Saga 는 다음 스텝 진입 전에 이 플래그를 스토어에서 최신값으로 읽는다(서비스-인스턴스 메모리 set `_cancel_requested` 제거).
+- 시스템별 입력값은 `SuiteInputStorePort`(기본 `InMemorySuiteInputStore`)가 소유한다(PII 를 Suite blob 에 싣지 않음, `RunInputStore` 와 동일 패턴).
+- Suite 단위 임계영역은 `suite_id` 키 `asyncio.Lock` 으로 직렬화한다(이벤트 핸들러/advance 동시 접근 방지).
+- Suite 종료 시 `SuiteFinished` 도메인 이벤트를 발행해 통합 결과 메일 1통 발송(`EmailNotificationSubscriber`); Suite 소속 개별 Run 종료 메일은 생략
 
 Suite / SuiteStep 상태:
 
@@ -458,7 +468,7 @@ manifest 에 들어 있는 정보:
 
 ### 5.6 Storage 계층
 
-저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`SuiteRepositoryPort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다.
+저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`RunControlStorePort`/`RunInputStorePort`/`SuiteRepositoryPort`/`SuiteControlStorePort`/`SuiteInputStorePort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다. 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다 — Run 은 `RunControlStorePort`/`RunInputStorePort`, Suite 는 `SuiteControlStorePort`/`SuiteInputStorePort`.
 
 **집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않으며**(어댑터의 `save_run` 이 `model_dump_json(exclude=...)` 으로 방어적으로 제외), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
 

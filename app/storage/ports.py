@@ -94,6 +94,34 @@ class RunInputStorePort(Protocol):
     async def delete(self, run_id: str) -> None: ...
 
 
+class SuiteControlStorePort(Protocol):
+    """Suite 의 **비공개 제어 상태**(취소 의도) 저장 경계.
+
+    ``RunControlStorePort`` 와 같은 이유로, Suite 취소 의도를 더 이상 서비스-인스턴스 메모리
+    set(``_cancel_requested``)에 두지 않고 권위 있는 단일 출처로 영속한다. Suite blob 은 WebSocket
+    리스너로 그대로 방송되므로 제어 상태는 형제 스토어가 소유한다. 이벤트 기반 Saga 가 다음
+    스텝으로 진행하기 전에 이 플래그를 (스토어에서 최신값으로) 읽어 협력적으로 중단한다.
+    """
+
+    async def set_cancel_requested(self, suite_id: str) -> None: ...
+    async def is_cancel_requested(self, suite_id: str) -> bool: ...
+    async def delete(self, suite_id: str) -> None: ...
+
+
+class SuiteInputStorePort(Protocol):
+    """Suite 의 시스템별 실행 입력값(``{system_code: {field: value}}``) 저장 경계.
+
+    이벤트 기반 Saga 는 각 스텝의 Run 을 시작할 때 시스템별 입력값이 필요하다(과거에는
+    ``_execute_suite`` 의 루프 클로저에만 들고 있었다). PII 가 섞일 수 있어 Suite blob/이벤트
+    payload 로 직렬화하지 않고 이 전용 스토어에만 둔다(``RunInputStorePort`` 와 동일 패턴, 기본
+    인메모리 휘발성).
+    """
+
+    async def put(self, suite_id: str, systems_input: dict[str, dict[str, str]]) -> None: ...
+    async def get(self, suite_id: str) -> dict[str, dict[str, str]] | None: ...
+    async def delete(self, suite_id: str) -> None: ...
+
+
 class SuiteRepositoryPort(Protocol):
     async def create_suite(self, suite: SuiteRun) -> SuiteRun: ...
     async def save_suite(self, suite: SuiteRun) -> SuiteRun: ...
