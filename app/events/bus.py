@@ -18,6 +18,24 @@ class RunFinished:
 
 
 @dataclass(frozen=True)
+class RunWaitingInput:
+    """Run 이 사용자 입력(OTP) 대기로 일시정지했음을 알리는 도메인 이벤트.
+
+    Suite Saga 가 하위 Run 의 일시정지를 프레젠테이션(WebSocket) 큐 폴링이 아니라 이
+    도메인 이벤트로 감지해 Suite 상태에 반영하도록 한다.
+    """
+
+    run: Run
+
+
+@dataclass(frozen=True)
+class RunResumed:
+    """일시정지된 Run 이 입력(OTP) 접수 후 재개되었음을 알리는 도메인 이벤트."""
+
+    run: Run
+
+
+@dataclass(frozen=True)
 class SuiteFinished:
     """Suite 가 최종 상태(PASSED/FAILED/CANCELLED)로 종료되었음을 알리는 도메인 이벤트."""
 

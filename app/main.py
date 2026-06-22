@@ -25,6 +25,7 @@ from app.events.subscribers.email_notification import EmailNotificationSubscribe
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.local_gateway import LocalExecutionGateway
+from app.execution.run_queue import DEFAULT_RUN_CONCURRENCY, RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.run_service import RunService
@@ -39,7 +40,9 @@ from app.storage.sqlite_run_control_store import SqliteRunControlStore
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
+from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
+from app.storage.suite_input_store import InMemorySuiteInputStore
 from app.storage.sqlite_support import DEFAULT_DB_PATH
 from app.core.env_utils import load_dotenv_file, resolve_env_value
 
@@ -74,6 +77,15 @@ async def lifespan(app: FastAPI):
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
 
+    # 감독되는 실행 작업 큐: Run 실행을 fire-and-forget asyncio.create_task 가 아니라 워커 풀이
+    # 소비한다(예외 격리·동시성 제한·정상 종료). 동시성은 E2E_RUN_CONCURRENCY 로 조정한다.
+    concurrency_raw = resolve_env_value("E2E_RUN_CONCURRENCY", dotenv)
+    try:
+        worker_count = int(concurrency_raw) if concurrency_raw else DEFAULT_RUN_CONCURRENCY
+    except ValueError:
+        worker_count = DEFAULT_RUN_CONCURRENCY
+    run_queue = RunExecutionQueue(worker_count=worker_count)
+
     # 실행 경계: 오케스트레이터는 이 포트 뒤의 브라우저/스레드/런타임을 모른다.
     # 실제 실행(LocalExecutionGateway)과 시뮬레이션(SimulatedExecutionGateway)을 합성
     # 게이트웨이가 execution_mode 로 라우팅한다. 시뮬레이션은 더 이상 코어에 인라인되지 않고
@@ -101,6 +113,7 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
         control_store=run_control_store,
         input_store=run_input_store,
+        run_queue=run_queue,
         artifact_manager=artifact_manager,
     )
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
@@ -108,12 +121,19 @@ async def lifespan(app: FastAPI):
 
     suite_repository = SqliteSuiteRepository(db_path)
     schedule_repository = SqliteScheduleRepository(db_path)
+    # Suite 취소 의도는 영속(SQLite), 시스템별 입력값은 인메모리(Phase 1, RunInputStore 와 동일).
+    suite_control_store = SqliteSuiteControlStore(db_path)
+    suite_input_store = InMemorySuiteInputStore()
     suite_service = SuiteService(
         registry=registry,
         run_service=run_service,
         repository=suite_repository,
         event_bus=event_bus,
+        cancel_store=suite_control_store,
+        input_store=suite_input_store,
     )
+    # Suite Saga 가 의존하는 도메인 이벤트(RunFinished/RunWaitingInput/RunResumed) 구독 등록.
+    suite_service.register(event_bus)
     app.state.run_service = run_service
     app.state.suite_service = suite_service
     # API 의존성 주입(app/api/dependencies.py)이 꺼내 쓰는 공유 싱글턴들. 라우트가 서비스의
@@ -139,6 +159,10 @@ async def lifespan(app: FastAPI):
             f"Suite {interrupted_suites}건을 CANCELLED 로 정리했습니다."
         )
 
+    # 감독되는 작업 큐의 워커를 띄운다(reconcile 이후 — reconcile 은 작업을 제출하지 않는다).
+    run_queue.start()
+    print(f"[startup] 실행 작업 큐 워커 {run_queue.worker_count}개 시작.")
+
     scheduler = SchedulerService(
         run_service=run_service,
         suite_service=suite_service,
@@ -155,6 +179,7 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except asyncio.CancelledError:
             pass
+        await run_queue.stop()
 
 
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)

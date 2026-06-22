@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -8,7 +9,7 @@ from uuid import uuid4
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import Run, RunModule
 from app.domain.run_aggregate import RunAggregate
-from app.events.bus import EventBus, RunFinished
+from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.orchestrator.run_comparator import RunComparator
 from app.orchestrator.run_event_publisher import RunEventPublisher
@@ -24,6 +25,7 @@ from app.storage.ports import (
 )
 
 if TYPE_CHECKING:
+    from app.execution.run_queue import JobQueue
     from app.orchestrator.run_actor import ActorContext
 
 
@@ -48,6 +50,7 @@ class RunService:
         event_bus: EventBus,
         control_store: RunControlStorePort,
         input_store: RunInputStorePort,
+        run_queue: "JobQueue",
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
         artifact_manager: ArtifactManager | None = None,
@@ -57,6 +60,9 @@ class RunService:
         self._log_store = log_store
         self._gateway = execution_gateway
         self._event_bus = event_bus
+        # 실행 코루틴은 더 이상 fire-and-forget asyncio.create_task 가 아니라, 감독되는 작업
+        # 큐(워커 풀 · 예외 격리 · 동시성 제한 · 수명 관리)에 제출한다.
+        self._run_queue = run_queue
         self._comparator = comparator or RunComparator(repository)
         self._planner = planner or RunPlanner()
         self._events = RunEventPublisher(repository)
@@ -210,7 +216,10 @@ class RunService:
         await self._input_store.put(run_id, dict(sanitized_input))
         await self._repository.create_run(run)
         await self._events.run_event("run_created", run)
-        asyncio.create_task(self._execute_run(run.run_id, sanitized_input))
+        await self._run_queue.submit(
+            functools.partial(self._execute_run, run.run_id, sanitized_input),
+            label=f"run:{run.run_id}",
+        )
         return run
 
     async def submit_otp(self, run_id: str, otp_code: str) -> Run:
@@ -232,9 +241,11 @@ class RunService:
         await self._repository.save_run(run)
         await self._events.module_event("module_queued", run, waiting_module)
         await self._events.run_event("run_resumed", run)
+        await self._event_bus.publish(RunResumed(run=run))
         await self._control_store.clear_pending(run_id)
-        asyncio.create_task(
-            self._execute_run(run_id, input_data, pending.resume_index, handle)
+        await self._run_queue.submit(
+            functools.partial(self._execute_run, run_id, input_data, pending.resume_index, handle),
+            label=f"run:{run_id}:resume",
         )
         return run
 
@@ -418,6 +429,8 @@ class RunService:
         await self._repository.save_run(run)
         await self._events.module_event("module_waiting_input", run, module)
         await self._events.run_event("run_waiting_input", run)
+        # Suite Saga 가 하위 Run 의 일시정지를 폴링이 아니라 도메인 이벤트로 감지하도록 발행.
+        await self._event_bus.publish(RunWaitingInput(run=run))
         # 재개 컨텍스트(직렬화 토큰 + resume index)는 메모리 dict 가 아니라 제어 스토어가 소유한다.
         # 입력값(PII)은 start_run 에서 이미 input_store 에 보관됐다.
         await self._control_store.set_pending(
