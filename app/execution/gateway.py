@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from dataclasses import dataclass
+from typing import Awaitable, Callable
 
 from app.core.models import ModuleDefinition
 from app.runner.workflow_common import StepExecutionResult
@@ -13,19 +13,20 @@ from app.runner.workflow_common import StepExecutionResult
 LogSink = Callable[[str], Awaitable[None]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExecutionHandle:
-    """오케스트레이터가 들고 다니는 불투명한 실행 세션 핸들.
+    """오케스트레이터가 들고 다니는 **직렬화 가능한** 실행 세션 토큰.
 
-    내부 구현(브라우저 런타임, 스레드 풀, 원격 워커 식별자 등)은 게이트웨이만 안다.
-    오케스트레이터는 이 핸들을 재개(start_index)·취소·종료 시 게이트웨이에 그대로
-    되돌려 줄 뿐, ``execution_mode`` 외의 내부 필드에 접근하지 않는다.
+    두 필드 모두 평범한 문자열이므로 메모리 참조(라이브 브라우저 런타임·스레드 풀 등)를
+    전혀 담지 않는다. 실제 런타임은 게이트웨이가 ``session_id`` 로 자기 안에서만 보관하며,
+    오케스트레이터는 이 토큰을 재개(start_index)·취소·종료 시 게이트웨이에 그대로 되돌려
+    줄 뿐 내부를 들여다보지 않는다. 핸들이 값(value)이므로 OTP 일시정지 상태(``PendingOtpState``)
+    에 라이브 객체가 새지 않고, 장차 별도 프로세스/원격 워커 구현으로 토큰을 그대로 넘길 수 있다.
     """
 
     execution_mode: str
-    # 어댑터 전용 내부 상태. 오케스트레이터는 절대 들여다보지 않는다.
-    runtime: Any = None
-    internal: dict[str, Any] = field(default_factory=dict)
+    # 게이트웨이 내부 세션 레지스트리의 키. 라이브 객체가 아니라 식별자(문자열)다.
+    session_id: str
 
 
 class ExecutionGateway(ABC):
