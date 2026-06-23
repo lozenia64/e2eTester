@@ -1,0 +1,69 @@
+{
+  "collected_at": "2026-06-23",
+  "source": "Playwright MCP on https://www.eagleprm.co.kr/amain.do (logged-in session)",
+  "navigation": {
+    "main_page_path": "/amain.do",
+    "top_menu_salvage": {
+      "playwright": "page.get_by_role('link', name='잔존물')",
+      "note": "클릭 시 서브메뉴 펼침"
+    },
+    "submenu_bid_inquiry": {
+      "playwright": "page.get_by_role('link', name='잔존물입찰조회')",
+      "note": "서브메뉴 첫 항목"
+    }
+  },
+  "list_screen": {
+    "page_heading": {
+      "playwright": "page.get_by_role('heading', name='잔존물입찰조회', level=2)"
+    },
+    "bottom_tab": {
+      "playwright": "page.locator('.tab-area, .bottom-tab').get_by_role('link', name='잔존물입찰조회')",
+      "fallback": "page.get_by_role('link', name='잔존물입찰조회').last"
+    },
+    "work_iframe": {
+      "playwright": "page.locator('iframe[name^=\"workArea_\"]')",
+      "observed_name_list": "workArea_hrpF020"
+    },
+    "total_count": {
+      "playwright": "frame.get_by_text(re.compile(r'총\\s*\\d+\\s*건'))",
+      "observed_text": "총 19 건"
+    },
+    "list_table_header": {
+      "playwright": "frame.get_by_role('columnheader', name='순번')"
+    },
+    "first_row_sequence": {
+      "playwright": "frame.locator('table').nth(1).get_by_role('row').first.get_by_role('cell').first",
+      "observed_text": "1"
+    },
+    "first_row_receipt_number": {
+      "playwright": "frame.locator('table').nth(1).get_by_role('row').first.get_by_role('cell').nth(1)",
+      "observed_text": "202606-09817-02-001",
+      "note": "접수번호 셀 클릭으로 상세 진입"
+    },
+    "search_button": {
+      "playwright": "frame.get_by_role('button', name='조회')"
+    }
+  },
+  "detail_screen": {
+    "page_heading": {
+      "playwright": "page.get_by_role('heading', name='잔존물입찰', level=2)"
+    },
+    "bottom_tab": {
+      "playwright": "page.get_by_role('link', name='잔존물입찰')"
+    },
+    "sections": {
+      "registrant": {
+        "playwright": "frame.get_by_role('heading', name='등록자 정보', level=3)"
+      },
+      "registration": {
+        "playwright": "frame.get_by_role('heading', name='등록정보', level=3)"
+      },
+      "accident": {
+        "playwright": "frame.get_by_role('heading', name='사고정보', level=3)"
+      },
+      "vehicle": {
+        "playwright": "frame.get_by_role('heading', name='차량정보', level=3)"
+      }
+    }
+  }
+}

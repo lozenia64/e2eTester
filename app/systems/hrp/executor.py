@@ -7,7 +7,7 @@ from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.workflow_engine import WAITING_INPUT_PREFIX
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
-from app.systems.hrp.steps import login
+from app.systems.hrp.steps import login, salvage_bid_inquiry_detail, salvage_bid_inquiry_list
 
 DEFAULT_BASE_URL = "https://www.eagleprm.co.kr"
 
@@ -56,6 +56,10 @@ class HrpWorkflowExecutor(AccessWorkflowExecutor):
                 otp_code=runtime.otp_code,
                 dialog_messages=runtime.dialog_messages,
             )
+        if module.workflow_step == "salvage_bid_inquiry_list":
+            return salvage_bid_inquiry_list.run(runtime.page, base_url=runtime.base_url)
+        if module.workflow_step == "salvage_bid_inquiry_detail":
+            return salvage_bid_inquiry_detail.run(runtime.page, base_url=runtime.base_url)
         return super()._run_step(runtime, module, artifact_dir)
 
     def update_otp_code(self, runtime: HrpRuntime, otp_code: str) -> None:
