@@ -42,7 +42,7 @@ modules:
     estimated_manual_seconds: 120
   - module_id: hwtc.phone.auth
     system_code: hwtc
-    name: 휴대폰 인증
+    name: 로그인
     description: 아이디·비밀번호 로그인 후 SMS 인증번호를 발급하고 OTP 입력으로 로그인을 완료합니다.
     group: login
     order: 20

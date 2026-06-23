@@ -297,7 +297,7 @@ e2eTester/
 - `GET /admin` (관리자 대시보드 HTML)
 - `GET /admin/users` (사용자 관리 HTML)
 - `GET /admin/stats` (사용량 통계 HTML)
-- `GET /admin/modules` (모듈별 수동 업무 시간 관리 HTML)
+- `GET /admin/modules` (모듈별 수동 업무 시간 관리 HTML; 시스템 카드당 저장 버튼 1개로 변경분 일괄 저장)
 
 역할:
 

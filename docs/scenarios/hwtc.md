@@ -19,7 +19,7 @@
 `manifest.yaml` `order` 기준:
 
 1. `hwtc.main.access` — 메인화면 접속 (`workflow_step: main_access`, `timeout_seconds: 120`)
-2. `hwtc.phone.auth` — 휴대폰 인증 (`workflow_step: phone_auth`, `timeout_seconds: 180`)
+2. `hwtc.phone.auth` — 로그인 (`workflow_step: phone_auth`, `timeout_seconds: 180`)
 3. `hwtc.video.playback` — 동영상 재생 (`workflow_step: video_playback`, `timeout_seconds: 180`)
 
 의존성 그래프:
@@ -37,7 +37,7 @@
 3. 초기 안내 팝업이 있으면 `닫기` 형태 버튼으로 정리한다(`app/systems/access_common/browser.py` 의 `maybe_close_popup`).
 4. 메인화면 스크린샷(`final.png`)을 남기고 "메인화면 접속 성공"으로 종료한다.
 
-### 3.2 휴대폰 인증 (`hwtc.phone.auth`)
+### 3.2 로그인 (`hwtc.phone.auth`)
 
 1. 로그인 화면(`/login/loginForm.do`)이 아니면 해당 URL로 이동한다.
 2. 초기 팝업이 있으면 정리한다.

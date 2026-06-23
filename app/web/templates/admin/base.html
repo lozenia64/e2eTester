@@ -48,10 +48,6 @@
             </a>
         </nav>
         <div class="border-t border-gray-200 px-6 py-4 space-y-2">
-            <a href="/" class="flex items-center gap-2 text-xs text-indigo-600 font-semibold hover:underline">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                사용자 화면으로
-            </a>
             {% if current_user %}
             <p class="text-xs text-gray-500">{{ current_user.name }}</p>
             <a href="/account/password" class="block text-xs text-gray-600 hover:text-gray-900">비밀번호 변경</a>
