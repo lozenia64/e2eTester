@@ -20,11 +20,15 @@
 
 1. `hrp.main.access` — 메인화면 접속 (`workflow_step: main_access`, `timeout_seconds: 120`)
 2. `hrp.login` — 로그인 (`workflow_step: login`, `timeout_seconds: 180`)
+3. `hrp.salvage.bid.inquiry.list` — 잔존물 입찰 조회(목록) (`workflow_step: salvage_bid_inquiry_list`, `timeout_seconds: 180`)
+4. `hrp.salvage.bid.inquiry.detail` — 잔존물 입찰 조회(상세) (`workflow_step: salvage_bid_inquiry_detail`, `timeout_seconds: 180`)
 
 의존성 그래프:
 
 - `hrp.main.access` → 없음
 - `hrp.login` → `hrp.main.access`
+- `hrp.salvage.bid.inquiry.list` → `hrp.login`
+- `hrp.salvage.bid.inquiry.detail` → `hrp.salvage.bid.inquiry.list`
 
 ## 3. 시나리오 상세
 
@@ -64,6 +68,32 @@
 | SMS 인증 | 인증번호 받기 | `#btnSMS` |
 | SMS 인증 | 확인 | `#btnOk` |
 | SMS 인증 | 취소 | `#btnCancel` |
+
+### 3.3 잔존물 입찰 조회(목록) (`hrp.salvage.bid.inquiry.list`)
+
+1. 로그인 완료 후 메인화면(`/amain.do`)에서 시작한다. 다른 URL이면 `/amain.do`로 이동한다.
+2. 상단 메뉴 **잔존물** → **잔존물입찰조회**를 클릭한다.
+3. **목록 검증**: 페이지 제목 `잔존물입찰조회`(h2), 하단 탭 **잔존물입찰조회** 생성, iframe `workArea_hrpF020` 내 **총 N건** 건수 표시, 목록 **순번 1** 행·접수번호 존재를 확인하면 성공한다.
+
+### 3.4 잔존물 입찰 조회(상세) (`hrp.salvage.bid.inquiry.detail`)
+
+1. 목록 모듈 직후 **잔존물입찰조회** 화면(동일 브라우저 세션)에서 시작한다.
+2. 순번 1 행의 **접수번호** 셀을 클릭해 상세 화면으로 진입한다.
+3. **상세 검증**: 페이지 제목 `잔존물입찰`(h2), 하단 탭 **잔존물입찰** 생성, iframe `workArea_hrpF021` 내 **등록자 정보·등록정보·사고정보·차량정보** 섹션(h3) 존재를 확인하면 성공한다.
+
+#### 셀렉터 요약 (Playwright MCP 수집)
+
+| 단계 | 요소 | Playwright / CSS |
+|------|------|------------------|
+| 메뉴 | 잔존물 | `get_by_role('link', name='잔존물')` |
+| 메뉴 | 잔존물입찰조회 | `get_by_role('link', name='잔존물입찰조회')` |
+| 목록 | 페이지 제목 | `get_by_role('heading', name='잔존물입찰조회', level=2)` |
+| 목록 | work iframe | `iframe[name="workArea_hrpF020"]` |
+| 목록 | 총 건수 | `get_by_text(/총\s*\d+\s*건/)` (iframe 내) |
+| 목록 | 순번 1 / 접수번호 | `get_by_role('row').filter(has_text=접수번호패턴)` 후 첫 `cell`·접수번호 `cell` |
+| 상세 | 페이지 제목 | `get_by_role('heading', name='잔존물입찰', level=2)` |
+| 상세 | work iframe | `iframe[name="workArea_hrpF021"]` |
+| 상세 | 정보 섹션 | `get_by_role('heading', name='등록자 정보'|'등록정보'|'사고정보'|'차량정보', level=3)` |
 
 ## 4. 향후 시나리오
 
