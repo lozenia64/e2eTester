@@ -263,6 +263,17 @@ class SubmitOtpRequest(BaseModel):
     otp_code: str
 
 
+class InboundOtpRequest(BaseModel):
+    """SMS 중계기(안드로이드/문자 포워더)가 보내는 인바운드 OTP 요청.
+
+    ``run_id`` 없이 코드만 보낸다(중계기는 어느 Run 이 대기 중인지 모른다). ``code`` 가 오면
+    그대로 쓰고, 없으면 ``text``(SMS 원문)를 서버가 정규식으로 파싱한다.
+    """
+
+    code: str | None = None
+    text: str | None = None
+
+
 class CreateScheduleRequest(BaseModel):
     cron: str
     name: str = ""

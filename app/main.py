@@ -13,6 +13,7 @@ from app.auth.service import UserService
 from app.storage.sqlite_user_repository import SqliteUserRepository
 from app.api.routes_admin import router as admin_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_otp import router as otp_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_schedules import router as schedules_router
 from app.api.routes_suites import router as suites_router
@@ -141,6 +142,10 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.suite_repository = suite_repository
     app.state.schedule_repository = schedule_repository
+    # SMS 중계 인바운드 OTP(POST /api/otp/inbound): 기기 토큰 미설정 시 기능 비활성(엔드포인트가
+    # 503). SMS 원문 파싱 정규식은 회사 SMS 형식에 맞춰 재정의 가능(미설정 시 라우트 기본값).
+    app.state.otp_relay_token = resolve_env_value("E2E_OTP_RELAY_TOKEN", dotenv)
+    app.state.otp_relay_regex = resolve_env_value("E2E_OTP_RELAY_REGEX", dotenv)
     app.state.stats_service = StatsService(
         run_repo=repository,
         suite_repo=suite_repository,
@@ -190,6 +195,7 @@ app.include_router(admin_router)
 app.include_router(dashboard_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
+app.include_router(otp_router)
 app.include_router(schedules_router)
 app.include_router(suites_router)
 app.include_router(ws_runs_router)
