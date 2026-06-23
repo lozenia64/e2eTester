@@ -249,6 +249,33 @@ class RunService:
         )
         return run
 
+    async def submit_otp_to_waiting(self, otp_code: str) -> Run:
+        """현재 OTP 입력 대기 중인 Run 을 찾아 OTP 를 제출하고 재개한다.
+
+        SMS 중계기는 ``run_id`` 를 모르고 코드만 보내므로, 서버가 "지금 OTP 를 기다리는 Run"
+        을 찾아 기존 ``submit_otp`` 로 위임한다. 제어 스토어의 pending(=OTP 대기)이 권위 있는
+        단일 출처이므로, ``WAITING_INPUT`` Run 중 pending 이 살아 있는 것만 후보로 본다(상태와
+        제어 스토어가 어긋난 경합 상황을 배제). 무인 자동화는 본래 순차 실행이라 보통 1건이며,
+        여러 건이면 가장 최근에 요청된 Run(방금 도착한 SMS 에 대응)을 고른다.
+        """
+        candidates: list[Run] = []
+        for run in await self._repository.list_runs():
+            if run.status != RunStatus.WAITING_INPUT:
+                continue
+            if await self._control_store.get_pending(run.run_id) is None:
+                continue
+            candidates.append(run)
+        if not candidates:
+            raise KeyError("OTP 입력을 기다리는 Run이 없습니다.")
+        candidates.sort(key=lambda run: run.requested_at, reverse=True)
+        target = candidates[0]
+        if len(candidates) > 1:
+            print(
+                f"[otp-relay] OTP 대기 Run 이 {len(candidates)}건입니다. "
+                f"가장 최근 요청 Run({target.run_id})에 제출합니다."
+            )
+        return await self.submit_otp(target.run_id, otp_code)
+
     async def cancel_run(self, run_id: str) -> Run:
         run = await self._repository.get_run(run_id)
         if run.status in {RunStatus.PASSED, RunStatus.FAILED, RunStatus.CANCELLED}:

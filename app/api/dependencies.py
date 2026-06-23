@@ -55,3 +55,13 @@ def get_schedule_repository(connection: HTTPConnection) -> "ScheduleRepositoryPo
 
 def get_module_settings_repo(connection: HTTPConnection):
     return connection.app.state.module_settings_repo
+
+
+def get_otp_relay_token(connection: HTTPConnection) -> str | None:
+    """SMS 중계 인바운드 OTP 엔드포인트의 기기 인증 토큰(미설정 시 None = 기능 비활성)."""
+    return getattr(connection.app.state, "otp_relay_token", None)
+
+
+def get_otp_relay_regex(connection: HTTPConnection) -> str | None:
+    """SMS 원문에서 OTP 를 추출할 정규식(미설정 시 None → 라우트의 기본 정규식 사용)."""
+    return getattr(connection.app.state, "otp_relay_regex", None)

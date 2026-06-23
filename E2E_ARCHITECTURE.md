@@ -273,6 +273,7 @@ e2eTester/
 - `GET /api/suites/{suite_id}`
 - `POST /api/suites/{suite_id}/cancel`
 - `POST /api/suites/{suite_id}/otp` (현재 대기 중인 시스템 Run에 OTP 전달)
+- `POST /api/otp/inbound` (SMS 중계기 → 현재 OTP 대기 Run 자동 탐색 후 OTP 주입·재개; 사용자 세션이 아닌 `X-OTP-Relay-Token` 기기 토큰 인증, `E2E_OTP_RELAY_TOKEN` 미설정 시 비활성)
 - `GET /api/schedules` (예약 목록 요약, input_data / suite_systems 제외)
 - `POST /api/schedules/systems/{system_code}` (개별 시스템 cron 예약 등록)
 - `POST /api/schedules/suites` (전체 점검 cron 예약 등록, `selected_system_codes` 포함)
@@ -306,7 +307,7 @@ e2eTester/
 - Run 생성 (`selected_module_ids` 로 실행 모듈 부분 선택 가능)
 - Suite 생성 (`selected_system_codes` 로 실행 시스템 부분 선택 가능, 미지정 시 전체)
 - Run / Suite / 노드 조회
-- OTP 재개 (`POST /api/runs/{run_id}/otp`, Suite 경유 `POST /api/suites/{suite_id}/otp`)
+- OTP 재개 (`POST /api/runs/{run_id}/otp`, Suite 경유 `POST /api/suites/{suite_id}/otp`, SMS 중계 경유 `POST /api/otp/inbound` — run_id 없이 현재 대기 Run 자동 탐색)
 - Run 취소 (`POST /api/runs/{run_id}/cancel`) — 진행 중/대기 중 Run을 `CANCELLED` 로 중단
 - Suite 취소 (`POST /api/suites/{suite_id}/cancel`) — 진행 중 Suite와 현재 시스템 Run을 함께 중단
 - 동일 입력 재실행 (`POST /api/runs/{run_id}/rerun`) — 같은 시스템·입력·모듈 선택으로 새 Run 생성
