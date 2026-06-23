@@ -5,9 +5,12 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_suite_service
+from app.auth.dependencies import get_user_service
 from app.auth.jwt import decode_token
+from app.orchestrator.suite_view import filter_suite_event_for_user, filter_suite_for_user
 
 if TYPE_CHECKING:
+    from app.auth.service import UserService
     from app.orchestrator.suite_service import SuiteService
 
 router = APIRouter(tags=["ws"])
@@ -18,6 +21,7 @@ async def suite_updates(
     websocket: WebSocket,
     suite_id: str,
     suite_service: "SuiteService" = Depends(get_suite_service),
+    user_service: "UserService" = Depends(get_user_service),
 ):
     token = websocket.cookies.get("access_token")
     if not token:
@@ -25,7 +29,12 @@ async def suite_updates(
         return
     try:
         payload = decode_token(token)
-        if not payload.get("sub"):
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=1008)
+            return
+        user = await user_service.get_user(user_id)
+        if not user.is_active:
             await websocket.close(code=1008)
             return
     except Exception:
@@ -35,7 +44,7 @@ async def suite_updates(
     await websocket.accept()
     queue = await suite_service.subscribe(suite_id)
     try:
-        suite = await suite_service.get_suite(suite_id)
+        suite = filter_suite_for_user(await suite_service.get_suite(suite_id), user)
         await websocket.send_json(
             {
                 "event_type": "snapshot",
@@ -45,7 +54,7 @@ async def suite_updates(
             }
         )
         while True:
-            event = await queue.get()
+            event = filter_suite_event_for_user(await queue.get(), user)
             await websocket.send_json(event.model_dump(mode="json"))
     except WebSocketDisconnect:
         pass

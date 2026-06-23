@@ -11,6 +11,7 @@ from app.api.dependencies import get_run_service, get_suite_service
 from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.orchestrator.suite_view import filter_suite_for_user
 
 if TYPE_CHECKING:
     from app.orchestrator.run_service import RunService
@@ -107,6 +108,7 @@ async def suite_dashboard(
         suite = await suite_service.get_suite(suite_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Suite not found") from exc
+    suite = filter_suite_for_user(suite, current_user)
     return templates.TemplateResponse(
         request,
         "suite.html",

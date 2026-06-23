@@ -1667,6 +1667,17 @@ function readSelectedSuiteSystemCodes(form) {
     return codes.filter(Boolean);
 }
 
+function readSuiteScopeSystemCodes(form) {
+    const codes = [];
+    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
+        const code = String(checkbox.dataset.systemCode ?? checkbox.value ?? "").trim();
+        if (code) {
+            codes.push(code);
+        }
+    }
+    return codes;
+}
+
 function updateSuiteSystemSelectorState(form) {
     const summary = form.querySelector('[data-role="suite-system-selection-summary"]');
     const checkboxes = [...form.querySelectorAll('[data-role="suite-system-checkbox"]')];
@@ -1710,6 +1721,7 @@ function collectSuiteRequest(form) {
         browser_mode: browserMode,
         systems,
         selected_system_codes: [...selectedCodes],
+        scope_system_codes: readSuiteScopeSystemCodes(form),
     };
 }
 

@@ -81,13 +81,13 @@ python3 -m playwright install chromium
 프로젝트 폴더에서 아래 명령을 실행합니다.
 
 ```bash
-python3 -m uvicorn app.main:app --reload
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 예:
 
 ```bash
-/usr/local/bin/python3 -m uvicorn app.main:app --reload
+/usr/local/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 ### 5. 브라우저에서 접속
@@ -95,10 +95,18 @@ python3 -m uvicorn app.main:app --reload
 웹 브라우저에서 아래 주소로 접속합니다.
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:2222
 ```
 
-접속 후 웹 화면에서 테스트를 실행하면 됩니다.
+같은 PC가 아닌 다른 기기(휴대폰 SMS 중계기 등)에서 접속할 때는 PC의 IP 주소를 사용합니다. 서버는 `--host 0.0.0.0`으로 모든 네트워크 인터페이스에서 수신합니다.
+
+```text
+http://<PC IP>:2222
+```
+
+예: PC IP가 `219.251.153.96`이면 `http://219.251.153.96:2222`
+
+Windows 방화벽에서 TCP 2222 인바운드를 허용해야 할 수 있습니다.
 
 ## 사용 흐름
 
@@ -240,7 +248,7 @@ E2E_GEMINI_SSL_VERIFY=true
 
 ```bash
 cd e2eTester
-python3 -m uvicorn app.main:app --reload
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 터미널에서 일회성으로 값을 덮어쓰고 싶다면 아래처럼 입력할 수 있습니다.
@@ -252,7 +260,7 @@ export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
 export GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
 
-python3 -m uvicorn app.main:app --reload
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 한 줄로 실행하고 싶다면 아래처럼 입력할 수도 있습니다.
@@ -263,13 +271,13 @@ cd e2eTester
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
 GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest" \
-python3 -m uvicorn app.main:app --reload
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 브라우저에서 아래 주소로 접속하면 됩니다.
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:2222
 ```
 
 참고:
@@ -278,7 +286,7 @@ http://127.0.0.1:8000
 - `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
 - 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
 - 회사망 프록시나 사설 인증서 때문에 Gemini API 에서 `CERTIFICATE_VERIFY_FAILED` 가 발생하면 `E2E_GEMINI_SSL_VERIFY=false` 로 SSL 인증서 검증을 우회할 수 있습니다.
-- AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload`만 실행하면 됩니다.
+- AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222`만 실행하면 됩니다.
 - 홈 화면에는 AI 분석 상태 카드가 표시되며, 현재 설정값이 유효한지 바로 확인할 수 있습니다.
 - AI 분석 설정이 잘못되어도 앱은 실행되지만, 실패 분석 결과는 생성되지 않을 수 있습니다.
 
@@ -287,7 +295,7 @@ http://127.0.0.1:8000
 예:
 
 ```bash
-/usr/local/bin/python3 -m uvicorn app.main:app --reload
+/usr/local/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
 옵션 설명:
@@ -376,13 +384,13 @@ E2E_OTP_RELAY_REGEX="(\d{4,8})"
 
 ```bash
 # (1) 폰/앱이 OTP 숫자만 추출해 보내는 경우
-curl -X POST http://<서버>:8000/api/otp/inbound \
+curl -X POST http://<서버>:2222/api/otp/inbound \
   -H "X-OTP-Relay-Token: 길고_무작위한_토큰" \
   -H "Content-Type: application/json" \
   -d '{"code":"123456"}'
 
 # (2) SMS 원문을 그대로 보내고 서버가 정규식으로 추출하는 경우
-curl -X POST http://<서버>:8000/api/otp/inbound \
+curl -X POST http://<서버>:2222/api/otp/inbound \
   -H "X-OTP-Relay-Token: 길고_무작위한_토큰" \
   -H "Content-Type: application/json" \
   -d '{"text":"[한화손해보험] 인증번호는 123456 입니다."}'

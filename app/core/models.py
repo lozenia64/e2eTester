@@ -168,6 +168,7 @@ class Schedule(BaseModel):
     browser_mode: str | None = None
     suite_systems: dict[str, dict[str, str]] | None = None
     selected_system_codes: list[str] | None = None
+    scope_system_codes: list[str] | None = None
     step_total: int | None = None
     created_at: datetime
     created_by_user_id: str | None = None
@@ -288,6 +289,7 @@ class CreateSuiteScheduleRequest(BaseModel):
     browser_mode: str = "headed"
     systems: dict[str, dict[str, str]] = Field(default_factory=dict)
     selected_system_codes: list[str] | None = None
+    scope_system_codes: list[str] | None = None
     enabled: bool = True
 
 
@@ -328,3 +330,4 @@ class StartSuiteRequest(BaseModel):
     browser_mode: str = "headed"
     systems: dict[str, dict[str, str]] = Field(default_factory=dict)
     selected_system_codes: list[str] | None = None
+    scope_system_codes: list[str] | None = None

@@ -115,6 +115,7 @@ class SchedulerService:
             browser_mode=browser_mode,
             suite_systems=normalized_systems,
             selected_system_codes=resolved_system_codes,
+            scope_system_codes=request.scope_system_codes,
             step_total=len(resolved_system_codes),
             created_at=datetime.now(UTC),
             created_by_user_id=user_id,
@@ -268,6 +269,9 @@ class SchedulerService:
                 systems=dict(schedule.suite_systems or {}),
                 selected_system_codes=list(schedule.selected_system_codes)
                 if schedule.selected_system_codes is not None
+                else None,
+                scope_system_codes=list(schedule.scope_system_codes)
+                if schedule.scope_system_codes is not None
                 else None,
             ),
             user_id=actor_id,

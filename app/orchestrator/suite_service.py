@@ -150,6 +150,29 @@ class SuiteService:
         selected_set = set(selected_values)
         return [code for code in ordered_codes if code in selected_set]
 
+    @staticmethod
+    def _resolve_scope_system_codes(
+        systems: list[SystemDefinition],
+        scope_system_codes: list[str] | None,
+    ) -> list[str]:
+        ordered_codes = [system.system_code for system in systems]
+        if scope_system_codes is None:
+            return ordered_codes
+
+        scope_set: set[str] = set()
+        for raw_code in scope_system_codes:
+            code = raw_code.strip().lower()
+            if code:
+                scope_set.add(code)
+
+        known_codes = set(ordered_codes)
+        unknown_codes = [code for code in scope_set if code not in known_codes]
+        if unknown_codes:
+            joined = ", ".join(unknown_codes)
+            raise ValueError(f"알 수 없는 시스템이 범위에 포함되었습니다: {joined}")
+
+        return [code for code in ordered_codes if code in scope_set]
+
     def validate_suite_request(
         self,
         browser_mode: str,
@@ -192,10 +215,13 @@ class SuiteService:
             request.selected_system_codes,
         )
         selected_set = set(resolved_system_codes)
+        scope_codes = self._resolve_scope_system_codes(systems, request.scope_system_codes)
+        system_by_code = {system.system_code: system for system in systems}
 
         steps: list[SuiteStep] = []
-        for index, system in enumerate(systems):
-            is_selected = system.system_code in selected_set
+        for index, code in enumerate(scope_codes):
+            system = system_by_code[code]
+            is_selected = code in selected_set
             steps.append(
                 SuiteStep(
                     system_code=system.system_code,

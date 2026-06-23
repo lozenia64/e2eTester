@@ -48,7 +48,7 @@ Body:    {"code": "123456"}            # 권장: 숫자 코드만
 
 1. OTP 를 받는 그 번호의 SIM 이 꽂힌 안드로이드 폰에 포워더 앱 설치.
 2. 트리거: **수신 SMS**(가능하면 발신자/키워드로 OTP 문자만 필터).
-3. 액션: HTTP **POST** `http://<서버>:8000/api/otp/inbound`
+3. 액션: HTTP **POST** `http://<서버>:2222/api/otp/inbound`
    - 헤더 `X-OTP-Relay-Token: <토큰>`, `Content-Type: application/json`
    - 본문 `{"text": "{{sms_body}}"}` (앱이 본문 변수를 치환). 앱이 정규식 추출을 지원하면
      숫자만 뽑아 `{"code": "{{추출값}}"}` 로 보내도 된다.
