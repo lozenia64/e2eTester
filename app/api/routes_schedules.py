@@ -11,7 +11,8 @@ from app.api.dependencies import (
 )
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.models import CreateScheduleRequest, CreateSuiteScheduleRequest, Schedule
+from app.core.models import CreateScheduleRequest, CreateSuiteScheduleRequest, Schedule, StartSuiteRequest
+from app.orchestrator.suite_view import resolve_suite_request_for_user
 
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry
@@ -78,14 +79,25 @@ async def create_suite_schedule(
     registry: "ModuleRegistry" = Depends(get_registry),
 ):
     if current_user.role != "admin":
-        allowed = current_user.allowed_system_codes
         all_codes = [s.system_code for s in registry.list_systems()]
-        requested = payload.selected_system_codes or all_codes
-        blocked = [code for code in requested if code not in allowed]
-        if blocked:
-            raise HTTPException(status_code=403, detail=f"접근 권한이 없는 시스템: {', '.join(blocked)}")
+        try:
+            resolved = resolve_suite_request_for_user(
+                StartSuiteRequest(
+                    browser_mode=payload.browser_mode,
+                    systems=payload.systems,
+                    selected_system_codes=payload.selected_system_codes,
+                    scope_system_codes=payload.scope_system_codes,
+                ),
+                all_system_codes=all_codes,
+                allowed_system_codes=current_user.allowed_system_codes,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         payload = payload.model_copy(
-            update={"selected_system_codes": [code for code in requested if code in allowed]}
+            update={
+                "selected_system_codes": resolved.selected_system_codes,
+                "scope_system_codes": resolved.scope_system_codes,
+            }
         )
     try:
         schedule = await schedule_service.create_suite_schedule(

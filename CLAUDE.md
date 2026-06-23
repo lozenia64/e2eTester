@@ -13,8 +13,8 @@ An internal web-triggered E2E test platform (Korean-language UI/docs). A FastAPI
 python3 -m pip install -r requirements.txt
 python3 -m playwright install chromium   # fallback browser; local Chrome channel is preferred at runtime
 
-# Run the server (then open http://127.0.0.1:8000)
-python3 -m uvicorn app.main:app --reload
+# Run the server (then open http://127.0.0.1:2222 or http://<PC IP>:2222)
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 
 # Docs ↔ source consistency guard (run before opening a PR; CI also runs this)
 python3 scripts/check_docs_consistency.py

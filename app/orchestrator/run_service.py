@@ -108,6 +108,7 @@ class RunService:
         system_code: str | None = None,
         user_name_query: str | None = None,
         actor_context: ActorContext | None = None,
+        run_status: RunStatus | None = None,
     ) -> list[dict]:
         if user_id is not None:
             runs = await self._repository.list_runs_by_user(user_id)
@@ -118,6 +119,8 @@ class RunService:
         normalized_name_query = (user_name_query or "").strip().casefold()
         summaries: list[dict] = []
         for run in runs:
+            if run_status is not None and run.status != run_status:
+                continue
             summary = summarize_run(run, actor_context=actor_context)
             if system_code and summary.get("system_code") != system_code:
                 continue

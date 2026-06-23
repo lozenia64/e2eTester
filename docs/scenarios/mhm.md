@@ -84,6 +84,7 @@
 
 역할:
 
+- (있으면) 메인 화면 하단 이벤트 배너 팝업(`.dialog.bottom.bottom_bnr.show`) — **`닫기`**(`button.btn.s1.c1.ui_dialog_close`) 클릭 후 로그인 버튼 탐색
 - 모바일 로그인 진입(햄버거/하단 메뉴 등)으로 로그인 페이지로 이동
 - 인증 수단에 따라 분기
 - **휴대폰**: [`/lin/fid/LginTypSlc1000`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1000)에서 **`다른 로그인 방법`**(`main button.btn.btn_more`) 클릭 → **`휴대폰인증`**(`main a[role="button"].c5` / `span.cert_select_text`) 클릭 → [`/lin/fid/LginTypSlc1020`](https://m.hwgeneralins.com/lin/fid/LginTypSlc1020) 폼에서 `#customerName`·`#jumin1`(YYMMDD)·`#jumin2`(성별/내외국인)·`#cellphone0`(통신사)·`#cellphone1`(휴대전화번호) 입력·**`#checkAll` 전체동의** → **`인증요청`**(`button.btn.s3.c4`) → **`.dialog.modal.alert.show` 알림(인증번호가 발송되었습니다.)** 의 **`확인`**(`button.btn.ui_dialog_close`) 클릭 → OTP를 `#reqPhoneCheck`에 입력 후 **`확인`**(`button.btn.s1.c1`, 활성화 후 클릭) → [`/myh/mai/MySubMain1000`](https://m.hwgeneralins.com/myh/mai/MySubMain1000) 리다이렉트 → (있으면) **`#coachMarkDialog` 코치마크** 단계별 클릭으로 닫기 → (있으면) **모바일 안내장 신청안내** 팝업에서 **`다음에 할게요`**(`button.btn.s1.c2`) 클릭

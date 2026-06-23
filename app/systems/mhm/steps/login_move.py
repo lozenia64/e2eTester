@@ -4,6 +4,8 @@ from . import login_common as common
 
 
 def run(page) -> str:
+    common.maybe_close_pre_login_bottom_popup(page)
+
     candidates = [
         page.locator('main button.btn:has-text("로그인"):visible').first,
         page.get_by_role("button", name="로그인", exact=True).first,

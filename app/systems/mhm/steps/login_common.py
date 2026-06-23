@@ -369,6 +369,52 @@ def maybe_close_home_popup(page: Page) -> None:
         return
 
 
+def maybe_close_pre_login_bottom_popup(page: Page) -> None:
+    """로그인 버튼 클릭 전 하단 이벤트 배너 팝업(.dialog.bottom.bottom_bnr)을 닫는다."""
+    print("[step] Check pre-login bottom banner popup")
+    dialog_candidates = [
+        page.locator(".dialog.bottom.bottom_bnr.show"),
+        page.locator('[role="dialog"].bottom.bottom_bnr.show'),
+    ]
+    dialog = None
+    for candidate in dialog_candidates:
+        try:
+            if candidate.first.is_visible(timeout=3000):
+                dialog = candidate.first
+                break
+        except PlaywrightTimeoutError:
+            continue
+        except Exception:
+            continue
+
+    if dialog is None:
+        print("[step] No pre-login bottom banner popup detected")
+        return
+
+    print("[step] Pre-login bottom banner popup detected")
+    close_candidates = [
+        dialog.locator("button.btn.s1.c1.ui_dialog_close"),
+        dialog.get_by_role("button", name="닫기", exact=True),
+        dialog.locator('button.btn.ui_dialog_close:has-text("닫기")'),
+    ]
+    for candidate in close_candidates:
+        try:
+            if candidate.first.is_visible(timeout=1500):
+                click_with_log(candidate.first, "Close pre-login bottom banner popup")
+                wait_timeout_with_log(page, 500, "Post bottom-banner-popup close settle")
+                try:
+                    if not dialog.is_visible(timeout=2000):
+                        print("[step] Pre-login bottom banner popup dismissed")
+                        return
+                except PlaywrightTimeoutError:
+                    print("[step] Pre-login bottom banner popup dismissed")
+                    return
+        except Exception:
+            continue
+
+    print("[warn] Pre-login bottom banner popup is still visible after close attempts")
+
+
 def resolve_user_data_dir() -> Path:
     override = os.environ.get("E2E_USER_DATA_DIR")
     target = Path(override).expanduser() if override else DEFAULT_USER_DATA_DIR
