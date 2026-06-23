@@ -241,6 +241,72 @@ async def admin_list_module_settings(
     return result
 
 
+@router.put("/module-settings/systems/{system_code}")
+async def admin_bulk_update_module_settings(
+    system_code: str,
+    payload: dict,
+    current_user: User = Depends(require_admin),
+    registry: "ModuleRegistry" = Depends(get_registry),
+    repo=Depends(get_module_settings_repo),
+) -> dict:
+    modules = payload.get("modules")
+    if not isinstance(modules, list) or not modules:
+        raise HTTPException(status_code=400, detail="modules 목록이 필요합니다.")
+
+    try:
+        system = registry.get_system(system_code)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="시스템을 찾을 수 없습니다.") from exc
+
+    allowed_ids = {m.module_id for m in system.modules}
+
+    for item in modules:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="modules 항목 형식이 올바르지 않습니다.")
+        module_id = item.get("module_id")
+        if not isinstance(module_id, str) or module_id not in allowed_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{module_id}는 이 시스템에 속하지 않습니다.",
+            )
+        seconds = item.get("estimated_manual_seconds")
+        if not isinstance(seconds, int) or seconds < 0:
+            raise HTTPException(status_code=400, detail="estimated_manual_seconds 값이 필요합니다.")
+
+    if repo is None:
+        raise HTTPException(status_code=503, detail="모듈 설정 저장소가 초기화되지 않았습니다.")
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    saved: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+
+    for item in modules:
+        module_id = item["module_id"]
+        seconds = item["estimated_manual_seconds"]
+        try:
+            settings = ModuleSettings(
+                module_id=module_id,
+                estimated_manual_seconds=seconds,
+                updated_at=now,
+            )
+            await repo.save(settings)
+            saved.append({"module_id": module_id, "estimated_manual_seconds": seconds})
+        except Exception as exc:
+            failed.append({"module_id": module_id, "detail": str(exc)})
+
+    if failed:
+        return {
+            "ok": False,
+            "system_code": system_code,
+            "saved": saved,
+            "failed": failed,
+        }
+
+    return {"ok": True, "system_code": system_code, "saved": saved}
+
+
 @router.put("/module-settings/{module_id:path}")
 async def admin_update_module_settings(
     module_id: str,

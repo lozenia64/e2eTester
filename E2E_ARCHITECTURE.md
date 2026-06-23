@@ -287,6 +287,7 @@ e2eTester/
 - `GET /api/admin/stats/savings/csv` (절감 시간 통계 CSV 다운로드, admin 전용)
 - `GET /api/admin/systems` (등록 시스템 코드·이름 목록, admin 전용)
 - `GET /api/admin/module-settings` (시스템·모듈별 수동 업무 시간 설정 조회, admin 전용)
+- `PUT /api/admin/module-settings/systems/{system_code}` (시스템별 수동 업무 시간 벌크 저장, admin 전용)
 - `PUT /api/admin/module-settings/{module_id:path}` (모듈별 수동 업무 시간 저장, admin 전용)
 - `GET /api/admin/users` (사용자 목록, admin 전용)
 - `POST /api/admin/users` (사용자 생성, admin 전용)
