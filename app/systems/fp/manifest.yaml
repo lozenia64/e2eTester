@@ -1,8 +1,9 @@
 system_code: fp
 name: 영업가족 위촉서류 등록(PC)
-description: 영업가족 위촉서류 등록 사이트 메인화면 접속 점검
+description: 영업가족 위촉서류 등록 사이트 메인화면 접속 및 본인인증·서류작성 점검
 display_order: 40
-supported_auth_methods: []
+supported_auth_methods:
+  - phone
 run_form:
   - key: browser_mode
     label: 브라우저 실행 모드
@@ -15,6 +16,47 @@ run_form:
         value: headed
       - label: 백그라운드 실행
         value: headless
+  - key: name
+    label: 이름
+    type: text
+    required: true
+    placeholder: 홍길동
+  - key: ssn_front
+    label: 주민등록번호 앞자리
+    type: text
+    required: true
+    placeholder: YYMMDD
+    help_text: 주민등록번호 앞 6자리
+  - key: ssn_back
+    label: 주민등록번호 뒷자리
+    type: password
+    required: true
+    placeholder: "*******"
+    help_text: 주민등록번호 뒷 7자리
+  - key: carrier
+    label: 통신사
+    type: select
+    required: true
+    default: skt
+    options:
+      - label: SKT
+        value: skt
+      - label: KT
+        value: kt
+      - label: LGU+
+        value: lgu+
+      - label: SKT 알뜰폰
+        value: skt_mvno
+      - label: KT 알뜰폰
+        value: kt_mvno
+      - label: LGU+ 알뜰폰
+        value: lgu_mvno
+  - key: phone_number
+    label: 휴대폰 번호
+    type: text
+    required: true
+    placeholder: 01012345678
+    help_text: 010 또는 011로 시작하는 11자리 숫자
 modules:
   - module_id: fp.main.access
     system_code: fp
@@ -28,3 +70,29 @@ modules:
     workflow_name: fp_access
     workflow_step: main_access
     estimated_manual_seconds: 120
+  - module_id: fp.identity.verification
+    system_code: fp
+    name: FP 본인인증
+    description: 영업가족 계약서 작성 본인확인(개인정보 동의·휴대폰 OTP) 후 계약서 체결하기까지 진행합니다.
+    group: login
+    order: 20
+    depends_on:
+      - fp.main.access
+    timeout_seconds: 300
+    execution_mode: fp_workflow_step
+    workflow_name: fp_access
+    workflow_step: identity_verification
+    estimated_manual_seconds: 180
+  - module_id: fp.document.writing
+    system_code: fp
+    name: FP 서류작성
+    description: 계약서 작성 화면에서 정보보호서약서(순번 8) 전자서명·휴대폰 인증 후 작성완료 화면까지 진행합니다.
+    group: workflow
+    order: 30
+    depends_on:
+      - fp.identity.verification
+    timeout_seconds: 420
+    execution_mode: fp_workflow_step
+    workflow_name: fp_access
+    workflow_step: document_writing
+    estimated_manual_seconds: 240
