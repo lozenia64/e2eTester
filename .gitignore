@@ -9,3 +9,4 @@ data/
 *.db-wal
 *.db-shm
 .claude/
+.cursor/orchestration/
