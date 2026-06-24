@@ -34,6 +34,7 @@ from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
+from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
 from app.scheduling.scheduler import SchedulerService
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
@@ -175,6 +176,10 @@ async def lifespan(app: FastAPI):
     )
     app.state.schedule_service = scheduler
     scheduler_task = asyncio.create_task(scheduler.run_forever())
+    retention_scheduler = RunRetentionScheduler.from_env(RunRetentionService(run_service))
+    retention_task: asyncio.Task | None = None
+    if retention_scheduler is not None:
+        retention_task = asyncio.create_task(retention_scheduler.run_forever())
     try:
         yield
     finally:
@@ -184,6 +189,14 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except asyncio.CancelledError:
             pass
+        if retention_scheduler is not None:
+            retention_scheduler.stop()
+        if retention_task is not None:
+            retention_task.cancel()
+            try:
+                await retention_task
+            except asyncio.CancelledError:
+                pass
         await run_queue.stop()
 
 

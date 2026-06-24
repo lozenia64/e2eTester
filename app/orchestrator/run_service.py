@@ -109,6 +109,7 @@ class RunService:
         user_name_query: str | None = None,
         actor_context: ActorContext | None = None,
         run_status: RunStatus | None = None,
+        run_statuses: frozenset[RunStatus] | None = None,
     ) -> list[dict]:
         if user_id is not None:
             runs = await self._repository.list_runs_by_user(user_id)
@@ -119,6 +120,8 @@ class RunService:
         normalized_name_query = (user_name_query or "").strip().casefold()
         summaries: list[dict] = []
         for run in runs:
+            if run_statuses is not None and run.status not in run_statuses:
+                continue
             if run_status is not None and run.status != run_status:
                 continue
             summary = summarize_run(run, actor_context=actor_context)
@@ -145,6 +148,47 @@ class RunService:
         self._artifact_manager.delete_run_artifacts(run_id)
         await self._input_store.delete(run_id)
         await self._control_store.delete(run_id)
+
+    async def purge_runs(
+        self,
+        *,
+        statuses: frozenset[RunStatus],
+        requested_before: datetime | None = None,
+    ) -> list[str]:
+        """지정 상태의 종료 Run 을 일괄 삭제한다(보존 정리 배치용).
+
+        ``requested_before`` 가 있으면 해당 시각 이전에 요청된 Run 만 대상으로 한다.
+        진행 중(PENDING/RUNNING/WAITING_INPUT) Run 과 OTP 대기 중인 Run 은 건너뛴다.
+        """
+        deleted: list[str] = []
+        active = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+        cutoff_utc = None
+        if requested_before is not None:
+            cutoff_utc = (
+                requested_before
+                if requested_before.tzinfo is not None
+                else requested_before.replace(tzinfo=UTC)
+            )
+        for run in await self._repository.list_runs():
+            if run.status not in statuses or run.status in active:
+                continue
+            if cutoff_utc is not None:
+                run_at = (
+                    run.requested_at
+                    if run.requested_at.tzinfo is not None
+                    else run.requested_at.replace(tzinfo=UTC)
+                )
+                if run_at >= cutoff_utc:
+                    continue
+            if await self._control_store.get_pending(run.run_id) is not None:
+                continue
+            await self._log_store.delete_by_run_id(run.run_id)
+            await self._repository.delete_run(run.run_id)
+            self._artifact_manager.delete_run_artifacts(run.run_id)
+            await self._input_store.delete(run.run_id)
+            await self._control_store.delete(run.run_id)
+            deleted.append(run.run_id)
+        return deleted
 
     async def reconcile_interrupted_runs(self) -> int:
         """재기동 시 비종료 상태로 남은 Run 을 CANCELLED 로 정리한다.

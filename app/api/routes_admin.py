@@ -21,7 +21,7 @@ from app.api.dependencies import (
 from app.orchestrator.run_actor import load_actor_context
 from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
-from app.core.enums import RunStatus
+from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 from app.core.models import ModuleSettings
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ async def admin_list_runs(
         system_code=system_code,
         user_name_query=user_name,
         actor_context=actor_context,
-        run_status=RunStatus.PASSED,
+        run_statuses=ADMIN_VISIBLE_RUN_STATUSES,
     )
     return summaries
 

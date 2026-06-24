@@ -85,3 +85,51 @@ def test_saved_seconds_sums_without_per_run_truncation():
     assert stats.by_system[0].manual_seconds_saved == 135
     assert stats.by_user[0].manual_seconds_saved == 135
     assert stats.by_user[0].by_system[0].manual_seconds_saved == 135
+
+
+def test_usage_stats_includes_anomaly_excludes_error():
+    module_id = "hom.login"
+    registry = _FakeRegistry([
+        SystemDefinition(
+            system_code="hom",
+            name="HOM",
+            description="",
+            modules=[
+                ModuleDefinition(
+                    module_id=module_id,
+                    system_code="hom",
+                    name="login",
+                    description="",
+                    group="auth",
+                    order=0,
+                    estimated_manual_seconds=30,
+                ),
+            ],
+        ),
+    ])
+    run_repo = InMemoryRunRepository()
+
+    def _run(run_id: str, status: RunStatus) -> Run:
+        return Run(
+            run_id=run_id,
+            system_code="hom",
+            system_name="HOM",
+            status=status,
+            requested_at=datetime.now(UTC),
+            modules=[_module(module_id, status=ModuleStatus.PASSED)],
+            selected_module_ids=[module_id],
+        )
+
+    asyncio.run(run_repo.create_run(_passed_run("run_passed", module_id)))
+    asyncio.run(run_repo.create_run(_run("run_anomaly", RunStatus.ANOMALY)))
+    asyncio.run(run_repo.create_run(_run("run_error", RunStatus.ERROR)))
+
+    service = StatsService(
+        run_repo=run_repo,
+        suite_repo=_FakeSuiteRepo(),
+        registry=registry,
+    )
+    stats = asyncio.run(service.get_usage_stats())
+
+    assert stats.total_runs == 2
+    assert stats.by_system[0].runs == 2

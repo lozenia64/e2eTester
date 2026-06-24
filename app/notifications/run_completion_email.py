@@ -7,7 +7,11 @@ import re
 import smtplib
 from dataclasses import dataclass
 from datetime import UTC
-from email.message import EmailMessage
+from email.message import Message
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import parseaddr
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -49,6 +53,8 @@ GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
 KST = ZoneInfo("Asia/Seoul")
 MAX_EMAIL_ATTACHMENT_BYTES = 17_500_000
+MAX_INLINE_EMAIL_IMAGE_BYTES = 2_500_000
+MAX_INLINE_EMAIL_TOTAL_BYTES = 16_000_000
 MAX_GEMINI_ATTACHMENT_BYTES = 7_500_000
 MAX_GEMINI_INLINE_IMAGE_BYTES = 2_500_000
 MAX_GEMINI_LOG_BYTES = 180_000
@@ -410,10 +416,20 @@ class OmittedArtifact:
 
 
 @dataclass(frozen=True)
-class AttachmentSelection:
-    included: list[RunArtifact]
+class InlineScreenshot:
+    artifact: RunArtifact
+    cid: str
+    status: str = ""
+    status_label: str = ""
+
+
+@dataclass(frozen=True)
+class EmailContentSelection:
+    inline_screenshots: list[InlineScreenshot]
+    log_attachments: list[RunArtifact]
     omitted: list[OmittedArtifact]
-    total_bytes: int
+    inline_total_bytes: int = 0
+    attachment_total_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -427,7 +443,7 @@ class GmailEmailSender:
     def __init__(self, config: EmailNotificationConfig) -> None:
         self._config = config
 
-    def send(self, message: EmailMessage, recipients: list[str]) -> None:
+    def send(self, message: Message, recipients: list[str]) -> None:
         with smtplib.SMTP_SSL(self._config.smtp_host, self._config.smtp_port, timeout=self._config.timeout_seconds) as smtp:
             smtp.login(self._config.gmail_account, self._normalize_password(self._config.gmail_app_password))
             smtp.send_message(message, to_addrs=recipients)
@@ -435,6 +451,78 @@ class GmailEmailSender:
     @staticmethod
     def _normalize_password(raw_password: str) -> str:
         return re.sub(r"\s+", "", raw_password)
+
+
+def _make_screenshot_cid(artifact: RunArtifact) -> str:
+    safe_module = re.sub(r"[^A-Za-z0-9_.-]+", "_", artifact.module_id)
+    prefix = f"{artifact.system_code}_" if artifact.system_code else ""
+    return f"screenshot_{prefix}{safe_module}_{artifact.seq}@e2etester"
+
+
+def _build_email_message(
+    *,
+    subject: str,
+    from_addr: str,
+    plain_body: str,
+    html_body: str,
+    inline_screenshots: list[InlineScreenshot],
+    log_attachments: list[RunArtifact],
+) -> MIMEMultipart:
+    """Outlook 웹 호환 CID 인라인 이미지 메일.
+
+    Outlook on the web 은 ``multipart/related`` 가 바깥이고 그 안에
+    ``multipart/alternative``(plain + html)와 inline 이미지가 오는 구조를 기대한다.
+    ``add_alternative`` 후 HTML 파트에 ``add_related`` 를 호출하면 related 가
+    alternative 안쪽에 중첩되어 Outlook 웹에서 cid 이미지가 빈 칸으로 렌더링될 수 있다.
+
+    구조::
+
+        multipart/mixed                 (로그 첨부가 있을 때만)
+          multipart/related
+            multipart/alternative
+              text/plain
+              text/html
+            image/png (Content-ID, inline)
+          application/octet-stream ...  (로그 첨부)
+
+    ``Content-ID`` 헤더는 RFC 2392 에 맞게 ``<...>`` 로 감싸고, HTML ``cid:`` URL 은
+    꺾쇠 없이 유지한다.
+    """
+    alternative = MIMEMultipart("alternative")
+    alternative.attach(MIMEText(plain_body, "plain", "utf-8"))
+    alternative.attach(MIMEText(html_body, "html", "utf-8"))
+
+    if inline_screenshots:
+        related = MIMEMultipart("related")
+        related.attach(alternative)
+        for inline in inline_screenshots:
+            image_bytes = inline.artifact.path.read_bytes()
+            mime_type = mimetypes.guess_type(inline.artifact.path.name)[0] or "image/png"
+            subtype = mime_type.split("/", 1)[1]
+            img = MIMEImage(image_bytes, _subtype=subtype)
+            img.add_header("Content-ID", f"<{inline.cid}>")
+            img.add_header("Content-Disposition", "inline", filename=inline.artifact.attachment_name)
+            related.attach(img)
+        root_body: MIMEMultipart = related
+    else:
+        root_body = alternative
+
+    if log_attachments:
+        root = MIMEMultipart("mixed")
+        root.attach(root_body)
+        for artifact in log_attachments:
+            mime_type = mimetypes.guess_type(artifact.path.name)[0] or "application/octet-stream"
+            _maintype, subtype = mime_type.split("/", 1)
+            part = MIMEApplication(artifact.path.read_bytes(), _subtype=subtype)
+            part.add_header("Content-Disposition", "attachment", filename=artifact.attachment_name)
+            root.attach(part)
+    else:
+        root = root_body
+
+    root["Subject"] = subject
+    root["From"] = from_addr
+    root["To"] = "undisclosed-recipients:;"
+    return root
 
 
 class GeminiReportContentComposer:
@@ -662,62 +750,44 @@ class RunCompletionEmailBuilder:
         self,
         run: Run,
         recipients: list[str],
-        email_selection: AttachmentSelection,
+        email_selection: EmailContentSelection,
         gemini_selection: GeminiPromptSelection,
         operator_alert: bool = False,
-    ) -> EmailMessage:
+    ) -> Message:
         context = _build_email_context(run, email_selection, gemini_selection)
         html_body = self._build_html_body(context, gemini_selection.parts)
         text_body = self._build_plain_text(context)
 
-        message = EmailMessage()
-        message["Subject"] = _build_subject(run, operator_alert=operator_alert)
-        message["From"] = self._config.gmail_account
-        message["To"] = "undisclosed-recipients:;"
-        message.set_content(text_body)
-        message.add_alternative(html_body, subtype="html")
-
-        for artifact in email_selection.included:
-            mime_type = mimetypes.guess_type(artifact.path.name)[0] or "application/octet-stream"
-            maintype, subtype = mime_type.split("/", 1)
-            message.add_attachment(
-                artifact.path.read_bytes(),
-                maintype=maintype,
-                subtype=subtype,
-                filename=artifact.attachment_name,
-            )
-        return message
+        return _build_email_message(
+            subject=_build_subject(run, operator_alert=operator_alert),
+            from_addr=self._config.gmail_account,
+            plain_body=text_body,
+            html_body=html_body,
+            inline_screenshots=email_selection.inline_screenshots,
+            log_attachments=email_selection.log_attachments,
+        )
 
     def build_suite(
         self,
         suite: SuiteRun,
         runs: list[Run],
         recipients: list[str],
-        email_selection: AttachmentSelection,
+        email_selection: EmailContentSelection,
         gemini_selection: GeminiPromptSelection,
         operator_alert: bool = False,
-    ) -> EmailMessage:
+    ) -> Message:
         context = _build_suite_email_context(suite, runs, email_selection, gemini_selection)
         html_body = self._build_html_body(context, gemini_selection.parts)
         text_body = self._build_plain_text(context)
 
-        message = EmailMessage()
-        message["Subject"] = _build_suite_subject(suite, operator_alert=operator_alert)
-        message["From"] = self._config.gmail_account
-        message["To"] = "undisclosed-recipients:;"
-        message.set_content(text_body)
-        message.add_alternative(html_body, subtype="html")
-
-        for artifact in email_selection.included:
-            mime_type = mimetypes.guess_type(artifact.path.name)[0] or "application/octet-stream"
-            maintype, subtype = mime_type.split("/", 1)
-            message.add_attachment(
-                artifact.path.read_bytes(),
-                maintype=maintype,
-                subtype=subtype,
-                filename=artifact.attachment_name,
-            )
-        return message
+        return _build_email_message(
+            subject=_build_suite_subject(suite, operator_alert=operator_alert),
+            from_addr=self._config.gmail_account,
+            plain_body=text_body,
+            html_body=html_body,
+            inline_screenshots=email_selection.inline_screenshots,
+            log_attachments=email_selection.log_attachments,
+        )
 
     def _build_html_body(self, context: dict, gemini_parts: list[dict]) -> str:
         # 레이아웃은 report_renderer 가 결정적으로 찍어내고, Gemini 는 분석 콘텐츠만 채운다.
@@ -781,7 +851,8 @@ class RunCompletionEmailBuilder:
         lines.extend(
             [
                 "",
-                f"첨부 파일: 스크린샷 {attachment_summary['screenshot_count']}건, 로그 {attachment_summary['log_count']}건",
+                f"본문 스크린샷: {attachment_summary['inline_screenshot_count']}건 · "
+                f"첨부 로그: {attachment_summary['log_count']}건",
             ]
         )
         if attachment_summary["omitted"]:
@@ -824,13 +895,14 @@ class RunCompletionEmailNotifier:
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: {run.system_code}")
 
         artifacts = self._collect_artifacts(run)
-        email_selection = self._select_email_attachments(run, artifacts)
+        email_selection = self._select_email_content(run, artifacts)
         gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
         message = self._builder.build(run, recipients, email_selection, gemini_selection)
         self._sender.send(message, recipients)
         print(
             f"[email] run={run.run_id} recipients={len(recipients)} "
-            f"attachments={len(email_selection.included)} status={run.status}"
+            f"inline_screenshots={len(email_selection.inline_screenshots)} "
+            f"log_attachments={len(email_selection.log_attachments)} status={run.status}"
         )
 
     def send_run_operator_alert(self, run: Run) -> None:
@@ -842,13 +914,14 @@ class RunCompletionEmailNotifier:
             return
 
         artifacts = self._collect_artifacts(run)
-        email_selection = self._select_email_attachments(run, artifacts)
+        email_selection = self._select_email_content(run, artifacts)
         gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
         message = self._builder.build(run, recipients, email_selection, gemini_selection, operator_alert=True)
         self._sender.send(message, recipients)
         print(
             f"[email] run={run.run_id} operator_recipients={len(recipients)} "
-            f"attachments={len(email_selection.included)} status={run.status}"
+            f"inline_screenshots={len(email_selection.inline_screenshots)} "
+            f"log_attachments={len(email_selection.log_attachments)} status={run.status}"
         )
 
     def send_suite_completion(self, suite: SuiteRun, runs: list[Run]) -> None:
@@ -861,13 +934,14 @@ class RunCompletionEmailNotifier:
 
         ordered_runs = self._order_runs_for_suite(suite, runs)
         artifacts = self._collect_artifacts_for_runs(ordered_runs)
-        email_selection = self._select_suite_email_attachments(suite, ordered_runs, artifacts)
+        email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts)
         gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
         message = self._builder.build_suite(suite, ordered_runs, recipients, email_selection, gemini_selection)
         self._sender.send(message, recipients)
         print(
             f"[email] suite={suite.suite_id} recipients={len(recipients)} "
-            f"attachments={len(email_selection.included)} status={suite.status}"
+            f"inline_screenshots={len(email_selection.inline_screenshots)} "
+            f"log_attachments={len(email_selection.log_attachments)} status={suite.status}"
         )
 
     def send_suite_operator_alert(self, suite: SuiteRun, runs: list[Run]) -> None:
@@ -878,7 +952,7 @@ class RunCompletionEmailNotifier:
 
         ordered_runs = self._order_runs_for_suite(suite, runs)
         artifacts = self._collect_artifacts_for_runs(ordered_runs)
-        email_selection = self._select_suite_email_attachments(suite, ordered_runs, artifacts, include_logs=True)
+        email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts, include_logs=True)
         gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
         message = self._builder.build_suite(
             suite, ordered_runs, recipients, email_selection, gemini_selection, operator_alert=True
@@ -886,7 +960,8 @@ class RunCompletionEmailNotifier:
         self._sender.send(message, recipients)
         print(
             f"[email] suite={suite.suite_id} operator_recipients={len(recipients)} "
-            f"attachments={len(email_selection.included)} status={suite.status}"
+            f"inline_screenshots={len(email_selection.inline_screenshots)} "
+            f"log_attachments={len(email_selection.log_attachments)} status={suite.status}"
         )
 
     def _resolve_suite_recipients(self, suite: SuiteRun) -> list[str]:
@@ -920,42 +995,56 @@ class RunCompletionEmailNotifier:
                 collected.append(artifact)
         return collected
 
-    def _select_suite_email_attachments(
+    def _select_suite_email_content(
         self,
         suite: SuiteRun,
         runs: list[Run],
         artifacts: list[RunArtifact],
         include_logs: bool = False,
-    ) -> AttachmentSelection:
+    ) -> EmailContentSelection:
         issue_run_ids = {
             run.run_id
             for run in runs
             if run.status in RUN_ANOMALY_STATUSES | RUN_ERROR_STATUSES
         }
         wanted_logs = include_logs or suite.status in SUITE_ANOMALY_STATUSES | SUITE_ERROR_STATUSES
-        included: list[RunArtifact] = []
+        module_meta = _module_status_meta_for_runs(runs)
+        inline_screenshots: list[InlineScreenshot] = []
+        log_attachments: list[RunArtifact] = []
         omitted: list[OmittedArtifact] = []
-        total_bytes = 0
+        inline_total_bytes = 0
+        attachment_total_bytes = 0
+
         for artifact in artifacts:
             if artifact.kind == "screenshot":
-                accept = True
-            elif artifact.kind == "log":
-                accept = wanted_logs and artifact.run_id in issue_run_ids
-            else:
-                accept = False
-            if not accept:
-                continue
-            if total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
-                omitted.append(
-                    OmittedArtifact(
-                        relative_path=artifact.relative_path,
-                        reason=f"Gmail 첨부 한도({self._config.max_email_attachment_bytes} bytes)를 초과합니다.",
-                    )
+                inline, inline_total_bytes, new_omitted = self._try_select_inline_screenshot(
+                    artifact,
+                    inline_screenshots,
+                    inline_total_bytes,
+                    module_meta,
                 )
-                continue
-            included.append(artifact)
-            total_bytes += artifact.size_bytes
-        return AttachmentSelection(included=included, omitted=omitted, total_bytes=total_bytes)
+                if inline is not None:
+                    inline_screenshots.append(inline)
+                omitted.extend(new_omitted)
+            elif artifact.kind == "log" and wanted_logs and artifact.run_id in issue_run_ids:
+                if attachment_total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
+                    omitted.append(
+                        OmittedArtifact(
+                            relative_path=artifact.relative_path,
+                            reason=f"Gmail 첨부 한도({self._config.max_email_attachment_bytes} bytes)를 초과합니다.",
+                        )
+                    )
+                    continue
+                log_attachments.append(artifact)
+                attachment_total_bytes += artifact.size_bytes
+
+        return EmailContentSelection(
+            inline_screenshots=inline_screenshots,
+            log_attachments=log_attachments,
+            omitted=omitted,
+            inline_total_bytes=inline_total_bytes,
+            attachment_total_bytes=attachment_total_bytes,
+        )
 
     def _select_gemini_prompt_inputs_for_artifacts(self, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
         parts: list[dict] = []
@@ -1050,25 +1139,79 @@ class RunCompletionEmailNotifier:
                 )
         return collected
 
-    def _select_email_attachments(self, run: Run, artifacts: list[RunArtifact]) -> AttachmentSelection:
+    def _select_email_content(self, run: Run, artifacts: list[RunArtifact]) -> EmailContentSelection:
         wanted_kinds = _wanted_email_kinds(run)
-        included: list[RunArtifact] = []
+        module_meta = _module_status_meta_for_run(run)
+        inline_screenshots: list[InlineScreenshot] = []
+        log_attachments: list[RunArtifact] = []
         omitted: list[OmittedArtifact] = []
-        total_bytes = 0
+        inline_total_bytes = 0
+        attachment_total_bytes = 0
+
         for artifact in artifacts:
-            if artifact.kind not in wanted_kinds:
-                continue
-            if total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
-                omitted.append(
-                    OmittedArtifact(
-                        relative_path=artifact.relative_path,
-                        reason=f"Gmail 첨부 한도({self._config.max_email_attachment_bytes} bytes)를 초과합니다.",
-                    )
+            if artifact.kind == "screenshot":
+                inline, inline_total_bytes, new_omitted = self._try_select_inline_screenshot(
+                    artifact,
+                    inline_screenshots,
+                    inline_total_bytes,
+                    module_meta,
                 )
-                continue
-            included.append(artifact)
-            total_bytes += artifact.size_bytes
-        return AttachmentSelection(included=included, omitted=omitted, total_bytes=total_bytes)
+                if inline is not None:
+                    inline_screenshots.append(inline)
+                omitted.extend(new_omitted)
+            elif artifact.kind == "log" and "log" in wanted_kinds:
+                if attachment_total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
+                    omitted.append(
+                        OmittedArtifact(
+                            relative_path=artifact.relative_path,
+                            reason=f"Gmail 첨부 한도({self._config.max_email_attachment_bytes} bytes)를 초과합니다.",
+                        )
+                    )
+                    continue
+                log_attachments.append(artifact)
+                attachment_total_bytes += artifact.size_bytes
+
+        return EmailContentSelection(
+            inline_screenshots=inline_screenshots,
+            log_attachments=log_attachments,
+            omitted=omitted,
+            inline_total_bytes=inline_total_bytes,
+            attachment_total_bytes=attachment_total_bytes,
+        )
+
+    def _try_select_inline_screenshot(
+        self,
+        artifact: RunArtifact,
+        already_selected: list[InlineScreenshot],
+        inline_total_bytes: int,
+        module_meta: dict[str, dict[str, str]],
+    ) -> tuple[InlineScreenshot | None, int, list[OmittedArtifact]]:
+        omitted: list[OmittedArtifact] = []
+        if artifact.size_bytes > MAX_INLINE_EMAIL_IMAGE_BYTES:
+            omitted.append(
+                OmittedArtifact(
+                    relative_path=artifact.relative_path,
+                    reason=f"인라인 이미지 한도({MAX_INLINE_EMAIL_IMAGE_BYTES} bytes)를 초과합니다.",
+                )
+            )
+            return None, inline_total_bytes, omitted
+        if inline_total_bytes + artifact.size_bytes > MAX_INLINE_EMAIL_TOTAL_BYTES:
+            omitted.append(
+                OmittedArtifact(
+                    relative_path=artifact.relative_path,
+                    reason=f"본문 인라인 이미지 총 한도({MAX_INLINE_EMAIL_TOTAL_BYTES} bytes)를 초과합니다.",
+                )
+            )
+            return None, inline_total_bytes, omitted
+
+        meta = module_meta.get(artifact.module_id, {})
+        inline = InlineScreenshot(
+            artifact=artifact,
+            cid=_make_screenshot_cid(artifact),
+            status=meta.get("status", ""),
+            status_label=meta.get("status_label", ""),
+        )
+        return inline, inline_total_bytes + artifact.size_bytes, omitted
 
     def _select_gemini_prompt_inputs(self, run: Run, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
         # 메일 첨부와 달리 Gemini 입력에는 성공/실패와 무관하게 스크린샷과 로그를 모두 제공한다.
@@ -1249,7 +1392,7 @@ def _serialize_run_for_suite_report(run: Run) -> dict:
 def _build_suite_email_context(
     suite: SuiteRun,
     runs: list[Run],
-    email_selection: AttachmentSelection,
+    email_selection: EmailContentSelection,
     gemini_selection: GeminiPromptSelection,
 ) -> dict:
     run_by_id = {run.run_id: run for run in runs}
@@ -1342,14 +1485,8 @@ def _build_suite_email_context(
         },
         "step_summary": step_summary,
         "system_runs": system_runs,
-        "email_attachment_summary": {
-            "screenshot_count": sum(1 for artifact in email_selection.included if artifact.kind == "screenshot"),
-            "log_count": sum(1 for artifact in email_selection.included if artifact.kind == "log"),
-            "omitted": [
-                {"path": item.relative_path, "reason": item.reason}
-                for item in email_selection.omitted
-            ],
-        },
+        "inline_screenshots": _serialize_inline_screenshots(email_selection),
+        "email_attachment_summary": _email_attachment_summary(email_selection),
         "gemini_input_summary": {
             "included": list(gemini_selection.included_labels),
             "omitted": [
@@ -1399,13 +1536,60 @@ def _build_suite_plain_text(context: dict) -> str:
     lines.extend(
         [
             "",
-            f"첨부 파일: 스크린샷 {attachment_summary['screenshot_count']}건, 로그 {attachment_summary['log_count']}건",
+            f"본문 스크린샷: {attachment_summary['inline_screenshot_count']}건 · "
+            f"첨부 로그: {attachment_summary['log_count']}건",
         ]
     )
     return "\n".join(lines)
 
 
-def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_selection: GeminiPromptSelection) -> dict:
+def _serialize_inline_screenshots(selection: EmailContentSelection) -> list[dict]:
+    return [
+        {
+            "cid": inline.cid,
+            "seq": inline.artifact.seq,
+            "order": inline.artifact.order,
+            "module_id": inline.artifact.module_id,
+            "module_name": inline.artifact.module_name,
+            "system_code": (inline.artifact.system_code or "").upper(),
+            "run_id": inline.artifact.run_id,
+            "relative_path": inline.artifact.relative_path,
+            "status": inline.status,
+            "status_label": inline.status_label,
+        }
+        for inline in selection.inline_screenshots
+    ]
+
+
+def _email_attachment_summary(selection: EmailContentSelection) -> dict:
+    return {
+        "inline_screenshot_count": len(selection.inline_screenshots),
+        "log_count": len(selection.log_attachments),
+        "omitted": [
+            {"path": item.relative_path, "reason": item.reason}
+            for item in selection.omitted
+        ],
+    }
+
+
+def _module_status_meta_for_run(run: Run) -> dict[str, dict[str, str]]:
+    return {
+        module.module_id: {
+            "status": module.status.value,
+            "status_label": module_status_label(module.status.value),
+        }
+        for module in run.modules
+    }
+
+
+def _module_status_meta_for_runs(runs: list[Run]) -> dict[str, dict[str, str]]:
+    meta: dict[str, dict[str, str]] = {}
+    for run in runs:
+        meta.update(_module_status_meta_for_run(run))
+    return meta
+
+
+def _build_email_context(run: Run, email_selection: EmailContentSelection, gemini_selection: GeminiPromptSelection) -> dict:
     module_summary = _module_status_counts(run)
     ordered_modules = sorted(run.modules, key=lambda item: item.order)
     modules = [
@@ -1467,14 +1651,8 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
         "module_summary": module_summary,
         "modules": modules,
         "failed_modules": failed_modules,
-        "email_attachment_summary": {
-            "screenshot_count": sum(1 for artifact in email_selection.included if artifact.kind == "screenshot"),
-            "log_count": sum(1 for artifact in email_selection.included if artifact.kind == "log"),
-            "omitted": [
-                {"path": item.relative_path, "reason": item.reason}
-                for item in email_selection.omitted
-            ],
-        },
+        "inline_screenshots": _serialize_inline_screenshots(email_selection),
+        "email_attachment_summary": _email_attachment_summary(email_selection),
         "gemini_input_summary": {
             "included": list(gemini_selection.included_labels),
             "omitted": [

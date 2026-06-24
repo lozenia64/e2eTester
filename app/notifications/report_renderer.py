@@ -87,6 +87,22 @@ def _status_color(status: str) -> str:
     return _STATUS_COLORS.get(status, NEUTRAL_COLOR)
 
 
+def _status_soft_bg(status: str) -> str:
+    if status in {RunStatus.PASSED.value, SuiteStatus.PASSED.value, ModuleStatus.PASSED.value}:
+        return PASS_SOFT_BG
+    if status in {RunStatus.ERROR.value, SuiteStatus.ERROR.value, ModuleStatus.ERROR.value}:
+        return FAIL_SOFT_BG
+    if status in {
+        RunStatus.ANOMALY.value,
+        SuiteStatus.ANOMALY.value,
+        ModuleStatus.ANOMALY.value,
+        RunStatus.FAILED.value,
+        ModuleStatus.FAILED.value,
+    }:
+        return WARN_SOFT_BG
+    return NEUTRAL_SOFT_BG
+
+
 def _is_passed(status: str) -> bool:
     return status in {RunStatus.PASSED.value, SuiteStatus.PASSED.value, ModuleStatus.PASSED.value}
 
@@ -341,6 +357,105 @@ def _omitted_warning(email_summary: dict, gemini_summary: dict) -> str:
     return "".join(blocks)
 
 
+def _screenshot_image_html(image_src: str, module_title: str) -> str:
+    """Outlook 호환 CID 이미지 마크업."""
+    safe_title = escape(module_title)
+    safe_src = image_src.replace('"', "")
+    return (
+        "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" "
+        "style=\"border-collapse:collapse;\"><tr><td align=\"center\" "
+        f"style=\"padding:0;line-height:0;font-size:0;background:{SOFT_BG};\">"
+        f"<img src=\"{safe_src}\" alt=\"{safe_title} 스크린샷\" width=\"600\" border=\"0\" "
+        f"style=\"display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;"
+        f"text-decoration:none;-ms-interpolation-mode:bicubic;\" />"
+        "</td></tr></table>"
+    )
+
+
+def _screenshot_card(screenshot: dict, observation: str = "") -> str:
+    """모듈별 CID 인라인 스크린샷 카드."""
+    status = screenshot.get("status") or ""
+    status_label = screenshot.get("status_label") or _status_label(status)
+    accent = _status_color(status) if status else INFO_COLOR
+    module_title = _text(screenshot.get("module_name"))
+    seq = screenshot.get("seq", "-")
+    cid = (screenshot.get("cid") or "").strip()
+    if not cid:
+        return ""
+    image_src = f"cid:{cid}"
+    observation_html = ""
+    if observation.strip():
+        observation_html = (
+            f"<div style=\"margin-top:10px;padding:10px 12px;background:{SOFT_BG};"
+            f"border-radius:8px;font-size:13px;color:{INK};line-height:1.5;\">"
+            f"<span style=\"display:block;font-size:11px;font-weight:700;color:{MUTED};"
+            f"margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;\">AI 화면 관찰</span>"
+            f"{escape(observation.strip())}</div>"
+        )
+    return (
+        f"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" "
+        f"style=\"border-collapse:separate;border-spacing:0;margin-bottom:16px;\">"
+        f"<tr><td style=\"padding:0;border:1px solid {BORDER};border-radius:14px;overflow:hidden;"
+        f"background:{CARD_BG};\">"
+        f"<div style=\"height:4px;background:{accent};font-size:0;line-height:0;\">&nbsp;</div>"
+        f"<div style=\"padding:14px 16px 12px;\">"
+        f"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\">"
+        f"<tr>"
+        f"<td style=\"font-size:14px;font-weight:700;color:{INK};vertical-align:middle;\">"
+        f"<span style=\"display:inline-block;min-width:28px;color:{MUTED};font-weight:600;\">#{seq}</span> "
+        f"{module_title}</td>"
+        f"<td align=\"right\" style=\"vertical-align:middle;white-space:nowrap;\">"
+        f"<span style=\"display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;"
+        f"font-weight:700;color:{accent};background:{_status_soft_bg(status)};\">"
+        f"{escape(status_label)}</span></td>"
+        f"</tr></table>"
+        f"<div style=\"margin-top:12px;border:1px solid {BORDER};border-radius:10px;overflow:hidden;"
+        f"background:{SOFT_BG};line-height:0;font-size:0;\">"
+        f"{_screenshot_image_html(image_src, module_title)}"
+        f"</div>"
+        f"{observation_html}"
+        f"</div></td></tr></table>"
+    )
+
+
+def _screenshot_gallery(
+    inline_screenshots: list[dict],
+    findings_by_module: dict | None = None,
+    *,
+    system_code: str | None = None,
+) -> str:
+    findings_by_module = findings_by_module or {}
+    filtered = [
+        item
+        for item in inline_screenshots
+        if not system_code or (item.get("system_code") or "").upper() == system_code.upper()
+    ]
+    if not filtered:
+        return ""
+    cards: list[str] = []
+    for screenshot in sorted(filtered, key=lambda item: (item.get("order", 0), item.get("seq", 0))):
+        module_id = screenshot.get("module_id") or ""
+        observation = (findings_by_module.get(module_id) or {}).get("screen_observation", "")
+        if isinstance(observation, str):
+            observation_text = observation
+        else:
+            observation_text = ""
+        card = _screenshot_card(screenshot, observation_text)
+        if card:
+            cards.append(card)
+    if not cards:
+        return ""
+    return "".join(cards)
+
+
+def _attachment_notice_body(attachment: dict, gemini_summary: dict) -> str:
+    return (
+        f"<div style=\"font-size:14px;\">본문 스크린샷 <strong>{attachment['inline_screenshot_count']}건</strong> · "
+        f"첨부 로그 <strong>{attachment['log_count']}건</strong></div>"
+        + _omitted_warning(attachment, gemini_summary)
+    )
+
+
 def _footer() -> str:
     return (
         f"<hr style=\"margin:28px 0 14px;border:none;border-top:1px solid {BORDER};\">"
@@ -405,23 +520,25 @@ def render_run_report_html(context: dict, ai_content: dict | None = None) -> str
         _section(2, "핵심 요약", _callout(f"<span style=\"color:{INK};\">{escape(headline)}</span>", accent, PASS_SOFT_BG if _is_passed(run["status"]) else FAIL_SOFT_BG), accent),
         _section(3, "직전 실행 대비 변화", _comparison_block(context["comparison"], ai.get("comparison_comment") or ""), INFO_COLOR),
         _section(4, "모듈별 결과", _module_table(modules), accent),
-        _section(5, "화면 검증 (스크린샷 분석)", _observation_list(modules, findings, "screen_observation", "분석할 스크린샷 자료가 없습니다."), accent),
-        _section(6, "로그 분석", _observation_list(modules, findings, "log_observation", "분석할 실행 로그가 없습니다."), accent),
+        _section(
+            5,
+            "모듈별 스크린샷",
+            _screenshot_gallery(context.get("inline_screenshots") or [], findings)
+            or f"<div style=\"font-size:13px;color:{MUTED};\">본문에 포함할 스크린샷이 없습니다.</div>",
+            accent,
+        ),
+        _section(6, "화면 검증 (스크린샷 분석)", _observation_list(modules, findings, "screen_observation", "분석할 스크린샷 자료가 없습니다."), accent),
+        _section(7, "로그 분석", _observation_list(modules, findings, "log_observation", "분석할 실행 로그가 없습니다."), accent),
     ]
 
     if context["failed_modules"]:
         sections.append(
-            _section(7, "실패 상세 분석", _failure_cards(modules_by_id, ai.get("failure_details") or [], context["failed_modules"]), FAIL_COLOR)
+            _section(8, "실패 상세 분석", _failure_cards(modules_by_id, ai.get("failure_details") or [], context["failed_modules"]), FAIL_COLOR)
         )
 
     next_no = len(sections) + 1
     attachment = context["email_attachment_summary"]
-    attach_body = (
-        f"<div style=\"font-size:14px;\">첨부 스크린샷 <strong>{attachment['screenshot_count']}건</strong> · "
-        f"첨부 로그 <strong>{attachment['log_count']}건</strong></div>"
-        + _omitted_warning(attachment, context["gemini_input_summary"])
-    )
-    sections.append(_section(next_no, "첨부 및 제외 파일 안내", attach_body, accent))
+    sections.append(_section(next_no, "첨부 및 제외 파일 안내", _attachment_notice_body(attachment, context["gemini_input_summary"]), accent))
 
     return _shell(title, "".join(sections) + _footer())
 
@@ -520,6 +637,16 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
             screen_obs = _observation_list(modules, findings, "screen_observation", "")
             if "분석" not in screen_obs and findings:
                 body_parts.append(f"<div style=\"margin-top:10px;font-size:13px;font-weight:700;color:{MUTED};\">화면·로그 관찰</div>{screen_obs}")
+            system_screenshots = _screenshot_gallery(
+                context.get("inline_screenshots") or [],
+                findings,
+                system_code=system_run["system_code"],
+            )
+            if system_screenshots.strip():
+                body_parts.append(
+                    f"<div style=\"margin-top:14px;font-size:13px;font-weight:700;color:{MUTED};\">모듈별 스크린샷</div>"
+                    f"{system_screenshots}"
+                )
             if system_run.get("failed_modules"):
                 body_parts.append(_failure_cards(modules_by_id, ai_system.get("failure_details") or [], system_run["failed_modules"]))
             body_inner = "".join(body_parts)
@@ -533,11 +660,6 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
 
     next_no = 4
     attachment = context["email_attachment_summary"]
-    attach_body = (
-        f"<div style=\"font-size:14px;\">첨부 스크린샷 <strong>{attachment['screenshot_count']}건</strong> · "
-        f"첨부 로그 <strong>{attachment['log_count']}건</strong></div>"
-        + _omitted_warning(attachment, context["gemini_input_summary"])
-    )
 
     headline = (ai.get("headline") or "").strip() or (
         f"전체 {suite['step_total']}개 시스템 순차 점검이 {suite['status_label']} 상태로 종료되었습니다. "
@@ -549,7 +671,7 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
         _section(2, "핵심 요약", _callout(f"<span style=\"color:{INK};\">{escape(headline)}</span>", accent, PASS_SOFT_BG if _is_passed(suite["status"]) else FAIL_SOFT_BG), accent),
         _section(3, "시스템 요약", summary_table, accent),
         _section(next_no, "시스템별 상세 결과", "".join(system_sections), accent),
-        _section(5, "첨부 및 제외 파일 안내", attach_body, accent),
+        _section(5, "첨부 및 제외 파일 안내", _attachment_notice_body(attachment, context["gemini_input_summary"]), accent),
     ]
 
     return _shell(title, "".join(sections) + _footer())
