@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DEFAULT_ENV_FILE_PATH = Path(".env")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_ENV_FILE_PATH = _REPO_ROOT / ".env"
 
 
 def load_dotenv_file(env_path: Path = DEFAULT_ENV_FILE_PATH) -> dict[str, str]:

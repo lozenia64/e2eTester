@@ -102,9 +102,9 @@ async def lifespan(app: FastAPI):
     event_bus = EventBus()
     failure_analyzer = GeminiFailureAnalyzer.from_env()
     FailureAnalysisSubscriber(failure_analyzer, repository, registry).register(event_bus)
-    email_notifier = RunCompletionEmailNotifier.from_env(system_codes)
-    if email_notifier is not None:
-        EmailNotificationSubscriber(email_notifier).register(event_bus)
+    EmailNotificationSubscriber(system_codes).register(event_bus)
+    email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
+    print(f"[startup] 메일 알림: {email_status.title} — {email_status.message}")
 
     run_service = RunService(
         registry=registry,

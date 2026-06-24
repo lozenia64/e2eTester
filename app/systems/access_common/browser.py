@@ -11,6 +11,8 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
+PC_VIEWPORT: Final[dict[str, int]] = {"width": 1339, "height": 1038}
+MOBILE_VIEWPORT: Final[dict[str, int]] = {"width": 390, "height": 844}
 MAX_TIMEOUT_MS: Final[int] = 20000
 MAIN_ACCESS_TIMEOUT_MS: Final[int] = 20000
 DEFAULT_USER_DATA_ROOT: Final[Path] = Path.home() / ".e2etester"
@@ -143,7 +145,7 @@ def launch_legacy_persistent_browser_context(
     common_args = {
         "headless": headless,
         "slow_mo": slow_mo,
-        "no_viewport": True,
+        "viewport": PC_VIEWPORT,
         "locale": "ko-KR",
         "ignore_default_args": [
             "--enable-automation",
@@ -192,13 +194,13 @@ def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_
 
     - ignore --disable-extensions (확장 프로그램 허용)
     - --disable-blink-features=AutomationControlled
-    - headed: viewport=None / headless: 1280x720
+    - viewport: PC_VIEWPORT (headed·headless 동일)
     - grant_permissions·커스텀 --disable-features 없음
     """
     user_data_dir.mkdir(parents=True, exist_ok=True)
     common_args = {
         "headless": headless,
-        "viewport": {"width": 1280, "height": 720} if headless else None,
+        "viewport": PC_VIEWPORT,
         "ignore_default_args": ["--disable-extensions"],
         "args": [PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE],
     }
@@ -230,9 +232,8 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
     if device is None:
         raise RuntimeError(f"Playwright 디바이스 프로필을 찾지 못했습니다: {MOBILE_DEVICE_NAME}")
 
-    viewport = device["viewport"]
-    width = viewport["width"]
-    height = viewport["height"]
+    width = MOBILE_VIEWPORT["width"]
+    height = MOBILE_VIEWPORT["height"]
     device_scale_factor = device.get("device_scale_factor", 1)
     user_agent = device["user_agent"]
     is_mobile = device.get("is_mobile", True)
