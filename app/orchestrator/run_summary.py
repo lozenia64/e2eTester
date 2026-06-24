@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
 from app.core.models import Run
+from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES, run_status_label
 
 if TYPE_CHECKING:
     from app.orchestrator.run_actor import ActorContext
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 def summarize_run(run: Run, actor_context: ActorContext | None = None) -> dict:
     """홈 화면 "진행 중 / 최근 Run" 패널용 Run 요약(읽기 전용 뷰).
 
-    PII 가 섞일 수 있는 입력값은 포함하지 않고, 진행률·현재/실패 모듈명 등 표시용
+    PII 가 섞일 수 있는 입력값은 포함하지 않고, 진행률·현재/이슈 모듈명 등 표시용
     파생 값만 추린다.
     """
     ordered_modules = sorted(run.modules, key=lambda module: module.order)
@@ -28,11 +29,12 @@ def summarize_run(run: Run, actor_context: ActorContext | None = None) -> dict:
         ),
         None,
     )
-    failed_module = next(
+    issue_module = next(
         (
             module
             for module in ordered_modules
-            if module.module_id in selected_module_ids and module.status == ModuleStatus.FAILED
+            if module.module_id in selected_module_ids
+            and module.status in MODULE_ANOMALY_STATUSES | MODULE_ERROR_STATUSES
         ),
         None,
     )
@@ -46,6 +48,7 @@ def summarize_run(run: Run, actor_context: ActorContext | None = None) -> dict:
         "system_code": run.system_code,
         "system_name": run.system_name,
         "status": run.status,
+        "status_label": run_status_label(run.status),
         "requested_at": run.requested_at.isoformat(),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "ended_at": run.ended_at.isoformat() if run.ended_at else None,
@@ -60,7 +63,7 @@ def summarize_run(run: Run, actor_context: ActorContext | None = None) -> dict:
             if module.module_id in selected_module_ids and module.status == ModuleStatus.PASSED
         ),
         "current_module_name": current_module.name if current_module else None,
-        "failed_module_name": failed_module.name if failed_module else None,
+        "failed_module_name": issue_module.name if issue_module else None,
         "triggered_by": run.triggered_by,
         "suite_id": run.suite_id,
         "created_by_user_id": created_by_user_id,

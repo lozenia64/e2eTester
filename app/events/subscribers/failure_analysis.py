@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from app.core.enums import ModuleStatus
+from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.core.models import (
     FailureAnalysis,
     FailureAnalysisRequest,
@@ -44,7 +44,7 @@ class FailureAnalysisSubscriber:
         if not self._enabled:
             return
         run = event.run
-        failed_modules = [module for module in run.modules if module.status == ModuleStatus.FAILED]
+        failed_modules = [module for module in run.modules if module.status in MODULE_ANOMALY_STATUSES]
         if not failed_modules:
             return
         try:

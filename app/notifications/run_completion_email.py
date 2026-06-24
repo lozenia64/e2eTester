@@ -32,6 +32,16 @@ from app.core.env_utils import (
 )
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.models import Run, SuiteRun
+from app.core.status_labels import (
+    MODULE_ANOMALY_STATUSES,
+    RUN_ANOMALY_STATUSES,
+    RUN_ERROR_STATUSES,
+    SUITE_ANOMALY_STATUSES,
+    SUITE_ERROR_STATUSES,
+    module_status_label,
+    run_status_label,
+    suite_status_label,
+)
 from app.notifications.report_renderer import render_run_report_html, render_suite_report_html
 from app.runner.artifact_manager import ArtifactManager
 
@@ -244,6 +254,7 @@ class EmailNotificationConfig:
     gmail_account: str
     gmail_app_password: str
     recipients_by_system: dict[str, tuple[str, ...]]
+    operator_recipients: tuple[str, ...]
     gemini_api_key: str | None
     gemini_models: tuple[str, ...]
     gemini_enabled: bool
@@ -267,6 +278,7 @@ class EmailNotificationConfig:
         gmail_account = (resolve_env_value("E2E_EMAIL_GMAIL_ACCOUNT", dotenv_values) or "").strip()
         gmail_app_password = (resolve_env_value("E2E_EMAIL_GMAIL_APP_PASSWORD", dotenv_values) or "").strip()
         recipients_by_system, recipient_errors = _resolve_recipient_map(system_codes, dotenv_values)
+        operator_recipients, _operator_errors = _resolve_operator_recipients(dotenv_values)
         if not _gmail_account_looks_valid(gmail_account) or not _gmail_app_password_looks_valid(gmail_app_password):
             return None
         if recipient_errors:
@@ -280,6 +292,7 @@ class EmailNotificationConfig:
             gmail_account=gmail_account,
             gmail_app_password=gmail_app_password,
             recipients_by_system=recipients_by_system,
+            operator_recipients=operator_recipients,
             gemini_api_key=gemini_api_key if gemini_enabled else None,
             gemini_models=gemini_models,
             gemini_enabled=gemini_enabled,
@@ -651,13 +664,14 @@ class RunCompletionEmailBuilder:
         recipients: list[str],
         email_selection: AttachmentSelection,
         gemini_selection: GeminiPromptSelection,
+        operator_alert: bool = False,
     ) -> EmailMessage:
         context = _build_email_context(run, email_selection, gemini_selection)
         html_body = self._build_html_body(context, gemini_selection.parts)
         text_body = self._build_plain_text(context)
 
         message = EmailMessage()
-        message["Subject"] = _build_subject(run)
+        message["Subject"] = _build_subject(run, operator_alert=operator_alert)
         message["From"] = self._config.gmail_account
         message["To"] = "undisclosed-recipients:;"
         message.set_content(text_body)
@@ -681,13 +695,14 @@ class RunCompletionEmailBuilder:
         recipients: list[str],
         email_selection: AttachmentSelection,
         gemini_selection: GeminiPromptSelection,
+        operator_alert: bool = False,
     ) -> EmailMessage:
         context = _build_suite_email_context(suite, runs, email_selection, gemini_selection)
         html_body = self._build_html_body(context, gemini_selection.parts)
         text_body = self._build_plain_text(context)
 
         message = EmailMessage()
-        message["Subject"] = _build_suite_subject(suite)
+        message["Subject"] = _build_suite_subject(suite, operator_alert=operator_alert)
         message["From"] = self._config.gmail_account
         message["To"] = "undisclosed-recipients:;"
         message.set_content(text_body)
@@ -801,6 +816,9 @@ class RunCompletionEmailNotifier:
     def send_run_completion(self, run: Run) -> None:
         if run.suite_id:
             return
+        if run.status in RUN_ERROR_STATUSES:
+            self.send_run_operator_alert(run)
+            return
         recipients = list(self._config.recipients_by_system.get(run.system_code, ()))
         if not recipients:
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: {run.system_code}")
@@ -815,7 +833,28 @@ class RunCompletionEmailNotifier:
             f"attachments={len(email_selection.included)} status={run.status}"
         )
 
+    def send_run_operator_alert(self, run: Run) -> None:
+        if run.suite_id:
+            return
+        recipients = list(self._config.operator_recipients)
+        if not recipients:
+            print(f"[email] run={run.run_id} 운영자 수신자 미설정 — ERROR 메일 생략")
+            return
+
+        artifacts = self._collect_artifacts(run)
+        email_selection = self._select_email_attachments(run, artifacts)
+        gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
+        message = self._builder.build(run, recipients, email_selection, gemini_selection, operator_alert=True)
+        self._sender.send(message, recipients)
+        print(
+            f"[email] run={run.run_id} operator_recipients={len(recipients)} "
+            f"attachments={len(email_selection.included)} status={run.status}"
+        )
+
     def send_suite_completion(self, suite: SuiteRun, runs: list[Run]) -> None:
+        if suite.status in SUITE_ERROR_STATUSES:
+            self.send_suite_operator_alert(suite, runs)
+            return
         recipients = self._resolve_suite_recipients(suite)
         if not recipients:
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: suite={suite.suite_id}")
@@ -828,6 +867,25 @@ class RunCompletionEmailNotifier:
         self._sender.send(message, recipients)
         print(
             f"[email] suite={suite.suite_id} recipients={len(recipients)} "
+            f"attachments={len(email_selection.included)} status={suite.status}"
+        )
+
+    def send_suite_operator_alert(self, suite: SuiteRun, runs: list[Run]) -> None:
+        recipients = list(self._config.operator_recipients)
+        if not recipients:
+            print(f"[email] suite={suite.suite_id} 운영자 수신자 미설정 — ERROR 메일 생략")
+            return
+
+        ordered_runs = self._order_runs_for_suite(suite, runs)
+        artifacts = self._collect_artifacts_for_runs(ordered_runs)
+        email_selection = self._select_suite_email_attachments(suite, ordered_runs, artifacts, include_logs=True)
+        gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
+        message = self._builder.build_suite(
+            suite, ordered_runs, recipients, email_selection, gemini_selection, operator_alert=True
+        )
+        self._sender.send(message, recipients)
+        print(
+            f"[email] suite={suite.suite_id} operator_recipients={len(recipients)} "
             f"attachments={len(email_selection.included)} status={suite.status}"
         )
 
@@ -867,9 +925,14 @@ class RunCompletionEmailNotifier:
         suite: SuiteRun,
         runs: list[Run],
         artifacts: list[RunArtifact],
+        include_logs: bool = False,
     ) -> AttachmentSelection:
-        failed_run_ids = {run.run_id for run in runs if run.status == RunStatus.FAILED}
-        wanted_logs = suite.status == SuiteStatus.FAILED
+        issue_run_ids = {
+            run.run_id
+            for run in runs
+            if run.status in RUN_ANOMALY_STATUSES | RUN_ERROR_STATUSES
+        }
+        wanted_logs = include_logs or suite.status in SUITE_ANOMALY_STATUSES | SUITE_ERROR_STATUSES
         included: list[RunArtifact] = []
         omitted: list[OmittedArtifact] = []
         total_bytes = 0
@@ -877,7 +940,7 @@ class RunCompletionEmailNotifier:
             if artifact.kind == "screenshot":
                 accept = True
             elif artifact.kind == "log":
-                accept = wanted_logs and artifact.run_id in failed_run_ids
+                accept = wanted_logs and artifact.run_id in issue_run_ids
             else:
                 accept = False
             if not accept:
@@ -1071,14 +1134,26 @@ class RunCompletionEmailNotifier:
         return GeminiPromptSelection(parts=parts, omitted=omitted, included_labels=included_labels)
 
 
-def _build_subject(run: Run) -> str:
-    status_label = "테스트 완료" if run.status == RunStatus.PASSED else "테스트 중단"
-    return f"[E2E][{run.system_code.upper()}][{run.status.value}] {run.run_id} {status_label}"
+def _build_subject(run: Run, operator_alert: bool = False) -> str:
+    prefix = "[E2E][OPERATOR]" if operator_alert else f"[E2E][{run.system_code.upper()}]"
+    if run.status == RunStatus.PASSED:
+        tail = "테스트 완료"
+    elif run.status in RUN_ERROR_STATUSES:
+        tail = "점검 실패"
+    else:
+        tail = "이상징후 탐지"
+    return f"{prefix}[{run.status.value}] {run.run_id} {tail}"
 
 
-def _build_suite_subject(suite: SuiteRun) -> str:
-    status_label = "전체 점검 완료" if suite.status == SuiteStatus.PASSED else "전체 점검 중단"
-    return f"[E2E][SUITE][{suite.status.value}] {suite.suite_id} {status_label}"
+def _build_suite_subject(suite: SuiteRun, operator_alert: bool = False) -> str:
+    prefix = "[E2E][OPERATOR][SUITE]" if operator_alert else "[E2E][SUITE]"
+    if suite.status == SuiteStatus.PASSED:
+        tail = "전체 점검 완료"
+    elif suite.status in SUITE_ERROR_STATUSES:
+        tail = "점검 실패"
+    else:
+        tail = "이상징후 탐지"
+    return f"{prefix}[{suite.status.value}] {suite.suite_id} {tail}"
 
 
 def _format_suite_duration(suite: SuiteRun) -> str:
@@ -1095,25 +1170,13 @@ def _format_suite_duration(suite: SuiteRun) -> str:
 
 
 def _module_status_label(status: str) -> str:
-    labels = {
-        ModuleStatus.PASSED.value: "성공",
-        ModuleStatus.FAILED.value: "실패",
-        ModuleStatus.BLOCKED.value: "차단",
-        ModuleStatus.SKIPPED.value: "제외",
-        ModuleStatus.CANCELLED.value: "취소",
-        ModuleStatus.RUNNING.value: "실행 중",
-        ModuleStatus.QUEUED.value: "대기",
-        ModuleStatus.PENDING.value: "대기",
-        ModuleStatus.WAITING_INPUT.value: "입력 대기",
-        SuiteStatus.PASSED.value: "성공",
-        SuiteStatus.FAILED.value: "실패",
-        SuiteStatus.SKIPPED.value: "제외",
-        SuiteStatus.CANCELLED.value: "취소",
-        SuiteStatus.RUNNING.value: "실행 중",
-        SuiteStatus.PENDING.value: "대기",
-        SuiteStatus.WAITING_INPUT.value: "입력 대기",
-    }
-    return labels.get(status, status)
+    try:
+        return module_status_label(ModuleStatus(status))
+    except ValueError:
+        try:
+            return suite_status_label(SuiteStatus(status))
+        except ValueError:
+            return status
 
 
 def _build_comparison_context(run: Run) -> dict:
@@ -1161,7 +1224,7 @@ def _serialize_run_for_suite_report(run: Run) -> dict:
                 "retry_count": module.retry_count,
             }
         )
-        if module.status == ModuleStatus.FAILED:
+        if module.status in MODULE_ANOMALY_STATUSES:
             failed_modules.append(
                 {
                     "module_id": module.module_id,
@@ -1191,7 +1254,8 @@ def _build_suite_email_context(
 ) -> dict:
     run_by_id = {run.run_id: run for run in runs}
     step_passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
-    step_failed = sum(1 for step in suite.steps if step.status == SuiteStatus.FAILED)
+    step_anomaly = sum(1 for step in suite.steps if step.status in SUITE_ANOMALY_STATUSES)
+    step_error = sum(1 for step in suite.steps if step.status in SUITE_ERROR_STATUSES)
     step_skipped = sum(1 for step in suite.steps if step.status == SuiteStatus.SKIPPED)
     step_selected_total = len(suite.steps) - step_skipped
     step_summary = []
@@ -1211,7 +1275,7 @@ def _build_suite_email_context(
                     "system_name": run.system_name,
                     "run_id": run.run_id,
                     "status": run.status.value,
-                    "status_label": "성공" if run.status == RunStatus.PASSED else "실패",
+                    "status_label": run_status_label(run.status),
                     "duration_text": report["duration_text"],
                     "module_passed": module_passed,
                     "module_total": module_total,
@@ -1224,7 +1288,7 @@ def _build_suite_email_context(
         else:
             if step.status == SuiteStatus.SKIPPED:
                 note = "건너뜀 (선택 제외)"
-            elif step.status == SuiteStatus.FAILED:
+            elif step.status in SUITE_ANOMALY_STATUSES | SUITE_ERROR_STATUSES:
                 note = "Run이 생성되지 않았습니다."
             else:
                 note = "실행되지 않음"
@@ -1263,7 +1327,7 @@ def _build_suite_email_context(
         "suite": {
             "suite_id": suite.suite_id,
             "status": suite.status.value,
-            "status_label": "성공" if suite.status == SuiteStatus.PASSED else "실패",
+            "status_label": suite_status_label(suite.status),
             "requested_at_kst": _format_datetime(suite.requested_at),
             "started_at_kst": _format_datetime(suite.started_at),
             "ended_at_kst": _format_datetime(suite.ended_at),
@@ -1272,7 +1336,8 @@ def _build_suite_email_context(
             "step_defined_total": len(suite.steps),
             "step_skipped": step_skipped,
             "step_passed": step_passed,
-            "step_failed": step_failed,
+            "step_anomaly": step_anomaly,
+            "step_error": step_error,
             "browser_mode": suite.browser_mode,
         },
         "step_summary": step_summary,
@@ -1359,7 +1424,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
     ]
     failed_modules = []
     for module in ordered_modules:
-        if module.status != ModuleStatus.FAILED:
+        if module.status not in MODULE_ANOMALY_STATUSES:
             continue
         failed_modules.append(
             {
@@ -1391,7 +1456,7 @@ def _build_email_context(run: Run, email_selection: AttachmentSelection, gemini_
             "system_code": run.system_code.upper(),
             "system_name": run.system_name,
             "status": run.status.value,
-            "status_label": "성공" if run.status == RunStatus.PASSED else "실패",
+            "status_label": run_status_label(run.status),
             "requested_at_kst": _format_datetime(run.requested_at),
             "started_at_kst": _format_datetime(run.started_at),
             "ended_at_kst": _format_datetime(run.ended_at),
@@ -1475,6 +1540,18 @@ def _format_duration(run: Run) -> str:
     if minutes:
         return f"{minutes}분 {seconds}초"
     return f"{seconds}초"
+
+
+def _resolve_operator_recipients(dotenv_values: dict[str, str]) -> tuple[tuple[str, ...], list[str]]:
+    raw_value = (resolve_env_value("E2E_EMAIL_OPERATOR_RECIPIENTS", dotenv_values) or "").strip()
+    recipients, invalid_entries = _parse_recipients(raw_value)
+    errors: list[str] = []
+    if invalid_entries:
+        errors.append(
+            "E2E_EMAIL_OPERATOR_RECIPIENTS 에 유효하지 않은 메일 주소가 있습니다: "
+            + ", ".join(invalid_entries)
+        )
+    return tuple(recipients), errors
 
 
 def _resolve_recipient_map(system_codes: list[str], dotenv_values: dict[str, str]) -> tuple[dict[str, tuple[str, ...]], list[str]]:

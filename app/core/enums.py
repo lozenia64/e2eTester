@@ -8,7 +8,9 @@ class RunStatus(StrEnum):
     RUNNING = "RUNNING"
     WAITING_INPUT = "WAITING_INPUT"
     PASSED = "PASSED"
-    FAILED = "FAILED"
+    ANOMALY = "ANOMALY"
+    ERROR = "ERROR"
+    FAILED = "FAILED"  # 레거시 SQLite 호환; 신규 기록에는 사용하지 않음
     CANCELLED = "CANCELLED"
 
 
@@ -17,7 +19,9 @@ class SuiteStatus(StrEnum):
     RUNNING = "RUNNING"
     WAITING_INPUT = "WAITING_INPUT"
     PASSED = "PASSED"
-    FAILED = "FAILED"
+    ANOMALY = "ANOMALY"
+    ERROR = "ERROR"
+    FAILED = "FAILED"  # 레거시 호환
     SKIPPED = "SKIPPED"
     CANCELLED = "CANCELLED"
 
@@ -28,7 +32,9 @@ class ModuleStatus(StrEnum):
     RUNNING = "RUNNING"
     WAITING_INPUT = "WAITING_INPUT"
     PASSED = "PASSED"
-    FAILED = "FAILED"
+    ANOMALY = "ANOMALY"
+    ERROR = "ERROR"
+    FAILED = "FAILED"  # 레거시 호환
     BLOCKED = "BLOCKED"
     SKIPPED = "SKIPPED"
     CANCELLED = "CANCELLED"

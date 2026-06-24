@@ -4,10 +4,13 @@ from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import Run, RunModule
+from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 
 # 더 이상 전이시키지 않는(이미 끝난) 모듈 상태들.
 _MODULE_TERMINAL = {
     ModuleStatus.PASSED,
+    ModuleStatus.ANOMALY,
+    ModuleStatus.ERROR,
     ModuleStatus.FAILED,
     ModuleStatus.SKIPPED,
     ModuleStatus.BLOCKED,
@@ -56,14 +59,24 @@ class RunAggregate:
             for dependency in module.depends_on
         )
 
-    def has_failure(self) -> bool:
-        return any(module.status == ModuleStatus.FAILED for module in self.run.modules)
+    def has_module_error(self) -> bool:
+        return any(module.status in MODULE_ERROR_STATUSES for module in self.run.modules)
+
+    def has_module_anomaly(self) -> bool:
+        return any(module.status in MODULE_ANOMALY_STATUSES for module in self.run.modules)
 
     def compute_final_status(self, forced_status: RunStatus | None) -> RunStatus:
-        """종료 시점의 Run 상태 판정 규칙(강제 상태가 있으면 그것이 우선)."""
+        """종료 시점의 Run 상태 판정 규칙(강제 상태가 있으면 그것이 우선).
+
+        우선순위: ERROR > ANOMALY > PASSED
+        """
         if forced_status is not None:
             return forced_status
-        return RunStatus.FAILED if self.has_failure() else RunStatus.PASSED
+        if self.has_module_error():
+            return RunStatus.ERROR
+        if self.has_module_anomaly():
+            return RunStatus.ANOMALY
+        return RunStatus.PASSED
 
     def select_failure_target(
         self,
@@ -130,17 +143,17 @@ class RunAggregate:
         module.duration_ms = self._duration_ms(module)
 
     def fail_module(self, module: RunModule, message: str) -> None:
-        """단계 진입 전/도중 오류로 모듈을 실패 종료한다."""
-        module.status = ModuleStatus.FAILED
+        """단계 진입 전/도중 e2eTester(플랫폼) 오류로 모듈을 종료한다."""
+        module.status = ModuleStatus.ERROR
         module.message = message
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)
 
     def mark_fatal(self, module: RunModule, message: str) -> None:
-        """예상치 못한 실행 오류를 특정 모듈에 귀속해 FAILED 처리한다."""
+        """예상치 못한 실행 오류를 특정 모듈에 귀속해 ERROR 처리한다."""
         if module.started_at is None:
             module.started_at = datetime.now(UTC)
-        module.status = ModuleStatus.FAILED
+        module.status = ModuleStatus.ERROR
         module.message = message
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)

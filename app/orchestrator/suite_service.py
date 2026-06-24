@@ -11,8 +11,29 @@ from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import SuiteControlStorePort, SuiteInputStorePort, SuiteRepositoryPort
 
-_TERMINAL_SUITE = {SuiteStatus.PASSED, SuiteStatus.FAILED, SuiteStatus.CANCELLED}
-_TERMINAL_STEP = {SuiteStatus.PASSED, SuiteStatus.FAILED, SuiteStatus.CANCELLED, SuiteStatus.SKIPPED}
+from app.core.status_labels import (
+    RUN_ANOMALY_STATUSES,
+    RUN_ERROR_STATUSES,
+    SUITE_ANOMALY_STATUSES,
+    SUITE_ERROR_STATUSES,
+    SUITE_TERMINAL_OUTCOME_STATUSES,
+)
+
+_TERMINAL_SUITE = {
+    SuiteStatus.PASSED,
+    SuiteStatus.ANOMALY,
+    SuiteStatus.ERROR,
+    SuiteStatus.FAILED,
+    SuiteStatus.CANCELLED,
+}
+_TERMINAL_STEP = {
+    SuiteStatus.PASSED,
+    SuiteStatus.ANOMALY,
+    SuiteStatus.ERROR,
+    SuiteStatus.FAILED,
+    SuiteStatus.CANCELLED,
+    SuiteStatus.SKIPPED,
+}
 
 
 class SuiteService:
@@ -88,7 +109,8 @@ class SuiteService:
     @staticmethod
     def _summarize_suite(suite: SuiteRun) -> dict:
         passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
-        failed = sum(1 for step in suite.steps if step.status == SuiteStatus.FAILED)
+        anomaly = sum(1 for step in suite.steps if step.status in SUITE_ANOMALY_STATUSES)
+        error = sum(1 for step in suite.steps if step.status in SUITE_ERROR_STATUSES)
         skipped = sum(1 for step in suite.steps if step.status == SuiteStatus.SKIPPED)
         selected_total = len(suite.steps) - skipped
         return {
@@ -100,7 +122,8 @@ class SuiteService:
             "step_total": len(suite.steps),
             "step_selected_total": selected_total,
             "step_passed": passed,
-            "step_failed": failed,
+            "step_failed": anomaly,
+            "step_error": error,
             "step_skipped": skipped,
             "current_step_index": suite.current_step_index,
             "active_run_id": suite.active_run_id,
@@ -303,8 +326,10 @@ class SuiteService:
                 step.status = SuiteStatus.PASSED
             elif run.status == RunStatus.CANCELLED:
                 step.status = SuiteStatus.CANCELLED
+            elif run.status in RUN_ERROR_STATUSES:
+                step.status = SuiteStatus.ERROR
             else:
-                step.status = SuiteStatus.FAILED
+                step.status = SuiteStatus.ANOMALY
             suite.active_run_id = None
             suite.awaiting_input_run_id = None
             suite.awaiting_input_prompt = None
@@ -369,7 +394,7 @@ class SuiteService:
                     break
                 next_index = self._next_pending_index(suite)
                 if next_index is None:
-                    final_status = SuiteStatus.FAILED if self._any_failed(suite) else SuiteStatus.PASSED
+                    final_status = self._compute_suite_final_status(suite)
                     await self._finalize_locked(suite, final_status)
                     finalized = (suite, final_status)
                     break
@@ -394,7 +419,7 @@ class SuiteService:
                         user_name=suite.created_by_user_name,
                     )
                 except (KeyError, ValueError) as exc:
-                    step.status = SuiteStatus.FAILED
+                    step.status = SuiteStatus.ERROR
                     await self._repository.save_suite(suite)
                     await self._publish_event(
                         "suite_step_finished", suite, {"step_index": next_index, "error": str(exc)}
@@ -411,7 +436,7 @@ class SuiteService:
 
         # 종료(락 밖에서 통합 메일용 도메인 이벤트 발행)
         suite, status = finalized
-        if status in {SuiteStatus.PASSED, SuiteStatus.FAILED}:
+        if status in SUITE_TERMINAL_OUTCOME_STATUSES:
             runs = await self._collect_step_runs(suite)
             await self._event_bus.publish(SuiteFinished(suite=suite.model_copy(deep=True), runs=runs))
 
@@ -475,8 +500,13 @@ class SuiteService:
         return None
 
     @staticmethod
-    def _any_failed(suite: SuiteRun) -> bool:
-        return any(step.status == SuiteStatus.FAILED for step in suite.steps)
+    def _compute_suite_final_status(suite: SuiteRun) -> SuiteStatus:
+        """Suite 종료 상태: ERROR > ANOMALY > PASSED."""
+        if any(step.status in SUITE_ERROR_STATUSES for step in suite.steps):
+            return SuiteStatus.ERROR
+        if any(step.status in SUITE_ANOMALY_STATUSES for step in suite.steps):
+            return SuiteStatus.ANOMALY
+        return SuiteStatus.PASSED
 
     @staticmethod
     def _find_step(suite: SuiteRun, run_id: str) -> tuple[int, SuiteStep | None]:

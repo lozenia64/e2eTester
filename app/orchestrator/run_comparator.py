@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import Run, RunComparison
+from app.core.status_labels import MODULE_ANOMALY_STATUSES, RUN_TERMINAL_OUTCOME_STATUSES
 
 
 class RunComparator:
@@ -20,7 +21,7 @@ class RunComparator:
         for other in await self._repository.list_runs():
             if other.run_id == run.run_id or other.system_code != run.system_code:
                 continue
-            if other.status not in {RunStatus.PASSED, RunStatus.FAILED}:
+            if other.status not in RUN_TERMINAL_OUTCOME_STATUSES:
                 continue
             if other.requested_at >= run.requested_at:
                 continue
@@ -42,12 +43,12 @@ class RunComparator:
             if module.status == ModuleStatus.SKIPPED:
                 continue
             previous = baseline_status.get(module.module_id)
-            if module.status == ModuleStatus.FAILED:
-                if previous == ModuleStatus.FAILED:
+            if module.status in MODULE_ANOMALY_STATUSES:
+                if previous in MODULE_ANOMALY_STATUSES:
                     still_failing.append(module.name)
                 else:
                     newly_failed.append(module.name)
-            elif module.status == ModuleStatus.PASSED and previous == ModuleStatus.FAILED:
+            elif module.status == ModuleStatus.PASSED and previous in MODULE_ANOMALY_STATUSES:
                 recovered.append(module.name)
 
         return RunComparison(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from app.core.enums import RunStatus, SuiteStatus
+from app.core.status_labels import RUN_TERMINAL_OUTCOME_STATUSES, SUITE_TERMINAL_OUTCOME_STATUSES
 from app.events.bus import EventBus, RunFinished, SuiteFinished
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 
@@ -11,7 +12,7 @@ class EmailNotificationSubscriber:
     """Run/Suite 종료 이벤트를 받아 결과 메일을 발송하는 구독자.
 
     오케스트레이터에서 분리된 부수 관심사다. 메일 발송 정책(취소 Run 제외, Suite 소속
-    Run 은 통합 메일로 갈음 등)도 이 구독자가 소유한다.
+    Run 은 통합 메일로 갈음, ERROR 는 운영자 수신 등)도 이 구독자가 소유한다.
 
     매 이벤트마다 ``RunCompletionEmailNotifier.from_env`` 를 다시 호출해
     ``E2E_EMAIL_ENABLED`` 등 환경 설정이 기동 시점에 고정되지 않도록 한다.
@@ -26,9 +27,7 @@ class EmailNotificationSubscriber:
 
     async def on_run_finished(self, event: RunFinished) -> None:
         run = event.run
-        # 사용자가 취소한 Run 은 보내지 않고(PASSED/FAILED 만), Suite 소속 Run 은
-        # Suite 종료 시 통합 메일 1통으로 갈음한다.
-        if run.status not in {RunStatus.PASSED, RunStatus.FAILED} or run.suite_id:
+        if run.status not in RUN_TERMINAL_OUTCOME_STATUSES or run.suite_id:
             return
         notifier = RunCompletionEmailNotifier.from_env(self._system_codes)
         if notifier is None:
@@ -41,7 +40,7 @@ class EmailNotificationSubscriber:
 
     async def on_suite_finished(self, event: SuiteFinished) -> None:
         suite = event.suite
-        if suite.status not in {SuiteStatus.PASSED, SuiteStatus.FAILED}:
+        if suite.status not in SUITE_TERMINAL_OUTCOME_STATUSES:
             return
         notifier = RunCompletionEmailNotifier.from_env(self._system_codes)
         if notifier is None:

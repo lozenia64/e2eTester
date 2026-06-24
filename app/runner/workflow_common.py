@@ -28,7 +28,7 @@ class StepExecutionResult:
         screenshot_path: Path | None = None,
     ) -> "StepExecutionResult":
         return cls(
-            status=ModuleStatus.FAILED,
+            status=ModuleStatus.ANOMALY,
             message=message,
             artifacts=[],
             current_url=current_url,
