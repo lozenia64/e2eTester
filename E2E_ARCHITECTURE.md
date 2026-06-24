@@ -18,7 +18,7 @@
 현재 구현은 다음과 같다.
 
 - FastAPI 서버가 웹 화면과 API, WebSocket을 제공한다.
-- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: 대표홈페이지 HOM·MHM, 접속 점검 시스템 FP·HRP·HWTC·CHBOT)
+- 시스템은 manifest 기반으로 로드된다. (현재 기본 포함 시스템: 대표홈페이지 HOM·MHM, 업무 시스템 FP·HRP·HWTC·CHBOT — 각각 다단계 모듈·휴대폰 OTP 시나리오)
 - Run 생성 후 모듈 상태가 실시간으로 갱신된다.
 - **전체 시스템 순차 점검(Suite)** 으로 등록 시스템을 `display_order` 순으로 연속 실행할 수 있으며, 실행 전 시스템별 포함/제외(`selected_system_codes`)를 선택할 수 있다.
 - 실행 엔진은 Playwright Python sync API 기반의 공유 브라우저 세션 워크플로우다.
@@ -77,8 +77,16 @@ e2eTester/
       routes_schedules.py
       routes_suites.py
       routes_systems.py
+      routes_admin.py
+      routes_otp.py
       ws_runs.py
       ws_suites.py
+    auth/
+      router.py                    # /login, /auth/*, /account/password
+      dependencies.py
+      jwt.py
+      service.py
+      models.py
     core/
       enums.py
       env_utils.py
@@ -107,6 +115,7 @@ e2eTester/
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
       suite_service.py           # SuiteService: 이벤트 기반 Saga(RunFinished 구동, 폴링 없음)
+      stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
     registry/
       loader.py
     scheduling/
@@ -163,12 +172,24 @@ e2eTester/
           long_term_policy_certificate.py
       access_common/
         browser.py                 # 공용 브라우저 기동/팝업/모바일 모드 헬퍼
-        executor.py                # AccessWorkflowExecutor
-        main_access.py             # 단일 main_access 단계
+        executor.py                # AccessWorkflowExecutor (FP/HRP/HWTC/CHBOT 공통 베이스)
+        main_access.py             # main_access 단계
       fp/
+        executor.py                # FpWorkflowExecutor
+        manifest.yaml
+        steps/
       hrp/
+        executor.py                # HrpWorkflowExecutor
+        manifest.yaml
+        steps/
       hwtc/
+        executor.py                # HwtcWorkflowExecutor
+        manifest.yaml
+        steps/
       chbot/
+        executor.py                # ChbotWorkflowExecutor
+        manifest.yaml
+        steps/
     storage/
       ports.py                   # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule
       sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
@@ -179,6 +200,8 @@ e2eTester/
       sqlite_suite_repository.py # SQLite Suite 어댑터(기본 사용)
       sqlite_suite_control_store.py # SQLite Suite 제어 상태 어댑터(취소 의도, suite_control 테이블)
       sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
+      sqlite_user_repository.py    # SQLite 사용자 어댑터(기본 사용)
+      sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
       run_control_store.py       # 인메모리 Run 제어 상태 어댑터
       run_input_store.py         # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
       suite_control_store.py     # 인메모리 Suite 제어 상태 어댑터
@@ -193,6 +216,15 @@ e2eTester/
         index.html
         run.html
         suite.html
+        login.html
+        account/
+          password.html
+        admin/
+          base.html
+          index.html
+          users.html
+          modules.html
+          stats.html
       static/
         app.css
         app.js
@@ -237,7 +269,7 @@ e2eTester/
 역할:
 
 - 시스템 카드 렌더링
-- **전체 시스템 순차 점검(SUITE)** 카드: 시스템 체크박스 선택, 공통 브라우저 모드, HOM/MHM 인증 패널(선택된 시스템만), cron 예약 등록
+- **전체 시스템 순차 점검(SUITE)** 카드: 시스템 체크박스 선택, 공통 브라우저 모드, `supported_auth_methods` 가 있는 시스템별 인증 입력 패널(선택된 시스템만), cron 예약 등록
 - 조건부 입력 폼 렌더링
 - 실행 모듈 선택 그래프(`module-graph`) 렌더링과 의존성 경고
 - Run / Suite 화면 렌더링
@@ -247,7 +279,7 @@ e2eTester/
 
 - 홈 화면은 “시스템 실행”과 “전체 순차 점검”을 함께 제공한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
-- 홈 화면에는 “진행 중 / 최근 Run” 패널이 있으며 `GET /api/runs` 요약을 주기적으로 불러와 렌더링한다. (메모리 기반이라 서버 재시작 시 사라짐)
+- 홈 화면에는 “진행 중 / 최근 Run” 패널이 있으며 `GET /api/runs` 요약을 주기적으로 불러와 렌더링한다. (SQLite 영속 — 서버 재시작 후에도 이력이 남음)
 - 개별 시스템 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
 - **SUITE** 실행 전 시스템 체크박스에서 시스템을 개별 해제할 수 있고, 선택값은 `selected_system_codes` 로 전달된다. 미선택 시스템은 Suite step `SKIPPED` 로 남는다.
 - 개별 Run 실행 시 곧바로 Run 상세 화면으로, SUITE 실행 시 Suite 상세 화면(`/suites/{suite_id}`)으로 이동한다.
@@ -258,6 +290,12 @@ e2eTester/
 현재 구현:
 
 - `GET /` (홈 대시보드 HTML)
+- `GET /login` (로그인 HTML)
+- `POST /auth/login` (폼 또는 JSON 로그인 → JWT 쿠키)
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /account/password` (비밀번호 변경 HTML)
+- `POST /auth/change-password`
 - `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
 - `GET /api/systems`
@@ -448,7 +486,8 @@ manifest 에 들어 있는 정보:
 - `app/scenarios/rep_homepage/channel.py` (`ChannelProfile` / `ChannelSteps`) — 채널(드라이버) 기술서와 셀렉터 어댑터 계약. `app/scenarios/rep_homepage/constants.py` 는 청구 본문 문구 등 charge↔result↔cancel 도메인 결합 규칙의 SSOT.
 - `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/hom/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "hom_workflow_step"`) — PC 채널 어댑터(`hom.steps`) 주입.
 - `app/systems/mhm/channel.py` (`MOBILE_CHANNEL`, `mobile=True`) / `app/systems/mhm/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "mhm_workflow_step"`) — 모바일 채널 어댑터(`mhm.steps`) 주입.
-- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, 접속 점검 공용 실행기)
+- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, FP/HRP/HWTC/CHBOT 공통 베이스 — `main_access` + 시스템별 `_run_step` 확장)
+- `app/systems/fp/executor.py` (`FpWorkflowExecutor`) / `app/systems/hrp/executor.py` (`HrpWorkflowExecutor`) / `app/systems/hwtc/executor.py` (`HwtcWorkflowExecutor`) / `app/systems/chbot/executor.py` (`ChbotWorkflowExecutor`)
 - `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
 - `app/runner/artifact_manager.py`
 - `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들 — 각 채널이 공용 시나리오에 주입하는 셀렉터 어댑터
@@ -554,7 +593,7 @@ manifest 에 들어 있는 정보:
 역할:
 
 - 홈 화면 시스템 폼에서 입력값·모듈 선택 그대로 cron 식을 붙여 **개별 시스템** 예약을 등록한다. 등록 시 `RunService.validate_run_request` 로 검증한다.
-- 홈 SUITE 카드에서 브라우저 모드·시스템 선택(`selected_system_codes`)·HOM/MHM 인증 정보와 함께 **전체 점검** 예약을 등록한다 (`POST /api/schedules/suites`). 등록 시 `SuiteService.validate_suite_request` 로 검증한다.
+- 홈 SUITE 카드에서 브라우저 모드·시스템 선택(`selected_system_codes`)·선택된 시스템별 인증 정보와 함께 **전체 점검** 예약을 등록한다 (`POST /api/schedules/suites`). 등록 시 `SuiteService.validate_suite_request` 로 검증한다.
 - 예약은 `schedule_kind` 가 `system`(개별 Run) 또는 `suite`(전체 점검) 이다.
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
@@ -622,7 +661,7 @@ artifacts/
 현재 구현 내용:
 
 - 워크플로 단계 모듈(`hom_workflow_step` / `mhm_workflow_step`)은 로그를 `execution.log` 로 남긴다.
-- 스크린샷(`final.png`)은 **공용 실행 엔진**이 책임진다. 개별 단계 함수는 스크린샷을 직접 찍지 않으며, `BaseWorkflowExecutor.execute_step` 이 각 모듈 종료 시점(성공·실패 공통)에 `runtime.page` 로 한 번 캡처한다(`app/runner/screenshot.py`의 `capture_screenshot`). 모든 시스템(HOM/MHM/접속 점검)에 동일하게 적용된다.
+- 스크린샷(`final.png`)은 **공용 실행 엔진**이 책임진다. 개별 단계 함수는 스크린샷을 직접 찍지 않으며, `BaseWorkflowExecutor.execute_step` 이 각 모듈 종료 시점(성공·실패 공통)에 `runtime.page` 로 한 번 캡처한다(`app/runner/screenshot.py`의 `capture_screenshot`). 모든 등록 시스템(HOM/MHM/FP/HRP/HWTC/CHBOT)에 동일하게 적용된다.
 - 캡처는 로그 리다이렉트 안에서 수행되므로 스크린샷 관련 로그도 `execution.log` / WebSocket 으로 함께 남는다.
 - 표준 캡처 → 폰트 폴백 재시도 → CDP 폴백 순으로 시도하며, 캡처가 모두 실패해도 단계 성공/실패 판정에는 영향을 주지 않는다(예외를 삼킨다).
 - Run 화면에서 아티팩트 링크 노출
