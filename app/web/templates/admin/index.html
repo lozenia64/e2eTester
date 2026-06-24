@@ -6,7 +6,7 @@
 <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
     <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">관리자 대시보드</h1>
-    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 통과한 Run 이력을 확인합니다.</p>
+    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(성공·이상징후) 이력을 확인합니다.</p>
 </div>
 
 <!-- 요약 카드 -->
@@ -16,11 +16,11 @@
         <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-users">—</p>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">오늘 통과 Run</p>
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">오늘 완료 Run</p>
         <p class="mt-2 text-3xl font-bold text-gray-900" id="card-today-runs">—</p>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">통과 Run</p>
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">완료 Run</p>
         <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-runs">—</p>
     </div>
 </div>
@@ -45,7 +45,7 @@
 <!-- 최근 Run 목록 -->
 <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
     <div class="border-b border-gray-100 px-6 py-4">
-        <h2 class="text-sm font-semibold text-gray-900">최근 통과 Run</h2>
+        <h2 class="text-sm font-semibold text-gray-900">최근 완료 Run</h2>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -69,13 +69,15 @@
 
 {% block scripts %}
 <script>
-const statusLabels = {
-    PASSED: ['통과', 'bg-green-100 text-green-700'],
-    FAILED: ['실패', 'bg-red-100 text-red-700'],
-    RUNNING: ['실행 중', 'bg-blue-100 text-blue-700'],
-    PENDING: ['대기', 'bg-gray-100 text-gray-600'],
-    CANCELLED: ['취소', 'bg-gray-100 text-gray-500'],
-    WAITING_INPUT: ['OTP 대기', 'bg-yellow-100 text-yellow-700'],
+const statusBadgeClasses = {
+    PASSED: 'bg-green-100 text-green-700',
+    ANOMALY: 'bg-amber-100 text-amber-800',
+    FAILED: 'bg-amber-100 text-amber-800',
+    ERROR: 'bg-red-100 text-red-700',
+    RUNNING: 'bg-blue-100 text-blue-700',
+    PENDING: 'bg-gray-100 text-gray-600',
+    CANCELLED: 'bg-gray-100 text-gray-500',
+    WAITING_INPUT: 'bg-yellow-100 text-yellow-700',
 };
 
 function buildRunsQuery() {
@@ -94,7 +96,8 @@ function renderRunsTable(runs) {
         return;
     }
     tbody.innerHTML = runs.map(r => {
-        const [label, cls] = statusLabels[r.status] || [r.status, 'bg-gray-100 text-gray-600'];
+        const cls = statusBadgeClasses[r.status] || 'bg-gray-100 text-gray-600';
+        const label = r.status_label || r.status;
         const at = r.requested_at ? new Date(r.requested_at).toLocaleString('ko-KR') : '—';
         const canDelete = !['RUNNING', 'PENDING', 'WAITING_INPUT'].includes(r.status);
         const deleteBtn = canDelete

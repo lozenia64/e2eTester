@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from app.core.enums import ModuleStatus, RunStatus
-from app.core.status_labels import MODULE_ANOMALY_STATUSES, RUN_ANOMALY_STATUSES
+from app.core.enums import ModuleStatus
+from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES, MODULE_ANOMALY_STATUSES
 from app.core.models import UsageStats, UserUsageStat, SystemUsageStat
 from app.orchestrator.run_actor import load_actor_context
 from app.storage.ports import RunRepositoryPort, ScheduleRepositoryPort, SuiteRepositoryPort
@@ -39,7 +39,7 @@ class StatsService:
     ) -> UsageStats:
         all_runs = [
             run for run in await self._run_repo.list_runs()
-            if run.status in {RunStatus.PASSED, *RUN_ANOMALY_STATUSES}
+            if run.status in ADMIN_VISIBLE_RUN_STATUSES
         ]
 
         if from_dt is not None:
