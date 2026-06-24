@@ -4,11 +4,45 @@ const STATUS_BADGE_CLASSES = {
     running: "bg-blue-100 text-blue-700",
     waiting_input: "bg-amber-100 text-amber-700",
     passed: "bg-emerald-100 text-emerald-700",
-    failed: "bg-red-100 text-red-700",
+    anomaly: "bg-amber-100 text-amber-800",
+    error: "bg-red-100 text-red-700",
+    failed: "bg-amber-100 text-amber-800",
     blocked: "bg-orange-100 text-orange-700",
     skipped: "bg-slate-200 text-slate-700",
     cancelled: "bg-zinc-200 text-zinc-700",
 };
+
+const STATUS_DISPLAY_LABELS = {
+    pending: "대기",
+    queued: "대기",
+    running: "실행 중",
+    waiting_input: "입력 대기",
+    passed: "정상",
+    anomaly: "이상징후",
+    error: "점검실패",
+    failed: "이상징후",
+    blocked: "차단",
+    skipped: "제외",
+    cancelled: "취소",
+};
+
+function normalizeOutcomeStatus(status) {
+    const value = String(status ?? "").toLowerCase();
+    return value === "failed" ? "anomaly" : value;
+}
+
+function statusDisplayLabel(entity) {
+    if (entity?.status_label) {
+        return entity.status_label;
+    }
+    const normalized = normalizeOutcomeStatus(entity?.status ?? entity);
+    return STATUS_DISPLAY_LABELS[normalized] ?? String(entity?.status ?? entity ?? "");
+}
+
+function isModuleIssueStatus(status) {
+    const normalized = normalizeOutcomeStatus(status);
+    return normalized === "anomaly" || normalized === "error";
+}
 
 const MODULE_GRAPH_COLUMN_WIDTH = 172;
 const MODULE_GRAPH_ROW_HEIGHT = 76;
@@ -443,7 +477,7 @@ async function readErrorMessage(response) {
 }
 
 function statusBadgeClassName(status, sizeClasses = "px-2.5 py-1") {
-    const tone = STATUS_BADGE_CLASSES[String(status).toLowerCase()] ?? "bg-gray-100 text-gray-600";
+    const tone = STATUS_BADGE_CLASSES[normalizeOutcomeStatus(status)] ?? "bg-gray-100 text-gray-600";
     return `inline-flex items-center rounded-full text-xs font-semibold ${sizeClasses} ${tone}`;
 }
 
@@ -698,8 +732,9 @@ function createRunListItem(run) {
         metaParts.push(run.awaiting_input_prompt);
     } else if (isActive && run.current_module_name) {
         metaParts.push(`실행 중 · ${run.current_module_name}`);
-    } else if (status === "failed" && run.failed_module_name) {
-        metaParts.push(`실패 · ${run.failed_module_name}`);
+    } else if (isModuleIssueStatus(status) && run.failed_module_name) {
+        const issueLabel = normalizeOutcomeStatus(status) === "error" ? "점검실패" : "이상징후";
+        metaParts.push(`${issueLabel} · ${run.failed_module_name}`);
     }
     meta.textContent = metaParts.filter(Boolean).join(" · ");
     info.appendChild(meta);
@@ -717,7 +752,7 @@ function createRunListItem(run) {
 
     const statusPill = document.createElement("span");
     statusPill.className = statusBadgeClassName(run.status);
-    statusPill.textContent = run.status ?? "";
+    statusPill.textContent = statusDisplayLabel(run);
     right.appendChild(statusPill);
 
     card.appendChild(left);
@@ -1199,15 +1234,15 @@ function updateModuleCard(module) {
         return;
     }
 
-    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "failed", "blocked", "skipped", "cancelled"];
+    const statuses = ["pending", "queued", "running", "waiting_input", "passed", "anomaly", "error", "failed", "blocked", "skipped", "cancelled"];
     for (const status of statuses) {
         card.classList.remove(`status-${status}`);
     }
-    card.classList.add(`status-${module.status.toLowerCase()}`);
+    card.classList.add(`status-${normalizeOutcomeStatus(module.status)}`);
 
     const statusNode = card.querySelector('[data-role="module-status"]');
     statusNode.className = statusBadgeClassName(module.status);
-    statusNode.textContent = module.status;
+    statusNode.textContent = statusDisplayLabel({ status: module.status });
 
     card.querySelector('[data-role="module-message"]').textContent = module.message;
     card.querySelector('[data-role="module-duration"]').textContent = `${module.duration_ms ?? 0} ms`;
@@ -1411,18 +1446,23 @@ function updateRunProgress() {
     const states = [...moduleRuntimeState.values()].map((state) => state.status);
     const total = states.filter((status) => status !== "skipped").length;
     const passed = states.filter((status) => status === "passed").length;
-    const failed = states.filter((status) => status === "failed").length;
+    const anomaly = states.filter((status) => normalizeOutcomeStatus(status) === "anomaly").length;
+    const error = states.filter((status) => normalizeOutcomeStatus(status) === "error").length;
     const blocked = states.filter((status) => status === "blocked").length;
-    const finished = passed + failed + blocked;
+    const finished = passed + anomaly + error + blocked;
     const ratio = total === 0 ? 0 : Math.round((finished / total) * 100);
     bar.style.width = `${ratio}%`;
-    bar.classList.toggle("bg-red-500", failed > 0);
-    bar.classList.toggle("bg-emerald-500", failed === 0);
+    bar.classList.toggle("bg-red-500", error > 0);
+    bar.classList.toggle("bg-amber-500", error === 0 && anomaly > 0);
+    bar.classList.toggle("bg-emerald-500", error === 0 && anomaly === 0);
     label.textContent = `통과 ${passed}/${total}`;
     if (detail) {
         const parts = [`완료 ${finished}/${total}`];
-        if (failed > 0) {
-            parts.push(`실패 ${failed}`);
+        if (anomaly > 0) {
+            parts.push(`이상징후 ${anomaly}`);
+        }
+        if (error > 0) {
+            parts.push(`점검실패 ${error}`);
         }
         if (blocked > 0) {
             parts.push(`차단 ${blocked}`);
@@ -1935,16 +1975,16 @@ function computeRunModuleProgress(run) {
     }
 
     const passedCount = modules.filter((module) => String(module.status).toLowerCase() === "passed").length;
-    const failedIndex = modules.findIndex((module) => String(module.status).toLowerCase() === "failed");
-    const runStatus = String(run?.status ?? "").toLowerCase();
+    const issueIndex = modules.findIndex((module) => isModuleIssueStatus(module.status));
+    const runStatus = normalizeOutcomeStatus(run?.status);
 
-    if (failedIndex >= 0) {
+    if (issueIndex >= 0 && (runStatus === "anomaly" || runStatus === "error")) {
         return {
-            current: failedIndex + 1,
+            current: issueIndex + 1,
             total,
-            label: `${failedIndex + 1}/${total}`,
-            moduleName: modules[failedIndex].name ?? "",
-            tone: "failed",
+            label: `${issueIndex + 1}/${total}`,
+            moduleName: modules[issueIndex].name ?? "",
+            tone: runStatus === "error" ? "error" : "anomaly",
         };
     }
 
@@ -1978,8 +2018,11 @@ function computeRunModuleProgress(run) {
 }
 
 function moduleProgressClassName(tone) {
-    if (tone === "failed") {
+    if (tone === "error") {
         return "mt-1 text-xs font-semibold text-red-600";
+    }
+    if (tone === "anomaly" || tone === "failed") {
+        return "mt-1 text-xs font-semibold text-amber-700";
     }
     if (tone === "passed") {
         return "mt-1 text-xs font-semibold text-emerald-600";
@@ -2001,8 +2044,11 @@ function formatStepModuleProgressText(progress, stepStatus) {
     if (status === "pending") {
         return "";
     }
-    if (progress.tone === "failed") {
-        return `모듈 ${progress.label} 실패${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
+    if (progress.tone === "error") {
+        return `모듈 ${progress.label} 점검실패${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
+    }
+    if (progress.tone === "anomaly" || progress.tone === "failed") {
+        return `모듈 ${progress.label} 이상징후${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
     }
     if (progress.tone === "passed" || status === "passed") {
         return `모듈 ${progress.label} 완료`;
@@ -2152,7 +2198,7 @@ function refreshFinishedSuiteStepProgress(suite) {
         if (!step.run_id) {
             continue;
         }
-        if (status === "passed" || status === "failed" || status === "cancelled") {
+        if (status === "passed" || status === "anomaly" || status === "error" || status === "failed" || status === "cancelled") {
             refreshSuiteRunProgress(step.run_id);
         }
     }
@@ -2486,9 +2532,9 @@ function updateComparisonPanel(runPayload) {
     }
     body.innerHTML = "";
     const groups = [
-        { label: "새로 실패", names: comparison.newly_failed ?? [], cls: "bg-red-100 text-red-700" },
+        { label: "새 이상징후", names: comparison.newly_failed ?? [], cls: "bg-amber-100 text-amber-800" },
         { label: "복구됨", names: comparison.recovered ?? [], cls: "bg-emerald-100 text-emerald-700" },
-        { label: "계속 실패", names: comparison.still_failing ?? [], cls: "bg-amber-100 text-amber-700" },
+        { label: "지속 이상징후", names: comparison.still_failing ?? [], cls: "bg-orange-100 text-orange-700" },
     ];
     let hasAny = false;
     for (const group of groups) {

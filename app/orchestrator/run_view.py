@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.core.enums import RunStatus
 from app.core.models import Run, RunComparison, RunModule
+from app.core.status_labels import run_status_label
 
 
 class RunView(BaseModel):
@@ -25,6 +26,7 @@ class RunView(BaseModel):
     system_code: str
     system_name: str
     status: RunStatus
+    status_label: str
     requested_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
@@ -46,6 +48,7 @@ class RunView(BaseModel):
             system_code=run.system_code,
             system_name=run.system_name,
             status=run.status,
+            status_label=run_status_label(run.status),
             requested_at=run.requested_at,
             started_at=run.started_at,
             ended_at=run.ended_at,

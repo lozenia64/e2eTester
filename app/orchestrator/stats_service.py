@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus, RunStatus
+from app.core.status_labels import MODULE_ANOMALY_STATUSES, RUN_ANOMALY_STATUSES
 from app.core.models import UsageStats, UserUsageStat, SystemUsageStat
 from app.orchestrator.run_actor import load_actor_context
 from app.storage.ports import RunRepositoryPort, ScheduleRepositoryPort, SuiteRepositoryPort
@@ -38,7 +39,7 @@ class StatsService:
     ) -> UsageStats:
         all_runs = [
             run for run in await self._run_repo.list_runs()
-            if run.status == RunStatus.PASSED
+            if run.status in {RunStatus.PASSED, *RUN_ANOMALY_STATUSES}
         ]
 
         if from_dt is not None:
@@ -76,7 +77,7 @@ class StatsService:
 
         for run in all_runs:
             passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
-            failed = sum(1 for m in run.modules if m.status == ModuleStatus.FAILED)
+            failed = sum(1 for m in run.modules if m.status in MODULE_ANOMALY_STATUSES)
             duration = sum(m.duration_ms or 0 for m in run.modules)
             sys_seconds = module_seconds.get(run.system_code, {})
             saved_seconds = sum(

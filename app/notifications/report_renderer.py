@@ -21,6 +21,11 @@ from __future__ import annotations
 from html import escape
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.status_labels import (
+    MODULE_STATUS_LABELS,
+    RUN_STATUS_LABELS,
+    SUITE_STATUS_LABELS,
+)
 
 # --- 디자인 토큰 (이 값만 바꾸면 전체 메일 룩앤필이 일관되게 바뀐다) -----------------
 FONT_STACK = "Arial,'Noto Sans KR','Malgun Gothic',sans-serif"
@@ -44,29 +49,31 @@ INFO_COLOR = "#2563eb"
 INFO_SOFT_BG = "#eef3ff"
 
 _STATUS_LABELS = {
-    ModuleStatus.PASSED.value: "성공",
-    ModuleStatus.FAILED.value: "실패",
-    ModuleStatus.BLOCKED.value: "차단",
-    ModuleStatus.SKIPPED.value: "제외",
-    ModuleStatus.CANCELLED.value: "취소",
-    ModuleStatus.RUNNING.value: "실행 중",
-    ModuleStatus.QUEUED.value: "대기",
-    ModuleStatus.PENDING.value: "대기",
-    ModuleStatus.WAITING_INPUT.value: "입력 대기",
+    key.value: value for key, value in MODULE_STATUS_LABELS.items()
+} | {
+    key.value: value for key, value in RUN_STATUS_LABELS.items()
+} | {
+    key.value: value for key, value in SUITE_STATUS_LABELS.items()
 }
 
 _STATUS_COLORS = {
     ModuleStatus.PASSED.value: PASS_COLOR,
-    ModuleStatus.FAILED.value: FAIL_COLOR,
+    ModuleStatus.ANOMALY.value: WARN_COLOR,
+    ModuleStatus.ERROR.value: FAIL_COLOR,
+    ModuleStatus.FAILED.value: WARN_COLOR,
     ModuleStatus.BLOCKED.value: WARN_COLOR,
     ModuleStatus.SKIPPED.value: NEUTRAL_COLOR,
     ModuleStatus.CANCELLED.value: NEUTRAL_COLOR,
     ModuleStatus.WAITING_INPUT.value: WARN_COLOR,
     RunStatus.PASSED.value: PASS_COLOR,
-    RunStatus.FAILED.value: FAIL_COLOR,
+    RunStatus.ANOMALY.value: WARN_COLOR,
+    RunStatus.ERROR.value: FAIL_COLOR,
+    RunStatus.FAILED.value: WARN_COLOR,
     RunStatus.CANCELLED.value: NEUTRAL_COLOR,
     SuiteStatus.PASSED.value: PASS_COLOR,
-    SuiteStatus.FAILED.value: FAIL_COLOR,
+    SuiteStatus.ANOMALY.value: WARN_COLOR,
+    SuiteStatus.ERROR.value: FAIL_COLOR,
+    SuiteStatus.FAILED.value: WARN_COLOR,
     SuiteStatus.SKIPPED.value: NEUTRAL_COLOR,
     SuiteStatus.CANCELLED.value: NEUTRAL_COLOR,
 }
@@ -299,9 +306,9 @@ def _comparison_block(comparison: dict, comment: str) -> str:
         f"{_text(comparison.get('baseline_run_id'), '-')}</code> ({_text(comparison.get('baseline_requested_at'), '-')})</div>"
     )
     for label, names, color in (
-        ("새로 실패", comparison.get("newly_failed") or [], FAIL_COLOR),
+        ("새 이상징후", comparison.get("newly_failed") or [], WARN_COLOR),
         ("복구됨", comparison.get("recovered") or [], PASS_COLOR),
-        ("계속 실패", comparison.get("still_failing") or [], WARN_COLOR),
+        ("지속 이상징후", comparison.get("still_failing") or [], WARN_COLOR),
     ):
         if not names:
             continue
@@ -355,11 +362,12 @@ def render_run_report_html(context: dict, ai_content: dict | None = None) -> str
     }
     summary = context["module_summary"]
     passed = summary.get(ModuleStatus.PASSED.value, 0)
-    failed = summary.get(ModuleStatus.FAILED.value, 0)
+    anomaly = summary.get(ModuleStatus.ANOMALY.value, 0) + summary.get(ModuleStatus.FAILED.value, 0)
+    error = summary.get(ModuleStatus.ERROR.value, 0)
     skipped = summary.get(ModuleStatus.SKIPPED.value, 0)
-    executed = passed + failed
+    executed = passed + anomaly + error
     pass_rate = f"{round(passed / executed * 100)}%" if executed else "-"
-    accent = PASS_COLOR if _is_passed(run["status"]) else FAIL_COLOR
+    accent = PASS_COLOR if _is_passed(run["status"]) else (FAIL_COLOR if error else WARN_COLOR)
 
     title = _title_block(
         f"[E2E] {run['system_name']} 테스트 결과 보고서",
@@ -371,8 +379,9 @@ def render_run_report_html(context: dict, ai_content: dict | None = None) -> str
     kpi = _kpi_cards(
         [
             ("전체 모듈", str(len(modules)), INK),
-            ("성공", str(passed), PASS_COLOR),
-            ("실패", str(failed), FAIL_COLOR if failed else MUTED),
+            ("정상", str(passed), PASS_COLOR),
+            ("이상징후", str(anomaly), WARN_COLOR if anomaly else MUTED),
+            ("점검실패", str(error), FAIL_COLOR if error else MUTED),
             ("통과율", pass_rate, accent),
         ]
     )
@@ -388,7 +397,7 @@ def render_run_report_html(context: dict, ai_content: dict | None = None) -> str
 
     headline = (ai.get("headline") or "").strip() or (
         f"{run['system_name']} 테스트가 {run['status_label']} 상태로 종료되었습니다. "
-        f"전체 {len(modules)}개 모듈 중 {passed}개 성공, {failed}개 실패, {skipped}개 제외되었습니다."
+        f"전체 {len(modules)}개 모듈 중 {passed}개 정상, {anomaly}개 이상징후, {error}개 점검실패, {skipped}개 제외되었습니다."
     )
 
     sections = [
@@ -442,7 +451,8 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
         [
             ("점검 시스템", str(suite["step_total"]), INK),
             ("통과", str(suite["step_passed"]), PASS_COLOR),
-            ("실패", str(suite["step_failed"]), FAIL_COLOR if suite["step_failed"] else MUTED),
+            ("이상징후", str(suite.get("step_anomaly", suite.get("step_failed", 0))), WARN_COLOR if suite.get("step_anomaly", suite.get("step_failed", 0)) else MUTED),
+            ("점검실패", str(suite.get("step_error", 0)), FAIL_COLOR if suite.get("step_error", 0) else MUTED),
             ("소요 시간", suite["duration_text"], accent),
         ]
     )
@@ -531,7 +541,7 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
 
     headline = (ai.get("headline") or "").strip() or (
         f"전체 {suite['step_total']}개 시스템 순차 점검이 {suite['status_label']} 상태로 종료되었습니다. "
-        f"통과 {suite['step_passed']}개, 실패 {suite['step_failed']}개입니다."
+        f"통과 {suite['step_passed']}개, 이상징후 {suite.get('step_anomaly', suite.get('step_failed', 0))}개, 점검실패 {suite.get('step_error', 0)}개입니다."
     )
 
     sections = [

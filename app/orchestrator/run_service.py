@@ -281,7 +281,7 @@ class RunService:
 
     async def cancel_run(self, run_id: str) -> Run:
         run = await self._repository.get_run(run_id)
-        if run.status in {RunStatus.PASSED, RunStatus.FAILED, RunStatus.CANCELLED}:
+        if run.status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED, RunStatus.CANCELLED}:
             raise ValueError("이미 종료된 Run은 취소할 수 없습니다.")
         await self._control_store.set_cancel_requested(run_id)
         pending = await self._control_store.get_pending(run_id)
@@ -397,7 +397,7 @@ class RunService:
                 await self._repository.save_run(run)
                 await self._events.module_event("module_finished", run, module)
         except Exception as exc:
-            forced_status = RunStatus.FAILED
+            forced_status = RunStatus.ERROR
             await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
         finally:
             if handle is not None and not paused:
@@ -405,7 +405,7 @@ class RunService:
                     await self._gateway.close_session(handle)
                 except Exception as exc:
                     if forced_status is None:
-                        forced_status = RunStatus.FAILED
+                        forced_status = RunStatus.ERROR
                         await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
                     else:
                         print(f"[run] run={run.run_id} runtime cleanup error: {exc}")
@@ -510,7 +510,7 @@ class RunService:
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
         final_status = RunAggregate(run).finalize(forced_status)
-        if final_status in {RunStatus.PASSED, RunStatus.FAILED}:
+        if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
             run.comparison = await self._comparator.compute(run)
         await self._repository.save_run(run)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은

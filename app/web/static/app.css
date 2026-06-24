@@ -127,12 +127,17 @@ body {
     border-left-color: #f59e0b;
 }
 
-.node-card.status-passed {
-    border-left-color: #10b981;
+.node-card.status-anomaly,
+.node-card.status-failed {
+    border-left-color: #f59e0b;
 }
 
-.node-card.status-failed {
+.node-card.status-error {
     border-left-color: #ef4444;
+}
+
+.node-card.status-passed {
+    border-left-color: #10b981;
 }
 
 .node-card.status-blocked {

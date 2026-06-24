@@ -45,10 +45,13 @@ class SimulatedExecutionGateway(ExecutionGateway):
         on_log: LogSink,
     ) -> StepExecutionResult:
         await asyncio.sleep(module.simulated_duration_ms / 1000)
-        if module.simulated_outcome.upper() == ModuleStatus.FAILED.value:
+        if module.simulated_outcome.upper() in {
+            ModuleStatus.FAILED.value,
+            ModuleStatus.ANOMALY.value,
+        }:
             return StepExecutionResult(
-                status=ModuleStatus.FAILED,
-                message="시뮬레이션 실패",
+                status=ModuleStatus.ANOMALY,
+                message="시뮬레이션 이상징후",
                 artifacts=[],
                 current_url=None,
                 dialog_messages=[],

@@ -99,8 +99,13 @@ class BaseWorkflowExecutor(ABC):
                     else:
                         status = ModuleStatus.PASSED
                         message = raw_message
+                except RuntimeError as exc:
+                    status = ModuleStatus.ANOMALY
+                    message = str(exc)
+                    last_error = str(exc)
+                    print(f"[error] {exc}")
                 except Exception as exc:
-                    status = ModuleStatus.FAILED
+                    status = ModuleStatus.ERROR
                     message = str(exc)
                     last_error = str(exc)
                     print(f"[error] {exc}")

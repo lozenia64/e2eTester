@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+
+# 레거시 FAILED 는 과거 Run/모듈 JSON 호환용. 집계·표시 시 ANOMALY 로 취급한다.
+MODULE_ANOMALY_STATUSES = frozenset({ModuleStatus.ANOMALY, ModuleStatus.FAILED})
+MODULE_ERROR_STATUSES = frozenset({ModuleStatus.ERROR})
+RUN_ANOMALY_STATUSES = frozenset({RunStatus.ANOMALY, RunStatus.FAILED})
+RUN_ERROR_STATUSES = frozenset({RunStatus.ERROR})
+RUN_TERMINAL_OUTCOME_STATUSES = frozenset(
+    {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}
+)
+SUITE_ANOMALY_STATUSES = frozenset({SuiteStatus.ANOMALY, SuiteStatus.FAILED})
+SUITE_ERROR_STATUSES = frozenset({SuiteStatus.ERROR})
+SUITE_TERMINAL_OUTCOME_STATUSES = frozenset(
+    {SuiteStatus.PASSED, SuiteStatus.ANOMALY, SuiteStatus.ERROR, SuiteStatus.FAILED}
+)
+
+RUN_STATUS_LABELS: dict[RunStatus, str] = {
+    RunStatus.PENDING: "대기",
+    RunStatus.RUNNING: "실행 중",
+    RunStatus.WAITING_INPUT: "입력 대기",
+    RunStatus.PASSED: "정상",
+    RunStatus.ANOMALY: "이상징후",
+    RunStatus.ERROR: "점검실패",
+    RunStatus.FAILED: "이상징후",
+    RunStatus.CANCELLED: "취소",
+}
+
+MODULE_STATUS_LABELS: dict[ModuleStatus, str] = {
+    ModuleStatus.PENDING: "대기",
+    ModuleStatus.QUEUED: "대기",
+    ModuleStatus.RUNNING: "실행 중",
+    ModuleStatus.WAITING_INPUT: "입력 대기",
+    ModuleStatus.PASSED: "정상",
+    ModuleStatus.ANOMALY: "이상징후",
+    ModuleStatus.ERROR: "점검실패",
+    ModuleStatus.FAILED: "이상징후",
+    ModuleStatus.BLOCKED: "차단",
+    ModuleStatus.SKIPPED: "제외",
+    ModuleStatus.CANCELLED: "취소",
+}
+
+SUITE_STATUS_LABELS: dict[SuiteStatus, str] = {
+    SuiteStatus.PENDING: "대기",
+    SuiteStatus.RUNNING: "실행 중",
+    SuiteStatus.WAITING_INPUT: "입력 대기",
+    SuiteStatus.PASSED: "정상",
+    SuiteStatus.ANOMALY: "이상징후",
+    SuiteStatus.ERROR: "점검실패",
+    SuiteStatus.FAILED: "이상징후",
+    SuiteStatus.SKIPPED: "제외",
+    SuiteStatus.CANCELLED: "취소",
+}
+
+
+def run_status_label(status: RunStatus) -> str:
+    return RUN_STATUS_LABELS.get(status, str(status))
+
+
+def module_status_label(status: ModuleStatus) -> str:
+    return MODULE_STATUS_LABELS.get(status, str(status))
+
+
+def suite_status_label(status: SuiteStatus) -> str:
+    return SUITE_STATUS_LABELS.get(status, str(status))
+
+
+def run_status_badge_tone(status: RunStatus) -> str:
+    if status == RunStatus.PASSED:
+        return "passed"
+    if status in RUN_ERROR_STATUSES:
+        return "error"
+    if status in RUN_ANOMALY_STATUSES:
+        return "anomaly"
+    if status == RunStatus.RUNNING:
+        return "running"
+    if status == RunStatus.WAITING_INPUT:
+        return "waiting_input"
+    if status == RunStatus.CANCELLED:
+        return "cancelled"
+    return "pending"
+
+
+def module_status_badge_tone(status: ModuleStatus) -> str:
+    if status == ModuleStatus.PASSED:
+        return "passed"
+    if status in MODULE_ERROR_STATUSES:
+        return "error"
+    if status in MODULE_ANOMALY_STATUSES:
+        return "anomaly"
+    if status == ModuleStatus.RUNNING:
+        return "running"
+    if status == ModuleStatus.WAITING_INPUT:
+        return "waiting_input"
+    if status == ModuleStatus.BLOCKED:
+        return "blocked"
+    if status == ModuleStatus.SKIPPED:
+        return "skipped"
+    if status == ModuleStatus.CANCELLED:
+        return "cancelled"
+    return "pending"

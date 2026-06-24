@@ -49,7 +49,7 @@ def test_dependencies_satisfied_requires_all_passed():
     agg = RunAggregate(_run([login, contract]))
     assert agg.dependencies_satisfied(contract) is True
 
-    login.status = ModuleStatus.FAILED
+    login.status = ModuleStatus.ANOMALY
     assert agg.dependencies_satisfied(contract) is False
 
 
@@ -64,11 +64,31 @@ def test_compute_final_status_rules():
     passed = _run([_module("a", 0, status=ModuleStatus.PASSED)])
     assert RunAggregate(passed).compute_final_status(None) == RunStatus.PASSED
 
-    failed = _run([_module("a", 0, status=ModuleStatus.FAILED)])
-    assert RunAggregate(failed).compute_final_status(None) == RunStatus.FAILED
+    anomaly = _run([_module("a", 0, status=ModuleStatus.ANOMALY)])
+    assert RunAggregate(anomaly).compute_final_status(None) == RunStatus.ANOMALY
 
-    # 강제 상태(취소 등)는 실패 유무와 무관하게 우선한다.
-    assert RunAggregate(failed).compute_final_status(RunStatus.CANCELLED) == RunStatus.CANCELLED
+    legacy_anomaly = _run([_module("a", 0, status=ModuleStatus.FAILED)])
+    assert RunAggregate(legacy_anomaly).compute_final_status(None) == RunStatus.ANOMALY
+
+    error = _run([_module("a", 0, status=ModuleStatus.ERROR)])
+    assert RunAggregate(error).compute_final_status(None) == RunStatus.ERROR
+
+    mixed = _run(
+        [
+            _module("a", 0, status=ModuleStatus.ANOMALY),
+            _module("b", 1, status=ModuleStatus.ERROR),
+        ]
+    )
+    assert RunAggregate(mixed).compute_final_status(None) == RunStatus.ERROR
+
+    # 강제 상태(취소 등)는 outcome 과 무관하게 우선한다.
+    assert RunAggregate(error).compute_final_status(RunStatus.CANCELLED) == RunStatus.CANCELLED
+
+
+def test_fail_module_marks_error():
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    RunAggregate(_run([module])).fail_module(module, "gateway error")
+    assert module.status == ModuleStatus.ERROR
 
 
 def test_record_result_copies_fields_but_not_logs():
