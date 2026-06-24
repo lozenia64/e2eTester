@@ -40,7 +40,7 @@
         <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-passed">—</p>
     </div>
     <div class="rounded-xl border border-green-100 bg-green-50 p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</p>
+        <p class="text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</p>
         <p class="mt-2 text-3xl font-bold text-green-700" id="stat-total-saved">—</p>
     </div>
 </div>
@@ -59,7 +59,7 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</th>
                 </tr>
             </thead>
             <tbody id="user-stats-tbody" class="divide-y divide-gray-100">
@@ -83,7 +83,7 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간(분)</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</th>
                 </tr>
             </thead>
             <tbody id="sys-stats-tbody" class="divide-y divide-gray-100">
@@ -99,6 +99,14 @@
 function fmtDuration(ms) {
     if (!ms) return '—';
     const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}초`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}분 ${rem}초`;
+}
+
+function fmtSavedSeconds(seconds) {
+    const s = Math.round(seconds || 0);
     if (s < 60) return `${s}초`;
     const m = Math.floor(s / 60);
     const rem = s % 60;
@@ -122,8 +130,8 @@ async function loadStats() {
     document.getElementById('stat-total-users').textContent = data.total_users;
     const totalPassed = (data.by_system || []).reduce((s, x) => s + x.modules_passed, 0);
     document.getElementById('stat-total-passed').textContent = totalPassed;
-    const totalSaved = (data.by_system || []).reduce((s, x) => s + (x.manual_minutes_saved || 0), 0);
-    document.getElementById('stat-total-saved').textContent = totalSaved;
+    const totalSaved = (data.by_system || []).reduce((s, x) => s + (x.manual_seconds_saved || 0), 0);
+    document.getElementById('stat-total-saved').textContent = fmtSavedSeconds(totalSaved);
 
     const gen = data.generated_at ? new Date(data.generated_at).toLocaleString('ko-KR') : '';
     document.getElementById('stats-meta').textContent = gen ? `생성: ${gen}` : '';
@@ -138,7 +146,7 @@ async function loadStats() {
             <td class="px-4 py-3 text-right text-green-700">${u.total_modules_passed}</td>
             <td class="px-4 py-3 text-right text-red-600">${u.total_modules_failed}</td>
             <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(u.total_duration_ms)}</td>
-            <td class="px-4 py-3 text-right font-semibold text-green-700">${u.manual_minutes_saved || 0}분</td>
+            <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(u.manual_seconds_saved)}</td>
         </tr>`).join('');
     }
 
@@ -152,7 +160,7 @@ async function loadStats() {
             <td class="px-4 py-3 text-right text-green-700">${s.modules_passed}</td>
             <td class="px-4 py-3 text-right text-red-600">${s.modules_failed}</td>
             <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(s.total_duration_ms)}</td>
-            <td class="px-4 py-3 text-right font-semibold text-green-700">${s.manual_minutes_saved || 0}분</td>
+            <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(s.manual_seconds_saved)}</td>
         </tr>`).join('');
     }
 }
