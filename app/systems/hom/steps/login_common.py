@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
 
+from app.systems.access_common.browser import PC_VIEWPORT
+
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("hwgeneralins-login-result.png")
@@ -392,7 +394,7 @@ def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, 
     common_args = {
         "headless": headless,
         "slow_mo": slow_mo,
-        "viewport": {"width": 1440, "height": 1200},
+        "viewport": PC_VIEWPORT,
         "locale": "ko-KR",
         # --enable-automation: navigator.webdriver 를 실제 false 로(스텔스 위조 대신).
         # --disable-extensions / --disable-component-extensions-with-background-pages:

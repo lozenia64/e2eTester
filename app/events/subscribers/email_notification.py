@@ -12,10 +12,13 @@ class EmailNotificationSubscriber:
 
     오케스트레이터에서 분리된 부수 관심사다. 메일 발송 정책(취소 Run 제외, Suite 소속
     Run 은 통합 메일로 갈음 등)도 이 구독자가 소유한다.
+
+    매 이벤트마다 ``RunCompletionEmailNotifier.from_env`` 를 다시 호출해
+    ``E2E_EMAIL_ENABLED`` 등 환경 설정이 기동 시점에 고정되지 않도록 한다.
     """
 
-    def __init__(self, notifier: RunCompletionEmailNotifier) -> None:
-        self._notifier = notifier
+    def __init__(self, system_codes: list[str]) -> None:
+        self._system_codes = system_codes
 
     def register(self, event_bus: EventBus) -> None:
         event_bus.subscribe(RunFinished, self.on_run_finished)
@@ -27,9 +30,12 @@ class EmailNotificationSubscriber:
         # Suite 종료 시 통합 메일 1통으로 갈음한다.
         if run.status not in {RunStatus.PASSED, RunStatus.FAILED} or run.suite_id:
             return
+        notifier = RunCompletionEmailNotifier.from_env(self._system_codes)
+        if notifier is None:
+            return
         snapshot = run.model_copy(deep=True)
         try:
-            await asyncio.to_thread(self._notifier.send_run_completion, snapshot)
+            await asyncio.to_thread(notifier.send_run_completion, snapshot)
         except Exception as exc:
             print(f"[email] run={run.run_id} 종료 메일 발송 실패: {exc}")
 
@@ -37,7 +43,10 @@ class EmailNotificationSubscriber:
         suite = event.suite
         if suite.status not in {SuiteStatus.PASSED, SuiteStatus.FAILED}:
             return
+        notifier = RunCompletionEmailNotifier.from_env(self._system_codes)
+        if notifier is None:
+            return
         try:
-            await asyncio.to_thread(self._notifier.send_suite_completion, suite, event.runs)
+            await asyncio.to_thread(notifier.send_suite_completion, suite, event.runs)
         except Exception as exc:
             print(f"[email] suite={suite.suite_id} 종료 메일 발송 실패: {exc}")

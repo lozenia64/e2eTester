@@ -446,10 +446,11 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
     Playwright MCP로 수동 검증할 때와 동일한 순서를 강제한다:
     1) 브라우저 실행 → 2) 모바일 모드 전환 → 3) 이후 ``m.hwgeneralins.com`` 접속.
     """
+    from app.systems.access_common.browser import MOBILE_VIEWPORT
+
     device = resolve_mobile_device(playwright)
-    viewport = device["viewport"]
-    width = viewport["width"]
-    height = viewport["height"]
+    width = MOBILE_VIEWPORT["width"]
+    height = MOBILE_VIEWPORT["height"]
     device_scale_factor = device.get("device_scale_factor", 1)
     user_agent = device["user_agent"]
     is_mobile = device.get("is_mobile", True)
