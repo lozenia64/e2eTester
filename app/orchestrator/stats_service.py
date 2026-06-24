@@ -84,8 +84,6 @@ class StatsService:
                 for m in run.modules
                 if m.status == ModuleStatus.PASSED
             )
-            saved = saved_seconds // 60
-
             code = run.system_code
             if code not in system_map:
                 system_map[code] = SystemUsageStat(
@@ -95,7 +93,7 @@ class StatsService:
                     modules_passed=0,
                     modules_failed=0,
                     total_duration_ms=0,
-                    manual_minutes_saved=0,
+                    manual_seconds_saved=0,
                 )
             s = system_map[code]
             system_map[code] = s.model_copy(update={
@@ -103,7 +101,7 @@ class StatsService:
                 "modules_passed": s.modules_passed + passed,
                 "modules_failed": s.modules_failed + failed,
                 "total_duration_ms": s.total_duration_ms + duration,
-                "manual_minutes_saved": s.manual_minutes_saved + saved,
+                "manual_seconds_saved": s.manual_seconds_saved + saved_seconds,
             })
 
             uid = run.created_by_user_id
@@ -123,7 +121,7 @@ class StatsService:
                     total_modules_passed=0,
                     total_modules_failed=0,
                     total_duration_ms=0,
-                    manual_minutes_saved=0,
+                    manual_seconds_saved=0,
                     by_system=[],
                 )
             u = user_map[uid]
@@ -137,7 +135,7 @@ class StatsService:
                     modules_passed=0,
                     modules_failed=0,
                     total_duration_ms=0,
-                    manual_minutes_saved=0,
+                    manual_seconds_saved=0,
                 )
             us = u_sys_map[code]
             u_sys_map[code] = us.model_copy(update={
@@ -145,7 +143,7 @@ class StatsService:
                 "modules_passed": us.modules_passed + passed,
                 "modules_failed": us.modules_failed + failed,
                 "total_duration_ms": us.total_duration_ms + duration,
-                "manual_minutes_saved": us.manual_minutes_saved + saved,
+                "manual_seconds_saved": us.manual_seconds_saved + saved_seconds,
             })
 
             user_map[uid] = u.model_copy(update={
@@ -153,7 +151,7 @@ class StatsService:
                 "total_modules_passed": u.total_modules_passed + passed,
                 "total_modules_failed": u.total_modules_failed + failed,
                 "total_duration_ms": u.total_duration_ms + duration,
-                "manual_minutes_saved": u.manual_minutes_saved + saved,
+                "manual_seconds_saved": u.manual_seconds_saved + saved_seconds,
                 "by_system": list(u_sys_map.values()),
             })
 

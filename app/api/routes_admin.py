@@ -34,6 +34,14 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+def _fmt_saved_seconds(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds}초"
+    minutes = seconds // 60
+    rem = seconds % 60
+    return f"{minutes}분 {rem}초"
+
+
 @router.get("/runs")
 async def admin_list_runs(
     limit: int = Query(default=100, ge=1, le=1000),
@@ -150,8 +158,8 @@ async def admin_savings_csv(
     writer = csv.writer(output)
     writer.writerow([
         "사용자ID", "이름", "이메일", "총Run수", "통과모듈수", "실패모듈수",
-        "자동화실행시간(분)", "절감시간(분)",
-        "시스템코드", "시스템명", "시스템별Run수", "시스템별통과모듈", "시스템별절감시간(분)",
+        "자동화실행시간(분)", "절감시간",
+        "시스템코드", "시스템명", "시스템별Run수", "시스템별통과모듈", "시스템별절감시간",
     ])
 
     for u in stats.by_user:
@@ -166,12 +174,12 @@ async def admin_savings_csv(
                 u.total_modules_passed,
                 u.total_modules_failed,
                 automation_min,
-                u.manual_minutes_saved,
+                _fmt_saved_seconds(u.manual_seconds_saved),
                 s.system_code,
                 s.system_name,
                 s.runs,
                 s.modules_passed,
-                s.manual_minutes_saved,
+                _fmt_saved_seconds(s.manual_seconds_saved),
             ])
 
     date_str = datetime.now().strftime("%Y%m%d")

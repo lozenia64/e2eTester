@@ -216,7 +216,7 @@ class SystemUsageStat(BaseModel):
     modules_passed: int
     modules_failed: int
     total_duration_ms: int
-    manual_minutes_saved: int
+    manual_seconds_saved: int
 
 
 class UserUsageStat(BaseModel):
@@ -227,7 +227,7 @@ class UserUsageStat(BaseModel):
     total_modules_passed: int
     total_modules_failed: int
     total_duration_ms: int
-    manual_minutes_saved: int
+    manual_seconds_saved: int
     by_system: list[SystemUsageStat]
 
 
