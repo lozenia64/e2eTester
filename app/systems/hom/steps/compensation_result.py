@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT
+
 from . import compensation_result_common as result_common
 from . import login_common as common
 
@@ -35,7 +37,7 @@ def _assert_result02_detail(page, timeout_ms: int, expected_receipt_number: str)
         raise RuntimeError(f"상세 화면 사고(진단)일자를 확인하지 못했습니다: {accident_date}")
     if "기타" not in claim_type:
         raise RuntimeError(f"상세 화면 청구유형이 예상과 다릅니다: {claim_type}")
-    if claim_content != result_common.TARGET_CLAIM_TEXT:
+    if claim_content != TARGET_CLAIM_TEXT:
         raise RuntimeError(f"상세 화면 청구내용 불일치: {claim_content}")
 
     common.wait_locator_visible_with_log(

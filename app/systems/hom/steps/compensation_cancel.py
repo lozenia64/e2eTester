@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+
 from . import compensation_result_common as result_common
 from . import login_common as common
 
@@ -89,7 +91,7 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
     row = _find_row_by_receipt_number(page, receipt_number, timeout_ms)
     row_text = result_common.normalize_text(row.inner_text(timeout=1000))
-    if result_common.TARGET_CLAIM_TEXT_TRUNCATED not in row_text:
+    if TARGET_CLAIM_TEXT_TRUNCATED not in row_text:
         raise RuntimeError(f"완료 탭 청구내용이 예상과 다릅니다: {row_text}")
     if CANCELLED_STATUS not in row_text:
         raise RuntimeError(f"완료 탭 상태값이 취소가 아닙니다: {row_text}")
