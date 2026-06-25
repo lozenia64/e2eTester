@@ -16,6 +16,13 @@ from email.utils import parseaddr
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
+
 from app.ai.gemini_client import (
     build_user_contents,
     create_gemini_client,
@@ -274,10 +281,57 @@ class GeminiPromptSelection:
     included_labels: list[str]
 
 
+EMAIL_SEND_MAX_ATTEMPTS = 3
+
+
+def _is_transient_smtp_error(exc: BaseException) -> bool:
+    """일시적(재시도 가치 있는) SMTP/네트워크 오류만 True.
+
+    인증 실패·수신/발신 거부 같은 영구 오류는 재시도해도 동일하게 실패하므로 제외한다.
+    (모든 smtplib 예외는 OSError 하위라, 광범위 OSError 매칭은 인증 실패까지 재시도해 위험.)
+    """
+    if isinstance(
+        exc,
+        (
+            smtplib.SMTPAuthenticationError,
+            smtplib.SMTPRecipientsRefused,
+            smtplib.SMTPSenderRefused,
+            smtplib.SMTPNotSupportedError,
+        ),
+    ):
+        return False
+    return isinstance(
+        exc,
+        (
+            smtplib.SMTPConnectError,
+            smtplib.SMTPServerDisconnected,
+            smtplib.SMTPHeloError,
+            TimeoutError,
+            ConnectionError,
+        ),
+    )
+
+
+def _log_email_send_retry(retry_state) -> None:
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    sleep_for = getattr(retry_state.next_action, "sleep", 0.0) or 0.0
+    print(
+        f"[email] SMTP 전송 일시 실패 — 재시도 "
+        f"{retry_state.attempt_number}/{EMAIL_SEND_MAX_ATTEMPTS} ({sleep_for:.1f}s 후): {exc}"
+    )
+
+
 class GmailEmailSender:
     def __init__(self, config: EmailNotificationConfig) -> None:
         self._config = config
 
+    @retry(
+        retry=retry_if_exception(_is_transient_smtp_error),
+        stop=stop_after_attempt(EMAIL_SEND_MAX_ATTEMPTS),
+        wait=wait_exponential_jitter(initial=1, max=8),
+        before_sleep=_log_email_send_retry,
+        reraise=True,
+    )
     def send(self, message: Message, recipients: list[str]) -> None:
         with smtplib.SMTP_SSL(
             self._config.smtp_host, self._config.smtp_port, timeout=self._config.timeout_seconds
