@@ -401,3 +401,72 @@ body {
     outline: 2px solid #6366f1;
     outline-offset: 2px;
 }
+
+/* 관리자 사용량 통계 리포트 */
+.stats-section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.stats-section-header__title {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.375;
+    color: #111827;
+}
+
+.stats-section-header__subtitle {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.375;
+    color: #6b7280;
+}
+
+.stats-chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 17.5rem;
+    padding: 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.stats-chart-card__title {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.stats-chart-card__body {
+    position: relative;
+    flex: 1;
+    min-height: 13.75rem;
+}
+
+.stats-chart-card__body canvas,
+.stats-plotly-chart {
+    display: block;
+    width: 100% !important;
+    min-height: 13.75rem;
+}
+
+.stats-chart-card__body canvas {
+    height: 100% !important;
+}
+
+.stats-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 13.75rem;
+    margin: 0;
+    font-size: 0.875rem;
+    color: #9ca3af;
+    text-align: center;
+}

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
+from app.core.logging import get_logger, log_context
 from app.core.models import Run, RunModule
 from app.domain.run_aggregate import RunAggregate
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
@@ -27,6 +28,8 @@ from app.storage.ports import (
 if TYPE_CHECKING:
     from app.execution.run_queue import JobQueue
     from app.orchestrator.run_actor import ActorContext
+
+logger = get_logger(__name__)
 
 
 class RunService:
@@ -263,6 +266,16 @@ class RunService:
         await self._input_store.put(run_id, dict(sanitized_input))
         await self._repository.create_run(run)
         await self._events.run_event("run_created", run)
+        logger.info(
+            "Run 생성",
+            log_event="run.created",
+            run_id=run.run_id,
+            system_code=run.system_code,
+            triggered_by=run.triggered_by,
+            suite_id=run.suite_id,
+            schedule_id=run.schedule_id,
+            user_name=run.created_by_user_name,
+        )
         await self._run_queue.submit(
             functools.partial(self._execute_run, run.run_id, sanitized_input),
             label=f"run:{run.run_id}",
@@ -290,6 +303,7 @@ class RunService:
         await self._events.run_event("run_resumed", run)
         await self._event_bus.publish(RunResumed(run=run))
         await self._control_store.clear_pending(run_id)
+        logger.info("Run OTP 재개", log_event="run.resumed", run_id=run_id, module_id=pending.module_id)
         await self._run_queue.submit(
             functools.partial(self._execute_run, run_id, input_data, pending.resume_index, handle),
             label=f"run:{run_id}:resume",
@@ -317,9 +331,11 @@ class RunService:
         candidates.sort(key=lambda run: run.requested_at, reverse=True)
         target = candidates[0]
         if len(candidates) > 1:
-            print(
-                f"[otp-relay] OTP 대기 Run 이 {len(candidates)}건입니다. "
-                f"가장 최근 요청 Run({target.run_id})에 제출합니다."
+            logger.warning(
+                "OTP 대기 Run 다건 — 최근 요청 Run 에 제출",
+                log_event="run.otp_relay_ambiguous",
+                candidate_count=len(candidates),
+                selected_run_id=target.run_id,
             )
         return await self.submit_otp(target.run_id, otp_code)
 
@@ -328,6 +344,7 @@ class RunService:
         if run.status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED, RunStatus.CANCELLED}:
             raise ValueError("이미 종료된 Run은 취소할 수 없습니다.")
         await self._control_store.set_cancel_requested(run_id)
+        logger.info("Run 취소 요청", log_event="run.cancel_requested", run_id=run_id, status=run.status.value)
         pending = await self._control_store.get_pending(run_id)
         if pending is not None:
             # OTP 입력 대기 중에는 실행 루프가 돌고 있지 않으므로 여기서 직접 정리·종료한다.
@@ -369,6 +386,28 @@ class RunService:
         handle: ExecutionHandle | None = None,
     ) -> None:
         run = await self._repository.get_run(run_id)
+        with log_context(
+            run_id=run.run_id,
+            system_code=run.system_code,
+            suite_id=run.suite_id,
+            schedule_id=run.schedule_id,
+            triggered_by=run.triggered_by,
+        ):
+            await self._execute_run_inner(
+                run,
+                input_data,
+                start_index=start_index,
+                handle=handle,
+            )
+
+    async def _execute_run_inner(
+        self,
+        run: Run,
+        input_data: dict[str, str],
+        *,
+        start_index: int = 0,
+        handle: ExecutionHandle | None = None,
+    ) -> None:
         should_finalize = True
         # OTP 입력 대기로 일시정지하며 빠져나갈 때만 True. finally 의 세션 종료를 건너뛰는
         # 판단을 더 이상 메모리 dict(_pending_otp) 멤버십이 아니라 이 로컬 플래그로 한다.
@@ -379,6 +418,7 @@ class RunService:
             aggregate.begin()
             await self._repository.save_run(run)
             await self._events.run_event("run_started", run)
+            logger.info("Run 시작", log_event="run.started", run_id=run.run_id, system_code=run.system_code)
 
         system = self._registry.get_system(run.system_code)
         definitions = {module.module_id: module for module in system.modules}
@@ -452,7 +492,12 @@ class RunService:
                         forced_status = RunStatus.ERROR
                         await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
                     else:
-                        print(f"[run] run={run.run_id} runtime cleanup error: {exc}")
+                        logger.exception(
+                            "Run runtime 정리 오류",
+                            log_event="run.cleanup_failed",
+                            run_id=run.run_id,
+                            error=str(exc),
+                        )
 
         if not should_finalize:
             return
@@ -514,6 +559,12 @@ class RunService:
             resume_index=index,
             module_id=module.module_id,
         )
+        logger.info(
+            "Run OTP 대기",
+            log_event="run.waiting_input",
+            run_id=run.run_id,
+            module_id=module.module_id,
+        )
 
     # --- 취소 / 종료 ------------------------------------------------------
 
@@ -521,7 +572,12 @@ class RunService:
         try:
             await self._gateway.close_session(handle)
         except Exception as exc:
-            print(f"[run] run={run.run_id} 취소 중 runtime 정리 오류: {exc}")
+            logger.exception(
+                "Run 취소 중 runtime 정리 오류",
+                log_event="run.cancel_cleanup_failed",
+                run_id=run.run_id,
+                error=str(exc),
+            )
         await self._mark_modules_cancelled(run, self._planner.ordered_selected_run_modules(run))
         run.awaiting_input_module_id = None
         run.awaiting_input_prompt = None
@@ -544,7 +600,12 @@ class RunService:
         aggregate = RunAggregate(run)
         target_module = aggregate.select_failure_target(current_module, ordered_modules)
         if target_module is None:
-            print(f"[run] run={run.run_id} unexpected execution error: {exc}")
+            logger.error(
+                "Run 예상치 못한 실행 오류",
+                log_event="run.unexpected_error",
+                run_id=run.run_id,
+                error=str(exc),
+            )
             return
 
         await self._handle_module_log(run, target_module, f"[fatal] {exc}")
@@ -565,6 +626,15 @@ class RunService:
         # 로그(`module.logs`)를 참조하므로, 로그가 하이드레이션된 읽기 모델을 이벤트로 싣는다.
         finished = await self.get_run(run.run_id)
         await self._event_bus.publish(RunFinished(run=finished))
+        logger.info(
+            "Run 종료",
+            log_event="run.finished",
+            run_id=run.run_id,
+            system_code=run.system_code,
+            status=final_status.value,
+            suite_id=run.suite_id,
+            schedule_id=run.schedule_id,
+        )
 
     # --- 로그 기록 --------------------------------------------------------
 

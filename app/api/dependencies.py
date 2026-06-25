@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING
 from starlette.requests import HTTPConnection
 
 if TYPE_CHECKING:
+    from app.core.settings import E2ESettings
+    from app.execution.run_queue import RunExecutionQueue
+    from app.orchestrator.ops_service import OpsService
     from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
     from app.orchestrator.suite_service import SuiteService
@@ -41,6 +44,14 @@ def get_schedule_service(connection: HTTPConnection) -> "SchedulerService":
     return connection.app.state.schedule_service
 
 
+def get_run_queue(connection: HTTPConnection) -> "RunExecutionQueue":
+    return connection.app.state.run_queue
+
+
+def get_ops_service(connection: HTTPConnection) -> "OpsService":
+    return connection.app.state.ops_service
+
+
 def get_registry(connection: HTTPConnection) -> "ModuleRegistry":
     return connection.app.state.registry
 
@@ -55,6 +66,10 @@ def get_schedule_repository(connection: HTTPConnection) -> "ScheduleRepositoryPo
 
 def get_module_settings_repo(connection: HTTPConnection):
     return connection.app.state.module_settings_repo
+
+
+def get_app_settings(connection: HTTPConnection) -> "E2ESettings":
+    return connection.app.state.settings
 
 
 def get_otp_relay_token(connection: HTTPConnection) -> str | None:

@@ -5,7 +5,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
+from app.core.logging import get_logger
 from app.core.models import Run, SuiteRun
+
+logger = get_logger(__name__)
 
 EventHandler = Callable[[Any], Awaitable[None]]
 
@@ -68,4 +71,9 @@ class EventBus:
         try:
             await handler(event)
         except Exception as exc:  # 구독자 오류는 발행 흐름과 격리한다
-            print(f"[event-bus] 구독자 처리 오류 ({type(event).__name__}): {exc}")
+            logger.exception(
+                "이벤트 구독자 처리 오류",
+                log_event="event_bus.subscriber_failed",
+                event_type=type(event).__name__,
+                error=str(exc),
+            )

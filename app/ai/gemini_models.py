@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 
-from app.core.env_utils import resolve_env_value, resolve_env_with_source
+from app.core.env_utils import load_dotenv_file, resolve_env_with_source
+from app.core.settings import E2ESettings, get_settings
 
 DEFAULT_GEMINI_MODEL_CHAIN: tuple[str, ...] = (
     "gemini-3.1-flash-lite",
@@ -47,15 +48,14 @@ def _split_models(raw_value: str) -> list[str]:
     return models
 
 
-def resolve_gemini_models(dotenv_values: dict[str, str]) -> list[str]:
-    raw_models = (resolve_env_value("GEMINI_MODELS", dotenv_values) or "").strip()
-    if raw_models:
-        return _split_models(raw_models)
-    return list(DEFAULT_GEMINI_MODEL_CHAIN)
+def resolve_gemini_models(settings: E2ESettings | None = None) -> list[str]:
+    settings = settings or get_settings()
+    raw_models = (settings.gemini_models or "").strip()
+    if not raw_models:
+        return list(DEFAULT_GEMINI_MODEL_CHAIN)
+    return _split_models(raw_models)
 
 
-def resolve_gemini_models_source(dotenv_values: dict[str, str]) -> str:
-    _, models_source = resolve_env_with_source("GEMINI_MODELS", dotenv_values)
-    if models_source:
-        return models_source
-    return "default"
+def resolve_gemini_models_source() -> str:
+    _, models_source = resolve_env_with_source("GEMINI_MODELS", load_dotenv_file())
+    return models_source or "default"

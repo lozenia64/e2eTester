@@ -6,7 +6,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.enums import RunStatus, SuiteStatus
-from app.core.env_utils import DEFAULT_ENV_FILE_PATH, load_dotenv_file, resolve_env_value
+from app.core.logging import get_logger
+from app.core.settings import get_settings
 from app.core.models import (
     SUITE_SCHEDULE_SYSTEM_CODE,
     SUITE_SCHEDULE_SYSTEM_NAME,
@@ -25,14 +26,20 @@ DEFAULT_TICK_SECONDS = 20
 _ACTIVE_RUN_STATUSES = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
 _ACTIVE_SUITE_STATUSES = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
 
+logger = get_logger(__name__)
+
 
 def _resolve_timezone() -> tuple[ZoneInfo, str]:
-    dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
-    name = (resolve_env_value("E2E_SCHEDULE_TZ", dotenv_values) or "").strip() or DEFAULT_SCHEDULE_TIMEZONE
+    settings = get_settings()
+    name = (settings.schedule_tz or "").strip() or DEFAULT_SCHEDULE_TIMEZONE
     try:
         return ZoneInfo(name), name
     except (ZoneInfoNotFoundError, ValueError):
-        print(f"[scheduler] 알 수 없는 타임존 '{name}', UTC 로 대체합니다.")
+        logger.warning(
+            "알 수 없는 타임존, UTC 로 대체",
+            log_event="schedule.timezone_fallback",
+            timezone=name,
+        )
         return ZoneInfo("UTC"), "UTC"
 
 
@@ -176,20 +183,29 @@ class SchedulerService:
     async def run_forever(self) -> None:
         self._running = True
         await self._reconcile_due_schedules_on_start()
-        print(f"[scheduler] 시작 (tz={self._timezone_name}, tick={self._tick_seconds}s)")
+        logger.info(
+            "스케줄러 시작",
+            log_event="schedule.started",
+            timezone=self._timezone_name,
+            tick_seconds=self._tick_seconds,
+        )
         while self._running:
             try:
                 await self._tick()
             except Exception as exc:  # 루프는 어떤 경우에도 죽지 않아야 한다
-                print(f"[scheduler] tick 오류: {exc}")
+                logger.exception("스케줄러 tick 오류", log_event="schedule.tick_error", error=str(exc))
             try:
                 await asyncio.sleep(self._tick_seconds)
             except asyncio.CancelledError:
                 break
-        print("[scheduler] 종료")
+        logger.info("스케줄러 종료", log_event="schedule.stopped")
 
     def stop(self) -> None:
         self._running = False
+
+    @property
+    def timezone_name(self) -> str:
+        return self._timezone_name
 
     async def _reconcile_due_schedules_on_start(self) -> None:
         """재기동 시 과거(``next_run_at`` ≤ now)로 밀린 활성 예약을 다음 cron 시각으로 재계산한다.
@@ -206,7 +222,11 @@ class SchedulerService:
                 await self._repository.save(schedule)
                 rescheduled += 1
         if rescheduled:
-            print(f"[scheduler] 재기동: 과거로 밀린 예약 {rescheduled}건의 다음 실행 시각을 재계산했습니다.")
+            logger.info(
+                "재기동 시 과거 예약 시각 재계산",
+                log_event="schedule.reconcile",
+                rescheduled_count=rescheduled,
+            )
 
     async def _tick(self) -> None:
         now = datetime.now(UTC)
@@ -219,17 +239,42 @@ class SchedulerService:
 
     async def _fire(self, schedule: Schedule, now: datetime) -> None:
         if await self._last_execution_active(schedule):
-            print(f"[scheduler] {schedule.schedule_id} 직전 실행 진행 중 -> 이번 주기 건너뜀")
+            logger.info(
+                "직전 실행 진행 중으로 이번 주기 건너뜀",
+                log_event="schedule.skipped_overlap",
+                schedule_id=schedule.schedule_id,
+                schedule_kind=schedule.schedule_kind,
+                system_code=schedule.system_code,
+            )
             schedule.next_run_at = self._next_run_from_now(schedule.cron)
             await self._repository.save(schedule)
             return
+        fired_id: str | None = None
         try:
             if schedule.schedule_kind == "suite":
-                await self._trigger_suite(schedule)
+                suite = await self._trigger_suite(schedule)
+                fired_id = suite.suite_id
             else:
-                await self._trigger_run(schedule)
+                run = await self._trigger_run(schedule)
+                fired_id = run.run_id
         except Exception as exc:
-            print(f"[scheduler] {schedule.schedule_id} 예약 실행 실패: {exc}")
+            logger.exception(
+                "예약 실행 실패",
+                log_event="schedule.fire_failed",
+                schedule_id=schedule.schedule_id,
+                schedule_kind=schedule.schedule_kind,
+                system_code=schedule.system_code,
+                error=str(exc),
+            )
+        else:
+            logger.info(
+                "예약 실행 트리거",
+                log_event="schedule.fired",
+                schedule_id=schedule.schedule_id,
+                schedule_kind=schedule.schedule_kind,
+                system_code=schedule.system_code,
+                fired_id=fired_id,
+            )
         schedule.next_run_at = self._next_run_from_now(schedule.cron)
         await self._repository.save(schedule)
 

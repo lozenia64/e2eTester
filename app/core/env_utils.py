@@ -1,3 +1,9 @@
+"""환경 변수 유틸 — 레거시 호환 및 출처(terminal/.env) 추적.
+
+애플리케이션 설정의 SSOT는 ``app.core.settings.E2ESettings`` (pydantic-settings)이다.
+새 코드는 ``get_settings()`` 를 사용하고, 이 모듈은 관리자 상태 패널의 env 출처 표시 등에만 쓴다.
+"""
+
 from __future__ import annotations
 
 import os

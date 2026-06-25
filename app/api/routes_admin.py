@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (
     get_module_settings_repo,
+    get_ops_service,
     get_registry,
     get_run_service,
     get_schedule_repository,
@@ -26,6 +27,7 @@ from app.core.models import ModuleSettings
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
+    from app.orchestrator.ops_service import OpsService
     from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
     from app.registry.loader import ModuleRegistry
@@ -81,6 +83,14 @@ async def admin_delete_run(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+@router.get("/ops/snapshot")
+async def admin_ops_snapshot(
+    current_user: User = Depends(require_admin),
+    ops_service: "OpsService" = Depends(get_ops_service),
+) -> dict[str, Any]:
+    return await ops_service.build_snapshot()
 
 
 @router.get("/stats/usage")

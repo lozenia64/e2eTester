@@ -22,7 +22,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.ai.gemini_http import DEFAULT_GEMINI_ENDPOINT, load_gemini_transport_settings
-from app.core.env_utils import DEFAULT_ENV_FILE_PATH, load_dotenv_file, resolve_env_value
+from app.core.settings import get_settings
 
 GENERATE_CONTENT_METHOD = "generateContent"
 
@@ -116,13 +116,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
-    api_key = (resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
+    settings = get_settings()
+    api_key = settings.gemini_api_key_str()
     if not api_key or api_key == "your_actual_api_key":
         print("GEMINI_API_KEY 가 .env 또는 환경 변수에 설정되어 있지 않습니다.", file=sys.stderr)
         return 1
 
-    transport = load_gemini_transport_settings(dotenv_values)
+    transport = load_gemini_transport_settings()
     models = _fetch_models(
         api_key=api_key,
         verify_ssl=transport.verify_ssl,

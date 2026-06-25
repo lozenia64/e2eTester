@@ -84,6 +84,17 @@ async def admin_modules(request: Request, current_user: User = Depends(require_a
     )
 
 
+@router.get("/admin/ops", response_class=HTMLResponse)
+async def admin_ops(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/ops.html",
+        {"current_user": current_user},
+    )
+
+
 @router.get("/admin/stats", response_class=HTMLResponse)
 async def admin_stats(request: Request, current_user: User = Depends(require_admin)):
     if isinstance(current_user, RedirectResponse):

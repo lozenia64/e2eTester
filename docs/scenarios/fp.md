@@ -82,15 +82,16 @@
 
 1. **계약서 작성** 화면(`https://fp.hwgeneralins.com/fp/loan/sales02.do`)에서 시작한다. URL이 다르면 해당 경로로 이동한다.
 2. 순번 **8** `(신)정보보호서약서_설계사대리점` 행의 **양식보기** 버튼(`#btnGroup8`)을 클릭한다.
-3. 새 탭(`https://ozhome.hwgeneralins.com/ozwebroot/sales02_oz.jsp`)에서 OZ 뷰어가 로드되는지 확인한다. 양식 본문은 DOM 텍스트가 아니라 canvas(문서 2번째·서명란 3번째)로 렌더링되므로, 제출하기 버튼과 canvas 크기로 준비 여부를 판단한다.
-4. 양식 우측 하단 **서명란 overlay canvas**(index 2, 약 124×43px)를 `scrollIntoViewIfNeeded` 로 화면에 올린 뒤, `focus` + **trusted mouse** 로 **O** 형태 원을 그린다. `INPUT_CHECK_VALIDITY` 가 `valid` 이고 `INPUT_JSON.sign` 이 채워져야 한다. (문서 canvas 에 synthetic mouse 이벤트를내면 픽셀만 찍히고 OZ 가 서명으로 인식하지 않으며, 스크롤 없이 그리면 서명란이 화면 밖이라 실패한다.) 이후 팝업 하단 **제출하기**(`#btnSaveCert`)를 클릭한다.
-5. **10초** 대기한다(양식 저장 반영).
-6. 순번 8 행 상태 셀(`#check8`)에 **작성완료**가 표시되는지 확인한다.
-7. 하단 **인증하기** 버튼(`#btnSaveCert`)을 클릭한다. 미제출 양식이 남아 있으면 `저장되지 않은 양식이 …건 있습니다` 확인(confirm)이 뜰 수 있으며, 자동 수락한다.
-8. **휴대폰인증** 영역(`#phoneCert`)이 표시되면 **인증번호요청**(`#btnSendAuth`)을 클릭한다. `POST /cmcom/hp-sms-request.json`(파라미터 `authFlgcd: "2"`) 응답을 확인한다.
-9. Run 을 `WAITING_INPUT` 으로 일시정지한다. 사용자가 웹 대시보드 OTP 패널에 4~8자리 인증번호를 입력하면 재개한다.
-10. `#smsCertNo` 에 인증번호를 입력하고 하단 **제출하기** 버튼(`#btnSave`)을 클릭한다.
-11. `https://fp.hwgeneralins.com/fp/loan/sales03.do` 로 이동하면 "FP 서류작성 성공"으로 종료한다.
+3. **10초** 대기한다(OZ 양식 탭 로드 안정화).
+4. 새 탭(`https://ozhome.hwgeneralins.com/ozwebroot/sales02_oz.jsp`)에서 OZ 뷰어가 로드되는지 확인한다. 양식 본문은 DOM 텍스트가 아니라 canvas(문서 2번째·서명란 3번째)로 렌더링되므로, 제출하기 버튼과 canvas 크기로 준비 여부를 판단한다.
+5. 양식 우측 하단 **서명란 overlay canvas**(index 2, 약 124×43px)를 `scrollIntoViewIfNeeded` 로 화면에 올린 뒤, `focus` + **trusted mouse** 로 **O** 형태 원을 그린다. `INPUT_CHECK_VALIDITY` 가 `valid` 이고 `INPUT_JSON.sign` 이 채워져야 한다. (문서 canvas 에 synthetic mouse 이벤트를내면 픽셀만 찍히고 OZ 가 서명으로 인식하지 않으며, 스크롤 없이 그리면 서명란이 화면 밖이라 실패한다.) 이후 팝업 하단 **제출하기**(`#btnSaveCert`)를 클릭한다.
+6. **10초** 대기한다(양식 저장 반영).
+7. 순번 8 행 상태 셀(`#check8`)에 **작성완료**가 표시되는지 확인한다.
+8. 하단 **인증하기** 버튼(`#btnSaveCert`)을 클릭한다. 미제출 양식이 남아 있으면 `저장되지 않은 양식이 …건 있습니다` 확인(confirm)이 뜰 수 있으며, 자동 수락한다.
+9. **휴대폰인증** 영역(`#phoneCert`)이 표시되면 **인증번호요청**(`#btnSendAuth`)을 클릭한다. `POST /cmcom/hp-sms-request.json`(파라미터 `authFlgcd: "2"`) 응답을 확인한다.
+10. Run 을 `WAITING_INPUT` 으로 일시정지한다. 사용자가 웹 대시보드 OTP 패널에 4~8자리 인증번호를 입력하면 재개한다.
+11. `#smsCertNo` 에 인증번호를 입력하고 하단 **제출하기** 버튼(`#btnSave`)을 클릭한다.
+12. `https://fp.hwgeneralins.com/fp/loan/sales03.do` 로 이동하면 "FP 서류작성 성공"으로 종료한다.
 
 #### 셀렉터 요약 (Playwright MCP 수집)
 

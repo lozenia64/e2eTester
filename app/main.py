@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from app.auth.router import router as auth_router
@@ -26,9 +26,10 @@ from app.events.subscribers.email_notification import EmailNotificationSubscribe
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.local_gateway import LocalExecutionGateway
-from app.execution.run_queue import DEFAULT_RUN_CONCURRENCY, RunExecutionQueue
+from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.orchestrator.ops_service import OpsService
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
@@ -45,8 +46,11 @@ from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
 from app.storage.suite_input_store import InMemorySuiteInputStore
+from app.core.settings import get_settings
+from app.core.logging import bind_log_context, clear_log_context, configure_logging, get_logger
 from app.storage.sqlite_support import DEFAULT_DB_PATH
-from app.core.env_utils import load_dotenv_file, resolve_env_value
+
+logger = get_logger(__name__)
 
 
 ARTIFACTS_DIR = Path("artifacts")
@@ -55,17 +59,23 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    configure_logging(log_level=settings.log_level, log_format=settings.log_format)
+    app.state.settings = settings
+    logger.info(
+        "애플리케이션 시작",
+        log_event="startup.begin",
+        log_level=settings.log_level,
+        log_format=settings.log_format,
+    )
+
     registry = ModuleRegistry()
-    dotenv = load_dotenv_file()
-    # 영속 저장소(SQLite): Run/Suite/예약이 서버 재시작 후에도 남는다. 경로는 E2E_DB_PATH.
-    db_path = resolve_env_value("E2E_DB_PATH", dotenv) or DEFAULT_DB_PATH
+    db_path = settings.db_path or DEFAULT_DB_PATH
 
     user_repository = SqliteUserRepository(db_path)
     user_service = UserService(user_repository)
     app.state.user_service = user_service
-    admin_email = resolve_env_value("E2E_ADMIN_EMAIL", dotenv) or "admin@example.com"
-    admin_password = resolve_env_value("E2E_ADMIN_PASSWORD", dotenv) or "admin1234"
-    await user_service.seed_admin(admin_email, admin_password)
+    await user_service.seed_admin(settings.admin_email, settings.admin_password.get_secret_value())
 
     repository = SqliteRunRepository(db_path)
     # 모듈 로그는 Run 상태 집합체와 분리된 append-only 스트림 스토어가 소유한다(핫패스
@@ -81,12 +91,7 @@ async def lifespan(app: FastAPI):
 
     # 감독되는 실행 작업 큐: Run 실행을 fire-and-forget asyncio.create_task 가 아니라 워커 풀이
     # 소비한다(예외 격리·동시성 제한·정상 종료). 동시성은 E2E_RUN_CONCURRENCY 로 조정한다.
-    concurrency_raw = resolve_env_value("E2E_RUN_CONCURRENCY", dotenv)
-    try:
-        worker_count = int(concurrency_raw) if concurrency_raw else DEFAULT_RUN_CONCURRENCY
-    except ValueError:
-        worker_count = DEFAULT_RUN_CONCURRENCY
-    run_queue = RunExecutionQueue(worker_count=worker_count)
+    run_queue = RunExecutionQueue(worker_count=settings.run_concurrency)
 
     # 실행 경계: 오케스트레이터는 이 포트 뒤의 브라우저/스레드/런타임을 모른다.
     # 실제 실행(LocalExecutionGateway)과 시뮬레이션(SimulatedExecutionGateway)을 합성
@@ -105,7 +110,12 @@ async def lifespan(app: FastAPI):
     FailureAnalysisSubscriber(failure_analyzer, repository, registry).register(event_bus)
     EmailNotificationSubscriber(system_codes).register(event_bus)
     email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
-    print(f"[startup] 메일 알림: {email_status.title} — {email_status.message}")
+    logger.info(
+        "메일 알림 상태",
+        log_event="startup.email_status",
+        title=email_status.title,
+        message=email_status.message,
+    )
 
     run_service = RunService(
         registry=registry,
@@ -138,6 +148,7 @@ async def lifespan(app: FastAPI):
     suite_service.register(event_bus)
     app.state.run_service = run_service
     app.state.suite_service = suite_service
+    app.state.run_queue = run_queue
     # API 의존성 주입(app/api/dependencies.py)이 꺼내 쓰는 공유 싱글턴들. 라우트가 서비스의
     # 비공개 속성(._registry/._repository)을 들춰보지 않고 포트/레지스트리를 직접 주입받게 한다.
     app.state.registry = registry
@@ -145,8 +156,8 @@ async def lifespan(app: FastAPI):
     app.state.schedule_repository = schedule_repository
     # SMS 중계 인바운드 OTP(POST /api/otp/inbound): 기기 토큰 미설정 시 기능 비활성(엔드포인트가
     # 503). SMS 원문 파싱 정규식은 회사 SMS 형식에 맞춰 재정의 가능(미설정 시 라우트 기본값).
-    app.state.otp_relay_token = resolve_env_value("E2E_OTP_RELAY_TOKEN", dotenv)
-    app.state.otp_relay_regex = resolve_env_value("E2E_OTP_RELAY_REGEX", dotenv)
+    app.state.otp_relay_token = settings.otp_relay_token_str()
+    app.state.otp_relay_regex = settings.otp_relay_regex
     app.state.stats_service = StatsService(
         run_repo=repository,
         suite_repo=suite_repository,
@@ -160,14 +171,20 @@ async def lifespan(app: FastAPI):
     interrupted_runs = await run_service.reconcile_interrupted_runs()
     interrupted_suites = await suite_service.reconcile_interrupted_suites()
     if interrupted_runs or interrupted_suites:
-        print(
-            f"[startup] 재기동으로 중단된 Run {interrupted_runs}건 · "
-            f"Suite {interrupted_suites}건을 CANCELLED 로 정리했습니다."
+        logger.info(
+            "재기동으로 중단된 작업 정리",
+            log_event="startup.reconcile_interrupted",
+            interrupted_runs=interrupted_runs,
+            interrupted_suites=interrupted_suites,
         )
 
     # 감독되는 작업 큐의 워커를 띄운다(reconcile 이후 — reconcile 은 작업을 제출하지 않는다).
     run_queue.start()
-    print(f"[startup] 실행 작업 큐 워커 {run_queue.worker_count}개 시작.")
+    logger.info(
+        "실행 작업 큐 시작",
+        log_event="startup.run_queue_started",
+        worker_count=run_queue.worker_count,
+    )
 
     scheduler = SchedulerService(
         run_service=run_service,
@@ -175,6 +192,14 @@ async def lifespan(app: FastAPI):
         repository=schedule_repository,
     )
     app.state.schedule_service = scheduler
+    app.state.ops_service = OpsService(
+        settings=settings,
+        run_repo=repository,
+        suite_repo=suite_repository,
+        schedule_repo=schedule_repository,
+        run_queue=run_queue,
+        scheduler=scheduler,
+    )
     scheduler_task = asyncio.create_task(scheduler.run_forever())
     retention_scheduler = RunRetentionScheduler.from_env(RunRetentionService(run_service))
     retention_task: asyncio.Task | None = None
@@ -201,6 +226,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def request_log_context_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    bind_log_context(
+        request_id=request_id,
+        http_method=request.method,
+        http_path=request.url.path,
+    )
+    try:
+        return await call_next(request)
+    finally:
+        clear_log_context("request_id", "http_method", "http_path")
+
+
 app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
 app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 app.include_router(auth_router)

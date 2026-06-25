@@ -43,6 +43,7 @@ OZ_READ_SIGN_STATE_JS = """
 }
 """
 HP_SMS_REQUEST_PATH = "hp-sms-request.json"
+OZ_POPUP_OPEN_SETTLE_MS = 10_000
 FORM_SUBMIT_SETTLE_MS = 10_000
 OZ_POPUP_TIMEOUT_MS = 60_000
 
@@ -195,6 +196,8 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
         view_button.click()
     popup = popup_info.value
     popup.wait_for_load_state("domcontentloaded", timeout=OZ_POPUP_TIMEOUT_MS)
+    print(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
+    popup.wait_for_timeout(OZ_POPUP_OPEN_SETTLE_MS)
     if OZ_POPUP_URL_FRAGMENT not in popup.url:
         raise RuntimeError(
             f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}"

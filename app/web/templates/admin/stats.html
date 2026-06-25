@@ -3,53 +3,143 @@
 {% block nav_stats %}bg-red-50 text-red-700 font-semibold{% endblock %}
 
 {% block content %}
-<div>
-    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">사용량 통계</h1>
-    <p class="mt-1.5 text-sm text-gray-500">기간별 사용자·시스템 단위 완료 Run(성공·이상징후) 집계입니다. 점검실패 Run은 포함되지 않습니다.</p>
+<!-- 리포트 헤더 -->
+<div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin · Usage Report</p>
+            <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">사용량 통계</h1>
+            <p class="mt-1.5 max-w-2xl text-sm text-gray-500">기간별 사용자·시스템 단위 완료 Run(성공·이상징후) 집계입니다. 점검실패 Run은 포함되지 않습니다.</p>
+        </div>
+        <p id="stats-meta" class="shrink-0 text-xs text-gray-400 sm:text-right"></p>
+    </div>
 </div>
 
 <!-- 기간 필터 -->
 <div class="flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
     <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">시작일</label>
+        <label for="filter-from" class="mb-1 block text-xs font-medium text-gray-500">시작일</label>
         <input id="filter-from" type="datetime-local" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
     </div>
     <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">종료일</label>
+        <label for="filter-to" class="mb-1 block text-xs font-medium text-gray-500">종료일</label>
         <input id="filter-to" type="datetime-local" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
     </div>
-    <button id="btn-load" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
-    <button id="btn-reset" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
-    <button id="btn-csv" class="rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100">CSV 내보내기</button>
-    <span id="stats-meta" class="text-xs text-gray-400 ml-auto"></span>
+    <button id="btn-load" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
+    <button id="btn-reset" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
+    <button id="btn-csv" type="button" class="rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100">CSV보내기</button>
 </div>
 
-<!-- 요약 카드 -->
-<div class="grid gap-3 md:grid-cols-4">
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">통과 Run</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-runs">—</p>
+<!-- KPI 요약 -->
+<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--indigo" aria-hidden="true">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </span>
+                <span class="status-metric-card__title">통과 Run</span>
+            </div>
+            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="통과 Run 수">
+                <span class="status-metric-card__kpi-value" id="stat-total-runs">—</span>
+            </span>
+        </div>
+        <p class="status-metric-card__summary">선택 기간 내 완료 Run 합계</p>
     </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">활성 사용자</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-users">—</p>
+
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--violet" aria-hidden="true">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                </span>
+                <span class="status-metric-card__title">활성 사용자</span>
+            </div>
+            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="활성 사용자 수">
+                <span class="status-metric-card__kpi-value" id="stat-total-users">—</span>
+            </span>
+        </div>
+        <p class="status-metric-card__summary">Run을 실행한 사용자 수</p>
     </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">통과 모듈</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="stat-total-passed">—</p>
+
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--sky" aria-hidden="true">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </span>
+                <span class="status-metric-card__title">통과 모듈</span>
+            </div>
+            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="통과 모듈 수">
+                <span class="status-metric-card__kpi-value" id="stat-total-passed">—</span>
+            </span>
+        </div>
+        <p class="status-metric-card__summary">시스템별 통과 모듈 합계</p>
     </div>
-    <div class="rounded-xl border border-green-100 bg-green-50 p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</p>
-        <p class="mt-2 text-3xl font-bold text-green-700" id="stat-total-saved">—</p>
+
+    <div class="status-metric-card">
+        <div class="status-metric-card__head">
+            <div class="status-metric-card__identity">
+                <span class="status-metric-card__icon status-metric-card__icon--indigo" aria-hidden="true">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </span>
+                <span class="status-metric-card__title">절감 시간</span>
+            </div>
+            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="수동 작업 절감 시간">
+                <span class="status-metric-card__kpi-value text-green-700" id="stat-total-saved">—</span>
+            </span>
+        </div>
+        <p class="status-metric-card__summary text-green-700">모듈 설정 기준 추정 절감</p>
+    </div>
+</div>
+
+<!-- 차트 섹션 -->
+<div class="stats-section-header">
+    <h2 class="stats-section-header__title">시각화 요약</h2>
+    <p class="stats-section-header__subtitle">시스템·사용자 분포와 모듈 통과/실패 현황을 한눈에 확인합니다.</p>
+</div>
+
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div class="stats-chart-card" aria-label="시스템별 Run 분포 차트">
+        <h3 class="stats-chart-card__title">시스템별 Run 분포</h3>
+        <div class="stats-chart-card__body">
+            <div id="chart-system-runs" class="stats-plotly-chart" role="img" aria-label="시스템별 Run 분포"></div>
+            <p class="stats-empty-state is-hidden" data-empty-for="chart-system-runs">표시할 데이터가 없습니다.</p>
+        </div>
+    </div>
+
+    <div class="stats-chart-card" aria-label="사용자별 Run Top 10 차트">
+        <h3 class="stats-chart-card__title">사용자별 Run Top 10</h3>
+        <div class="stats-chart-card__body">
+            <div id="chart-user-runs" class="stats-plotly-chart" role="img" aria-label="사용자별 Run Top 10"></div>
+            <p class="stats-empty-state is-hidden" data-empty-for="chart-user-runs">표시할 데이터가 없습니다.</p>
+        </div>
+    </div>
+
+    <div class="stats-chart-card" aria-label="시스템별 절감 시간 차트">
+        <h3 class="stats-chart-card__title">시스템별 절감 시간</h3>
+        <div class="stats-chart-card__body">
+            <div id="chart-system-savings" class="stats-plotly-chart" role="img" aria-label="시스템별 절감 시간"></div>
+            <p class="stats-empty-state is-hidden" data-empty-for="chart-system-savings">표시할 데이터가 없습니다.</p>
+        </div>
+    </div>
+
+    <div class="stats-chart-card" aria-label="시스템별 모듈 통과 실패 차트">
+        <h3 class="stats-chart-card__title">시스템별 모듈 통과/실패</h3>
+        <div class="stats-chart-card__body">
+            <div id="chart-module-pass-fail" class="stats-plotly-chart" role="img" aria-label="시스템별 모듈 통과 실패"></div>
+            <p class="stats-empty-state is-hidden" data-empty-for="chart-module-pass-fail">표시할 데이터가 없습니다.</p>
+        </div>
     </div>
 </div>
 
 <!-- 사용자별 통계 -->
+<div class="stats-section-header">
+    <h2 class="stats-section-header__title">사용자별 상세</h2>
+    <p class="stats-section-header__subtitle">사용자 단위 Run·모듈·절감 시간 내역입니다.</p>
+</div>
+
 <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-    <div class="border-b border-gray-100 px-6 py-4">
-        <h2 class="text-sm font-semibold text-gray-900">사용자별 통계</h2>
-    </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead class="bg-gray-50">
@@ -63,17 +153,19 @@
                 </tr>
             </thead>
             <tbody id="user-stats-tbody" class="divide-y divide-gray-100">
-                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 
 <!-- 시스템별 통계 -->
+<div class="stats-section-header">
+    <h2 class="stats-section-header__title">시스템별 상세</h2>
+    <p class="stats-section-header__subtitle">시스템 단위 Run·모듈·절감 시간 내역입니다.</p>
+</div>
+
 <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-    <div class="border-b border-gray-100 px-6 py-4">
-        <h2 class="text-sm font-semibold text-gray-900">시스템별 통계</h2>
-    </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead class="bg-gray-50">
@@ -87,7 +179,7 @@
                 </tr>
             </thead>
             <tbody id="sys-stats-tbody" class="divide-y divide-gray-100">
-                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
             </tbody>
         </table>
     </div>
@@ -95,103 +187,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-function fmtDuration(ms) {
-    if (!ms) return '—';
-    const s = Math.round(ms / 1000);
-    if (s < 60) return `${s}초`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}분 ${rem}초`;
-}
-
-function fmtSavedSeconds(seconds) {
-    const s = Math.round(seconds || 0);
-    if (s < 60) return `${s}초`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}분 ${rem}초`;
-}
-
-async function loadStats() {
-    const from = document.getElementById('filter-from').value;
-    const to = document.getElementById('filter-to').value;
-    const params = new URLSearchParams();
-    if (from) params.set('from', new Date(from).toISOString());
-    if (to) params.set('to', new Date(to).toISOString());
-    const res = await fetch('/api/admin/stats/usage?' + params.toString());
-    if (!res.ok) {
-        alert('통계 조회에 실패했습니다.');
-        return;
-    }
-    const data = await res.json();
-
-    document.getElementById('stat-total-runs').textContent = data.total_runs;
-    document.getElementById('stat-total-users').textContent = data.total_users;
-    const totalPassed = (data.by_system || []).reduce((s, x) => s + x.modules_passed, 0);
-    document.getElementById('stat-total-passed').textContent = totalPassed;
-    const totalSaved = (data.by_system || []).reduce((s, x) => s + (x.manual_seconds_saved || 0), 0);
-    document.getElementById('stat-total-saved').textContent = fmtSavedSeconds(totalSaved);
-
-    const gen = data.generated_at ? new Date(data.generated_at).toLocaleString('ko-KR') : '';
-    document.getElementById('stats-meta').textContent = gen ? `생성: ${gen}` : '';
-
-    const userTbody = document.getElementById('user-stats-tbody');
-    if (!data.by_user || data.by_user.length === 0) {
-        userTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
-    } else {
-        userTbody.innerHTML = data.by_user.map(u => `<tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">${u.user_name || '(시스템)'}</td>
-            <td class="px-4 py-3 text-right">${u.total_runs}</td>
-            <td class="px-4 py-3 text-right text-green-700">${u.total_modules_passed}</td>
-            <td class="px-4 py-3 text-right text-red-600">${u.total_modules_failed}</td>
-            <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(u.total_duration_ms)}</td>
-            <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(u.manual_seconds_saved)}</td>
-        </tr>`).join('');
-    }
-
-    const sysTbody = document.getElementById('sys-stats-tbody');
-    if (!data.by_system || data.by_system.length === 0) {
-        sysTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
-    } else {
-        sysTbody.innerHTML = data.by_system.map(s => `<tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">${s.system_name}</td>
-            <td class="px-4 py-3 text-right">${s.runs}</td>
-            <td class="px-4 py-3 text-right text-green-700">${s.modules_passed}</td>
-            <td class="px-4 py-3 text-right text-red-600">${s.modules_failed}</td>
-            <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(s.total_duration_ms)}</td>
-            <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(s.manual_seconds_saved)}</td>
-        </tr>`).join('');
-    }
-}
-
-document.getElementById('btn-load').addEventListener('click', loadStats);
-document.getElementById('btn-reset').addEventListener('click', () => {
-    setDefaultDates();
-    loadStats();
-});
-document.getElementById('btn-csv').addEventListener('click', () => {
-    const from = document.getElementById('filter-from').value;
-    const to = document.getElementById('filter-to').value;
-    const params = new URLSearchParams();
-    if (from) params.set('from', new Date(from).toISOString());
-    if (to) params.set('to', new Date(to).toISOString());
-    window.location.href = '/api/admin/stats/savings/csv?' + params.toString();
-});
-
-function toLocalDatetimeValue(date) {
-    const pad = n => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function setDefaultDates() {
-    const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0);
-    document.getElementById('filter-from').value = toLocalDatetimeValue(firstOfMonth);
-    document.getElementById('filter-to').value = toLocalDatetimeValue(now);
-}
-
-setDefaultDates();
-loadStats();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" crossorigin="anonymous"></script>
+<script src="/static/admin-stats.js" defer></script>
 {% endblock %}

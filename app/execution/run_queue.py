@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 from typing import Awaitable, Callable, Protocol
 
+from app.core.logging import get_logger
+
 # 큐에 적재되는 작업: 인자 없이 코루틴을 돌려주는 팩토리(보통 ``functools.partial``).
 Job = Callable[[], Awaitable[None]]
+
+logger = get_logger(__name__)
 
 # E2E 도구는 헤디드 브라우저를 띄우므로 동시 실행을 무한정 허용하면 자원이 폭증한다.
 # 기본 동시성은 보수적으로 두고 컴포지션 루트에서 env(E2E_RUN_CONCURRENCY)로 조정한다.
@@ -45,6 +49,14 @@ class RunExecutionQueue:
     def worker_count(self) -> int:
         return self._worker_count
 
+    @property
+    def is_running(self) -> bool:
+        return self._started
+
+    @property
+    def pending_jobs(self) -> int:
+        return self._queue.qsize()
+
     def start(self) -> None:
         if self._started:
             return
@@ -74,6 +86,12 @@ class RunExecutionQueue:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # 작업 예외는 다른 작업/워커로 전파되지 않게 격리
-                print(f"[run-queue] worker={index} job={label} 실행 오류: {exc}")
+                logger.exception(
+                    "실행 큐 작업 오류",
+                    log_event="queue.job_failed",
+                    worker_index=index,
+                    job_label=label,
+                    error=str(exc),
+                )
             finally:
                 self._queue.task_done()

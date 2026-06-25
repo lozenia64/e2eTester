@@ -322,6 +322,7 @@ e2eTester/
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/runs` (전체 Run 목록, admin 전용; `system_code`·`user_name` 필터, `limit` 지원)
 - `DELETE /api/admin/runs/{run_id}` (Run 영구 삭제 — DB·로그·아티팩트, admin 전용)
+- `GET /api/admin/ops/snapshot` (Run/Suite/스케줄·실행 큐·최근 운영 이벤트 스냅샷, admin 전용)
 - `GET /api/admin/stats/usage` (사용자·시스템별 사용량 통계, admin 전용)
 - `GET /api/admin/stats/savings/csv` (절감 시간 통계 CSV 다운로드, admin 전용)
 - `GET /api/admin/systems` (등록 시스템 코드·이름 목록, admin 전용)
@@ -336,6 +337,7 @@ e2eTester/
 - `GET /admin` (관리자 대시보드 HTML)
 - `GET /admin/users` (사용자 관리 HTML)
 - `GET /admin/stats` (사용량 통계 HTML)
+- `GET /admin/ops` (운영 관측 HTML — Run/Suite/스케줄·큐·최근 이벤트)
 - `GET /admin/modules` (모듈별 수동 업무 시간 관리 HTML; 시스템 카드당 저장 버튼 1개로 변경분 일괄 저장)
 
 역할:

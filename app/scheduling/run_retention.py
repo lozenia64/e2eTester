@@ -5,13 +5,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from app.core.env_utils import DEFAULT_ENV_FILE_PATH, env_flag, load_dotenv_file, resolve_env_value
+from app.core.logging import get_logger
+from app.core.settings import get_settings
 from app.core.status_labels import RUN_DAILY_PURGE_STATUSES
 from app.scheduling.cron import parse_cron
 from app.scheduling.scheduler import _resolve_timezone
 
 DEFAULT_RETENTION_CRON = "0 3 * * *"
 DEFAULT_RETENTION_TICK_SECONDS = 60
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -58,31 +61,32 @@ class RunRetentionScheduler:
 
     @classmethod
     def from_env(cls, retention_service: RunRetentionService) -> RunRetentionScheduler | None:
-        dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
-        if not env_flag("E2E_RUN_RETENTION_ENABLED", dotenv_values, default=True):
+        settings = get_settings()
+        if not settings.run_retention_enabled:
             return None
-        cron = (resolve_env_value("E2E_RUN_RETENTION_CRON", dotenv_values) or "").strip()
-        if not cron:
-            cron = DEFAULT_RETENTION_CRON
+        cron = (settings.run_retention_cron or "").strip() or DEFAULT_RETENTION_CRON
         parse_cron(cron)
         return cls(retention_service=retention_service, cron=cron)
 
     async def run_forever(self) -> None:
         self._running = True
-        print(
-            f"[run-retention] 시작 (tz={self._timezone_name}, cron={self._cron_expr!r}, "
-            f"tick={self._tick_seconds}s)"
+        logger.info(
+            "Run 보존 스케줄러 시작",
+            log_event="retention.started",
+            timezone=self._timezone_name,
+            cron=self._cron_expr,
+            tick_seconds=self._tick_seconds,
         )
         while self._running:
             try:
                 await self._tick()
             except Exception as exc:
-                print(f"[run-retention] tick 오류: {exc}")
+                logger.exception("Run 보존 tick 오류", log_event="retention.tick_error", error=str(exc))
             try:
                 await asyncio.sleep(self._tick_seconds)
             except asyncio.CancelledError:
                 break
-        print("[run-retention] 종료")
+        logger.info("Run 보존 스케줄러 종료", log_event="retention.stopped")
 
     def stop(self) -> None:
         self._running = False
@@ -102,12 +106,14 @@ class RunRetentionScheduler:
         result = await self.purge_now()
         self._last_purge_local_date = now_local.date()
         if result.deleted_run_ids:
-            print(
-                f"[run-retention] {len(result.deleted_run_ids)}건 삭제 "
-                f"(기준: {self._timezone_name} 오늘 00:00 이전, 점검실패·취소)"
+            logger.info(
+                "점검실패·취소 Run 보존 정리",
+                log_event="retention.purged",
+                deleted_count=len(result.deleted_run_ids),
+                timezone=self._timezone_name,
             )
         else:
-            print("[run-retention] 삭제 대상 없음")
+            logger.info("보존 정리 대상 없음", log_event="retention.noop", timezone=self._timezone_name)
 
     def _today_start_utc(self) -> datetime:
         now_local = datetime.now(self._timezone)
