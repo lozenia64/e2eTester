@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
+from app.orchestrator.stats_charts import build_usage_charts
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES, MODULE_ANOMALY_STATUSES
 from app.core.models import UsageStats, UserUsageStat, SystemUsageStat
 from app.orchestrator.run_actor import load_actor_context
@@ -159,7 +160,7 @@ class StatsService:
         by_user = sorted(user_map.values(), key=lambda u: u.total_runs, reverse=True)
         by_system = sorted(system_map.values(), key=lambda s: s.runs, reverse=True)
 
-        return UsageStats(
+        stats = UsageStats(
             period_from=from_dt,
             period_to=to_dt,
             generated_at=datetime.now(timezone.utc),
@@ -168,3 +169,4 @@ class StatsService:
             by_user=by_user,
             by_system=by_system,
         )
+        return stats.model_copy(update={"charts": build_usage_charts(stats)})

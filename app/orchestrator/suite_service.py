@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.core.enums import RunStatus, SuiteStatus
+from app.core.logging import get_logger
 from app.core.models import Run, StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep, SystemDefinition
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
 from app.orchestrator.run_service import RunService
@@ -34,6 +35,8 @@ _TERMINAL_STEP = {
     SuiteStatus.CANCELLED,
     SuiteStatus.SKIPPED,
 }
+
+logger = get_logger(__name__)
 
 
 class SuiteService:
@@ -270,12 +273,20 @@ class SuiteService:
         # 시스템별 입력값(PII 가능)은 Suite blob 이 아니라 전용 스토어에 보관한다.
         await self._input_store.put(suite_id, normalized_systems)
         await self._publish_event("suite_created", suite)
+        logger.info(
+            "Suite 생성",
+            log_event="suite.created",
+            suite_id=suite.suite_id,
+            selected_systems=resolved_system_codes,
+            user_name=user_name,
+        )
 
         # RUNNING 으로 전이하고 첫 스텝부터 Saga 를 시작한다(이후 진행은 RunFinished 구동).
         suite.status = SuiteStatus.RUNNING
         suite.started_at = datetime.now(UTC)
         await self._repository.save_suite(suite)
         await self._publish_event("suite_started", suite)
+        logger.info("Suite 시작", log_event="suite.started", suite_id=suite.suite_id)
         await self._advance(suite_id)
         return await self._repository.get_suite(suite_id)
 
@@ -286,6 +297,7 @@ class SuiteService:
         # 취소 의도를 영속한다 — 활성 Run 취소가 비동기로 마무리되거나, 다음 스텝 진입 직전
         # advance 가 이 플래그를 읽어 협력적으로 중단한다.
         await self._cancel_store.set_cancel_requested(suite_id)
+        logger.info("Suite 취소 요청", log_event="suite.cancel_requested", suite_id=suite_id, status=suite.status.value)
         active_run_id = suite.active_run_id
         if active_run_id:
             try:
@@ -360,6 +372,12 @@ class SuiteService:
             suite.awaiting_input_prompt = run.awaiting_input_prompt
             await self._repository.save_suite(suite)
             await self._publish_event("suite_waiting_input", suite, {"run_id": run.run_id})
+            logger.info(
+                "Suite OTP 대기",
+                log_event="suite.waiting_input",
+                suite_id=suite.suite_id,
+                run_id=run.run_id,
+            )
 
     async def on_run_resumed(self, event: RunResumed) -> None:
         run = event.run
@@ -377,6 +395,7 @@ class SuiteService:
             suite.awaiting_input_prompt = None
             await self._repository.save_suite(suite)
             await self._publish_event("suite_resumed", suite)
+            logger.info("Suite 재개", log_event="suite.resumed", suite_id=suite.suite_id, run_id=run.run_id)
 
     # --- 진행 / 종료 ------------------------------------------------------
 
@@ -471,6 +490,12 @@ class SuiteService:
         await self._publish_event("suite_finished", suite)
         await self._cancel_store.delete(suite.suite_id)
         await self._input_store.delete(suite.suite_id)
+        logger.info(
+            "Suite 종료",
+            log_event="suite.finished",
+            suite_id=suite.suite_id,
+            status=status.value,
+        )
 
     async def _collect_step_runs(self, suite: SuiteRun) -> list[Run]:
         runs: list[Run] = []

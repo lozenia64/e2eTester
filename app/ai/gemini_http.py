@@ -8,6 +8,7 @@ from typing import TypeVar
 from urllib import error, request
 
 from app.core.env_utils import resolve_env_with_source
+from app.core.settings import get_settings
 
 DEFAULT_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta"
 T = TypeVar("T")
@@ -19,7 +20,13 @@ class GeminiTransportSettings:
     verify_ssl_source: str | None
 
 
-def load_gemini_transport_settings(dotenv_values: dict[str, str]) -> GeminiTransportSettings:
+def load_gemini_transport_settings(dotenv_values: dict[str, str] | None = None) -> GeminiTransportSettings:
+    if dotenv_values is None:
+        settings = get_settings()
+        return GeminiTransportSettings(
+            verify_ssl=settings.gemini_ssl_verify,
+            verify_ssl_source=settings.env_source("E2E_GEMINI_SSL_VERIFY"),
+        )
     raw_value, source = resolve_env_with_source("E2E_GEMINI_SSL_VERIFY", dotenv_values)
     if raw_value is None:
         return GeminiTransportSettings(verify_ssl=True, verify_ssl_source=None)

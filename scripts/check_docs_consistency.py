@@ -73,6 +73,9 @@ DYNAMIC_ENV_PREFIX_RE = re.compile(r"""f["'](E2E_[A-Z0-9_]+_)\{""")
 LITERAL_ENV_RE = re.compile(
     r"""(?:resolve_env_value|resolve_env_with_source|env_flag)\(\s*["']([A-Z][A-Z0-9_]+)["']"""
 )
+SETTINGS_ALIAS_RE = re.compile(
+    r"""validation_alias\s*=\s*["']([A-Z][A-Z0-9_]+)["']"""
+)
 OS_ENV_RE = re.compile(
     r"""os\.(?:getenv|environ\.get)\(\s*["']([A-Z][A-Z0-9_]+)["']|os\.environ\[\s*["']([A-Z][A-Z0-9_]+)["']"""
 )
@@ -199,6 +202,7 @@ def _collect_env_names() -> tuple[set[str], set[str]]:
     prefixes: set[str] = set()
     for _path, text in _iter_py_sources(REPO_ROOT / "app"):
         literals.update(LITERAL_ENV_RE.findall(text))
+        literals.update(SETTINGS_ALIAS_RE.findall(text))
         for grp in OS_ENV_RE.findall(text):
             literals.update(name for name in grp if name)
         prefixes.update(DYNAMIC_ENV_PREFIX_RE.findall(text))

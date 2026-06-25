@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
+from app.core.settings import get_settings
+
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 PC_VIEWPORT: Final[dict[str, int]] = {"width": 1339, "height": 1038}
@@ -90,7 +92,7 @@ def origin_of(url: str) -> str:
 
 
 def resolve_user_data_dir(profile_name: str) -> Path:
-    override = os.environ.get("E2E_USER_DATA_DIR")
+    override = get_settings().user_data_dir or os.environ.get("E2E_USER_DATA_DIR")
     if override:
         target = Path(override).expanduser() / profile_name
     else:
@@ -101,7 +103,7 @@ def resolve_user_data_dir(profile_name: str) -> Path:
 
 def resolve_workspace_dir() -> Path:
     """Playwright MCP 가 프로필 해시에 쓰는 workspace 경로(cwd)."""
-    override = os.environ.get("E2E_WORKSPACE_DIR")
+    override = get_settings().workspace_dir or os.environ.get("E2E_WORKSPACE_DIR")
     if override:
         return Path(override).expanduser().resolve()
     return REPO_ROOT.resolve()
@@ -116,7 +118,7 @@ def resolve_playwright_mcp_user_data_dir(
 
     ms-playwright-mcp/mcp-{channel}-{sha256(workspace)[:7]}
     """
-    override = os.environ.get("E2E_PLAYWRIGHT_MCP_PROFILE_DIR")
+    override = get_settings().playwright_mcp_profile_dir or os.environ.get("E2E_PLAYWRIGHT_MCP_PROFILE_DIR")
     if override:
         target = Path(override).expanduser()
     else:

@@ -16,11 +16,16 @@ from email.utils import parseaddr
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.ai.gemini_client import (
+    build_user_contents,
+    create_gemini_client,
+    generate_structured_with_fallback,
+)
 from app.ai.gemini_http import (
     gemini_ssl_mode_detail,
     load_gemini_transport_settings,
-    post_gemini_generate_content_with_fallback,
 )
+from app.ai.gemini_schemas import RunReportContent, SuiteReportContent
 from app.ai.gemini_models import (
     api_key_looks_valid,
     gemini_models_look_valid,
@@ -58,191 +63,6 @@ MAX_INLINE_EMAIL_TOTAL_BYTES = 16_000_000
 MAX_GEMINI_ATTACHMENT_BYTES = 7_500_000
 MAX_GEMINI_INLINE_IMAGE_BYTES = 2_500_000
 MAX_GEMINI_LOG_BYTES = 180_000
-
-# Gemini 가 summary/headline 문자열 안에 module_findings 등 JSON 꼬리를 섞어 넣는 경우가 있다.
-_NARRATIVE_BLEED_MARKERS = (
-    '","module_findings"',
-    '","failure_details"',
-    ',"module_findings"',
-    ',"failure_details"',
-)
-
-
-def _extract_balanced_json_fragment(text: str, start: int, open_char: str, close_char: str) -> str | None:
-    depth = 0
-    in_string = False
-    escape = False
-    for index in range(start, len(text)):
-        char = text[index]
-        if in_string:
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == open_char:
-            depth += 1
-        elif char == close_char:
-            depth -= 1
-            if depth == 0:
-                return text[start : index + 1]
-    return None
-
-
-def _clean_narrative_text(text: str) -> str:
-    cleaned = (text or "").strip()
-    if not cleaned:
-        return ""
-    for marker in _NARRATIVE_BLEED_MARKERS:
-        marker_index = cleaned.find(marker)
-        if marker_index >= 0:
-            cleaned = cleaned[:marker_index].rstrip('",').rstrip('"').rstrip(",")
-    if cleaned.startswith(("{", "[")):
-        return ""
-    if '"module_id"' in cleaned and '"screen_observation"' in cleaned:
-        return ""
-    return cleaned
-
-
-def _coerce_module_findings(value: object) -> list[dict]:
-    if not isinstance(value, list):
-        return []
-    findings: list[dict] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        module_id = str(item.get("module_id") or "").strip()
-        if not module_id:
-            continue
-        findings.append(
-            {
-                "module_id": module_id,
-                "screen_observation": _clean_narrative_text(str(item.get("screen_observation") or "")),
-                "log_observation": _clean_narrative_text(str(item.get("log_observation") or "")),
-            }
-        )
-    return findings
-
-
-def _coerce_failure_details(value: object) -> list[dict]:
-    if not isinstance(value, list):
-        return []
-    details: list[dict] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        module_id = str(item.get("module_id") or "").strip()
-        if not module_id:
-            continue
-        details.append(
-            {
-                "module_id": module_id,
-                "symptom": _clean_narrative_text(str(item.get("symptom") or "")),
-                "evidence": _clean_narrative_text(str(item.get("evidence") or "")),
-                "probable_cause": _clean_narrative_text(str(item.get("probable_cause") or "")),
-                "recommended_action": _clean_narrative_text(str(item.get("recommended_action") or "")),
-            }
-        )
-    return details
-
-
-def _recover_json_array_after_key(text: str, key: str) -> list | None:
-    marker = f'"{key}"'
-    marker_index = text.find(marker)
-    if marker_index < 0:
-        return None
-    bracket_index = text.find("[", marker_index + len(marker))
-    if bracket_index < 0:
-        return None
-    array_text = _extract_balanced_json_fragment(text, bracket_index, "[", "]")
-    if not array_text:
-        return None
-    try:
-        loaded = json.loads(array_text)
-    except json.JSONDecodeError:
-        return None
-    return loaded if isinstance(loaded, list) else None
-
-
-def _normalize_system_entry(item: object) -> dict | None:
-    if not isinstance(item, dict):
-        return None
-    system_code = str(item.get("system_code") or "").strip().upper()
-    if not system_code:
-        return None
-    raw_summary = str(item.get("summary") or "")
-    module_findings = _coerce_module_findings(item.get("module_findings"))
-    if not module_findings:
-        recovered = _recover_json_array_after_key(raw_summary, "module_findings")
-        if recovered is not None:
-            module_findings = _coerce_module_findings(recovered)
-    failure_details = _coerce_failure_details(item.get("failure_details"))
-    if not failure_details:
-        recovered = _recover_json_array_after_key(raw_summary, "failure_details")
-        if recovered is not None:
-            failure_details = _coerce_failure_details(recovered)
-    cleaned_summary = _clean_narrative_text(raw_summary)
-    if raw_summary and cleaned_summary != raw_summary.strip():
-        print(
-            f"[email] Gemini summary 필드 정제: system={system_code} "
-            f"raw_len={len(raw_summary)} cleaned_len={len(cleaned_summary)}"
-        )
-    return {
-        "system_code": system_code,
-        "summary": cleaned_summary,
-        "module_findings": module_findings,
-        "failure_details": failure_details,
-    }
-
-
-def _sanitize_gemini_report_content(parsed: dict, *, is_suite: bool) -> dict:
-    if is_suite:
-        systems: list[dict] = []
-        for item in parsed.get("systems") or []:
-            normalized = _normalize_system_entry(item)
-            if normalized is not None:
-                systems.append(normalized)
-        parsed["systems"] = systems
-    else:
-        module_findings = _coerce_module_findings(parsed.get("module_findings"))
-        if not module_findings:
-            recovered = _recover_json_array_after_key(str(parsed.get("headline") or ""), "module_findings")
-            if recovered is not None:
-                module_findings = _coerce_module_findings(recovered)
-        parsed["module_findings"] = module_findings
-        parsed["failure_details"] = _coerce_failure_details(parsed.get("failure_details"))
-    raw_headline = str(parsed.get("headline") or "")
-    parsed["headline"] = _clean_narrative_text(raw_headline)
-    if not is_suite:
-        parsed["comparison_comment"] = _clean_narrative_text(str(parsed.get("comparison_comment") or ""))
-    return parsed
-
-
-def _parse_gemini_json_text(text: str) -> dict | None:
-    normalized = text.strip()
-    if normalized.startswith("```"):
-        normalized = re.sub(r"^```(?:json)?\s*", "", normalized, flags=re.IGNORECASE)
-        normalized = re.sub(r"\s*```$", "", normalized).strip()
-    try:
-        loaded = json.loads(normalized)
-        return loaded if isinstance(loaded, dict) else None
-    except json.JSONDecodeError:
-        pass
-    object_start = normalized.find("{")
-    if object_start >= 0:
-        object_text = _extract_balanced_json_fragment(normalized, object_start, "{", "}")
-        if object_text:
-            try:
-                loaded = json.loads(object_text)
-                return loaded if isinstance(loaded, dict) else None
-            except json.JSONDecodeError:
-                return None
-    return None
-
 
 @dataclass(frozen=True)
 class EmailNotificationStatus:
@@ -290,7 +110,7 @@ class EmailNotificationConfig:
         if recipient_errors:
             return None
 
-        gemini_models = tuple(resolve_gemini_models(dotenv_values))
+        gemini_models = tuple(resolve_gemini_models())
         gemini_api_key = (resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
         transport_settings = load_gemini_transport_settings(dotenv_values)
         gemini_enabled = api_key_looks_valid(gemini_api_key) and gemini_models_look_valid(list(gemini_models))
@@ -354,11 +174,11 @@ class EmailNotificationConfig:
                 recipient_summary=_recipient_summary(recipients_by_system),
             )
 
-        gemini_models = tuple(resolve_gemini_models(dotenv_values))
+        gemini_models = tuple(resolve_gemini_models())
         gemini_api_key, gemini_api_key_source = resolve_env_with_source("GEMINI_API_KEY", dotenv_values)
         gemini_enabled = api_key_looks_valid(gemini_api_key or "") and gemini_models_look_valid(list(gemini_models))
         models_label = " -> ".join(gemini_models)
-        models_source = resolve_gemini_models_source(dotenv_values)
+        models_source = resolve_gemini_models_source()
         if not gemini_enabled:
             return EmailNotificationStatus(
                 state="degraded",
@@ -530,60 +350,9 @@ class GeminiReportContentComposer:
 
     HTML/CSS 는 일절 생성하지 않는다. 레이아웃은 `report_renderer` 가 결정적으로
     찍어내고, 여기서 받은 콘텐츠(핵심 요약/화면·로그 관찰/실패 분석)만 그 안에 채워
-    넣는다. 그래서 응답이 매번 달라도 메일 디자인은 항상 동일하게 유지된다.
+    넣는다. 스키마는 ``app.ai.gemini_schemas`` Pydantic 모델이고, google-genai SDK 가
+    구조화 출력을 강제한다.
     """
-
-    # Run/Suite 콘텐츠 응답 스키마 — 모든 텍스트 필드. module_id 로 모듈을 식별한다.
-    _MODULE_FINDING_SCHEMA = {
-        "type": "OBJECT",
-        "properties": {
-            "module_id": {"type": "STRING"},
-            "screen_observation": {"type": "STRING"},
-            "log_observation": {"type": "STRING"},
-        },
-        "required": ["module_id"],
-    }
-    _FAILURE_DETAIL_SCHEMA = {
-        "type": "OBJECT",
-        "properties": {
-            "module_id": {"type": "STRING"},
-            "symptom": {"type": "STRING"},
-            "evidence": {"type": "STRING"},
-            "probable_cause": {"type": "STRING"},
-            "recommended_action": {"type": "STRING"},
-        },
-        "required": ["module_id"],
-    }
-    _RUN_SCHEMA = {
-        "type": "OBJECT",
-        "properties": {
-            "headline": {"type": "STRING"},
-            "comparison_comment": {"type": "STRING"},
-            "module_findings": {"type": "ARRAY", "items": _MODULE_FINDING_SCHEMA},
-            "failure_details": {"type": "ARRAY", "items": _FAILURE_DETAIL_SCHEMA},
-        },
-        "required": ["headline", "module_findings"],
-    }
-    _SUITE_SCHEMA = {
-        "type": "OBJECT",
-        "properties": {
-            "headline": {"type": "STRING"},
-            "systems": {
-                "type": "ARRAY",
-                "items": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "system_code": {"type": "STRING"},
-                        "summary": {"type": "STRING"},
-                        "module_findings": {"type": "ARRAY", "items": _MODULE_FINDING_SCHEMA},
-                        "failure_details": {"type": "ARRAY", "items": _FAILURE_DETAIL_SCHEMA},
-                    },
-                    "required": ["system_code"],
-                },
-            },
-        },
-        "required": ["headline", "systems"],
-    }
 
     def __init__(
         self,
@@ -592,47 +361,25 @@ class GeminiReportContentComposer:
         timeout_seconds: int = 20,
         verify_ssl: bool = True,
     ) -> None:
-        self._api_key = api_key
+        self._client = create_gemini_client(api_key=api_key, verify_ssl=verify_ssl)
         self._models = models
         self._timeout_seconds = timeout_seconds
-        self._endpoint = "https://generativelanguage.googleapis.com/v1beta"
-        self._verify_ssl = verify_ssl
 
     def compose(self, context: dict, gemini_parts: list[dict]) -> dict:
         is_suite = context.get("report_type") == "suite"
         prompt = self._build_suite_prompt(context) if is_suite else self._build_prompt(context)
-        schema = self._SUITE_SCHEMA if is_suite else self._RUN_SCHEMA
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}, *gemini_parts],
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "responseMimeType": "application/json",
-                "responseSchema": schema,
-            },
-        }
-        content, _model = post_gemini_generate_content_with_fallback(
-            api_key=self._api_key,
-            models=list(self._models),
-            payload=payload,
+        schema = SuiteReportContent if is_suite else RunReportContent
+        contents = build_user_contents(prompt, gemini_parts)
+        content, _model = generate_structured_with_fallback(
+            client=self._client,
+            models=self._models,
+            contents=contents,
+            schema=schema,
+            temperature=0.2,
             timeout_seconds=self._timeout_seconds,
-            verify_ssl=self._verify_ssl,
-            endpoint=self._endpoint,
             log_prefix="[email]",
-            transform=self._parse_content_response,
         )
-        return content
-
-    def _parse_content_response(self, response_json: dict, _model: str) -> dict:
-        parsed = self._extract_response_json(response_json)
-        if parsed is None:
-            raise RuntimeError("Gemini 콘텐츠 응답을 JSON으로 파싱하지 못했습니다.")
-        is_suite = isinstance(parsed.get("systems"), list)
-        return _sanitize_gemini_report_content(parsed, is_suite=is_suite)
+        return content.to_wire_dict()
 
     def _build_prompt(self, context: dict) -> str:
         prompt_context = {
@@ -716,20 +463,6 @@ class GeminiReportContentComposer:
                 json.dumps(prompt_context, ensure_ascii=False, indent=2),
             ]
         )
-
-    @staticmethod
-    def _extract_response_json(response_json: dict) -> dict | None:
-        candidates = response_json.get("candidates") or []
-        for candidate in candidates:
-            content = candidate.get("content") or {}
-            for part in content.get("parts") or []:
-                text = part.get("text")
-                if not text:
-                    continue
-                parsed = _parse_gemini_json_text(text)
-                if parsed is not None:
-                    return parsed
-        return None
 
 
 class RunCompletionEmailBuilder:
