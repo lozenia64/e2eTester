@@ -96,6 +96,19 @@
 | 상세 | 포스터(썸네일) | `.video-js .vjs-poster` |
 | 상세 | 재생 버튼 | `.vjs-big-play-button` |
 
-## 4. 향후 시나리오
+## 4. UI 입력 모델
+
+홈 화면의 `HWTC` 실행 카드에는 아래 입력이 있다.
+
+- 브라우저 실행 모드 (`headed` / `headless`, 기본값 `headed`)
+- 아이디 (한화스마트포털 HSP 와 동일한 로그인 ID)
+- 비밀번호 (`password` 타입)
+
+추가 규칙:
+
+- 브라우저 실행 모드 help_text: `headed` 를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열린다.
+- SMS 인증번호는 Run 폼이 아니라 Run 화면 OTP 패널에서 제출한다.
+
+## 5. 향후 시나리오
 
 연수원 본 업무 시나리오는 추후 모듈로 하나씩 추가한다. 모듈을 추가할 때는 이 문서와 `app/systems/hwtc/manifest.yaml`을 함께 갱신한다.

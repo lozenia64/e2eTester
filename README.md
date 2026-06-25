@@ -205,10 +205,22 @@ API 요청 시 `selected_system_codes`를 생략하면 기존과 같이 전체 �
 
 - Run/Suite 실행 이력·상태와 cron 예약은 **SQLite 파일에 영속**되어 서버를 재시작해도 남습니다. 저장 경로는 환경변수 `E2E_DB_PATH`(미설정 시 `data/e2etester.db`)로 지정합니다.
 - Run 실행은 **감독되는 작업 큐**의 워커 풀이 소비합니다. 동시에 실행할 Run 수는 환경변수 `E2E_RUN_CONCURRENCY`(미설정 시 4)로 조정합니다. 헤디드 브라우저 자원을 고려해 보수적으로 두며, `1`이면 한 번에 한 Run만 실행합니다.
-- 운영 로그는 **structlog** 로 출력합니다. `E2E_LOG_LEVEL`(기본 `INFO`)과 `E2E_LOG_FORMAT`(`console` 또는 `json`)으로 조정합니다. Run/Suite/스케줄 생명주기 이벤트는 관리자 **운영 관측** 페이지(`/admin/ops`)에서도 확인할 수 있습니다.
+- 운영 로그는 **structlog** 로 출력합니다. `E2E_LOG_LEVEL`(기본 `INFO`, `DEBUG`/`WARNING`/`ERROR` 등)과 `E2E_LOG_FORMAT`(`console` — 사람이 읽기 쉬운 형식, 또는 `json` — 로그 수집기용 한 줄 JSON)으로 조정합니다. Run/Suite/스케줄 생명주기 이벤트는 관리자 **운영 관측** 페이지(`/admin/ops`)에서도 확인할 수 있습니다.
 - 다만 서버를 내릴 때 **진행 중이던 Run/Suite**(RUNNING·OTP 대기)는 브라우저 세션이 함께 사라지므로 이어받을 수 없습니다. 재기동 시 자동으로 `CANCELLED` 로 정리되며, 필요하면 해당 Run을 **재실행(rerun)** 하면 됩니다. (OTP 대기는 **휴대폰인증** Run에서 본인인증 단계에 한합니다.)
 - 실시간 로그 라인 버퍼와 WebSocket 연결은 프로세스 메모리에만 있으므로 재시작 시 끊깁니다. 완료된 모듈의 로그는 Run 이력에 함께 저장되어 남습니다.
 - 이미 생성된 아티팩트 파일은 로컬 `artifacts/` 폴더에 남아 있습니다.
+
+## 개발·검증
+
+코드 변경 후 아래를 로컬에서 실행해 회귀를 확인합니다.
+
+```bash
+python3 -m pytest tests/
+python3 scripts/check_docs_consistency.py --verbose
+```
+
+- `tests/` — 도메인·설정·ops·retention 등 **브라우저 없이** 돌아가는 pytest 스위트(15개 파일).
+- `check_docs_consistency.py` — manifest·API·환경변수 등 기계 검증 가능한 문서-코드 정합성 가드(CI 동일).
 
 ## 주의 사항
 
@@ -233,7 +245,9 @@ E2E_ADMIN_EMAIL=admin@example.com
 E2E_ADMIN_PASSWORD=admin1234
 ```
 
-`E2E_JWT_SECRET` 은 운영 환경에서 반드시 변경하세요. 일반 사용자는 관리자가 `/admin/users` 에서 생성하며, 시스템별 실행 권한을 부여할 수 있습니다.
+`E2E_JWT_SECRET` 은 운영 환경에서 반드시 변경하세요. 일반 사용자는 관리자가 `/admin/users` 에서 생성하며, 시스템별 실행 권한(`allowed_system_codes`)을 부여할 수 있습니다.
+
+비관리자는 허용된 시스템만 홈 대시보드 카드·Suite 선택·조회에서 볼 수 있습니다. Suite REST/WS 응답은 허용되지 않은 시스템 step 이 숨겨집니다. 상세 ACL 동작은 [E2E_ARCHITECTURE.md](E2E_ARCHITECTURE.md) §5.3.2 를 참고하세요.
 
 ## 선택 기능: 실패 원인 AI 분석
 
@@ -331,8 +345,7 @@ http://127.0.0.1:2222
 테스트가 최종 종료되면 담당자에게 Gmail로 메일을 보낼 수 있습니다.
 
 - `E2E_EMAIL_ENABLED=false`로 설정하면 메일 발송을 비활성화합니다(기본값은 `.env.example` 참고).
-- 성공 종료(`PASSED`)와 실패 종료(`FAILED`) 모두 메일을 보냅니다.
-- `WAITING_INPUT` 처럼 중간 대기 상태에서는 메일을 보내지 않습니다.
+- 터미널 종료(`PASSED` 정상, `ANOMALY` 이상징후, `ERROR` 점검실패) Run/Suite 에 대해 결과 메일을 보냅니다. (`WAITING_INPUT` 등 중간 상태·`CANCELLED` 는 제외)
 - 메일 본문 HTML은 항상 고정 디자인 템플릿(`report_renderer`)으로 결정적으로 렌더링하며, Gemini는 HTML이 아니라 분석 콘텐츠(핵심 요약·화면/로그 관찰·실패 분석)만 구조화 JSON으로 생성해 템플릿에 채웁니다. Gemini가 비활성이거나 호출에 실패하면 같은 템플릿이 AI 서술 없이(기본 문구로) 렌더링됩니다.
 - 수신자 메일은 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{시스템코드}` 로 구분합니다. 기본 포함 시스템은 `HOM`·`MHM`·`FP`·`HRP`·`HWTC`·`CHBOT` 이며, 각각 `E2E_EMAIL_RECIPIENTS_HOM` 등으로 설정합니다.
 - 한 채널에 여러 수신자를 넣고 싶다면 `|` 로 구분하면 됩니다.
@@ -384,6 +397,23 @@ E2E_EMAIL_RECIPIENTS_CHBOT="user1@company.com"
 - 첨부 파일과 일부 로그/스크린샷은 Gemini 분석 콘텐츠 생성을 위해 Gemini API로도 전달될 수 있습니다.
 - 홈 화면에는 메일 알림 상태 카드가 표시되어 현재 설정이 유효한지 바로 확인할 수 있습니다.
 - 회사망 SSL 검사로 Gemini API 인증서 오류가 나면 `E2E_GEMINI_SSL_VERIFY=false` 로 설정해 Gemini 호출의 SSL 검증만 우회할 수 있습니다.
+
+## 선택 기능: cron 예약 실행
+
+홈 화면 개별 시스템 카드·SUITE 카드에서 5필드 cron 식으로 Run/Suite 자동 실행을 등록할 수 있습니다. 예약은 SQLite 에 영속되며 서버 재시작 후에도 유지됩니다.
+
+- 기준 타임존: `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`). cron 시각 해석·다음 실행 시각 계산에 사용합니다.
+- 무인 예약은 OTP 대기(`WAITING_INPUT`)에서 멈출 수 있습니다.
+- API·상세 동작은 [E2E_ARCHITECTURE.md](E2E_ARCHITECTURE.md) §5.9 를 참고하세요.
+
+## 선택 기능: Run 보존 (일일 정리)
+
+점검실패·취소 Run 을 자동으로 정리하는 선택 배치입니다. 정상(`PASSED`)·이상징후(`ANOMALY`) Run 은 유지합니다.
+
+- `E2E_RUN_RETENTION_ENABLED`: `true` 이면 매일 cron 시각에 보존 정리를 실행합니다(기본 `true`).
+- `E2E_RUN_RETENTION_CRON`: 5필드 cron 식(기본 `0 3 * * *` — 매일 03:00, `E2E_SCHEDULE_TZ` 기준).
+- 삭제 대상: **당일 00:00(기준 타임존) 이전**에 종료된 `ERROR`(점검실패)·`CANCELLED` Run. 당일 Run 은 다음 날까지 보존합니다.
+- 예시값은 `.env.example` 을 참고하세요.
 
 ## 선택 기능: OTP SMS 자동입력 (중계)
 

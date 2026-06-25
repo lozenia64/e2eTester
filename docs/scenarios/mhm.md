@@ -15,7 +15,7 @@
 
 ## 2. 모듈 목록
 
-`mhm.yaml` `order` 기준:
+`manifest.yaml` `order` 기준:
 
 1. `mhm.main.access`
 2. `mhm.login` — 로그인 화면 이동(`app/systems/mhm/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·30초·`인증확인`·최대 3회 재시도) 실행

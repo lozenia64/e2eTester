@@ -95,6 +95,19 @@
 | 상세 | work iframe | `iframe[name="workArea_hrpF021"]` |
 | 상세 | 정보 섹션 | `get_by_role('heading', name='등록자 정보'|'등록정보'|'사고정보'|'차량정보', level=3)` |
 
-## 4. 향후 시나리오
+## 4. UI 입력 모델
+
+홈 화면의 `HRP` 실행 카드에는 아래 입력이 있다.
+
+- 브라우저 실행 모드 (`headed` / `headless`, 기본값 `headed`)
+- 아이디 (현장출동 홈페이지 로그인 ID, 7자 이상)
+- 비밀번호 (`password` 타입)
+
+추가 규칙:
+
+- 브라우저 실행 모드 help_text: `headed` 를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열린다.
+- SMS 인증번호는 Run 폼이 아니라 Run 화면 OTP 패널에서 제출한다.
+
+## 5. 향후 시나리오
 
 현장출동 본 업무 시나리오는 추후 모듈로 하나씩 추가한다. 모듈을 추가할 때는 이 문서와 `app/systems/hrp/manifest.yaml`을 함께 갱신한다.

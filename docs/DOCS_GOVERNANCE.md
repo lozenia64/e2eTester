@@ -45,6 +45,8 @@
 4. 코드가 읽는 환경변수가 `README.md` 또는 `.env.example` 에 문서화
 5. 기본 Gemini 모델 체인(`app/ai/gemini_models.py` 상수)이 `README.md`/`.env.example` 와 일치
 
+가드는 `module_id` 존재·API·env 등 **기계적으로 대조 가능한 항목만** 검증한다. manifest 의 `order`/`depends_on`/`timeout_seconds`/`workflow_step`/`run_form` 필드와 시나리오 문서 본문 일치는 PR 체크리스트(§4)에서 수동 대조한다.
+
 실행:
 
 ```bash
@@ -61,6 +63,7 @@ python3 scripts/check_docs_consistency.py --verbose  # 통과 항목 상세까�
 코드를 바꾼 PR은 머지 전에 아래를 만족해야 한다. (`.github/pull_request_template.md` 에 동일 체크리스트가 들어 있다.)
 
 - [ ] `python3 scripts/check_docs_consistency.py` 가 통과한다(로컬/CI).
+- [ ] 해당 변경 시 `python3 -m pytest tests/` 가 통과한다.
 - [ ] 시스템 `manifest.yaml` 을 추가·변경했다면, 짝이 되는 `docs/scenarios/{code}.md` 를 같은 PR에서 갱신했다(모듈 추가/순서/의존성/`workflow_step`/타임아웃).
 - [ ] 사이트 흐름·selector 를 바꿨다면, 해당 시나리오 문서의 단계 설명을 갱신했다.
 - [ ] API 라우트를 추가·변경·삭제했다면, `E2E_ARCHITECTURE.md` §5.2 를 갱신했다.

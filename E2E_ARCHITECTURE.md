@@ -61,6 +61,7 @@ FastAPI app
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
 - 모듈 로그와 상태 이벤트는 repository를 통해 WebSocket에 전파된다.
+- Run REST/WS payload는 `RunView.dump` 프로젝션을 거치며, 일일 Run 보존(`RunRetentionScheduler`)·운영 스냅샷(`OpsService`)은 `main.py` lifespan 에서 기동된다.
 
 ## 4. 현재 폴더 구조
 
@@ -69,9 +70,12 @@ e2eTester/
   app/
     ai/
       failure_analyzer.py
+      gemini_client.py
       gemini_http.py
       gemini_models.py
+      gemini_schemas.py
     api/
+      dependencies.py              # FastAPI DI providers (get_run_service, get_app_settings, …)
       routes_dashboard.py
       routes_runs.py
       routes_schedules.py
@@ -90,7 +94,11 @@ e2eTester/
     core/
       enums.py
       env_utils.py
+      logging.py                   # structlog 설정
       models.py
+      ops_buffer.py                # 운영 이벤트 링 버퍼
+      settings.py                  # E2ESettings (pydantic-settings SSOT)
+      status_labels.py             # UI 상태 라벨·터미널 outcome·보존 purge 대상
     execution/
       gateway.py                 # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
       composite_gateway.py       # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
@@ -114,6 +122,10 @@ e2eTester/
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
+      run_actor.py               # Run/Suite/예약 실행자 이름 해석(관리자 이력·통계)
+      ops_service.py             # OpsService: Run/Suite/스케줄·큐 운영 스냅샷
+      stats_charts.py            # Plotly 사용량 통계 차트 JSON 빌더
+      suite_view.py              # Suite ACL·비관리자 steps 필터
       suite_service.py           # SuiteService: 이벤트 기반 Saga(RunFinished 구동, 폴링 없음)
       stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
     registry/
@@ -121,6 +133,7 @@ e2eTester/
     scheduling/
       cron.py
       scheduler.py
+      run_retention.py           # RunRetentionScheduler/Service: 일일 ERROR·CANCELLED 정리
     runner/
       artifact_manager.py
       screenshot.py              # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
@@ -202,6 +215,8 @@ e2eTester/
       sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
       sqlite_user_repository.py    # SQLite 사용자 어댑터(기본 사용)
       sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
+      user_repository.py         # UserRepositoryPort(Protocol)
+      module_settings_repository.py # ModuleSettingsRepositoryPort(Protocol)
       run_control_store.py       # 인메모리 Run 제어 상태 어댑터
       run_input_store.py         # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
       suite_control_store.py     # 인메모리 Suite 제어 상태 어댑터
@@ -225,12 +240,16 @@ e2eTester/
           users.html
           modules.html
           stats.html
+          ops.html
       static/
         app.css
         app.js
+        admin-ops.js
+        admin-stats.js
     main.py
   docs/
     DOCS_GOVERNANCE.md           # 문서 SSOT 매트릭스·PR 체크리스트
+    otp_relay.md                 # OTP SMS 중계기(안드로이드) 구성 가이드
     scenarios/
       hom.md
       mhm.md
@@ -240,6 +259,22 @@ e2eTester/
       chbot.md
   scripts/
     check_docs_consistency.py    # 문서-코드 정합성 가드
+  tests/                         # pytest (도메인·설정·ops·retention 등, 브라우저 없음)
+    test_run_aggregate.py
+    test_run_queue.py
+    test_run_retention.py
+    test_settings.py
+    test_ops_service.py
+    test_ops_buffer.py
+    test_stats_service.py
+    test_stats_charts.py
+    test_suite_control_store.py
+    test_gemini_client.py
+    test_gemini_schemas.py
+    test_email_attachment_selection.py
+    test_email_inline_images.py
+    test_otp_inbound.py
+    test_env_utils.py
   .github/
     workflows/
       docs-consistency.yml       # 정합성 가드 CI
@@ -259,12 +294,15 @@ e2eTester/
 현재 구현:
 
 - `app/api/routes_dashboard.py`
+- `app/api/dependencies.py`
 - `app/web/templates/base.html`
 - `app/web/templates/index.html`
 - `app/web/templates/run.html`
 - `app/web/templates/suite.html`
 - `app/web/static/app.js`
 - `app/web/static/app.css`
+- `app/web/templates/admin/ops.html`, `app/web/static/admin-ops.js` (운영 관측)
+- `app/web/templates/admin/stats.html`, `app/web/static/admin-stats.js` (사용량 통계 차트)
 
 역할:
 
@@ -367,6 +405,10 @@ e2eTester/
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
 - `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사). Run 본문은 `RunView` 프로젝션을 거친다.
 - `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다(와이어 필드를 명시 선언 → 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않음). 현재 노출 형태는 기존 `run.model_dump` 와 1:1 동일.
+- `suite_view.py`(`suite_view.py`): 비관리자 Suite 요청·응답 ACL — `User.allowed_system_codes` 로 `resolve_suite_request_for_user` 가 선택 시스템을 제한하고, `filter_suite_for_user`/`filter_suite_event_for_user` 가 REST·WS 에서 허용되지 않은 `SuiteStep` 을 숨긴다.
+- `OpsService`(`ops_service.py`): 관리자 운영 관측(`/admin/ops`)용 Run/Suite/스케줄·실행 큐·최근 운영 이벤트 스냅샷.
+- `stats_charts.py`(`stats_charts.py`): `StatsService` 가 사용하는 Plotly 차트 JSON 빌더(사용량 통계 HTML).
+- `run_actor.py`(`run_actor.py`): Run/Suite/예약의 실행자(사용자) 이름·이메일 해석 — 관리자 이력·통계 표시용.
 - `EventBus` 구독자: AI 실패 분석·종료 메일(부수 관심사).
 - `summarize_run`(`run_summary.py`): 최근 Run 요약 뷰.
 
@@ -385,8 +427,10 @@ Run:
 - `PENDING`
 - `RUNNING`
 - `WAITING_INPUT`
-- `PASSED`
-- `FAILED`
+- `PASSED` (정상)
+- `ANOMALY` (이상징후 — 모듈 실패·비정상 종료)
+- `ERROR` (점검실패 — 도구/환경 오류)
+- `FAILED` (레거시 SQLite 호환; 신규 기록에는 사용하지 않으며 UI 에서는 `ANOMALY` 와 동일 라벨)
 - `CANCELLED` (사용자가 취소한 Run)
 
 Module:
@@ -396,7 +440,9 @@ Module:
 - `RUNNING`
 - `WAITING_INPUT`
 - `PASSED`
-- `FAILED`
+- `ANOMALY`
+- `ERROR`
+- `FAILED` (레거시 호환; UI 에서는 `ANOMALY` 와 동일 라벨)
 - `BLOCKED`
 - `SKIPPED`
 - `CANCELLED` (Run 취소로 실행되지 않거나 중단된 모듈)
@@ -431,20 +477,28 @@ Suite:
 - `RUNNING`
 - `WAITING_INPUT`
 - `PASSED` (선택된 시스템이 모두 통과)
-- `FAILED` (선택된 시스템 중 하나라도 실패)
+- `ANOMALY` (선택된 시스템 중 하나라도 이상징후 종료)
+- `ERROR` (선택된 시스템 중 하나라도 점검실패 종료)
+- `FAILED` (레거시 호환)
+- `SKIPPED` (전체 Suite 가 선택 제외된 경우 등)
 - `CANCELLED`
 
 SuiteStep (시스템 단위):
 
 - 위 상태 + `SKIPPED` (사용자가 시스템 선택에서 제외)
 
+### 5.3.2 인증·ACL
+
+- `User.allowed_system_codes`(`app/auth/models.py`): 비관리자가 실행·조회할 수 있는 시스템 코드 목록. 관리자는 전체 접근.
+- 홈 대시보드(`routes_dashboard.py`): 비관리자에게는 허용된 시스템 카드만 노출.
+- Suite 생성·조회(`suite_view.py`): `resolve_suite_request_for_user` 가 `selected_system_codes` 를 허용 범위로 제한하고, REST/WS 는 `filter_suite_for_user`/`filter_suite_event_for_user` 로 허용되지 않은 step 을 숨긴다.
+- 관리자 사용자 ACL: `PUT /api/admin/users/{user_id}/systems` 로 허용 시스템 목록 변경.
+
 ### 5.4 Registry 계층
 
 현재 구현:
 
-- `app/registry/loader.py` (`app/systems/*/manifest.yaml` 글롭 로드)
-- `app/systems/hom/manifest.yaml`
-- `app/systems/mhm/manifest.yaml`
+- `app/registry/loader.py` (`app/systems/*/manifest.yaml` 글롭 로드 — 기본 포함 6시스템: `hom`, `mhm`, `fp`, `hrp`, `hwtc`, `chbot`)
 
 역할:
 
@@ -524,6 +578,8 @@ manifest 에 들어 있는 정보:
 - `app/storage/sqlite_run_log_store.py` — **기본 사용되는** 모듈 로그 append-only SQLite 어댑터(`run_logs` 테이블, 한 줄당 한 행, `ORDER BY id` 로 입력 순서 복원)
 - `app/storage/run_repository.py` / `suite_repository.py` / `schedule_repository.py` — 인메모리 어댑터(단위 테스트·영속 불요 실행용)
 - `app/storage/run_log_store.py` — `InMemoryRunLogStore`(로그 스트림 인메모리 어댑터)
+- `app/storage/user_repository.py` / `module_settings_repository.py` — `UserRepositoryPort`/`ModuleSettingsRepositoryPort`(Protocol)
+- `app/storage/sqlite_user_repository.py` / `sqlite_module_settings_repository.py` — SQLite 어댑터(기본 사용, 사용자·모듈별 수동 업무 시간)
 
 역할:
 
@@ -543,9 +599,11 @@ manifest 에 들어 있는 정보:
 
 - `app/events/subscribers/failure_analysis.py` (`FailureAnalysisSubscriber` — `EventBus` 의 `RunFinished` 구독자)
 - `app/ai/failure_analyzer.py` (`GeminiFailureAnalyzer`)
+- `app/ai/gemini_client.py` (Gemini API 클라이언트·모델 체인 호출)
+- `app/ai/gemini_schemas.py` (실패 분석·메일 콘텐츠용 Pydantic 스키마)
 - `app/ai/gemini_http.py` (Gemini HTTP 호출 / SSL 검증 모드 처리)
 - `app/ai/gemini_models.py` (기본 Gemini 모델 체인 `DEFAULT_GEMINI_MODEL_CHAIN`·`GEMINI_MODELS` 파싱/검증)
-- `app/core/env_utils.py` (환경 변수·`.env` 우선순위 해석)
+- `app/core/settings.py` (`E2ESettings`, pydantic-settings — 환경변수·기본값 SSOT; `env_utils.py` 는 레거시 호환 주석만 유지)
 
 역할:
 
@@ -571,7 +629,7 @@ manifest 에 들어 있는 정보:
 역할:
 
 - **부수 관심사로 분리됨**: 오케스트레이터/Suite 서비스가 인라인으로 보내지 않고, `RunFinished`/`SuiteFinished` 이벤트를 받은 구독자가 발송 정책(취소 Run 제외, Suite 소속 Run 은 통합 메일로 갈음)까지 소유한다.
-- Run이 최종 종료(`PASSED`/`FAILED`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
+- Run이 터미널 종료(`PASSED`/`ANOMALY`/`ERROR`; 레거시 `FAILED` 포함)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
 - **Suite** 가 최종 종료되면 포함 시스템 Run 결과를 통합한 메일 1통을 보낸다. `SKIPPED` 시스템은 제외로 표시한다.
 - 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, `E2E_EMAIL_RECIPIENTS_FP`, … — 여러 명은 `|` 로 구분)
 - Suite 메일 수신자는 실행된(선택된) 시스템들의 수신자 집합을 합친다.
@@ -591,6 +649,7 @@ manifest 에 들어 있는 정보:
 - `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
 - `app/storage/sqlite_schedule_repository.py` (`SqliteScheduleRepository`, 기본 사용) / `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 예약 저장소. SQLite 어댑터는 `ScheduleRepositoryPort` 를 구현해 재시작 후에도 예약이 남는다.
 - `app/api/routes_schedules.py` — 예약 REST API.
+- `app/scheduling/run_retention.py` (`RunRetentionScheduler`, `RunRetentionService`) — 매일 cron 시각에 **당일 00:00(기준 타임존) 이전**의 `ERROR`·`CANCELLED` Run 을 삭제한다. `PASSED`·`ANOMALY` 는 유지. 환경변수 `E2E_RUN_RETENTION_ENABLED`/`E2E_RUN_RETENTION_CRON`(의미·기본값은 `README.md`, 예시는 `.env.example`).
 
 역할:
 
@@ -600,7 +659,7 @@ manifest 에 들어 있는 정보:
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
-- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
+- **이력 비교**: Run 이 터미널 종료(`PASSED`/`ANOMALY`/`ERROR`; 레거시 `FAILED` 포함)되면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
 
 제약:
 
@@ -714,8 +773,8 @@ Suite (`/ws/suites/{suite_id}`):
 
 현재 payload 특징:
 
-- Run 이벤트는 `run.model_dump(mode="json")`
-- Suite 이벤트는 `suite.model_dump(mode="json")` (+ `step_index` 등 보조 필드)
+- Run 이벤트·REST 응답 본문은 `RunView.dump(run)` (`app/orchestrator/run_view.py`; `RunEventPublisher`, `ws_runs.py`, `routes_runs.py` 경유) — 엔티티 `run.model_dump` 직접 사용 안 함
+- Suite 이벤트는 `suite.model_dump(mode="json")` (+ `step_index` 등 보조 필드). 비관리자에게는 `suite_view.filter_suite_event_for_user` 로 허용되지 않은 step 이 필터링될 수 있음
 - Module 이벤트는 `module` 스냅샷과 `run_status`
 - Log 이벤트는 `module_id`, `message`
 
