@@ -23,15 +23,21 @@ class RunPlanner:
     ) -> tuple[dict[str, str], list[str]]:
         """입력값을 정규화하고, 실행 모듈 선택과 인증 수단을 검증한다."""
         sanitized_input = {key: value.strip() for key, value in (input_data or {}).items()}
-        resolved_selected_module_ids = self._resolve_selected_module_ids(system, selected_module_ids)
+        resolved_selected_module_ids = self._resolve_selected_module_ids(
+            system, selected_module_ids
+        )
         if system.supported_auth_methods:
             auth_method = sanitized_input.get("auth_method") or system.supported_auth_methods[0]
             sanitized_input["auth_method"] = auth_method
             if auth_method not in system.supported_auth_methods:
-                raise ValueError(f"{system.name}에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다.")
+                raise ValueError(
+                    f"{system.name}에서는 휴대폰인증과 카카오인증만 실행할 수 있습니다."
+                )
         return sanitized_input, resolved_selected_module_ids
 
-    def build_run_modules(self, system: SystemDefinition, selected_module_ids: list[str]) -> list[RunModule]:
+    def build_run_modules(
+        self, system: SystemDefinition, selected_module_ids: list[str]
+    ) -> list[RunModule]:
         selected_set = set(selected_module_ids)
         run_modules: list[RunModule] = []
         for module in self.ordered_modules(system):
@@ -81,7 +87,9 @@ class RunPlanner:
             raise ValueError("최소 1개 이상의 모듈을 선택해야 합니다.")
 
         module_name_by_id = {module.module_id: module.name for module in ordered_modules}
-        unknown_module_ids = [module_id for module_id in selected_values if module_id not in module_name_by_id]
+        unknown_module_ids = [
+            module_id for module_id in selected_values if module_id not in module_name_by_id
+        ]
         if unknown_module_ids:
             joined = ", ".join(unknown_module_ids)
             raise ValueError(f"알 수 없는 모듈이 선택되었습니다: {joined}")
@@ -96,12 +104,15 @@ class RunPlanner:
             ]
             if not missing_dependencies:
                 continue
-            missing_names = ", ".join(module_name_by_id[dependency] for dependency in missing_dependencies)
+            missing_names = ", ".join(
+                module_name_by_id[dependency] for dependency in missing_dependencies
+            )
             dependency_errors.append(f"{module.name}: {missing_names}")
 
         if dependency_errors:
             raise ValueError(
-                "선행 모듈이 선택되지 않아 실행할 수 없는 조합입니다. " + " / ".join(dependency_errors)
+                "선행 모듈이 선택되지 않아 실행할 수 없는 조합입니다. "
+                + " / ".join(dependency_errors)
             )
 
         return [module.module_id for module in ordered_modules if module.module_id in selected_set]

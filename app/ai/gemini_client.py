@@ -35,7 +35,9 @@ def create_gemini_client(*, api_key: str, verify_ssl: bool = True) -> genai.Clie
     return genai.Client(api_key=api_key, http_options=http_options)
 
 
-def build_user_contents(prompt: str, extra_parts: Sequence[dict] | None = None) -> list[types.Content]:
+def build_user_contents(
+    prompt: str, extra_parts: Sequence[dict] | None = None
+) -> list[types.Content]:
     parts: list[types.Part] = [types.Part.from_text(text=prompt)]
     for part in extra_parts or ():
         if "text" in part:

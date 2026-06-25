@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.core.settings import get_settings
-
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 PC_VIEWPORT: Final[dict[str, int]] = {"width": 1339, "height": 1038}
@@ -22,12 +22,10 @@ MOBILE_DEVICE_NAME: Final[str] = "iPhone 14 Pro"
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 
 # Playwright MCP(@playwright/mcp) persistent profile root — %LOCALAPPDATA%/ms-playwright-mcp
-PLAYWRIGHT_MCP_PROFILES_ROOT: Final[Path] = Path(
-    os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")
-) / "ms-playwright-mcp"
-PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE: Final[str] = (
-    "--disable-blink-features=AutomationControlled"
+PLAYWRIGHT_MCP_PROFILES_ROOT: Final[Path] = (
+    Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ms-playwright-mcp"
 )
+PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE: Final[str] = "--disable-blink-features=AutomationControlled"
 
 # Playwright 가 Chrome 실행 시 끄는 기본 feature 들. 로컬 네트워크 차단 해제를 위해
 # --disable-features 를 직접 넘기면 Chromium 은 마지막 하나만 인식하므로, Playwright
@@ -118,7 +116,9 @@ def resolve_playwright_mcp_user_data_dir(
 
     ms-playwright-mcp/mcp-{channel}-{sha256(workspace)[:7]}
     """
-    override = get_settings().playwright_mcp_profile_dir or os.environ.get("E2E_PLAYWRIGHT_MCP_PROFILE_DIR")
+    override = get_settings().playwright_mcp_profile_dir or os.environ.get(
+        "E2E_PLAYWRIGHT_MCP_PROFILE_DIR"
+    )
     if override:
         target = Path(override).expanduser()
     else:
@@ -157,7 +157,9 @@ def launch_legacy_persistent_browser_context(
         "args": [f"--disable-features={disabled_features}"],
     }
     try:
-        print(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({user_data_dir})")
+        print(
+            f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({user_data_dir})"
+        )
         return playwright.chromium.launch_persistent_context(
             str(user_data_dir),
             channel=PREFERRED_BROWSER_CHANNEL,

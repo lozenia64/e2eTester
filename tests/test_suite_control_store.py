@@ -2,28 +2,23 @@
 
 from __future__ import annotations
 
-import asyncio
-
-from app.storage.suite_control_store import InMemorySuiteControlStore
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
+from app.storage.suite_control_store import InMemorySuiteControlStore
 
 
-def _exercise(store) -> None:
-    async def scenario():
-        assert await store.is_cancel_requested("suite_1") is False
-        await store.set_cancel_requested("suite_1")
-        assert await store.is_cancel_requested("suite_1") is True
-        # 다른 Suite 는 영향받지 않는다.
-        assert await store.is_cancel_requested("suite_2") is False
-        await store.delete("suite_1")
-        assert await store.is_cancel_requested("suite_1") is False
-
-    asyncio.run(scenario())
+async def _exercise(store) -> None:
+    assert await store.is_cancel_requested("suite_1") is False
+    await store.set_cancel_requested("suite_1")
+    assert await store.is_cancel_requested("suite_1") is True
+    # 다른 Suite 는 영향받지 않는다.
+    assert await store.is_cancel_requested("suite_2") is False
+    await store.delete("suite_1")
+    assert await store.is_cancel_requested("suite_1") is False
 
 
-def test_in_memory_suite_control_store():
-    _exercise(InMemorySuiteControlStore())
+async def test_in_memory_suite_control_store():
+    await _exercise(InMemorySuiteControlStore())
 
 
-def test_sqlite_suite_control_store(tmp_path):
-    _exercise(SqliteSuiteControlStore(tmp_path / "suite_control.db"))
+async def test_sqlite_suite_control_store(tmp_path):
+    await _exercise(SqliteSuiteControlStore(tmp_path / "suite_control.db"))

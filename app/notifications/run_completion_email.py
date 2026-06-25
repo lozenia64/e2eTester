@@ -16,6 +16,13 @@ from email.utils import parseaddr
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
+
 from app.ai.gemini_client import (
     build_user_contents,
     create_gemini_client,
@@ -25,13 +32,14 @@ from app.ai.gemini_http import (
     gemini_ssl_mode_detail,
     load_gemini_transport_settings,
 )
-from app.ai.gemini_schemas import RunReportContent, SuiteReportContent
 from app.ai.gemini_models import (
     api_key_looks_valid,
     gemini_models_look_valid,
     resolve_gemini_models,
     resolve_gemini_models_source,
 )
+from app.ai.gemini_schemas import RunReportContent, SuiteReportContent
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.env_utils import (
     DEFAULT_ENV_FILE_PATH,
     env_flag,
@@ -39,7 +47,6 @@ from app.core.env_utils import (
     resolve_env_value,
     resolve_env_with_source,
 )
-from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.models import Run, SuiteRun
 from app.core.status_labels import (
     MODULE_ANOMALY_STATUSES,
@@ -63,6 +70,7 @@ MAX_INLINE_EMAIL_TOTAL_BYTES = 16_000_000
 MAX_GEMINI_ATTACHMENT_BYTES = 7_500_000
 MAX_GEMINI_INLINE_IMAGE_BYTES = 2_500_000
 MAX_GEMINI_LOG_BYTES = 180_000
+
 
 @dataclass(frozen=True)
 class EmailNotificationStatus:
@@ -96,16 +104,20 @@ class EmailNotificationConfig:
     max_gemini_log_bytes: int = MAX_GEMINI_LOG_BYTES
 
     @classmethod
-    def from_env(cls, system_codes: list[str]) -> "EmailNotificationConfig | None":
+    def from_env(cls, system_codes: list[str]) -> EmailNotificationConfig | None:
         dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
         if not env_flag("E2E_EMAIL_ENABLED", dotenv_values, default=False):
             return None
 
         gmail_account = (resolve_env_value("E2E_EMAIL_GMAIL_ACCOUNT", dotenv_values) or "").strip()
-        gmail_app_password = (resolve_env_value("E2E_EMAIL_GMAIL_APP_PASSWORD", dotenv_values) or "").strip()
+        gmail_app_password = (
+            resolve_env_value("E2E_EMAIL_GMAIL_APP_PASSWORD", dotenv_values) or ""
+        ).strip()
         recipients_by_system, recipient_errors = _resolve_recipient_map(system_codes, dotenv_values)
         operator_recipients, _operator_errors = _resolve_operator_recipients(dotenv_values)
-        if not _gmail_account_looks_valid(gmail_account) or not _gmail_app_password_looks_valid(gmail_app_password):
+        if not _gmail_account_looks_valid(gmail_account) or not _gmail_app_password_looks_valid(
+            gmail_app_password
+        ):
             return None
         if recipient_errors:
             return None
@@ -113,7 +125,9 @@ class EmailNotificationConfig:
         gemini_models = tuple(resolve_gemini_models())
         gemini_api_key = (resolve_env_value("GEMINI_API_KEY", dotenv_values) or "").strip()
         transport_settings = load_gemini_transport_settings(dotenv_values)
-        gemini_enabled = api_key_looks_valid(gemini_api_key) and gemini_models_look_valid(list(gemini_models))
+        gemini_enabled = api_key_looks_valid(gemini_api_key) and gemini_models_look_valid(
+            list(gemini_models)
+        )
         return cls(
             gmail_account=gmail_account,
             gmail_app_password=gmail_app_password,
@@ -155,8 +169,12 @@ class EmailNotificationConfig:
                 ),
             )
 
-        gmail_account, gmail_account_source = resolve_env_with_source("E2E_EMAIL_GMAIL_ACCOUNT", dotenv_values)
-        gmail_app_password, gmail_app_password_source = resolve_env_with_source("E2E_EMAIL_GMAIL_APP_PASSWORD", dotenv_values)
+        gmail_account, gmail_account_source = resolve_env_with_source(
+            "E2E_EMAIL_GMAIL_ACCOUNT", dotenv_values
+        )
+        gmail_app_password, gmail_app_password_source = resolve_env_with_source(
+            "E2E_EMAIL_GMAIL_APP_PASSWORD", dotenv_values
+        )
         recipients_by_system, recipient_errors = _resolve_recipient_map(system_codes, dotenv_values)
         errors: list[str] = []
         if not _gmail_account_looks_valid(gmail_account or ""):
@@ -175,8 +193,12 @@ class EmailNotificationConfig:
             )
 
         gemini_models = tuple(resolve_gemini_models())
-        gemini_api_key, gemini_api_key_source = resolve_env_with_source("GEMINI_API_KEY", dotenv_values)
-        gemini_enabled = api_key_looks_valid(gemini_api_key or "") and gemini_models_look_valid(list(gemini_models))
+        gemini_api_key, gemini_api_key_source = resolve_env_with_source(
+            "GEMINI_API_KEY", dotenv_values
+        )
+        gemini_enabled = api_key_looks_valid(gemini_api_key or "") and gemini_models_look_valid(
+            list(gemini_models)
+        )
         models_label = " -> ".join(gemini_models)
         models_source = resolve_gemini_models_source()
         if not gemini_enabled:
@@ -259,13 +281,65 @@ class GeminiPromptSelection:
     included_labels: list[str]
 
 
+EMAIL_SEND_MAX_ATTEMPTS = 3
+
+
+def _is_transient_smtp_error(exc: BaseException) -> bool:
+    """일시적(재시도 가치 있는) SMTP/네트워크 오류만 True.
+
+    인증 실패·수신/발신 거부 같은 영구 오류는 재시도해도 동일하게 실패하므로 제외한다.
+    (모든 smtplib 예외는 OSError 하위라, 광범위 OSError 매칭은 인증 실패까지 재시도해 위험.)
+    """
+    if isinstance(
+        exc,
+        (
+            smtplib.SMTPAuthenticationError,
+            smtplib.SMTPRecipientsRefused,
+            smtplib.SMTPSenderRefused,
+            smtplib.SMTPNotSupportedError,
+        ),
+    ):
+        return False
+    return isinstance(
+        exc,
+        (
+            smtplib.SMTPConnectError,
+            smtplib.SMTPServerDisconnected,
+            smtplib.SMTPHeloError,
+            TimeoutError,
+            ConnectionError,
+        ),
+    )
+
+
+def _log_email_send_retry(retry_state) -> None:
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    sleep_for = getattr(retry_state.next_action, "sleep", 0.0) or 0.0
+    print(
+        f"[email] SMTP 전송 일시 실패 — 재시도 "
+        f"{retry_state.attempt_number}/{EMAIL_SEND_MAX_ATTEMPTS} ({sleep_for:.1f}s 후): {exc}"
+    )
+
+
 class GmailEmailSender:
     def __init__(self, config: EmailNotificationConfig) -> None:
         self._config = config
 
+    @retry(
+        retry=retry_if_exception(_is_transient_smtp_error),
+        stop=stop_after_attempt(EMAIL_SEND_MAX_ATTEMPTS),
+        wait=wait_exponential_jitter(initial=1, max=8),
+        before_sleep=_log_email_send_retry,
+        reraise=True,
+    )
     def send(self, message: Message, recipients: list[str]) -> None:
-        with smtplib.SMTP_SSL(self._config.smtp_host, self._config.smtp_port, timeout=self._config.timeout_seconds) as smtp:
-            smtp.login(self._config.gmail_account, self._normalize_password(self._config.gmail_app_password))
+        with smtplib.SMTP_SSL(
+            self._config.smtp_host, self._config.smtp_port, timeout=self._config.timeout_seconds
+        ) as smtp:
+            smtp.login(
+                self._config.gmail_account,
+                self._normalize_password(self._config.gmail_app_password),
+            )
             smtp.send_message(message, to_addrs=recipients)
 
     @staticmethod
@@ -321,7 +395,9 @@ def _build_email_message(
             subtype = mime_type.split("/", 1)[1]
             img = MIMEImage(image_bytes, _subtype=subtype)
             img.add_header("Content-ID", f"<{inline.cid}>")
-            img.add_header("Content-Disposition", "inline", filename=inline.artifact.attachment_name)
+            img.add_header(
+                "Content-Disposition", "inline", filename=inline.artifact.attachment_name
+            )
             related.attach(img)
         root_body: MIMEMultipart = related
     else:
@@ -578,7 +654,9 @@ class RunCompletionEmailBuilder:
                 lines.append(f"- 복구됨: {', '.join(comparison['recovered'])}")
             if comparison["still_failing"]:
                 lines.append(f"- 계속 실패: {', '.join(comparison['still_failing'])}")
-            if not (comparison["newly_failed"] or comparison["recovered"] or comparison["still_failing"]):
+            if not (
+                comparison["newly_failed"] or comparison["recovered"] or comparison["still_failing"]
+            ):
                 lines.append("- 모듈 상태 변화 없음")
         attachment_summary = context["email_attachment_summary"]
         lines.extend(
@@ -607,7 +685,7 @@ class RunCompletionEmailNotifier:
         self._sender = GmailEmailSender(config)
 
     @classmethod
-    def from_env(cls, system_codes: list[str]) -> "RunCompletionEmailNotifier | None":
+    def from_env(cls, system_codes: list[str]) -> RunCompletionEmailNotifier | None:
         config = EmailNotificationConfig.from_env(system_codes)
         if config is None:
             return None
@@ -649,7 +727,9 @@ class RunCompletionEmailNotifier:
         artifacts = self._collect_artifacts(run)
         email_selection = self._select_email_content(run, artifacts)
         gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
-        message = self._builder.build(run, recipients, email_selection, gemini_selection, operator_alert=True)
+        message = self._builder.build(
+            run, recipients, email_selection, gemini_selection, operator_alert=True
+        )
         self._sender.send(message, recipients)
         print(
             f"[email] run={run.run_id} operator_recipients={len(recipients)} "
@@ -669,7 +749,9 @@ class RunCompletionEmailNotifier:
         artifacts = self._collect_artifacts_for_runs(ordered_runs)
         email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts)
         gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
-        message = self._builder.build_suite(suite, ordered_runs, recipients, email_selection, gemini_selection)
+        message = self._builder.build_suite(
+            suite, ordered_runs, recipients, email_selection, gemini_selection
+        )
         self._sender.send(message, recipients)
         print(
             f"[email] suite={suite.suite_id} recipients={len(recipients)} "
@@ -685,7 +767,9 @@ class RunCompletionEmailNotifier:
 
         ordered_runs = self._order_runs_for_suite(suite, runs)
         artifacts = self._collect_artifacts_for_runs(ordered_runs)
-        email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts, include_logs=True)
+        email_selection = self._select_suite_email_content(
+            suite, ordered_runs, artifacts, include_logs=True
+        )
         gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
         message = self._builder.build_suite(
             suite, ordered_runs, recipients, email_selection, gemini_selection, operator_alert=True
@@ -736,9 +820,7 @@ class RunCompletionEmailNotifier:
         include_logs: bool = False,
     ) -> EmailContentSelection:
         issue_run_ids = {
-            run.run_id
-            for run in runs
-            if run.status in RUN_ANOMALY_STATUSES | RUN_ERROR_STATUSES
+            run.run_id for run in runs if run.status in RUN_ANOMALY_STATUSES | RUN_ERROR_STATUSES
         }
         wanted_logs = include_logs or suite.status in SUITE_ANOMALY_STATUSES | SUITE_ERROR_STATUSES
         module_meta = _module_status_meta_for_runs(runs)
@@ -760,7 +842,10 @@ class RunCompletionEmailNotifier:
                     inline_screenshots.append(inline)
                 omitted.extend(new_omitted)
             elif artifact.kind == "log" and wanted_logs and artifact.run_id in issue_run_ids:
-                if attachment_total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
+                if (
+                    attachment_total_bytes + artifact.size_bytes
+                    > self._config.max_email_attachment_bytes
+                ):
                     omitted.append(
                         OmittedArtifact(
                             relative_path=artifact.relative_path,
@@ -779,14 +864,20 @@ class RunCompletionEmailNotifier:
             attachment_total_bytes=attachment_total_bytes,
         )
 
-    def _select_gemini_prompt_inputs_for_artifacts(self, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
+    def _select_gemini_prompt_inputs_for_artifacts(
+        self, artifacts: list[RunArtifact]
+    ) -> GeminiPromptSelection:
         parts: list[dict] = []
         omitted: list[OmittedArtifact] = []
         included_labels: list[str] = []
         total_bytes = 0
 
         for artifact in artifacts:
-            system_prefix = f"system_code={artifact.system_code} run_id={artifact.run_id} " if artifact.system_code else ""
+            system_prefix = (
+                f"system_code={artifact.system_code} run_id={artifact.run_id} "
+                if artifact.system_code
+                else ""
+            )
             label = (
                 f"{system_prefix}seq={artifact.seq} module_id={artifact.module_id} "
                 f"module_name={artifact.module_name} order={artifact.order} path={artifact.relative_path}"
@@ -833,7 +924,9 @@ class RunCompletionEmailNotifier:
                 continue
             log_text = artifact.path.read_text(encoding="utf-8", errors="ignore")
             if len(log_text.encode("utf-8")) > self._config.max_gemini_log_bytes:
-                log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode("utf-8", errors="ignore")
+                log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode(
+                    "utf-8", errors="ignore"
+                )
                 log_text = "[truncated_tail]\n" + log_text.lstrip()
             parts.append({"text": f"[execution_log] {label}\n{log_text}"})
             included_labels.append(f"log:{artifact.relative_path}")
@@ -872,7 +965,9 @@ class RunCompletionEmailNotifier:
                 )
         return collected
 
-    def _select_email_content(self, run: Run, artifacts: list[RunArtifact]) -> EmailContentSelection:
+    def _select_email_content(
+        self, run: Run, artifacts: list[RunArtifact]
+    ) -> EmailContentSelection:
         wanted_kinds = _wanted_email_kinds(run)
         module_meta = _module_status_meta_for_run(run)
         inline_screenshots: list[InlineScreenshot] = []
@@ -893,7 +988,10 @@ class RunCompletionEmailNotifier:
                     inline_screenshots.append(inline)
                 omitted.extend(new_omitted)
             elif artifact.kind == "log" and "log" in wanted_kinds:
-                if attachment_total_bytes + artifact.size_bytes > self._config.max_email_attachment_bytes:
+                if (
+                    attachment_total_bytes + artifact.size_bytes
+                    > self._config.max_email_attachment_bytes
+                ):
                     omitted.append(
                         OmittedArtifact(
                             relative_path=artifact.relative_path,
@@ -946,7 +1044,9 @@ class RunCompletionEmailNotifier:
         )
         return inline, inline_total_bytes + artifact.size_bytes, omitted
 
-    def _select_gemini_prompt_inputs(self, run: Run, artifacts: list[RunArtifact]) -> GeminiPromptSelection:
+    def _select_gemini_prompt_inputs(
+        self, run: Run, artifacts: list[RunArtifact]
+    ) -> GeminiPromptSelection:
         # 메일 첨부와 달리 Gemini 입력에는 성공/실패와 무관하게 스크린샷과 로그를 모두 제공한다.
         # 보고서 품질이 화면·로그 분석에 의존하기 때문이다.
         parts: list[dict] = []
@@ -1001,7 +1101,9 @@ class RunCompletionEmailNotifier:
                 continue
             log_text = artifact.path.read_text(encoding="utf-8", errors="ignore")
             if len(log_text.encode("utf-8")) > self._config.max_gemini_log_bytes:
-                log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode("utf-8", errors="ignore")
+                log_text = log_text.encode("utf-8")[-self._config.max_gemini_log_bytes :].decode(
+                    "utf-8", errors="ignore"
+                )
                 log_text = "[truncated_tail]\n" + log_text.lstrip()
             parts.append({"text": f"[execution_log] {label}\n{log_text}"})
             included_labels.append(f"log:{artifact.relative_path}")
@@ -1106,8 +1208,12 @@ def _serialize_run_for_suite_report(run: Run) -> dict:
                     "module_id": module.module_id,
                     "module_name": module.name,
                     "message": module.message,
-                    "analysis_summary": module.failure_analysis.user_summary if module.failure_analysis else "",
-                    "recommended_action": module.failure_analysis.recommended_action if module.failure_analysis else "",
+                    "analysis_summary": module.failure_analysis.user_summary
+                    if module.failure_analysis
+                    else "",
+                    "recommended_action": module.failure_analysis.recommended_action
+                    if module.failure_analysis
+                    else "",
                 }
             )
     module_passed = sum(1 for module in modules if module["status"] == ModuleStatus.PASSED.value)
@@ -1299,8 +1405,7 @@ def _email_attachment_summary(selection: EmailContentSelection) -> dict:
         "inline_screenshot_count": len(selection.inline_screenshots),
         "log_count": len(selection.log_attachments),
         "omitted": [
-            {"path": item.relative_path, "reason": item.reason}
-            for item in selection.omitted
+            {"path": item.relative_path, "reason": item.reason} for item in selection.omitted
         ],
     }
 
@@ -1322,7 +1427,9 @@ def _module_status_meta_for_runs(runs: list[Run]) -> dict[str, dict[str, str]]:
     return meta
 
 
-def _build_email_context(run: Run, email_selection: EmailContentSelection, gemini_selection: GeminiPromptSelection) -> dict:
+def _build_email_context(
+    run: Run, email_selection: EmailContentSelection, gemini_selection: GeminiPromptSelection
+) -> dict:
     module_summary = _module_status_counts(run)
     ordered_modules = sorted(run.modules, key=lambda item: item.order)
     modules = [
@@ -1348,8 +1455,12 @@ def _build_email_context(run: Run, email_selection: EmailContentSelection, gemin
                 "module_id": module.module_id,
                 "module_name": module.name,
                 "message": module.message,
-                "analysis_summary": module.failure_analysis.user_summary if module.failure_analysis else "",
-                "recommended_action": module.failure_analysis.recommended_action if module.failure_analysis else "",
+                "analysis_summary": module.failure_analysis.user_summary
+                if module.failure_analysis
+                else "",
+                "recommended_action": module.failure_analysis.recommended_action
+                if module.failure_analysis
+                else "",
             }
         )
 
@@ -1440,7 +1551,9 @@ def _format_module_duration(duration_ms: int | None) -> str:
 def _format_duration(run: Run) -> str:
     if run.started_at is None or run.ended_at is None:
         return "-"
-    duration_ms = int((run.ended_at.astimezone(UTC) - run.started_at.astimezone(UTC)).total_seconds() * 1000)
+    duration_ms = int(
+        (run.ended_at.astimezone(UTC) - run.started_at.astimezone(UTC)).total_seconds() * 1000
+    )
     if duration_ms < 1000:
         return f"{duration_ms} ms"
     seconds = duration_ms // 1000
@@ -1453,7 +1566,9 @@ def _format_duration(run: Run) -> str:
     return f"{seconds}초"
 
 
-def _resolve_operator_recipients(dotenv_values: dict[str, str]) -> tuple[tuple[str, ...], list[str]]:
+def _resolve_operator_recipients(
+    dotenv_values: dict[str, str],
+) -> tuple[tuple[str, ...], list[str]]:
     raw_value = (resolve_env_value("E2E_EMAIL_OPERATOR_RECIPIENTS", dotenv_values) or "").strip()
     recipients, invalid_entries = _parse_recipients(raw_value)
     errors: list[str] = []
@@ -1465,7 +1580,9 @@ def _resolve_operator_recipients(dotenv_values: dict[str, str]) -> tuple[tuple[s
     return tuple(recipients), errors
 
 
-def _resolve_recipient_map(system_codes: list[str], dotenv_values: dict[str, str]) -> tuple[dict[str, tuple[str, ...]], list[str]]:
+def _resolve_recipient_map(
+    system_codes: list[str], dotenv_values: dict[str, str]
+) -> tuple[dict[str, tuple[str, ...]], list[str]]:
     recipient_map: dict[str, tuple[str, ...]] = {}
     errors: list[str] = []
     for system_code in system_codes:
@@ -1473,7 +1590,9 @@ def _resolve_recipient_map(system_codes: list[str], dotenv_values: dict[str, str
         raw_value = (resolve_env_value(env_name, dotenv_values) or "").strip()
         recipients, invalid_entries = _parse_recipients(raw_value)
         if invalid_entries:
-            errors.append(f"{env_name} 에 유효하지 않은 메일 주소가 있습니다: {', '.join(invalid_entries)}")
+            errors.append(
+                f"{env_name} 에 유효하지 않은 메일 주소가 있습니다: {', '.join(invalid_entries)}"
+            )
         if not recipients:
             errors.append(f"{env_name} 값이 없거나 유효한 수신자가 없습니다.")
             continue
@@ -1484,7 +1603,10 @@ def _resolve_recipient_map(system_codes: list[str], dotenv_values: dict[str, str
 def _recipient_summary(recipients_by_system: dict[str, tuple[str, ...]]) -> str | None:
     if not recipients_by_system:
         return None
-    parts = [f"{system_code.upper()} {len(recipients)}명" for system_code, recipients in sorted(recipients_by_system.items())]
+    parts = [
+        f"{system_code.upper()} {len(recipients)}명"
+        for system_code, recipients in sorted(recipients_by_system.items())
+    ]
     return ", ".join(parts)
 
 

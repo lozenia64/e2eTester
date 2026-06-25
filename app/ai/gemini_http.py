@@ -20,7 +20,9 @@ class GeminiTransportSettings:
     verify_ssl_source: str | None
 
 
-def load_gemini_transport_settings(dotenv_values: dict[str, str] | None = None) -> GeminiTransportSettings:
+def load_gemini_transport_settings(
+    dotenv_values: dict[str, str] | None = None,
+) -> GeminiTransportSettings:
     if dotenv_values is None:
         settings = get_settings()
         return GeminiTransportSettings(
@@ -73,23 +75,33 @@ def summarize_gemini_response(response_json: dict) -> str:
         parts.append(f"totalTokenCount={total_tokens}")
 
     if response_json.get("error"):
-        parts.append(f"error={_truncate(json.dumps(response_json['error'], ensure_ascii=False), 200)}")
+        parts.append(
+            f"error={_truncate(json.dumps(response_json['error'], ensure_ascii=False), 200)}"
+        )
 
     return ", ".join(parts) if parts else "empty response body"
 
 
-def log_gemini_attempt_start(*, log_prefix: str, model: str, attempt: int, total: int, timeout_seconds: int) -> None:
-    print(f"{log_prefix} Gemini API 호출 시작 model={model} ({attempt}/{total}), timeout={timeout_seconds}s")
+def log_gemini_attempt_start(
+    *, log_prefix: str, model: str, attempt: int, total: int, timeout_seconds: int
+) -> None:
+    print(
+        f"{log_prefix} Gemini API 호출 시작 model={model} ({attempt}/{total}), timeout={timeout_seconds}s"
+    )
 
 
-def log_gemini_http_success(*, log_prefix: str, model: str, attempt: int, total: int, response_json: dict) -> None:
+def log_gemini_http_success(
+    *, log_prefix: str, model: str, attempt: int, total: int, response_json: dict
+) -> None:
     print(
         f"{log_prefix} Gemini API HTTP 200 model={model} ({attempt}/{total}): "
         f"{summarize_gemini_response(response_json)}"
     )
 
 
-def log_gemini_http_failure(*, log_prefix: str, model: str, attempt: int, total: int, error: Exception) -> None:
+def log_gemini_http_failure(
+    *, log_prefix: str, model: str, attempt: int, total: int, error: Exception
+) -> None:
     print(f"{log_prefix} Gemini API HTTP 실패 model={model} ({attempt}/{total}): {error}")
 
 
@@ -151,7 +163,9 @@ def post_gemini_generate_content(
     )
     ssl_context = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()
     try:
-        with request.urlopen(http_request, timeout=timeout_seconds, context=ssl_context) as response:
+        with request.urlopen(
+            http_request, timeout=timeout_seconds, context=ssl_context
+        ) as response:
             response_json = json.loads(response.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")

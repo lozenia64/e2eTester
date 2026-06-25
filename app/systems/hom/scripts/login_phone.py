@@ -10,7 +10,8 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from app.runner.screenshot import capture_screenshot
-from app.systems.hom.steps import kakao_login, login_common as common, login_move, main_access, phone_login
+from app.systems.hom.steps import kakao_login, login_move, main_access, phone_login
+from app.systems.hom.steps import login_common as common
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -32,13 +33,30 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--birthdate", default=None, help="Birthdate in YYYYMMDD")
     parser.add_argument("--gender", default=None, help="male/female or 남성/여성")
     parser.add_argument("--residency", default=None, help="domestic/foreign or 내국인/외국인")
-    parser.add_argument("--carrier", default=None, help="skt, kt, lgu+, skt_mvno, kt_mvno, lgu_mvno")
-    parser.add_argument("--phone-number", default=None, help="Full phone number, for example 01012345678")
-    parser.add_argument("--phone-prefix", default=None, help="Optional prefix override, for example 010")
-    parser.add_argument("--otp-code", default=None, help="SMS verification code. If omitted, the script prompts in the terminal.")
+    parser.add_argument(
+        "--carrier", default=None, help="skt, kt, lgu+, skt_mvno, kt_mvno, lgu_mvno"
+    )
+    parser.add_argument(
+        "--phone-number", default=None, help="Full phone number, for example 01012345678"
+    )
+    parser.add_argument(
+        "--phone-prefix", default=None, help="Optional prefix override, for example 010"
+    )
+    parser.add_argument(
+        "--otp-code",
+        default=None,
+        help="SMS verification code. If omitted, the script prompts in the terminal.",
+    )
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
-    parser.add_argument("--slow-mo", type=int, default=250, help="Delay between Playwright actions in milliseconds")
-    parser.add_argument("--timeout-ms", type=int, default=common.MAX_TIMEOUT_MS, help=f"Playwright timeout in milliseconds (max {common.MAX_TIMEOUT_MS})")
+    parser.add_argument(
+        "--slow-mo", type=int, default=250, help="Delay between Playwright actions in milliseconds"
+    )
+    parser.add_argument(
+        "--timeout-ms",
+        type=int,
+        default=common.MAX_TIMEOUT_MS,
+        help=f"Playwright timeout in milliseconds (max {common.MAX_TIMEOUT_MS})",
+    )
     parser.add_argument(
         "--success-stabilization-ms",
         type=int,
@@ -73,7 +91,9 @@ def main() -> int:
         parser.error(str(exc))
 
     with sync_playwright() as playwright:
-        context = common.launch_persistent_browser_context(playwright, config.headless, config.slow_mo)
+        context = common.launch_persistent_browser_context(
+            playwright, config.headless, config.slow_mo
+        )
         common.grant_browser_permissions(context, config.base_url)
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(config.timeout_ms)

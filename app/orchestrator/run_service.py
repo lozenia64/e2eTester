@@ -53,7 +53,7 @@ class RunService:
         event_bus: EventBus,
         control_store: RunControlStorePort,
         input_store: RunInputStorePort,
-        run_queue: "JobQueue",
+        run_queue: JobQueue,
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
         artifact_manager: ArtifactManager | None = None,
@@ -293,7 +293,9 @@ class RunService:
             raise KeyError(f"Run inputs are no longer available: {run_id}")
         # 핸들은 직렬화 토큰이라 pending 컨텍스트로 그대로 복원한다. OTP 는 입력값 dict 에
         # 담지 않고 게이트웨이로 런타임에 직접 주입한다(재개 시 OTP 는 runtime.config 에서 읽힘).
-        handle = ExecutionHandle(execution_mode=pending.execution_mode, session_id=pending.session_id)
+        handle = ExecutionHandle(
+            execution_mode=pending.execution_mode, session_id=pending.session_id
+        )
         await self._gateway.submit_input(handle, otp_code.strip())
         aggregate = RunAggregate(run)
         waiting_module = aggregate.module(pending.module_id)
@@ -303,7 +305,9 @@ class RunService:
         await self._events.run_event("run_resumed", run)
         await self._event_bus.publish(RunResumed(run=run))
         await self._control_store.clear_pending(run_id)
-        logger.info("Run OTP 재개", log_event="run.resumed", run_id=run_id, module_id=pending.module_id)
+        logger.info(
+            "Run OTP 재개", log_event="run.resumed", run_id=run_id, module_id=pending.module_id
+        )
         await self._run_queue.submit(
             functools.partial(self._execute_run, run_id, input_data, pending.resume_index, handle),
             label=f"run:{run_id}:resume",
@@ -341,10 +345,21 @@ class RunService:
 
     async def cancel_run(self, run_id: str) -> Run:
         run = await self._repository.get_run(run_id)
-        if run.status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED, RunStatus.CANCELLED}:
+        if run.status in {
+            RunStatus.PASSED,
+            RunStatus.ANOMALY,
+            RunStatus.ERROR,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+        }:
             raise ValueError("이미 종료된 Run은 취소할 수 없습니다.")
         await self._control_store.set_cancel_requested(run_id)
-        logger.info("Run 취소 요청", log_event="run.cancel_requested", run_id=run_id, status=run.status.value)
+        logger.info(
+            "Run 취소 요청",
+            log_event="run.cancel_requested",
+            run_id=run_id,
+            status=run.status.value,
+        )
         pending = await self._control_store.get_pending(run_id)
         if pending is not None:
             # OTP 입력 대기 중에는 실행 루프가 돌고 있지 않으므로 여기서 직접 정리·종료한다.
@@ -366,7 +381,9 @@ class RunService:
         original = await self._repository.get_run(run_id)
         stored_input = await self._input_store.get(run_id)
         if stored_input is None:
-            raise ValueError("재실행에 필요한 입력 정보를 찾을 수 없습니다. 홈에서 새로 실행해 주세요.")
+            raise ValueError(
+                "재실행에 필요한 입력 정보를 찾을 수 없습니다. 홈에서 새로 실행해 주세요."
+            )
         selected_module_ids = list(original.selected_module_ids) or None
         return await self.start_run(
             original.system_code,
@@ -418,7 +435,9 @@ class RunService:
             aggregate.begin()
             await self._repository.save_run(run)
             await self._events.run_event("run_started", run)
-            logger.info("Run 시작", log_event="run.started", run_id=run.run_id, system_code=run.system_code)
+            logger.info(
+                "Run 시작", log_event="run.started", run_id=run.run_id, system_code=run.system_code
+            )
 
         system = self._registry.get_system(run.system_code)
         definitions = {module.module_id: module for module in system.modules}
@@ -471,7 +490,9 @@ class RunService:
                         forced_status = RunStatus.CANCELLED
                         await self._mark_modules_cancelled(run, ordered_modules[index:])
                         break
-                    await self._pause_for_input(run, module, index, definition, handle, execution_result)
+                    await self._pause_for_input(
+                        run, module, index, definition, handle, execution_result
+                    )
                     should_finalize = False
                     paused = True
                     return
@@ -490,7 +511,9 @@ class RunService:
                 except Exception as exc:
                     if forced_status is None:
                         forced_status = RunStatus.ERROR
-                        await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
+                        await self._mark_unexpected_run_failure(
+                            run, current_module, ordered_modules, exc
+                        )
                     else:
                         logger.exception(
                             "Run runtime 정리 오류",
@@ -515,7 +538,9 @@ class RunService:
         await self._repository.save_run(run)
         await self._events.module_event("module_started", run, module)
 
-    def _record_module_result(self, aggregate: RunAggregate, module: RunModule, execution_result) -> None:
+    def _record_module_result(
+        self, aggregate: RunAggregate, module: RunModule, execution_result
+    ) -> None:
         # 로그는 별도 스토어가 소유하므로 집합체로 복사하지 않는다(읽기 시 하이드레이션).
         aggregate.record_result(
             module,

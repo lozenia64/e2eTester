@@ -83,17 +83,10 @@ async def load_actor_context(
     schedule_repo: ScheduleRepositoryPort,
 ) -> ActorContext:
     users_by_id = {
-        user.user_id: (user.name, user.email)
-        for user in await user_service.list_users()
+        user.user_id: (user.name, user.email) for user in await user_service.list_users()
     }
-    suites_by_id = {
-        suite.suite_id: suite
-        for suite in await suite_repo.list_suites()
-    }
-    schedules_by_id = {
-        schedule.schedule_id: schedule
-        for schedule in await schedule_repo.list()
-    }
+    suites_by_id = {suite.suite_id: suite for suite in await suite_repo.list_suites()}
+    schedules_by_id = {schedule.schedule_id: schedule for schedule in await schedule_repo.list()}
     return ActorContext(
         users_by_id=users_by_id,
         suites_by_id=suites_by_id,

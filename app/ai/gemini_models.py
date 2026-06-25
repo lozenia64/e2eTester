@@ -6,10 +6,10 @@ from app.core.env_utils import load_dotenv_file, resolve_env_with_source
 from app.core.settings import E2ESettings, get_settings
 
 DEFAULT_GEMINI_MODEL_CHAIN: tuple[str, ...] = (
+    "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-flash-latest",
+    "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
 )
 _MODEL_SPLIT_PATTERN = re.compile(r"[|,]+")
 

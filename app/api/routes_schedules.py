@@ -11,7 +11,12 @@ from app.api.dependencies import (
 )
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.models import CreateScheduleRequest, CreateSuiteScheduleRequest, Schedule, StartSuiteRequest
+from app.core.models import (
+    CreateScheduleRequest,
+    CreateSuiteScheduleRequest,
+    Schedule,
+    StartSuiteRequest,
+)
 from app.orchestrator.suite_view import resolve_suite_request_for_user
 
 if TYPE_CHECKING:
@@ -23,9 +28,7 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])
 
 
-async def _get_schedule_or_404(
-    schedule_repo: "ScheduleRepositoryPort", schedule_id: str
-) -> Schedule:
+async def _get_schedule_or_404(schedule_repo: ScheduleRepositoryPort, schedule_id: str) -> Schedule:
     try:
         return await schedule_repo.get(schedule_id)
     except KeyError as exc:
@@ -42,7 +45,7 @@ def _assert_can_manage_schedule(schedule: Schedule, current_user: User) -> None:
 @router.get("")
 async def list_schedules(
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
 ):
     user_id_filter = None if current_user.role == "admin" else current_user.user_id
     return await schedule_service.list_schedules(user_id=user_id_filter)
@@ -53,7 +56,7 @@ async def create_schedule(
     system_code: str,
     payload: CreateScheduleRequest,
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
 ):
     if current_user.role != "admin" and system_code not in current_user.allowed_system_codes:
         raise HTTPException(status_code=403, detail="해당 시스템에 대한 접근 권한이 없습니다.")
@@ -75,8 +78,8 @@ async def create_schedule(
 async def create_suite_schedule(
     payload: CreateSuiteScheduleRequest,
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
-    registry: "ModuleRegistry" = Depends(get_registry),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    registry: ModuleRegistry = Depends(get_registry),
 ):
     if current_user.role != "admin":
         all_codes = [s.system_code for s in registry.list_systems()]
@@ -114,8 +117,8 @@ async def create_suite_schedule(
 async def toggle_schedule(
     schedule_id: str,
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
-    schedule_repo: "ScheduleRepositoryPort" = Depends(get_schedule_repository),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
 ):
     schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
     _assert_can_manage_schedule(schedule, current_user)
@@ -132,8 +135,8 @@ async def toggle_schedule(
 async def run_schedule_now(
     schedule_id: str,
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
-    schedule_repo: "ScheduleRepositoryPort" = Depends(get_schedule_repository),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
 ):
     schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
     _assert_can_manage_schedule(schedule, current_user)
@@ -154,8 +157,8 @@ async def run_schedule_now(
 async def delete_schedule(
     schedule_id: str,
     current_user: User = Depends(get_current_user),
-    schedule_service: "SchedulerService" = Depends(get_schedule_service),
-    schedule_repo: "ScheduleRepositoryPort" = Depends(get_schedule_repository),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
 ):
     schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
     _assert_can_manage_schedule(schedule, current_user)

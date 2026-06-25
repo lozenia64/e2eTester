@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import re
 
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+
 from . import compensation_result_common as result_common
 from . import login_common as common
 
 CANCEL_CONFIRM_TEXT = "접수를 취소하시겠습니까?"
 CANCEL_SUCCESS_TEXT = re.compile(r"정상\s*처리\s*되었습니다")
 ALERT_DIALOG_SELECTOR = ".dialog.modal.alert.show, .dialog.show"
-FORBIDDEN_CANCELLED_DETAIL_BUTTONS = (
-    re.compile(r"접수\s*취소"),
-)
+FORBIDDEN_CANCELLED_DETAIL_BUTTONS = (re.compile(r"접수\s*취소"),)
 
 
 def _click_alert_dialog_button(
@@ -104,7 +104,7 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
     card = result_common.find_card_by_receipt_number(page, receipt_number, timeout_ms)
     card_text = result_common.normalize_text(card.inner_text(timeout=1000))
-    if result_common.TARGET_CLAIM_TEXT_TRUNCATED not in card_text:
+    if TARGET_CLAIM_TEXT_TRUNCATED not in card_text:
         raise RuntimeError(f"완료 탭 청구내용이 예상과 다릅니다: {card_text}")
     if not result_common.card_has_cancelled_status(card):
         raise RuntimeError(f"완료 탭 상태값이 취소가 아닙니다: {card_text}")
@@ -115,7 +115,9 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
 
 def run(page, config: common.LoginConfig) -> str:
     result_common.goto_result01(page, config)
-    result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms)
+    result_common.select_results_tab(
+        page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms
+    )
     row = result_common.find_processing_claim_row(page, config.timeout_ms)
     receipt_number = result_common.receipt_number_from_row(row)
     result_common.open_claim_detail(page, row, config.timeout_ms)

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 
@@ -458,9 +459,7 @@ def _refine_digit_map_with_full_decode(
     return refined
 
 
-def _probe_nfilter_digit_map(
-    page: Page, *, ssn_front: str, ssn_back: str
-) -> dict[str, str]:
+def _probe_nfilter_digit_map(page: Page, *, ssn_front: str, ssn_back: str) -> dict[str, str]:
     print("[step] Probe scrambled nfilter keypad (pixel match + Hungarian)")
     pairs = _probe_nfilter_digit_pairs(page)
     digit_map = _assign_digit_map_from_pairs(pairs)
@@ -523,9 +522,7 @@ def _type_ssn_back_digits(page: Page, ssn_back: str, *, digit_map: dict[str, str
             after = _ssn2_display_length(page)
             if after > before:
                 break
-            print(
-                f"[warn] nfilter digit {digit!r} retry {attempt}/{NFILTER_KEY_CLICK_RETRY_MAX}"
-            )
+            print(f"[warn] nfilter digit {digit!r} retry {attempt}/{NFILTER_KEY_CLICK_RETRY_MAX}")
         else:
             raise RuntimeError(f"nfilter 숫자 {digit!r} 입력에 실패했습니다.")
 
@@ -536,10 +533,7 @@ def _fill_ssn_back_via_nfilter(page: Page, *, ssn_front: str, ssn_back: str) -> 
     last_error: RuntimeError | None = None
     for attempt in range(1, NFILTER_FILL_ATTEMPTS_MAX + 1):
         if attempt > 1:
-            print(
-                f"[warn] nfilter ssn back refill attempt "
-                f"{attempt}/{NFILTER_FILL_ATTEMPTS_MAX}"
-            )
+            print(f"[warn] nfilter ssn back refill attempt {attempt}/{NFILTER_FILL_ATTEMPTS_MAX}")
             _clear_nfilter_ssn2(page)
         digit_map = _probe_nfilter_digit_map(page, ssn_front=ssn_front, ssn_back=ssn_back)
         sample = " ".join(f"{digit}->{digit_map[digit][:4]}" for digit in ssn_back)
@@ -767,9 +761,7 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
             if len(dialog_messages) > dialog_index
             else f"HTTP {decode_response.status}"
         )
-        raise RuntimeError(
-            f"주민등록번호 서버 등록 실패({DECODE_SSN_REGISTER_PATH}): {detail}"
-        )
+        raise RuntimeError(f"주민등록번호 서버 등록 실패({DECODE_SSN_REGISTER_PATH}): {detail}")
 
     sms_response = sms_info.value
     print(
@@ -828,7 +820,9 @@ def request_otp(
     _ensure_sales_page(page, base_url)
     _verify_privacy_consent_heading(page)
     _agree_all_terms(page)
-    _fill_identity_fields(page, name=resolved_name, ssn_front=resolved_ssn_front, ssn_back=resolved_ssn_back)
+    _fill_identity_fields(
+        page, name=resolved_name, ssn_front=resolved_ssn_front, ssn_back=resolved_ssn_back
+    )
     _select_phone_auth(page)
     _fill_phone_fields(
         page,
@@ -849,7 +843,9 @@ def submit_otp_and_complete(
 ) -> str:
     """인증번호 확인 후 계약서 체결하기까지 진행한다."""
     if SALES_PAGE_PATH not in page.url:
-        raise RuntimeError("본인인증 화면(/fp/loan/sales01.do)이 아닙니다. 이전 모듈부터 다시 실행해 주세요.")
+        raise RuntimeError(
+            "본인인증 화면(/fp/loan/sales01.do)이 아닙니다. 이전 모듈부터 다시 실행해 주세요."
+        )
 
     resolved = _resolve_otp_code(otp_code)
     print("[step] Submit SMS verification code")

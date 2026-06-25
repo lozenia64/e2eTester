@@ -23,7 +23,9 @@ def request_sms(page, config: common.LoginConfig, dialog_messages: list[str]) ->
     if phone_login_link is None:
         raise RuntimeError("휴대폰 인증 로그인 버튼을 찾지 못했습니다.")
 
-    common.click_and_wait_for_navigation(page, phone_login_link, r"/util/login/cellphone-login\.do$")
+    common.click_and_wait_for_navigation(
+        page, phone_login_link, r"/util/login/cellphone-login\.do$"
+    )
     common.fill_identity(page, config)
     common.request_sms_code(page, dialog_messages, config.timeout_ms)
     return "휴대폰 인증문자 발송 성공"

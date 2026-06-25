@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/runs", tags=["runs"])
 @router.get("")
 async def list_runs(
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     user_id_filter = None if current_user.role == "admin" else current_user.user_id
     return await run_service.list_run_summaries(user_id=user_id_filter)
@@ -31,7 +31,7 @@ async def start_system_run(
     system_code: str,
     payload: StartRunRequest,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     if current_user.role != "admin" and system_code not in current_user.allowed_system_codes:
         raise HTTPException(status_code=403, detail="해당 시스템에 대한 접근 권한이 없습니다.")
@@ -55,7 +55,7 @@ async def submit_run_otp(
     run_id: str,
     payload: SubmitOtpRequest,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
         run = await run_service.submit_otp(run_id, payload.otp_code)
@@ -68,7 +68,7 @@ async def submit_run_otp(
 async def cancel_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
         run = await run_service.cancel_run(run_id)
@@ -83,7 +83,7 @@ async def cancel_run(
 async def rerun_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
         run = await run_service.rerun_run(
@@ -102,7 +102,7 @@ async def rerun_run(
 async def get_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
         run = await run_service.get_run(run_id)
@@ -115,7 +115,7 @@ async def get_run(
 async def get_run_nodes(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
         run = await run_service.get_run(run_id)

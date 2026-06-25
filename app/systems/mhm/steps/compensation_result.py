@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT
+
 from . import compensation_result_common as result_common
 from . import login_common as common
 
@@ -25,14 +27,16 @@ def _assert_result_detail(page, timeout_ms: int, expected_receipt_number: str) -
 
     expected = result_common.normalize_receipt_number(expected_receipt_number)
     if receipt_number != expected:
-        raise RuntimeError(f"상세 화면 접수번호 불일치: expected={expected}, actual={receipt_number}")
+        raise RuntimeError(
+            f"상세 화면 접수번호 불일치: expected={expected}, actual={receipt_number}"
+        )
     if claim_date != result_common.today_display():
         raise RuntimeError(f"상세 화면 보험금청구일자가 오늘 날짜가 아닙니다: {claim_date}")
     if not result_common.RESULT_DATE_PATTERN.fullmatch(accident_date):
         raise RuntimeError(f"상세 화면 발병(사고)일을 확인하지 못했습니다: {accident_date}")
     if not claim_type:
         raise RuntimeError("상세 화면 청구 유형을 확인하지 못했습니다.")
-    if claim_content != result_common.TARGET_CLAIM_TEXT:
+    if claim_content != TARGET_CLAIM_TEXT:
         raise RuntimeError(f"상세 화면 청구내용 불일치: {claim_content}")
 
     common.wait_locator_visible_with_log(
@@ -244,7 +248,9 @@ def _verify_preview_sheet(page, timeout_ms: int) -> None:
     common.click_with_log(preview_button, "제출서류 확인하기 클릭")
     heading = page.get_by_role("heading", name=PREVIEW_SHEET_HEADING_PATTERN).first
     common.wait_locator_visible_with_log(heading, timeout_ms, "제출 서류 확인 시트")
-    common.wait_locator_visible_with_log(_preview_swipe_root(page), timeout_ms, "제출 서류 슬라이드 영역")
+    common.wait_locator_visible_with_log(
+        _preview_swipe_root(page), timeout_ms, "제출 서류 슬라이드 영역"
+    )
     common.wait_timeout_with_log(page, 3000, "제출 서류 파일 로딩 대기")
 
     _verify_preview_slides(page, timeout_ms)

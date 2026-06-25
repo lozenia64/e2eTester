@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.enums import RunStatus, SuiteStatus
 from app.core.status_labels import RUN_TERMINAL_OUTCOME_STATUSES, SUITE_TERMINAL_OUTCOME_STATUSES
 from app.events.bus import EventBus, RunFinished, SuiteFinished
 from app.notifications.run_completion_email import RunCompletionEmailNotifier

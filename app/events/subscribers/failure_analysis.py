@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.core.models import (
     FailureAnalysis,
     FailureAnalysisRequest,
@@ -11,6 +10,7 @@ from app.core.models import (
     Run,
     RunModule,
 )
+from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.events.bus import EventBus, RunFinished
 from app.orchestrator.run_event_publisher import RunEventPublisher
 
@@ -44,7 +44,9 @@ class FailureAnalysisSubscriber:
         if not self._enabled:
             return
         run = event.run
-        failed_modules = [module for module in run.modules if module.status in MODULE_ANOMALY_STATUSES]
+        failed_modules = [
+            module for module in run.modules if module.status in MODULE_ANOMALY_STATUSES
+        ]
         if not failed_modules:
             return
         try:
@@ -65,14 +67,18 @@ class FailureAnalysisSubscriber:
             # 분석 결과를 모듈 카드에 반영하도록 module_finished 를 다시 발행한다.
             await self._events.module_event("module_finished", run, module)
 
-    async def _analyze(self, run: Run, module: RunModule, definition: ModuleDefinition) -> FailureAnalysis | None:
+    async def _analyze(
+        self, run: Run, module: RunModule, definition: ModuleDefinition
+    ) -> FailureAnalysis | None:
         request = self._build_request(run, module, definition)
         try:
             return await asyncio.to_thread(self._analyzer.analyze, request)
         except Exception:
             return None
 
-    def _build_request(self, run: Run, module: RunModule, definition: ModuleDefinition) -> FailureAnalysisRequest:
+    def _build_request(
+        self, run: Run, module: RunModule, definition: ModuleDefinition
+    ) -> FailureAnalysisRequest:
         # 계약상세(contract_detail) 화면은 PII 노출 위험이 있어 URL/로그/다이얼로그/스크린샷을
         # AI 에 보내지 않는다(기존 정책 보존).
         is_contract_detail = definition.workflow_step == "contract_detail"

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import secrets
+from datetime import UTC, datetime
 
 import bcrypt
-from datetime import datetime, timezone
 
 from app.auth.models import CreateUserRequest, User
 from app.storage.user_repository import UserRepositoryPort
@@ -25,6 +25,7 @@ class UserService:
         existing = await self._repo.get_by_email(req.email)
         if existing is not None:
             from fastapi import HTTPException, status
+
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="이미 사용 중인 이메일입니다.",
@@ -36,7 +37,7 @@ class UserService:
             role=req.role,
             hashed_password=_hash_password(req.password),
             is_active=True,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         return await self._repo.save(user)
 

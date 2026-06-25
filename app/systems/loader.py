@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from importlib import import_module
-from typing import Any, Iterable
+from typing import Any
 
 from app.runner.artifact_manager import ArtifactManager
 
 
-def load_workflow_executors(system_codes: Iterable[str], artifact_manager: ArtifactManager) -> dict[str, Any]:
+def load_workflow_executors(
+    system_codes: Iterable[str], artifact_manager: ArtifactManager
+) -> dict[str, Any]:
     executors: dict[str, Any] = {}
     for system_code in system_codes:
         module_name = f"app.systems.{system_code}.executor"

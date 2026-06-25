@@ -48,9 +48,7 @@ class JsonTableStore:
             return await asyncio.to_thread(self._get_sync, key)
 
     def _get_sync(self, key: str) -> str | None:
-        cursor = self._conn.execute(
-            f"SELECT data FROM {self._table} WHERE id = ?", (key,)
-        )
+        cursor = self._conn.execute(f"SELECT data FROM {self._table} WHERE id = ?", (key,))
         row = cursor.fetchone()
         return row[0] if row else None
 

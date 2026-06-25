@@ -6,9 +6,9 @@ from pathlib import Path
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.screenshot import SELF_DEFENDER_HOST_FRAGMENTS
-from app.runner.workflow_engine import WAITING_INPUT_PREFIX, BaseWorkflowExecutor
-from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
+from app.runner.workflow_engine import WAITING_INPUT_PREFIX
 from app.systems.access_common import browser
+from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 from app.systems.hwtc.steps import phone_auth, video_playback
 
 DEFAULT_BASE_URL = "https://sls.hwgeneralins.com"

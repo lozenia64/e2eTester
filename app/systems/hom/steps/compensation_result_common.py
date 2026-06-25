@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 import re
+from datetime import date
 
 # 청구 식별 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
-from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT, TARGET_CLAIM_TEXT_TRUNCATED
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
 
 from . import login_common as common
 
@@ -129,12 +129,18 @@ def select_results_tab(page, selector: str, label: str, timeout_ms: int) -> None
 
 
 def result_table(page):
-    return find_visible_table_by_caption(page, RESULT_TABLE_CAPTION, "상해/질병/화재보험금 청구내역 목록 표")
+    return find_visible_table_by_caption(
+        page, RESULT_TABLE_CAPTION, "상해/질병/화재보험금 청구내역 목록 표"
+    )
 
 
 def row_button_names(row) -> list[str]:
     try:
-        return [normalize_text(value) for value in row.locator("button").all_inner_texts() if normalize_text(value)]
+        return [
+            normalize_text(value)
+            for value in row.locator("button").all_inner_texts()
+            if normalize_text(value)
+        ]
     except Exception:
         return []
 
@@ -189,9 +195,13 @@ def detail_table(page):
 
 
 def detail_value(page, table, header_name: str, cell_index: int = 0) -> str:
-    row = table.get_by_role("row").filter(
-        has=page.get_by_role("rowheader", name=re.compile(rf"^{re.escape(header_name)}$")),
-    ).first
+    row = (
+        table.get_by_role("row")
+        .filter(
+            has=page.get_by_role("rowheader", name=re.compile(rf"^{re.escape(header_name)}$")),
+        )
+        .first
+    )
     cell = row.locator("td").nth(cell_index)
     return normalize_text(cell.inner_text(timeout=1000))
 

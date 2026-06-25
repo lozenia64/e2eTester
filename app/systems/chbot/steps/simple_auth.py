@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 import time
 
-from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Locator, Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 
@@ -17,9 +18,7 @@ IDENTITY_CONFIRM_BUTTON = "#btn_conf, a[data-sinario='AUT002']"
 
 PHONE_AUTH_LINK = "a:has-text('휴대폰 인증')"
 
-PHONE_AUTH_CONTAINER = (
-    "xpath=//h2[contains(normalize-space(.),'휴대폰 인증')]/ancestor::div[contains(@class,'bot_lagacy')][1]"
-)
+PHONE_AUTH_CONTAINER = "xpath=//h2[contains(normalize-space(.),'휴대폰 인증')]/ancestor::div[contains(@class,'bot_lagacy')][1]"
 CARRIER_SELECT = "select[name='hp_com']"
 PHONE_PREFIX_INPUT = "input[name='hndphTlano']"
 PHONE_MIDDLE_INPUT = "input[name='hndphTltno']"

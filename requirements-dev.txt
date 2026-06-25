@@ -1,0 +1,12 @@
+# 개발/CI 전용 의존성 (런타임 requirements.txt 와 분리).
+# 설치: python3 -m pip install -r requirements-dev.txt
+-r requirements.txt
+
+# 코드 품질: 린터 + 포매터 (black/flake8/isort/pyupgrade 를 단일 바이너리로 대체)
+# 실행: ruff check .   /   ruff format .
+ruff>=0.15,<0.16
+
+# 테스트 러너 (tests/ 가 사용하나 그동안 선언이 누락돼 있었음)
+pytest>=8.0,<9.0
+# async def 테스트 네이티브 지원 (asyncio_mode="auto" — 수동 asyncio.run 래핑 제거)
+pytest-asyncio>=0.24,<2.0

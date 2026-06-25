@@ -55,7 +55,9 @@ _configure_stdio_utf8()
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - 의존성 안내
-    print("[error] PyYAML 이 필요합니다. `python3 -m pip install -r requirements.txt` 실행 후 다시 시도하세요.")
+    print(
+        "[error] PyYAML 이 필요합니다. `python3 -m pip install -r requirements.txt` 실행 후 다시 시도하세요."
+    )
     sys.exit(2)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -73,9 +75,7 @@ DYNAMIC_ENV_PREFIX_RE = re.compile(r"""f["'](E2E_[A-Z0-9_]+_)\{""")
 LITERAL_ENV_RE = re.compile(
     r"""(?:resolve_env_value|resolve_env_with_source|env_flag)\(\s*["']([A-Z][A-Z0-9_]+)["']"""
 )
-SETTINGS_ALIAS_RE = re.compile(
-    r"""validation_alias\s*=\s*["']([A-Z][A-Z0-9_]+)["']"""
-)
+SETTINGS_ALIAS_RE = re.compile(r"""validation_alias\s*=\s*["']([A-Z][A-Z0-9_]+)["']""")
 OS_ENV_RE = re.compile(
     r"""os\.(?:getenv|environ\.get)\(\s*["']([A-Z][A-Z0-9_]+)["']|os\.environ\[\s*["']([A-Z][A-Z0-9_]+)["']"""
 )
@@ -83,9 +83,7 @@ ROUTER_PREFIX_RE = re.compile(r"""APIRouter\([^)]*prefix\s*=\s*["']([^"']*)["']"
 ROUTE_DECORATOR_RE = re.compile(
     r"""@router\.(get|post|put|patch|delete|websocket)\(\s*["']([^"']*)["']"""
 )
-MODEL_CHAIN_RE = re.compile(
-    r"""DEFAULT_GEMINI_MODEL_CHAIN[^=]*=\s*\((.*?)\)""", re.DOTALL
-)
+MODEL_CHAIN_RE = re.compile(r"""DEFAULT_GEMINI_MODEL_CHAIN[^=]*=\s*\((.*?)\)""", re.DOTALL)
 
 
 @dataclass

@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 import time
 
-from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Locator, Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 from app.systems.hwtc.steps.phone_auth import AUTH_SUCCESS_PATH
@@ -184,7 +185,9 @@ def _read_remaining_time_text(page: Page) -> str:
             pass
 
     try:
-        text = page.locator(".vjs-remaining-time").first.inner_text(timeout=LOCATOR_VISIBLE_TIMEOUT_MS)
+        text = page.locator(".vjs-remaining-time").first.inner_text(
+            timeout=LOCATOR_VISIBLE_TIMEOUT_MS
+        )
         return (text or "").strip()
     except PlaywrightTimeoutError:
         return ""
@@ -309,7 +312,9 @@ def _click_play_control(page: Page) -> str:
         raise RuntimeError("동영상 재생 버튼을 찾지 못했습니다.")
     clicked = root.evaluate(_JS_CLICK_FROM_ROOT)
     if not clicked:
-        raise RuntimeError("동영상 재생 버튼(.vjs-big-play-button / .vjs-poster)을 찾지 못했습니다.")
+        raise RuntimeError(
+            "동영상 재생 버튼(.vjs-big-play-button / .vjs-poster)을 찾지 못했습니다."
+        )
     print(f"[step] Click video play control via {clicked}")
     return clicked
 
@@ -319,7 +324,9 @@ def _activate_detail_video_player(page: Page) -> None:
     _wait_for_player_ready(page)
     signals = _read_playback_signals(page)
     if _signals_show_playing(signals):
-        print(f"[step] Video already active before play click ({_format_playback_signals(signals)})")
+        print(
+            f"[step] Video already active before play click ({_format_playback_signals(signals)})"
+        )
         return
     _click_play_control(page)
     page.wait_for_timeout(1500)
@@ -345,10 +352,7 @@ def _start_video_playback(page: Page) -> None:
     _activate_detail_video_player(page)
     if _probe_playback(page, timeout_seconds=PLAYBACK_PROBE_TIMEOUT_SECONDS):
         return
-    print(
-        "[warn] Playback start probe did not confirm playing; "
-        "continuing to observation window"
-    )
+    print("[warn] Playback start probe did not confirm playing; continuing to observation window")
 
 
 def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float, dict[str, object]]:
@@ -356,7 +360,9 @@ def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float,
     start_signals = _read_playback_signals(page)
     start_remaining = str(start_signals.get("remainingTimeText") or "")
     start_video = start_signals.get("video")
-    start_time = float(start_video.get("currentTime") or 0) if isinstance(start_video, dict) else 0.0
+    start_time = (
+        float(start_video.get("currentTime") or 0) if isinstance(start_video, dict) else 0.0
+    )
 
     print(
         f"[wait] Observe playback for {wait_seconds} seconds "
@@ -394,7 +400,9 @@ def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float,
                 previous_video_time = current_time
 
         if _signals_show_playing(signals, previous_remaining=start_remaining or None):
-            print(f"[wait] Playback signal during observation ({_format_playback_signals(signals)})")
+            print(
+                f"[wait] Playback signal during observation ({_format_playback_signals(signals)})"
+            )
 
     end_remaining = str(last_signals.get("remainingTimeText") or "")
     total_remaining_drop = _remaining_time_drop_seconds(start_remaining, end_remaining)

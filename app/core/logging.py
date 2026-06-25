@@ -12,7 +12,15 @@ import structlog
 
 from app.core.ops_buffer import ops_event_buffer
 
-_OPS_EVENT_PREFIXES = ("run.", "suite.", "schedule.", "queue.", "startup.", "retention.", "event_bus.")
+_OPS_EVENT_PREFIXES = (
+    "run.",
+    "suite.",
+    "schedule.",
+    "queue.",
+    "startup.",
+    "retention.",
+    "event_bus.",
+)
 
 
 def _level_name_to_int(level: str) -> int:

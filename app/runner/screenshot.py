@@ -14,7 +14,8 @@ import base64
 from pathlib import Path
 from typing import Final
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000

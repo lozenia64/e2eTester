@@ -16,11 +16,13 @@ from app.systems.mhm.steps import (
     contract_detail,
     contract_list,
     kakao_login,
-    login_common as common,
     login_move,
     long_term_policy_certificate,
     main_access,
     phone_login,
+)
+from app.systems.mhm.steps import (
+    login_common as common,
 )
 
 MOBILE_CHANNEL = ChannelProfile(

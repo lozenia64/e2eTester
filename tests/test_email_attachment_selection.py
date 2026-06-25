@@ -14,7 +14,9 @@ from app.notifications.run_completion_email import (
 )
 
 
-def _artifact(*, module_id: str, kind: str = "screenshot", system_code: str = "FP", seq: int = 1) -> RunArtifact:
+def _artifact(
+    *, module_id: str, kind: str = "screenshot", system_code: str = "FP", seq: int = 1
+) -> RunArtifact:
     return RunArtifact(
         module_id=module_id,
         module_name=module_id,

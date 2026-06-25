@@ -25,7 +25,7 @@ templates = Jinja2Templates(directory="app/web/templates")
 async def dashboard_home(
     request: Request,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
@@ -111,7 +111,7 @@ async def suite_dashboard(
     request: Request,
     suite_id: str,
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
+    suite_service: SuiteService = Depends(get_suite_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
@@ -135,7 +135,7 @@ async def run_dashboard(
     request: Request,
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user

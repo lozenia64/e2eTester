@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import time
+from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -247,12 +247,16 @@ def _wait_for_issue_button_enabled(page, timeout_ms: int) -> None:
     )
 
 
-def _wait_for_issue_result(page, dialog_messages: list[str], start_index: int, timeout_ms: int) -> None:
+def _wait_for_issue_result(
+    page, dialog_messages: list[str], start_index: int, timeout_ms: int
+) -> None:
     deadline = time.monotonic() + (timeout_ms / 1000)
 
     while time.monotonic() < deadline:
         try:
-            success_dialog = page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=SUCCESS_DIALOG_TEXT).first
+            success_dialog = (
+                page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=SUCCESS_DIALOG_TEXT).first
+            )
             if success_dialog.is_visible(timeout=400):
                 print("[step] PDF download success alert detected")
                 return
@@ -272,7 +276,9 @@ def _wait_for_issue_result(page, dialog_messages: list[str], start_index: int, t
     raise RuntimeError("장기보험증권 PDF 다운로드 완료 알림을 확인하지 못했습니다.")
 
 
-def _issue_certificate(page, dialog_messages: list[str], timeout_ms: int, artifact_dir: Path) -> str:
+def _issue_certificate(
+    page, dialog_messages: list[str], timeout_ms: int, artifact_dir: Path
+) -> str:
     _wait_for_issue_button_enabled(page, timeout_ms)
     issue_button = page.locator(".fixed_bottom_button button.btn.s1.c1").first
 

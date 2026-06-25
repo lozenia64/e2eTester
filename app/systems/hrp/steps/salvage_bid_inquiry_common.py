@@ -40,7 +40,11 @@ def ensure_main_page(page: Page, base_url: str) -> None:
 
 
 def bottom_tab_links(page: Page) -> Locator:
-    return page.locator("li").filter(has=page.get_by_role("link", name="메인", exact=True)).locator("..")
+    return (
+        page.locator("li")
+        .filter(has=page.get_by_role("link", name="메인", exact=True))
+        .locator("..")
+    )
 
 
 def assert_bottom_tab(page: Page, tab_name: str) -> None:

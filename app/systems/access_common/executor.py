@@ -44,7 +44,9 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
         self._base_url = browser.normalize_base_url(base_url, base_url)
         self._mobile = mobile
 
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> AccessRuntime:
+    def build_runtime(
+        self, input_data: dict[str, str], run_id: str, module_id: str
+    ) -> AccessRuntime:
         headless = self._resolve_headless(input_data)
         base_url = browser.normalize_base_url(input_data.get("base_url"), self._base_url)
 
@@ -80,7 +82,9 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
     def _shutdown_browser(self, runtime: AccessRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
 
-    def _run_step(self, runtime: AccessRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
+    def _run_step(
+        self, runtime: AccessRuntime, module: ModuleDefinition, artifact_dir: Path
+    ) -> str:
         if module.workflow_step == "main_access":
             return main_access.run(runtime.page, runtime.base_url)
         raise RuntimeError(f"Unsupported {self._system_code} workflow step: {module.workflow_step}")

@@ -1,0 +1,40 @@
+[tool.ruff]
+# E2E 테스트 플랫폼 코드 품질 도구. black/flake8/isort/pyupgrade 를 단일 바이너리로 대체.
+# 실행: ruff check .   (자동 수정: ruff check --fix .)  /  포매터: ruff format .
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+    "research",   # throwaway 프로브 스크립트 (앱의 일부가 아님)
+    "artifacts",  # Run 산출물(로그/스크린샷)
+    "data",       # SQLite 상태 저장소
+]
+
+[tool.ruff.lint]
+# 고신호 규칙 위주로 시작한다. 한국어 UI 문자열·셀렉터가 많은 steps/ 코드의
+# 미사용 import(F401)·미정의 이름(F821)·f-string 누락(F541) 등을 빠르게 잡는다.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (미사용/미정의 이름, f-string 오류 등)
+    "I",   # isort (import 정렬)
+    "UP",  # pyupgrade (구식 문법 현대화)
+    "B",   # flake8-bugbear (버그 유발 패턴)
+    "C4",  # flake8-comprehensions
+]
+ignore = [
+    "E501",  # 라인 길이 — 포매터(ruff format)가 관리, 한국어 주석/로그가 길어 강제하지 않음
+    "B008",  # FastAPI Depends() 기본값 패턴 (의도된 사용)
+    "B904",  # except 내 raise ... from — 도입 1단계에선 보류. 자동화 step 코드 전반의
+             # 예외 체이닝 정비는 별도 후속 작업으로 분리한다(점진 적용).
+]
+
+[tool.pytest.ini_options]
+# async def 테스트를 자동으로 asyncio 코루틴으로 실행(마커 불필요).
+# 수동 asyncio.run(scenario()) 래핑을 제거하기 위한 설정.
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트는 일부 import 미사용/픽스처 패턴을 허용
+"tests/*" = ["F401", "F811"]
+# Plotly 차트 설정은 dict(...) 형태가 관용적(공식 예제 스타일) — 리터럴 강제 제외
+"app/orchestrator/stats_charts.py" = ["C408"]

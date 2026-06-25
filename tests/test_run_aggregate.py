@@ -13,7 +13,9 @@ from app.core.models import Run, RunModule
 from app.domain.run_aggregate import RunAggregate
 
 
-def _module(module_id: str, order: int, *, depends_on=None, status=ModuleStatus.PENDING) -> RunModule:
+def _module(
+    module_id: str, order: int, *, depends_on=None, status=ModuleStatus.PENDING
+) -> RunModule:
     return RunModule(
         module_id=module_id,
         name=module_id,

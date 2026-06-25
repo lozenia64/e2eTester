@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.settings import E2ESettings, clear_settings_cache, get_settings
 
@@ -62,5 +63,5 @@ def test_secret_str_masks_in_repr() -> None:
 
 def test_run_concurrency_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("E2E_RUN_CONCURRENCY", "0")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         get_settings()

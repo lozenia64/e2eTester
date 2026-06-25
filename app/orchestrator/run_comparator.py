@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import ModuleStatus
 from app.core.models import Run, RunComparison
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, RUN_TERMINAL_OUTCOME_STATUSES
 

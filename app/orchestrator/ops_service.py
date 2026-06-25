@@ -97,7 +97,9 @@ class OpsService:
                     "cron": schedule.cron,
                     "next_run_at": schedule.next_run_at.isoformat(),
                     "last_run_id": schedule.last_run_id,
-                    "last_run_status": schedule.last_run_status.value if schedule.last_run_status else None,
+                    "last_run_status": schedule.last_run_status.value
+                    if schedule.last_run_status
+                    else None,
                     "due_within_24h": schedule.next_run_at <= due_window,
                 }
             )
@@ -111,7 +113,9 @@ class OpsService:
                 "run_queue_workers": self._run_queue.worker_count,
                 "run_queue_pending": self._run_queue.pending_jobs,
                 "run_queue_running": self._run_queue.is_running,
-                "schedule_timezone": self._scheduler.timezone_name if self._scheduler else self._settings.schedule_tz,
+                "schedule_timezone": self._scheduler.timezone_name
+                if self._scheduler
+                else self._settings.schedule_tz,
             },
             "runs": {
                 "total": len(runs),

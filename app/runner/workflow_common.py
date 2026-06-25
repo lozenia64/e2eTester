@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from app.core.enums import ModuleStatus
 
@@ -26,7 +26,7 @@ class StepExecutionResult:
         dialog_messages: list[str],
         last_error: str | None,
         screenshot_path: Path | None = None,
-    ) -> "StepExecutionResult":
+    ) -> StepExecutionResult:
         return cls(
             status=ModuleStatus.ANOMALY,
             message=message,

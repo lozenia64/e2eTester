@@ -43,6 +43,5 @@ KAKAO_AUTH_INCOMPLETE_DIALOG_MARKERS: Final[tuple[str, ...]] = (
 def is_kakao_auth_incomplete_message(message: str) -> bool:
     normalized = message.strip().replace(" ", "")
     return any(
-        marker.replace(" ", "") in normalized
-        for marker in KAKAO_AUTH_INCOMPLETE_DIALOG_MARKERS
+        marker.replace(" ", "") in normalized for marker in KAKAO_AUTH_INCOMPLETE_DIALOG_MARKERS
     )

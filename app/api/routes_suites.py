@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/suites", tags=["suites"])
 @router.get("")
 async def list_suites(
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
+    suite_service: SuiteService = Depends(get_suite_service),
 ):
     return await suite_service.list_suite_summaries()
 
@@ -29,8 +29,8 @@ async def list_suites(
 async def start_suite(
     payload: StartSuiteRequest,
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
-    registry: "ModuleRegistry" = Depends(get_registry),
+    suite_service: SuiteService = Depends(get_suite_service),
+    registry: ModuleRegistry = Depends(get_registry),
 ):
     if current_user.role != "admin":
         all_codes = [s.system_code for s in registry.list_systems()]
@@ -60,7 +60,7 @@ async def start_suite(
 async def get_suite(
     suite_id: str,
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
+    suite_service: SuiteService = Depends(get_suite_service),
 ):
     try:
         suite = await suite_service.get_suite(suite_id)
@@ -74,7 +74,7 @@ async def get_suite(
 async def cancel_suite(
     suite_id: str,
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
+    suite_service: SuiteService = Depends(get_suite_service),
 ):
     try:
         suite = await suite_service.cancel_suite(suite_id)
@@ -91,7 +91,7 @@ async def submit_suite_otp(
     suite_id: str,
     payload: SubmitOtpRequest,
     current_user: User = Depends(get_current_user),
-    suite_service: "SuiteService" = Depends(get_suite_service),
+    suite_service: SuiteService = Depends(get_suite_service),
 ):
     try:
         suite = await suite_service.submit_otp(suite_id, payload.otp_code)

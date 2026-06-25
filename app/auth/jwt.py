@@ -31,7 +31,9 @@ def create_access_token(data: dict) -> str:
     payload = dict(data)
     payload["exp"] = int(time.time()) + ACCESS_TOKEN_EXPIRE_MINUTES * 60
     secret_key = _secret_key()
-    header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    header = _b64url_encode(
+        json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode()
+    )
     body = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
     sig_input = header + b"." + body
     sig = hmac.new(secret_key.encode(), sig_input, hashlib.sha256).digest()

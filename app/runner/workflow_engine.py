@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import contextlib
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
@@ -93,7 +94,9 @@ class BaseWorkflowExecutor(ABC):
             with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
                 try:
                     raw_message = self._run_step(runtime, module, artifact_dir)
-                    if isinstance(raw_message, str) and raw_message.startswith(WAITING_INPUT_PREFIX):
+                    if isinstance(raw_message, str) and raw_message.startswith(
+                        WAITING_INPUT_PREFIX
+                    ):
                         status = ModuleStatus.WAITING_INPUT
                         message = raw_message.split("::", 1)[1]
                     else:
@@ -112,8 +115,9 @@ class BaseWorkflowExecutor(ABC):
 
                 # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
                 # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
-                if status is not ModuleStatus.WAITING_INPUT and self._should_capture_module_screenshot(
-                    runtime, module
+                if (
+                    status is not ModuleStatus.WAITING_INPUT
+                    and self._should_capture_module_screenshot(runtime, module)
                 ):
                     capture_screenshot(runtime.page, screenshot_path)
                 tee.flush()
@@ -157,11 +161,14 @@ class BaseWorkflowExecutor(ABC):
             return None
 
     @abstractmethod
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> WorkflowRuntime:
-        ...
+    def build_runtime(
+        self, input_data: dict[str, str], run_id: str, module_id: str
+    ) -> WorkflowRuntime: ...
 
     @abstractmethod
-    def _run_step(self, runtime: WorkflowRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
+    def _run_step(
+        self, runtime: WorkflowRuntime, module: ModuleDefinition, artifact_dir: Path
+    ) -> str:
         """workflow_step 을 실제 단계 함수로 디스패치한다.
 
         `artifact_dir` 은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며,
@@ -171,5 +178,4 @@ class BaseWorkflowExecutor(ABC):
         ...
 
     @abstractmethod
-    def _shutdown_browser(self, runtime: WorkflowRuntime) -> None:
-        ...
+    def _shutdown_browser(self, runtime: WorkflowRuntime) -> None: ...

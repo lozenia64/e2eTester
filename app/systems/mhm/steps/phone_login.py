@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from . import login_common as common
 
@@ -43,8 +42,8 @@ CONFIRM_BUTTON_ENABLED_JS = """
 POST_LOGIN_MAIN_URL_FRAGMENT = "/myh/mai/MySubMain"
 SMS_SENT_ALERT_CONFIRM_SELECTOR = (
     '.dialog.modal.alert.show:has-text("인증번호가 발송되었습니다") '
-    'button.btn.ui_dialog_close, '
-    '.dialog.modal.alert.show a.dialog_close.ui_dialog_close'
+    "button.btn.ui_dialog_close, "
+    ".dialog.modal.alert.show a.dialog_close.ui_dialog_close"
 )
 SMS_SENT_ALERT_DISMISSED_JS = """
 () => !document.querySelector('.dialog.modal.alert.show')
@@ -53,7 +52,9 @@ SMS_SENT_ALERT_DISMISSED_JS = """
 
 def _phone_form_root(page):
     root = page.locator("main")
-    common.wait_locator_visible_with_log(root.locator("#customerName"), common.MAX_TIMEOUT_MS, "휴대폰인증 폼")
+    common.wait_locator_visible_with_log(
+        root.locator("#customerName"), common.MAX_TIMEOUT_MS, "휴대폰인증 폼"
+    )
     return root
 
 
@@ -77,7 +78,9 @@ def _prepare_login_type_select_page(page) -> None:
             "로그인 방법 선택 제목",
         )
     except Exception:
-        common.wait_locator_visible_with_log(page.locator("main"), common.MAX_TIMEOUT_MS, "로그인 방법 선택 main")
+        common.wait_locator_visible_with_log(
+            page.locator("main"), common.MAX_TIMEOUT_MS, "로그인 방법 선택 main"
+        )
 
 
 def _find_phone_auth_entry(page):
@@ -101,7 +104,9 @@ def _expand_other_login_methods(page) -> None:
         pass
 
     other_login = page.locator(OTHER_LOGIN_METHOD_SELECTOR).first
-    common.wait_locator_visible_with_log(other_login, common.MAX_TIMEOUT_MS, "다른 로그인 방법 버튼")
+    common.wait_locator_visible_with_log(
+        other_login, common.MAX_TIMEOUT_MS, "다른 로그인 방법 버튼"
+    )
     common.click_with_log(other_login, "다른 로그인 방법 펼치기")
     common.wait_locator_visible_with_log(
         _find_phone_auth_entry(page),
@@ -211,7 +216,9 @@ def request_mobile_sms_code(page, dialog_messages: list[str], timeout_ms: int) -
     common.click_with_log(auth_request, "휴대폰 인증요청")
     dismiss_sms_sent_alert(page, timeout_ms)
     common.wait_timeout_with_log(page, 1000, "Post-mobile-SMS-request settle delay")
-    common.ensure_no_failure_dialogs(dialog_messages, dialog_index, "mobile SMS verification request")
+    common.ensure_no_failure_dialogs(
+        dialog_messages, dialog_index, "mobile SMS verification request"
+    )
 
     try:
         common.wait_function_with_log(
@@ -275,6 +282,12 @@ def submit_otp_and_login(
     dialog_messages: list[str],
 ) -> str:
     otp_code = common.resolve_otp_code(config)
-    submit_mobile_otp(page, otp_code, dialog_messages, config.timeout_ms, post_login_fragment=config.post_login_fragment)
+    submit_mobile_otp(
+        page,
+        otp_code,
+        dialog_messages,
+        config.timeout_ms,
+        post_login_fragment=config.post_login_fragment,
+    )
     common.wait_for_login_success(page, config, dialog_messages)
     return f"휴대폰 로그인 성공: {page.url}"

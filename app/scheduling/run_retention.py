@@ -81,7 +81,9 @@ class RunRetentionScheduler:
             try:
                 await self._tick()
             except Exception as exc:
-                logger.exception("Run 보존 tick 오류", log_event="retention.tick_error", error=str(exc))
+                logger.exception(
+                    "Run 보존 tick 오류", log_event="retention.tick_error", error=str(exc)
+                )
             try:
                 await asyncio.sleep(self._tick_seconds)
             except asyncio.CancelledError:
@@ -113,7 +115,9 @@ class RunRetentionScheduler:
                 timezone=self._timezone_name,
             )
         else:
-            logger.info("보존 정리 대상 없음", log_event="retention.noop", timezone=self._timezone_name)
+            logger.info(
+                "보존 정리 대상 없음", log_event="retention.noop", timezone=self._timezone_name
+            )
 
     def _today_start_utc(self) -> datetime:
         now_local = datetime.now(self._timezone)

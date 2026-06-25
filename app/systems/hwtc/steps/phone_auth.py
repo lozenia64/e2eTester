@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 import time
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 
@@ -162,8 +163,7 @@ def _submit_credentials(
 
     if not filled:
         raise RuntimeError(
-            "로그인 화면에서 아이디·비밀번호 입력에 실패했습니다. "
-            "(개발자도구 차단 alert 반복)"
+            "로그인 화면에서 아이디·비밀번호 입력에 실패했습니다. (개발자도구 차단 alert 반복)"
         )
 
     print("[step] Submit login form")

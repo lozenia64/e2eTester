@@ -24,7 +24,9 @@ class ChbotRuntime(AccessRuntime):
 
 
 class ChbotWorkflowExecutor(AccessWorkflowExecutor):
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> ChbotRuntime:
+    def build_runtime(
+        self, input_data: dict[str, str], run_id: str, module_id: str
+    ) -> ChbotRuntime:
         runtime = super().build_runtime(input_data, run_id, module_id)
         return ChbotRuntime(
             base_url=runtime.base_url,

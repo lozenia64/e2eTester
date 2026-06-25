@@ -194,10 +194,14 @@ class Schedule(BaseModel):
             "timezone": self.timezone,
             "enabled": self.enabled,
             "selected_module_ids": list(self.selected_module_ids or []),
-            "module_count": len(self.selected_module_ids) if self.selected_module_ids is not None else None,
+            "module_count": len(self.selected_module_ids)
+            if self.selected_module_ids is not None
+            else None,
             "step_total": self.step_total if is_suite else None,
             "selected_system_codes": list(self.selected_system_codes or []) if is_suite else [],
-            "selected_system_count": len(self.selected_system_codes) if is_suite and self.selected_system_codes is not None else None,
+            "selected_system_count": len(self.selected_system_codes)
+            if is_suite and self.selected_system_codes is not None
+            else None,
             "browser_mode": self.browser_mode if is_suite else None,
             "auth_method": None if is_suite else self.input_data.get("auth_method"),
             "created_at": self.created_at.isoformat(),

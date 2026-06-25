@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
 
 from . import compensation_result_common as result_common
 from . import login_common as common
@@ -17,7 +18,9 @@ def _attach_dialog_recorder(page) -> list[tuple[str, str]]:
     return seen_dialogs
 
 
-def _cancel_claim_and_return_result01(page, timeout_ms: int, seen_dialogs: list[tuple[str, str]]) -> None:
+def _cancel_claim_and_return_result01(
+    page, timeout_ms: int, seen_dialogs: list[tuple[str, str]]
+) -> None:
     cancel_button = common.first_visible_locator(
         page.locator(result_common.DETAIL_CANCEL_SELECTOR), "상세 화면 접수취소(#btn4)"
     )
@@ -29,9 +32,15 @@ def _cancel_claim_and_return_result01(page, timeout_ms: int, seen_dialogs: list[
         common.wait_timeout_with_log(page, 400, "접수취소 처리 대기")
     result_common.wait_url_contains(page, "result01.do", timeout_ms)
 
-    if not any(dialog_type == "confirm" and "접수를 취소하시겠습니까?" in message for dialog_type, message in seen_dialogs):
+    if not any(
+        dialog_type == "confirm" and "접수를 취소하시겠습니까?" in message
+        for dialog_type, message in seen_dialogs
+    ):
         raise RuntimeError(f"접수취소 confirm 대화상자를 확인하지 못했습니다: {seen_dialogs}")
-    if not any(dialog_type == "alert" and "정상적으로 처리 되었습니다." in message for dialog_type, message in seen_dialogs):
+    if not any(
+        dialog_type == "alert" and "정상적으로 처리 되었습니다." in message
+        for dialog_type, message in seen_dialogs
+    ):
         raise RuntimeError(f"접수취소 완료 alert를 확인하지 못했습니다: {seen_dialogs}")
 
 
@@ -82,7 +91,7 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
     row = _find_row_by_receipt_number(page, receipt_number, timeout_ms)
     row_text = result_common.normalize_text(row.inner_text(timeout=1000))
-    if result_common.TARGET_CLAIM_TEXT_TRUNCATED not in row_text:
+    if TARGET_CLAIM_TEXT_TRUNCATED not in row_text:
         raise RuntimeError(f"완료 탭 청구내용이 예상과 다릅니다: {row_text}")
     if CANCELLED_STATUS not in row_text:
         raise RuntimeError(f"완료 탭 상태값이 취소가 아닙니다: {row_text}")
@@ -94,7 +103,9 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
 
 def run(page, config: common.LoginConfig) -> str:
     result_common.goto_result01(page, config)
-    result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms)
+    result_common.select_results_tab(
+        page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms
+    )
     row = result_common.find_processing_claim_row(page, config.timeout_ms)
     receipt_number = result_common.receipt_number_from_row(row)
     result_common.open_claim_detail(page, row, config.timeout_ms)

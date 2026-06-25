@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
-from typing import Any
-
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -19,11 +17,11 @@ from app.api.dependencies import (
     get_stats_service,
     get_suite_repository,
 )
-from app.orchestrator.run_actor import load_actor_context
 from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
-from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 from app.core.models import ModuleSettings
+from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
+from app.orchestrator.run_actor import load_actor_context
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
@@ -50,10 +48,10 @@ async def admin_list_runs(
     system_code: str | None = Query(default=None),
     user_name: str | None = Query(default=None),
     current_user: User = Depends(require_admin),
-    run_service: "RunService" = Depends(get_run_service),
-    user_service: "UserService" = Depends(get_user_service),
-    suite_repo: "SuiteRepositoryPort" = Depends(get_suite_repository),
-    schedule_repo: "ScheduleRepositoryPort" = Depends(get_schedule_repository),
+    run_service: RunService = Depends(get_run_service),
+    user_service: UserService = Depends(get_user_service),
+    suite_repo: SuiteRepositoryPort = Depends(get_suite_repository),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
 ) -> list[dict[str, Any]]:
     actor_context = await load_actor_context(
         user_service,
@@ -74,7 +72,7 @@ async def admin_list_runs(
 async def admin_delete_run(
     run_id: str,
     current_user: User = Depends(require_admin),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ) -> dict[str, bool]:
     try:
         await run_service.delete_run(run_id)
@@ -88,7 +86,7 @@ async def admin_delete_run(
 @router.get("/ops/snapshot")
 async def admin_ops_snapshot(
     current_user: User = Depends(require_admin),
-    ops_service: "OpsService" = Depends(get_ops_service),
+    ops_service: OpsService = Depends(get_ops_service),
 ) -> dict[str, Any]:
     return await ops_service.build_snapshot()
 
@@ -98,7 +96,7 @@ async def admin_usage_stats(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     current_user: User = Depends(require_admin),
-    stats_service: "StatsService" = Depends(get_stats_service),
+    stats_service: StatsService = Depends(get_stats_service),
 ):
     stats = await stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
     return stats.model_dump(mode="json")
@@ -107,7 +105,7 @@ async def admin_usage_stats(
 @router.get("/users")
 async def admin_list_users(
     current_user: User = Depends(require_admin),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ) -> list[UserPublic]:
     users = await user_service.list_users()
     return [UserPublic(**u.model_dump()) for u in users]
@@ -117,7 +115,7 @@ async def admin_list_users(
 async def admin_create_user(
     payload: CreateUserRequest,
     current_user: User = Depends(require_admin),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ) -> UserPublic:
     user = await user_service.create_user(payload)
     return UserPublic(**user.model_dump())
@@ -128,7 +126,7 @@ async def admin_toggle_user_active(
     user_id: str,
     payload: dict,
     current_user: User = Depends(require_admin),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ) -> UserPublic:
     is_active = payload.get("is_active")
     if not isinstance(is_active, bool):
@@ -144,7 +142,7 @@ async def admin_toggle_user_active(
 async def admin_delete_user(
     user_id: str,
     current_user: User = Depends(require_admin),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     try:
         await user_service.delete_user(user_id)
@@ -160,37 +158,50 @@ async def admin_savings_csv(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     current_user: User = Depends(require_admin),
-    stats_service: "StatsService" = Depends(get_stats_service),
+    stats_service: StatsService = Depends(get_stats_service),
 ) -> StreamingResponse:
     stats = await stats_service.get_usage_stats(from_dt=from_dt, to_dt=to_dt)
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "사용자ID", "이름", "이메일", "총Run수", "통과모듈수", "실패모듈수",
-        "자동화실행시간(분)", "절감시간",
-        "시스템코드", "시스템명", "시스템별Run수", "시스템별통과모듈", "시스템별절감시간",
-    ])
+    writer.writerow(
+        [
+            "사용자ID",
+            "이름",
+            "이메일",
+            "총Run수",
+            "통과모듈수",
+            "실패모듈수",
+            "자동화실행시간(분)",
+            "절감시간",
+            "시스템코드",
+            "시스템명",
+            "시스템별Run수",
+            "시스템별통과모듈",
+            "시스템별절감시간",
+        ]
+    )
 
     for u in stats.by_user:
         automation_min = round((u.total_duration_ms or 0) / 60000, 1)
         for s in u.by_system:
-            sys_automation_min = round((s.total_duration_ms or 0) / 60000, 1)
-            writer.writerow([
-                u.user_id or "",
-                u.user_name or "(시스템)",
-                u.email or "",
-                u.total_runs,
-                u.total_modules_passed,
-                u.total_modules_failed,
-                automation_min,
-                _fmt_saved_seconds(u.manual_seconds_saved),
-                s.system_code,
-                s.system_name,
-                s.runs,
-                s.modules_passed,
-                _fmt_saved_seconds(s.manual_seconds_saved),
-            ])
+            writer.writerow(
+                [
+                    u.user_id or "",
+                    u.user_name or "(시스템)",
+                    u.email or "",
+                    u.total_runs,
+                    u.total_modules_passed,
+                    u.total_modules_failed,
+                    automation_min,
+                    _fmt_saved_seconds(u.manual_seconds_saved),
+                    s.system_code,
+                    s.system_name,
+                    s.runs,
+                    s.modules_passed,
+                    _fmt_saved_seconds(s.manual_seconds_saved),
+                ]
+            )
 
     date_str = datetime.now().strftime("%Y%m%d")
     output.seek(0)
@@ -204,12 +215,9 @@ async def admin_savings_csv(
 @router.get("/systems")
 async def admin_list_systems(
     current_user: User = Depends(require_admin),
-    registry: "ModuleRegistry" = Depends(get_registry),
+    registry: ModuleRegistry = Depends(get_registry),
 ) -> list[dict]:
-    return [
-        {"system_code": s.system_code, "system_name": s.name}
-        for s in registry.list_systems()
-    ]
+    return [{"system_code": s.system_code, "system_name": s.name} for s in registry.list_systems()]
 
 
 @router.put("/users/{user_id}/systems")
@@ -217,7 +225,7 @@ async def admin_update_user_systems(
     user_id: str,
     payload: dict,
     current_user: User = Depends(require_admin),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ) -> UserPublic:
     codes = payload.get("allowed_system_codes")
     if not isinstance(codes, list):
@@ -232,7 +240,7 @@ async def admin_update_user_systems(
 @router.get("/module-settings")
 async def admin_list_module_settings(
     current_user: User = Depends(require_admin),
-    registry: "ModuleRegistry" = Depends(get_registry),
+    registry: ModuleRegistry = Depends(get_registry),
     repo=Depends(get_module_settings_repo),
 ) -> list[dict]:
     overrides: dict[str, int] = {}
@@ -246,18 +254,22 @@ async def admin_list_module_settings(
         for m in system.modules:
             is_overridden = m.module_id in overrides
             seconds = overrides[m.module_id] if is_overridden else m.estimated_manual_seconds
-            modules.append({
-                "module_id": m.module_id,
-                "name": m.name,
-                "estimated_manual_seconds": seconds,
-                "manifest_default": m.estimated_manual_seconds,
-                "is_overridden": is_overridden,
-            })
-        result.append({
-            "system_code": system.system_code,
-            "system_name": system.name,
-            "modules": modules,
-        })
+            modules.append(
+                {
+                    "module_id": m.module_id,
+                    "name": m.name,
+                    "estimated_manual_seconds": seconds,
+                    "manifest_default": m.estimated_manual_seconds,
+                    "is_overridden": is_overridden,
+                }
+            )
+        result.append(
+            {
+                "system_code": system.system_code,
+                "system_name": system.name,
+                "modules": modules,
+            }
+        )
     return result
 
 
@@ -266,7 +278,7 @@ async def admin_bulk_update_module_settings(
     system_code: str,
     payload: dict,
     current_user: User = Depends(require_admin),
-    registry: "ModuleRegistry" = Depends(get_registry),
+    registry: ModuleRegistry = Depends(get_registry),
     repo=Depends(get_module_settings_repo),
 ) -> dict:
     modules = payload.get("modules")
@@ -296,9 +308,9 @@ async def admin_bulk_update_module_settings(
     if repo is None:
         raise HTTPException(status_code=503, detail="모듈 설정 저장소가 초기화되지 않았습니다.")
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     saved: list[dict[str, Any]] = []
     failed: list[dict[str, str]] = []
 
@@ -341,11 +353,12 @@ async def admin_update_module_settings(
     if repo is None:
         raise HTTPException(status_code=503, detail="모듈 설정 저장소가 초기화되지 않았습니다.")
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     settings = ModuleSettings(
         module_id=module_id,
         estimated_manual_seconds=seconds,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
     )
     await repo.save(settings)
     return {"ok": True, "module_id": module_id, "estimated_manual_seconds": seconds}

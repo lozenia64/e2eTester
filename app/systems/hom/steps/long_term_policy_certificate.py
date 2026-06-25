@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import time
+from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from . import login_common as common
-
 
 PROOF_LIST_FRAGMENT = "/fplaza/proof/list.do"
 LONG_TERM_POLICY_FRAGMENT = "/fplaza/proof/ioltrh070.do"
@@ -145,7 +144,9 @@ def _click_radio_with_fallback(page, radio, description: str, timeout_ms: int) -
 
         label = page.locator(f'label[for="{radio_id}"]').first
         if label.count() == 0:
-            raise RuntimeError(f"{description} 클릭에 실패했고 연결된 라벨도 찾지 못했습니다: {exc}") from exc
+            raise RuntimeError(
+                f"{description} 클릭에 실패했고 연결된 라벨도 찾지 못했습니다: {exc}"
+            ) from exc
 
         print(f"[warn] {description}: input 클릭 실패, 라벨 클릭으로 재시도: {exc}")
         common.click_with_log(label, f"{description} 라벨 클릭")
@@ -221,7 +222,9 @@ def _wait_for_download_trigger(page, timeout_ms: int) -> bool:
         return False
 
 
-def _wait_for_issue_dialog(page, dialog_messages: list[str], start_index: int, timeout_ms: int) -> str:
+def _wait_for_issue_dialog(
+    page, dialog_messages: list[str], start_index: int, timeout_ms: int
+) -> str:
     deadline = time.monotonic() + (timeout_ms / 1000)
 
     while time.monotonic() < deadline:
@@ -238,7 +241,9 @@ def _wait_for_issue_dialog(page, dialog_messages: list[str], start_index: int, t
     raise RuntimeError("장기보험증권 PDF 다운로드 완료 알림을 확인하지 못했습니다.")
 
 
-def _issue_certificate(page, dialog_messages: list[str], timeout_ms: int, artifact_dir: Path) -> str:
+def _issue_certificate(
+    page, dialog_messages: list[str], timeout_ms: int, artifact_dir: Path
+) -> str:
     issue_button = _first_visible_candidate(
         [
             page.locator('a[onclick*="reqIssue"]'),
