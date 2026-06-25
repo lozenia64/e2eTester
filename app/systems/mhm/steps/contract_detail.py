@@ -5,12 +5,11 @@ import re
 from . import contract_list
 from . import login_common as common
 
-
 CONTRACT_DETAIL_URL_PATTERN = re.compile(r"/myh/ciq/PsnCrInq(?!1010)")
 CONTRACT_CARD_SELECTOR = (
     'main [role="tabpanel"] button:has(h3), '
     'main [role="tabpanel"] a[role="button"]:has(h3), '
-    'main button:has(h3), '
+    "main button:has(h3), "
     'main a[role="button"]:has(h3)'
 )
 POLICY_NUMBER_PATTERN = re.compile(r"[FL]A\d[\d*]{5,}")

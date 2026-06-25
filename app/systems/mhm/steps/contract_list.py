@@ -4,7 +4,6 @@ import re
 
 from . import login_common as common
 
-
 CONTRACT_LIST_URL_FRAGMENT = "/myh/ciq/PsnCrInq1010"
 CONTRACT_LIST_URL_PATTERN = re.compile(r"/myh/ciq/PsnCrInq1010")
 MAIN_SUB_MAIN_URL_FRAGMENT = "/myh/mai/MySubMain"
@@ -13,7 +12,7 @@ CONTRACT_STATUS_BUTTON_SELECTOR = 'main button.btn.s3.c4:has-text("계약현황�
 CONTRACT_CARD_SELECTOR = (
     'main [role="tabpanel"] button:has(h3), '
     'main [role="tabpanel"] a[role="button"]:has(h3), '
-    'main button:has(h3), '
+    "main button:has(h3), "
     'main a[role="button"]:has(h3)'
 )
 

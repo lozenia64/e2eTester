@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 _FIELD_BOUNDS: tuple[tuple[int, int], ...] = (
-    (0, 59),   # minute
-    (0, 23),   # hour
-    (1, 31),   # day of month
-    (1, 12),   # month
-    (0, 6),    # day of week (0 = Sunday)
+    (0, 59),  # minute
+    (0, 23),  # hour
+    (1, 31),  # day of month
+    (1, 12),  # month
+    (0, 6),  # day of week (0 = Sunday)
 )
 _FIELD_NAMES = ("분", "시", "일", "월", "요일")
 _SEARCH_LIMIT_MINUTES = 366 * 24 * 60
@@ -104,7 +104,9 @@ def _to_int(raw: str, index: int) -> int:
         value = 0
     low, high = _FIELD_BOUNDS[index]
     if value < low or value > high:
-        raise ValueError(f"{_FIELD_NAMES[index]} 필드 값이 범위({low}-{high})를 벗어났습니다: {value}")
+        raise ValueError(
+            f"{_FIELD_NAMES[index]} 필드 값이 범위({low}-{high})를 벗어났습니다: {value}"
+        )
     return value
 
 

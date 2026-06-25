@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from app.storage.suite_control_store import InMemorySuiteControlStore
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
+from app.storage.suite_control_store import InMemorySuiteControlStore
 
 
 def _exercise(store) -> None:

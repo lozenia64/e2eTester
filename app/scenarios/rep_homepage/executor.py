@@ -37,7 +37,9 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
         # 채널 프로파일이 SSOT. 로더/오케스트레이터는 이 값으로 실행기를 매핑한다.
         return self._profile.execution_mode
 
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> RepHomepageRuntime:
+    def build_runtime(
+        self, input_data: dict[str, str], run_id: str, module_id: str
+    ) -> RepHomepageRuntime:
         profile = self._profile
         common = profile.common
         headless = self._resolve_headless(input_data)
@@ -68,7 +70,9 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
 
         playwright_manager = sync_playwright()
         playwright = playwright_manager.__enter__()
-        context = common.launch_persistent_browser_context(playwright, config.headless, config.slow_mo)
+        context = common.launch_persistent_browser_context(
+            playwright, config.headless, config.slow_mo
+        )
         page = context.pages[0] if context.pages else context.new_page()
         # 모바일 채널은 페이지 생성 직후, 접속 이전에 모바일 디바이스 모드를 적용한다.
         if profile.mobile:
@@ -91,7 +95,9 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
     def _shutdown_browser(self, runtime: RepHomepageRuntime) -> None:
         runtime.channel.common.shutdown_browser(runtime.page, runtime.context, runtime.browser)
 
-    def _run_step(self, runtime: RepHomepageRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
+    def _run_step(
+        self, runtime: RepHomepageRuntime, module: ModuleDefinition, artifact_dir: Path
+    ) -> str:
         steps = runtime.channel.steps
         step = module.workflow_step
 

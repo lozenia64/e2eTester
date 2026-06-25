@@ -20,13 +20,17 @@ CLAIM_COMPLETE_URL_FRAGMENT = "/cmp/dii/IbnfDmRcp1090"
 CLAIM_COMPLETE_HEADING_PATTERN = re.compile(r"보험금청구를\s*완료")
 SERVICE_SATISFACTION_DIALOG_TEXT = re.compile(r"서비스\s*만족도\s*조사|서비스이용은\s*어떠셨")
 SERVICE_SATISFACTION_DIALOG_SELECTOR = ".dialog.full.show"
-SERVICE_SATISFACTION_CLOSE_SELECTOR = "button.dialog_close.ui_dialog_close, a.dialog_close.ui_dialog_close"
+SERVICE_SATISFACTION_CLOSE_SELECTOR = (
+    "button.dialog_close.ui_dialog_close, a.dialog_close.ui_dialog_close"
+)
 VISIBLE_MODAL_SELECTOR = (
     ".ui_dialog:visible, [role='dialog']:visible, .dialog.modal.show:visible, "
     ".dialog.show:visible, .modal.show:visible, .pop_wrap:visible"
 )
 SILSOM24_DIALOG_SELECTOR = "#dialog_silson24Url"
-SILSOM24_DISMISS_LINK_SELECTOR = f'{SILSOM24_DIALOG_SELECTOR} a.link_txt[title="오늘 더이상 안볼래요"]'
+SILSOM24_DISMISS_LINK_SELECTOR = (
+    f'{SILSOM24_DIALOG_SELECTOR} a.link_txt[title="오늘 더이상 안볼래요"]'
+)
 SILSOM24_CLOSE_LINK_SELECTOR = f"{SILSOM24_DIALOG_SELECTOR} a.dialog_close.ui_dialog_close"
 SELF_CLAIM_LABEL_SELECTOR = "label.ic_self.man"
 SELF_CLAIM_INPUT_SELECTOR = "#selectionRadio1_0_selectionRadio1_0"
@@ -36,16 +40,16 @@ LOADING_OVERLAY_SELECTOR = "#loading"
 TARGET_SELECT_NEXT_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("다음")'
 CLAIM_FLOW_DIALOG_SELECTOR = ".dialog.modal.show, .dialog.show"
 DUPLICATE_CLAIM_NOTICE_TEXT = re.compile(r"동일한\s*사고|청구하신\s*이력|동일한\s*질병")
-DUPLICATE_ACCIDENT_DATE_TYPE_TEXT = re.compile(
-    r"동일한\s*발병|사고유형으로\s*완료|기존\s*청구내역"
-)
+DUPLICATE_ACCIDENT_DATE_TYPE_TEXT = re.compile(r"동일한\s*발병|사고유형으로\s*완료|기존\s*청구내역")
 EXISTING_CLAIM_HISTORY_ALERT_SELECTOR = ".dialog.modal.alert.show"
 CLAIM_CONFIRM_MODAL_TEXT = re.compile(
     r"신규\s*접수|중복\s*청구|접수\s*확인|동일한\s*사고|청구하신\s*이력|동일한\s*질병"
 )
 ACCIDENT_TYPE_ETC_LABEL_SELECTOR = 'label:has(em.sel_lb_tit:text-is("기타"))'
 ACCIDENT_TYPE_ETC_INPUT_SELECTOR = 'main input[type="radio"][value="05"]'
-CLAIM_REASON_COMPLETE_SELECTOR = '.fixed_bottom_button button.btn.s1.c1:has-text("청구사유 입력완료")'
+CLAIM_REASON_COMPLETE_SELECTOR = (
+    '.fixed_bottom_button button.btn.s1.c1:has-text("청구사유 입력완료")'
+)
 ACCIDENT_TYPE_CONFIRM_TEXT = re.compile(r"사고\s*유형")
 DESKTOP_SCREENSHOT_GLOB_PATTERNS = (
     "스크린샷*.PNG",
@@ -73,9 +77,7 @@ MEDICAL_BENEFIT_NONE_INPUT_SELECTOR = "#radio10"
 CONSENT_FULL_AGREE_FOR = "[필수] 전체동의"
 CONSENT_GUIDE_PATTERN = re.compile(r"동의\s*안내|보험금청구를\s*위한\s*동의")
 CONSENT_SUMMARY_PATTERN = re.compile(r"요약\s*동의서|보험금청구를\s*위한")
-CONSENT_MODAL_SELECTOR = (
-    ".ui_dialog, [role='dialog'], .dialog.full.show, .dialog.modal.show, .dialog.bottom.show, .dialog.show"
-)
+CONSENT_MODAL_SELECTOR = ".ui_dialog, [role='dialog'], .dialog.full.show, .dialog.modal.show, .dialog.bottom.show, .dialog.show"
 GALLERY_FILE_INPUT_SELECTOR = "#galleyFile"
 PRIMARY_UPLOAD_BUTTON_PATTERN = re.compile(r"보험금청구서류")
 SECONDARY_UPLOAD_BUTTON_PATTERN = re.compile(r"진료비\s*세부")
@@ -128,11 +130,15 @@ def _find_visible_action(root, names: list[str | re.Pattern[str]], description: 
     return None
 
 
-def _click_named_action(page, names: list[str | re.Pattern[str]], description: str, *, scope=None) -> None:
+def _click_named_action(
+    page, names: list[str | re.Pattern[str]], description: str, *, scope=None
+) -> None:
     root = scope or page
     action = _find_visible_action(root, names, description)
     if action is None:
-        joined = ", ".join(pattern.pattern if hasattr(pattern, "pattern") else str(pattern) for pattern in names)
+        joined = ", ".join(
+            pattern.pattern if hasattr(pattern, "pattern") else str(pattern) for pattern in names
+        )
         raise RuntimeError(f"{description} 요소를 찾지 못했습니다: {joined}")
     common.click_with_log(action, description)
 
@@ -398,7 +404,9 @@ def _dismiss_duplicate_claim_notice_popup(page, timeout_ms: int) -> bool:
     if not _claim_flow_dialog_open(page, DUPLICATE_CLAIM_NOTICE_TEXT):
         return False
     for _ in range(max(3, timeout_ms // 500)):
-        if _click_claim_flow_dialog_confirm(page, DUPLICATE_CLAIM_NOTICE_TEXT, "동일 사고 청구 이력 안내"):
+        if _click_claim_flow_dialog_confirm(
+            page, DUPLICATE_CLAIM_NOTICE_TEXT, "동일 사고 청구 이력 안내"
+        ):
             _wait_for_loading_overlay_gone(page, min(timeout_ms, 5000))
             if not _claim_flow_dialog_open(page, DUPLICATE_CLAIM_NOTICE_TEXT):
                 return True
@@ -770,7 +778,9 @@ def _click_self_claim_target(page, timeout_ms: int) -> None:
 def _click_new_claim_type(page, timeout_ms: int) -> None:
     _close_gnb_menu_if_open(page)
     _wait_for_loading_overlay_gone(page, timeout_ms)
-    page.locator(f"main {NEW_CLAIM_LABEL_SELECTOR}").first.wait_for(state="attached", timeout=timeout_ms)
+    page.locator(f"main {NEW_CLAIM_LABEL_SELECTOR}").first.wait_for(
+        state="attached", timeout=timeout_ms
+    )
     _click_selection_label(
         page,
         label_selector=NEW_CLAIM_LABEL_SELECTOR,
@@ -832,7 +842,9 @@ def _navigate_to_claim_entry(page, timeout_ms: int, base_url: str) -> None:
 
 def _start_claim_from_intro(page, timeout_ms: int) -> None:
     _dismiss_claim_entry_popups(page, timeout_ms)
-    _click_named_action(page, ["보험금청구하기", re.compile(r"보험금\s*청구\s*하기")], "보험금청구하기")
+    _click_named_action(
+        page, ["보험금청구하기", re.compile(r"보험금\s*청구\s*하기")], "보험금청구하기"
+    )
     _wait_url_contains(page, TARGET_SELECT_URL_FRAGMENT, timeout_ms)
     _dismiss_claim_entry_popups(page, timeout_ms)
 
@@ -891,7 +903,9 @@ def _click_claim_reason_complete(page, timeout_ms: int) -> None:
 
 def _dismiss_accident_type_confirm_popup(page, timeout_ms: int) -> bool:
     if _claim_flow_dialog_open(page, ACCIDENT_TYPE_CONFIRM_TEXT):
-        return _click_claim_flow_dialog_confirm(page, ACCIDENT_TYPE_CONFIRM_TEXT, "사고유형 확인 팝업")
+        return _click_claim_flow_dialog_confirm(
+            page, ACCIDENT_TYPE_CONFIRM_TEXT, "사고유형 확인 팝업"
+        )
     return _maybe_click_modal_action(
         page,
         ACCIDENT_TYPE_CONFIRM_TEXT,
@@ -1074,7 +1088,9 @@ def _maybe_click_consent_action(
     if scope is not None:
         if _click_button_in_modal(root, names=names, description=description):
             return True
-        label_for = CONSENT_FULL_AGREE_FOR if "필수" in description and "전체" in description else None
+        label_for = (
+            CONSENT_FULL_AGREE_FOR if "필수" in description and "전체" in description else None
+        )
         text_pattern = next((name for name in names if isinstance(name, re.Pattern)), None)
         if label_for or text_pattern is not None:
             if _click_label_in_modal(
@@ -1344,8 +1360,12 @@ def _open_account_select_dialog(page, timeout_ms: int) -> None:
 
 
 def _click_saved_account_item(page, timeout_ms: int) -> None:
-    dialog = page.locator(".dialog.bottom.show, .dialog.show").filter(has_text=ACCOUNT_SELECT_DIALOG_TEXT)
-    saved_account = dialog.locator("a.ui-pop-select-btn").filter(has_text=SAVED_ACCOUNT_ITEM_PATTERN).first
+    dialog = page.locator(".dialog.bottom.show, .dialog.show").filter(
+        has_text=ACCOUNT_SELECT_DIALOG_TEXT
+    )
+    saved_account = (
+        dialog.locator("a.ui-pop-select-btn").filter(has_text=SAVED_ACCOUNT_ITEM_PATTERN).first
+    )
     try:
         if saved_account.count() > 0:
             common.wait_locator_visible_with_log(saved_account, timeout_ms, "등록된 계좌 항목")
@@ -1467,7 +1487,9 @@ def _complete_detail_step(page, timeout_ms: int) -> None:
     _wait_url_contains(page, DOCUMENT_UPLOAD_URL_FRAGMENT, timeout_ms)
 
 
-def _upload_via_album(page, category_pattern: re.Pattern[str], file_path: Path, description: str) -> None:
+def _upload_via_album(
+    page, category_pattern: re.Pattern[str], file_path: Path, description: str
+) -> None:
     category_button = page.get_by_role("button", name=category_pattern).first
     common.click_with_log(category_button, f"{description} 업로드 영역 열기")
     common.wait_timeout_with_log(page, 500, "서류 등록 시트 표시 대기")
@@ -1499,7 +1521,9 @@ def _upload_claim_documents(page) -> None:
     primary_file = _pick_random_desktop_screenshot()
     secondary_file = _pick_random_desktop_screenshot()
     _upload_via_album(page, PRIMARY_UPLOAD_BUTTON_PATTERN, primary_file, "보험금청구서류")
-    _upload_via_album(page, SECONDARY_UPLOAD_BUTTON_PATTERN, secondary_file, "진료비 세부(산정)내역서")
+    _upload_via_album(
+        page, SECONDARY_UPLOAD_BUTTON_PATTERN, secondary_file, "진료비 세부(산정)내역서"
+    )
 
 
 def _submit_documents(page, timeout_ms: int) -> None:

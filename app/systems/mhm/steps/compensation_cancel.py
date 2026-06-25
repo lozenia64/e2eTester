@@ -8,9 +8,7 @@ from . import login_common as common
 CANCEL_CONFIRM_TEXT = "접수를 취소하시겠습니까?"
 CANCEL_SUCCESS_TEXT = re.compile(r"정상\s*처리\s*되었습니다")
 ALERT_DIALOG_SELECTOR = ".dialog.modal.alert.show, .dialog.show"
-FORBIDDEN_CANCELLED_DETAIL_BUTTONS = (
-    re.compile(r"접수\s*취소"),
-)
+FORBIDDEN_CANCELLED_DETAIL_BUTTONS = (re.compile(r"접수\s*취소"),)
 
 
 def _click_alert_dialog_button(
@@ -115,7 +113,9 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
 
 def run(page, config: common.LoginConfig) -> str:
     result_common.goto_result01(page, config)
-    result_common.select_results_tab(page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms)
+    result_common.select_results_tab(
+        page, result_common.ING_TAB_SELECTOR, "진행중", config.timeout_ms
+    )
     row = result_common.find_processing_claim_row(page, config.timeout_ms)
     receipt_number = result_common.receipt_number_from_row(row)
     result_common.open_claim_detail(page, row, config.timeout_ms)

@@ -52,24 +52,26 @@ def _passed_run(run_id: str, module_id: str) -> Run:
 def test_saved_seconds_sums_without_per_run_truncation():
     """3 runs × 45s saved each = 135s total (not 0 from per-run // 60)."""
     module_id = "hom.login"
-    registry = _FakeRegistry([
-        SystemDefinition(
-            system_code="hom",
-            name="HOM",
-            description="",
-            modules=[
-                ModuleDefinition(
-                    module_id=module_id,
-                    system_code="hom",
-                    name="login",
-                    description="",
-                    group="auth",
-                    order=0,
-                    estimated_manual_seconds=45,
-                ),
-            ],
-        ),
-    ])
+    registry = _FakeRegistry(
+        [
+            SystemDefinition(
+                system_code="hom",
+                name="HOM",
+                description="",
+                modules=[
+                    ModuleDefinition(
+                        module_id=module_id,
+                        system_code="hom",
+                        name="login",
+                        description="",
+                        group="auth",
+                        order=0,
+                        estimated_manual_seconds=45,
+                    ),
+                ],
+            ),
+        ]
+    )
     run_repo = InMemoryRunRepository()
     for i in range(3):
         asyncio.run(run_repo.create_run(_passed_run(f"run_{i}", module_id)))
@@ -89,24 +91,26 @@ def test_saved_seconds_sums_without_per_run_truncation():
 
 def test_usage_stats_includes_anomaly_excludes_error():
     module_id = "hom.login"
-    registry = _FakeRegistry([
-        SystemDefinition(
-            system_code="hom",
-            name="HOM",
-            description="",
-            modules=[
-                ModuleDefinition(
-                    module_id=module_id,
-                    system_code="hom",
-                    name="login",
-                    description="",
-                    group="auth",
-                    order=0,
-                    estimated_manual_seconds=30,
-                ),
-            ],
-        ),
-    ])
+    registry = _FakeRegistry(
+        [
+            SystemDefinition(
+                system_code="hom",
+                name="HOM",
+                description="",
+                modules=[
+                    ModuleDefinition(
+                        module_id=module_id,
+                        system_code="hom",
+                        name="login",
+                        description="",
+                        group="auth",
+                        order=0,
+                        estimated_manual_seconds=30,
+                    ),
+                ],
+            ),
+        ]
+    )
     run_repo = InMemoryRunRepository()
 
     def _run(run_id: str, status: RunStatus) -> Run:

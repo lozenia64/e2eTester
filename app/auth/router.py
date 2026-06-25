@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-
-from typing import TYPE_CHECKING
 
 from app.auth.dependencies import get_current_user, get_user_service
 from app.auth.jwt import create_access_token
@@ -27,7 +27,7 @@ async def login(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ):
     user = await user_service.authenticate(email, password)
     if user is None:
@@ -38,7 +38,9 @@ async def login(
 
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
-        response = JSONResponse(content=TokenResponse(access_token=token, user=user_public).model_dump(mode="json"))
+        response = JSONResponse(
+            content=TokenResponse(access_token=token, user=user_public).model_dump(mode="json")
+        )
     else:
         response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -82,7 +84,7 @@ async def change_password(
     new_password: str = Form(...),
     new_password_confirm: str = Form(...),
     current_user: User = Depends(get_current_user),
-    user_service: "UserService" = Depends(get_user_service),
+    user_service: UserService = Depends(get_user_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user

@@ -55,7 +55,7 @@ class GeminiFailureAnalyzer:
         return self.models[0]
 
     @classmethod
-    def from_env(cls) -> "GeminiFailureAnalyzer | None":
+    def from_env(cls) -> GeminiFailureAnalyzer | None:
         settings = get_settings()
         if not settings.failure_analyzer_enabled:
             return None
@@ -64,13 +64,20 @@ class GeminiFailureAnalyzer:
         transport_settings = load_gemini_transport_settings()
         if not api_key:
             return None
-        return cls(api_key=api_key, models=tuple(models), enabled=True, verify_ssl=transport_settings.verify_ssl)
+        return cls(
+            api_key=api_key,
+            models=tuple(models),
+            enabled=True,
+            verify_ssl=transport_settings.verify_ssl,
+        )
 
     @classmethod
     def inspect_env_status(cls) -> GeminiFailureAnalyzerStatus:
         dotenv_values = load_dotenv_file(DEFAULT_ENV_FILE_PATH)
         transport_settings = load_gemini_transport_settings(dotenv_values)
-        enabled_raw, enabled_source = resolve_env_with_source("E2E_FAILURE_ANALYZER_ENABLED", dotenv_values)
+        enabled_raw, enabled_source = resolve_env_with_source(
+            "E2E_FAILURE_ANALYZER_ENABLED", dotenv_values
+        )
         if enabled_raw is None:
             return GeminiFailureAnalyzerStatus(
                 state="missing",
@@ -107,7 +114,9 @@ class GeminiFailureAnalyzer:
             if not api_key_valid:
                 problems.append("GEMINI_API_KEY 값이 없거나 placeholder 값입니다.")
             if not models_valid:
-                problems.append("GEMINI_MODELS 값이 비어 있거나 gemini-/gemma- 로 시작하는 모델이 없습니다.")
+                problems.append(
+                    "GEMINI_MODELS 값이 비어 있거나 gemini-/gemma- 로 시작하는 모델이 없습니다."
+                )
             return GeminiFailureAnalyzerStatus(
                 state="invalid",
                 color="yellow",

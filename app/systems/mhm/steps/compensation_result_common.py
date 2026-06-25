@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 import re
+from datetime import date
 
 # 청구 식별 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
-from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT, TARGET_CLAIM_TEXT_TRUNCATED
+from app.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
 
 from . import login_common as common
 
@@ -171,7 +171,11 @@ def claim_cards(page):
 
 def row_button_names(row) -> list[str]:
     try:
-        return [normalize_text(value) for value in row.locator("button").all_inner_texts() if normalize_text(value)]
+        return [
+            normalize_text(value)
+            for value in row.locator("button").all_inner_texts()
+            if normalize_text(value)
+        ]
     except Exception:
         return []
 
@@ -245,7 +249,9 @@ def open_claim_detail(page, row, timeout_ms: int) -> None:
 def detail_section(page):
     heading = page.get_by_role("heading", name=DETAIL_SECTION_HEADING).first
     common.wait_locator_visible_with_log(heading, common.MAX_TIMEOUT_MS, "보험금청구 내용 섹션")
-    return heading.locator("xpath=ancestor::article[1] | ancestor::div[contains(@class,'article')][1]")
+    return heading.locator(
+        "xpath=ancestor::article[1] | ancestor::div[contains(@class,'article')][1]"
+    )
 
 
 def detail_value(page, _table, header_name: str, cell_index: int = 0) -> str:

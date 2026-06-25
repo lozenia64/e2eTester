@@ -6,19 +6,24 @@ from uuid import uuid4
 
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.logging import get_logger
-from app.core.models import Run, StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep, SystemDefinition
-from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
-from app.orchestrator.run_service import RunService
-from app.registry.loader import ModuleRegistry
-from app.storage.ports import SuiteControlStorePort, SuiteInputStorePort, SuiteRepositoryPort
-
+from app.core.models import (
+    Run,
+    StartSuiteRequest,
+    SuiteEvent,
+    SuiteRun,
+    SuiteStep,
+    SystemDefinition,
+)
 from app.core.status_labels import (
-    RUN_ANOMALY_STATUSES,
     RUN_ERROR_STATUSES,
     SUITE_ANOMALY_STATUSES,
     SUITE_ERROR_STATUSES,
     SUITE_TERMINAL_OUTCOME_STATUSES,
 )
+from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
+from app.orchestrator.run_service import RunService
+from app.registry.loader import ModuleRegistry
+from app.storage.ports import SuiteControlStorePort, SuiteInputStorePort, SuiteRepositoryPort
 
 _TERMINAL_SUITE = {
     SuiteStatus.PASSED,
@@ -141,7 +146,9 @@ class SuiteService:
 
     # --- 검증 / 입력 병합 -------------------------------------------------
 
-    def _merge_input(self, browser_mode: str, system_code: str, systems_input: dict[str, dict[str, str]]) -> dict[str, str]:
+    def _merge_input(
+        self, browser_mode: str, system_code: str, systems_input: dict[str, dict[str, str]]
+    ) -> dict[str, str]:
         merged = {"browser_mode": browser_mode}
         merged.update(systems_input.get(system_code, {}))
         return merged
@@ -214,13 +221,19 @@ class SuiteService:
             raise ValueError("browser_mode는 headed 또는 headless 여야 합니다.")
 
         normalized_systems = {key: dict(value) for key, value in (systems or {}).items()}
-        resolved_system_codes = self._resolve_selected_system_codes(registered, selected_system_codes)
+        resolved_system_codes = self._resolve_selected_system_codes(
+            registered, selected_system_codes
+        )
         selected_set = set(resolved_system_codes)
         for system in registered:
             if system.system_code not in selected_set:
                 continue
-            merged_input = self._merge_input(normalized_mode, system.system_code, normalized_systems)
-            self._run_service.validate_run_request(system.system_code, merged_input, selected_module_ids=None)
+            merged_input = self._merge_input(
+                normalized_mode, system.system_code, normalized_systems
+            )
+            self._run_service.validate_run_request(
+                system.system_code, merged_input, selected_module_ids=None
+            )
         return normalized_mode, normalized_systems, resolved_system_codes
 
     # --- 명령 ------------------------------------------------------------
@@ -297,7 +310,12 @@ class SuiteService:
         # 취소 의도를 영속한다 — 활성 Run 취소가 비동기로 마무리되거나, 다음 스텝 진입 직전
         # advance 가 이 플래그를 읽어 협력적으로 중단한다.
         await self._cancel_store.set_cancel_requested(suite_id)
-        logger.info("Suite 취소 요청", log_event="suite.cancel_requested", suite_id=suite_id, status=suite.status.value)
+        logger.info(
+            "Suite 취소 요청",
+            log_event="suite.cancel_requested",
+            suite_id=suite_id,
+            status=suite.status.value,
+        )
         active_run_id = suite.active_run_id
         if active_run_id:
             try:
@@ -395,7 +413,9 @@ class SuiteService:
             suite.awaiting_input_prompt = None
             await self._repository.save_suite(suite)
             await self._publish_event("suite_resumed", suite)
-            logger.info("Suite 재개", log_event="suite.resumed", suite_id=suite.suite_id, run_id=run.run_id)
+            logger.info(
+                "Suite 재개", log_event="suite.resumed", suite_id=suite.suite_id, run_id=run.run_id
+            )
 
     # --- 진행 / 종료 ------------------------------------------------------
 
@@ -426,7 +446,9 @@ class SuiteService:
                 await self._publish_event("suite_step_started", suite, {"step_index": next_index})
 
                 systems_input = await self._input_store.get(suite_id) or {}
-                merged_input = self._merge_input(suite.browser_mode, step.system_code, systems_input)
+                merged_input = self._merge_input(
+                    suite.browser_mode, step.system_code, systems_input
+                )
                 try:
                     run = await self._run_service.start_run(
                         step.system_code,
@@ -457,7 +479,9 @@ class SuiteService:
         suite, status = finalized
         if status in SUITE_TERMINAL_OUTCOME_STATUSES:
             runs = await self._collect_step_runs(suite)
-            await self._event_bus.publish(SuiteFinished(suite=suite.model_copy(deep=True), runs=runs))
+            await self._event_bus.publish(
+                SuiteFinished(suite=suite.model_copy(deep=True), runs=runs)
+            )
 
     async def _finalize_cancelled(self, suite_id: str) -> None:
         async with self._lock_for(suite_id):
@@ -540,7 +564,9 @@ class SuiteService:
                 return index, step
         return -1, None
 
-    async def _publish_event(self, event_type: str, suite: SuiteRun, extra: dict | None = None) -> None:
+    async def _publish_event(
+        self, event_type: str, suite: SuiteRun, extra: dict | None = None
+    ) -> None:
         payload = suite.model_dump(mode="json")
         if extra:
             payload.update(extra)

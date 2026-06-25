@@ -19,7 +19,7 @@ router = APIRouter(tags=["ws"])
 async def run_updates(
     websocket: WebSocket,
     run_id: str,
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     token = websocket.cookies.get("access_token")
     if not token:

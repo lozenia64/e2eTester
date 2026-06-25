@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 from uuid import uuid4
 
 from app.core.models import ModuleDefinition
@@ -57,7 +58,9 @@ class LocalExecutionGateway(ExecutionGateway):
     ) -> ExecutionHandle:
         executor = self._require_executor(execution_mode)
         prefix = execution_mode.replace("_workflow_step", "")
-        thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{prefix}-runtime-{run_id}")
+        thread_pool = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix=f"{prefix}-runtime-{run_id}"
+        )
         try:
             runtime = await asyncio.get_running_loop().run_in_executor(
                 thread_pool,
@@ -122,7 +125,9 @@ class LocalExecutionGateway(ExecutionGateway):
     async def submit_input(self, handle: ExecutionHandle, value: str) -> None:
         session = self._require_session(handle)
         executor = self._require_executor(session.execution_mode)
-        await self._run_on_session_thread(session.runtime, executor.update_otp_code, session.runtime, value)
+        await self._run_on_session_thread(
+            session.runtime, executor.update_otp_code, session.runtime, value
+        )
 
     async def close_session(self, handle: ExecutionHandle) -> None:
         session = self._sessions.pop(handle.session_id, None)

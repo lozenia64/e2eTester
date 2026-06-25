@@ -5,7 +5,6 @@ import re
 from . import contract_list
 from . import login_common as common
 
-
 CONTRACT_DETAIL_URL_FRAGMENT = "/fplaza/inquiry/contract02.do"
 DETAIL_SECTION_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("계약일반정보", re.compile(r"계약\s*일반정보")),
@@ -23,7 +22,9 @@ POLICY_NUMBER_PATTERN = re.compile(r"\d[\d-]{5,}")
 
 
 def _ensure_contract_list_context(page, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT} ({timeout_ms} ms)")
+    print(
+        f"[wait] Start URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT} ({timeout_ms} ms)"
+    )
     page.wait_for_function(
         "fragment => window.location.href.includes(fragment)",
         arg=contract_list.CONTRACT_LIST_URL_FRAGMENT,
@@ -111,7 +112,9 @@ def _wait_for_detail_sections(page, timeout_ms: int) -> list[str]:
 
     for _ in range(attempts):
         body_text = re.sub(r"\s+", " ", page.locator("body").inner_text()).strip()
-        missing_sections = [label for label, pattern in DETAIL_SECTION_RULES if not pattern.search(body_text)]
+        missing_sections = [
+            label for label, pattern in DETAIL_SECTION_RULES if not pattern.search(body_text)
+        ]
         if not missing_sections:
             return []
         common.wait_timeout_with_log(page, 500, "Wait for contract detail sections")

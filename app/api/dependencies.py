@@ -28,39 +28,39 @@ if TYPE_CHECKING:
     from app.storage.ports import ScheduleRepositoryPort, SuiteRepositoryPort
 
 
-def get_run_service(connection: HTTPConnection) -> "RunService":
+def get_run_service(connection: HTTPConnection) -> RunService:
     return connection.app.state.run_service
 
 
-def get_suite_service(connection: HTTPConnection) -> "SuiteService":
+def get_suite_service(connection: HTTPConnection) -> SuiteService:
     return connection.app.state.suite_service
 
 
-def get_stats_service(connection: HTTPConnection) -> "StatsService":
+def get_stats_service(connection: HTTPConnection) -> StatsService:
     return connection.app.state.stats_service
 
 
-def get_schedule_service(connection: HTTPConnection) -> "SchedulerService":
+def get_schedule_service(connection: HTTPConnection) -> SchedulerService:
     return connection.app.state.schedule_service
 
 
-def get_run_queue(connection: HTTPConnection) -> "RunExecutionQueue":
+def get_run_queue(connection: HTTPConnection) -> RunExecutionQueue:
     return connection.app.state.run_queue
 
 
-def get_ops_service(connection: HTTPConnection) -> "OpsService":
+def get_ops_service(connection: HTTPConnection) -> OpsService:
     return connection.app.state.ops_service
 
 
-def get_registry(connection: HTTPConnection) -> "ModuleRegistry":
+def get_registry(connection: HTTPConnection) -> ModuleRegistry:
     return connection.app.state.registry
 
 
-def get_suite_repository(connection: HTTPConnection) -> "SuiteRepositoryPort":
+def get_suite_repository(connection: HTTPConnection) -> SuiteRepositoryPort:
     return connection.app.state.suite_repository
 
 
-def get_schedule_repository(connection: HTTPConnection) -> "ScheduleRepositoryPort":
+def get_schedule_repository(connection: HTTPConnection) -> ScheduleRepositoryPort:
     return connection.app.state.schedule_repository
 
 
@@ -68,7 +68,7 @@ def get_module_settings_repo(connection: HTTPConnection):
     return connection.app.state.module_settings_repo
 
 
-def get_app_settings(connection: HTTPConnection) -> "E2ESettings":
+def get_app_settings(connection: HTTPConnection) -> E2ESettings:
     return connection.app.state.settings
 
 

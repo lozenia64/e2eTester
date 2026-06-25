@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 import re
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 
@@ -199,9 +200,7 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
     print(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
     popup.wait_for_timeout(OZ_POPUP_OPEN_SETTLE_MS)
     if OZ_POPUP_URL_FRAGMENT not in popup.url:
-        raise RuntimeError(
-            f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}"
-        )
+        raise RuntimeError(f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}")
     print(f"[wait] OZ form popup ready: {popup.url}")
     _wait_for_oz_form_ready(popup)
     _draw_circle_signature(popup)

@@ -57,7 +57,7 @@ async def submit_inbound_otp(
     x_otp_relay_token: str | None = Header(default=None, alias="X-OTP-Relay-Token"),
     configured_token: str | None = Depends(get_otp_relay_token),
     relay_regex: str | None = Depends(get_otp_relay_regex),
-    run_service: "RunService" = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     """중계기가 보낸 OTP 를 현재 대기 중인 Run 에 주입해 재개한다.
 

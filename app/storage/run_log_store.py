@@ -25,7 +25,9 @@ class InMemoryRunLogStore:
 
     async def get_all(self, run_id: str) -> dict[str, list[str]]:
         async with self._lock:
-            return {module_id: list(lines) for module_id, lines in self._logs.get(run_id, {}).items()}
+            return {
+                module_id: list(lines) for module_id, lines in self._logs.get(run_id, {}).items()
+            }
 
     async def delete_by_run_id(self, run_id: str) -> None:
         async with self._lock:

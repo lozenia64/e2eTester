@@ -4,7 +4,6 @@ import re
 
 from . import login_common as common
 
-
 CONTRACT_LIST_URL_FRAGMENT = "/fplaza/inquiry/contract01.do"
 CONTRACT_COUNT_PATTERN = re.compile(r"총\s*([0-9,]+)\s*건")
 CONTRACT_DETAIL_LINK_SELECTOR = 'a[href*="contract02"]'
@@ -117,7 +116,9 @@ def _read_contract_count(page, timeout_ms: int) -> int:
         ]
         for candidate in heading_candidates:
             try:
-                common.wait_locator_visible_with_log(candidate, timeout_ms, "Personal contract inquiry heading")
+                common.wait_locator_visible_with_log(
+                    candidate, timeout_ms, "Personal contract inquiry heading"
+                )
                 break
             except Exception:
                 continue
@@ -134,7 +135,9 @@ def _read_contract_count(page, timeout_ms: int) -> int:
         common.wait_timeout_with_log(page, 400, "Wait for contract count text")
 
     assert_inquiry_page_available(page, context="계약목록 조회")
-    raise RuntimeError("계약목록 건수를 확인하지 못했습니다. (총 N건 문구 또는 계약 상세 링크 없음)")
+    raise RuntimeError(
+        "계약목록 건수를 확인하지 못했습니다. (총 N건 문구 또는 계약 상세 링크 없음)"
+    )
 
 
 def run(page, config: common.LoginConfig) -> str:

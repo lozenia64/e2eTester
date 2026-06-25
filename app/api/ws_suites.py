@@ -20,8 +20,8 @@ router = APIRouter(tags=["ws"])
 async def suite_updates(
     websocket: WebSocket,
     suite_id: str,
-    suite_service: "SuiteService" = Depends(get_suite_service),
-    user_service: "UserService" = Depends(get_user_service),
+    suite_service: SuiteService = Depends(get_suite_service),
+    user_service: UserService = Depends(get_user_service),
 ):
     token = websocket.cookies.get("access_token")
     if not token:

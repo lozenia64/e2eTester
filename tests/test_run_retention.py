@@ -75,7 +75,9 @@ def _service(tmp_path: Path) -> RunService:
 def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
     service = _service(tmp_path)
     tz = ZoneInfo("Asia/Seoul")
-    today_start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    today_start = (
+        datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    )
     yesterday = today_start - timedelta(hours=1)
     today = today_start + timedelta(hours=1)
 
@@ -109,12 +111,16 @@ def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
 def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
     service = _service(tmp_path)
     tz = ZoneInfo("Asia/Seoul")
-    today_start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    today_start = (
+        datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    )
     yesterday = today_start - timedelta(hours=2)
 
-    asyncio.run(service._repository.create_run(
-        _run("run_error_yesterday", status=RunStatus.ERROR, requested_at=yesterday),
-    ))
+    asyncio.run(
+        service._repository.create_run(
+            _run("run_error_yesterday", status=RunStatus.ERROR, requested_at=yesterday),
+        )
+    )
 
     scheduler = RunRetentionScheduler(
         RunRetentionService(service),

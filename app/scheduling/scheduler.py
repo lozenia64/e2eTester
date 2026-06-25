@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.logging import get_logger
-from app.core.settings import get_settings
 from app.core.models import (
     SUITE_SCHEDULE_SYSTEM_CODE,
     SUITE_SCHEDULE_SYSTEM_NAME,
@@ -18,6 +17,7 @@ from app.core.models import (
     StartSuiteRequest,
     SuiteRun,
 )
+from app.core.settings import get_settings
 from app.scheduling.cron import next_run_after, parse_cron
 from app.storage.ports import ScheduleRepositoryPort
 
@@ -105,10 +105,12 @@ class SchedulerService:
         user_name: str | None = None,
     ) -> Schedule:
         parse_cron(request.cron)  # ValueError -> 400
-        browser_mode, normalized_systems, resolved_system_codes = self._suite_service.validate_suite_request(
-            request.browser_mode,
-            request.systems,
-            request.selected_system_codes,
+        browser_mode, normalized_systems, resolved_system_codes = (
+            self._suite_service.validate_suite_request(
+                request.browser_mode,
+                request.systems,
+                request.selected_system_codes,
+            )
         )
         schedule = Schedule(
             schedule_id=f"sch_{uuid4().hex[:8]}",
@@ -133,9 +135,13 @@ class SchedulerService:
         return schedule
 
     async def list_schedules(self, user_id: str | None = None) -> list[dict]:
-        schedules = sorted(await self._repository.list(), key=lambda item: item.created_at, reverse=True)
+        schedules = sorted(
+            await self._repository.list(), key=lambda item: item.created_at, reverse=True
+        )
         if user_id is not None:
-            schedules = [schedule for schedule in schedules if schedule.created_by_user_id == user_id]
+            schedules = [
+                schedule for schedule in schedules if schedule.created_by_user_id == user_id
+            ]
         summaries: list[dict] = []
         for schedule in schedules:
             await self._refresh_last_execution_status(schedule)
@@ -193,7 +199,9 @@ class SchedulerService:
             try:
                 await self._tick()
             except Exception as exc:  # 루프는 어떤 경우에도 죽지 않아야 한다
-                logger.exception("스케줄러 tick 오류", log_event="schedule.tick_error", error=str(exc))
+                logger.exception(
+                    "스케줄러 tick 오류", log_event="schedule.tick_error", error=str(exc)
+                )
             try:
                 await asyncio.sleep(self._tick_seconds)
             except asyncio.CancelledError:
@@ -217,7 +225,11 @@ class SchedulerService:
         now = datetime.now(UTC)
         rescheduled = 0
         for schedule in await self._repository.list():
-            if schedule.enabled and schedule.next_run_at is not None and schedule.next_run_at <= now:
+            if (
+                schedule.enabled
+                and schedule.next_run_at is not None
+                and schedule.next_run_at <= now
+            ):
                 schedule.next_run_at = self._next_run_from_now(schedule.cron)
                 await self._repository.save(schedule)
                 rescheduled += 1
@@ -289,7 +301,9 @@ class SchedulerService:
         run = await self._run_service.start_run(
             schedule.system_code,
             dict(schedule.input_data),
-            list(schedule.selected_module_ids) if schedule.selected_module_ids is not None else None,
+            list(schedule.selected_module_ids)
+            if schedule.selected_module_ids is not None
+            else None,
             triggered_by="schedule",
             schedule_id=schedule.schedule_id,
             user_id=actor_id,

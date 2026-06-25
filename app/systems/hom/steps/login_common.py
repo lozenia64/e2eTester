@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
 
-from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Locator, Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common.browser import PC_VIEWPORT
-
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("hwgeneralins-login-result.png")
@@ -231,7 +231,9 @@ def parse_phone_number(raw_phone: str, explicit_prefix: str | None) -> tuple[str
         local_digits = digits
 
     if len(local_digits) not in {7, 8}:
-        raise ValueError("Phone number must contain 10 or 11 digits total, for example 01012345678.")
+        raise ValueError(
+            "Phone number must contain 10 or 11 digits total, for example 01012345678."
+        )
 
     if len(local_digits) == 7:
         middle = local_digits[:3]
@@ -252,9 +254,7 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
     dotenv_values = load_dotenv_file(dotenv_path)
 
     raw_auth = getattr(args, "auth_method", None)
-    auth_method = (
-        (env_or_arg(raw_auth, "HW_AUTH_METHOD", dotenv_values) or "phone").strip().lower()
-    )
+    auth_method = (env_or_arg(raw_auth, "HW_AUTH_METHOD", dotenv_values) or "phone").strip().lower()
     if auth_method not in {"phone", "kakao"}:
         raise ValueError(f"Unsupported auth_method for automation: {auth_method}")
 
@@ -351,7 +351,9 @@ def is_failure_dialog(message: str) -> bool:
     return any(keyword in normalized for keyword in FAILURE_DIALOG_KEYWORDS)
 
 
-def ensure_no_failure_dialogs(dialog_messages: list[str], start_index: int, step_name: str) -> list[str]:
+def ensure_no_failure_dialogs(
+    dialog_messages: list[str], start_index: int, step_name: str
+) -> list[str]:
     new_dialogs = get_new_dialogs(dialog_messages, start_index)
     failures = [message for message in new_dialogs if is_failure_dialog(message)]
     if failures:
@@ -377,7 +379,9 @@ def resolve_user_data_dir() -> Path:
     return target
 
 
-def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, user_data_dir: Path | None = None):
+def launch_persistent_browser_context(
+    playwright, headless: bool, slow_mo: int, user_data_dir: Path | None = None
+):
     """일반 브라우저/Cursor Playwright MCP와 동일하게, 영속 프로파일로 브라우저를 띄운다.
 
     - 시크릿 일회용 컨텍스트가 아닌 persistent context 라서 보안프로그램 확장/프로파일
@@ -408,7 +412,9 @@ def launch_persistent_browser_context(playwright, headless: bool, slow_mo: int, 
         "args": [f"--disable-features={disabled_features}"],
     }
     try:
-        print(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})")
+        print(
+            f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})"
+        )
         return playwright.chromium.launch_persistent_context(
             str(target_dir),
             channel=PREFERRED_BROWSER_CHANNEL,
@@ -459,7 +465,9 @@ def click_and_wait_for_navigation(page: Page, locator, expected_url: str) -> Non
     with page.expect_navigation(wait_until="domcontentloaded"):
         click_with_log(locator, f"Navigate to {expected_url}")
     print(f"[wait] End navigation wait: {expected_url} -> {page.url}")
-    wait_url_with_log(page, re.compile(expected_url), MAX_TIMEOUT_MS, f"Confirm URL matches {expected_url}")
+    wait_url_with_log(
+        page, re.compile(expected_url), MAX_TIMEOUT_MS, f"Confirm URL matches {expected_url}"
+    )
 
 
 def grant_browser_permissions(context, base_url: str) -> None:
@@ -480,11 +488,15 @@ def select_dropdown_option(root: Page | Locator, headline: str, button_name: str
     sel_root = anchor.locator("xpath=ancestor::div[contains(@class, 'select_list')][1]")
     click_with_log(anchor, f"Open dropdown: {headline}")
     option = sel_root.locator(f'ul >> button[name="{button_name}"]')
-    wait_locator_visible_with_log(option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}")
+    wait_locator_visible_with_log(
+        option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}"
+    )
     click_with_log(option, f"Select dropdown option {button_name} from {headline}")
 
 
-def select_dropdown_option_first_visible(root: Page | Locator, headline: str, button_name: str) -> None:
+def select_dropdown_option_first_visible(
+    root: Page | Locator, headline: str, button_name: str
+) -> None:
     """같은 title의 드롭다운이 페이지에 여러 개(숨김 템플릿 등)일 때, 보이는 앵커만 연다."""
     anchors = root.locator(f'a.headline[title="{headline}"]')
     anchor = None
@@ -502,7 +514,9 @@ def select_dropdown_option_first_visible(root: Page | Locator, headline: str, bu
     sel_root = anchor.locator("xpath=ancestor::div[contains(@class, 'select_list')][1]")
     click_with_log(anchor, f"Open dropdown (visible): {headline}")
     option = sel_root.locator(f'ul >> button[name="{button_name}"]')
-    wait_locator_visible_with_log(option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}")
+    wait_locator_visible_with_log(
+        option, MAX_TIMEOUT_MS, f"Dropdown option {button_name} visible in {headline}"
+    )
     click_with_log(option, f"Select dropdown option {button_name} from {headline}")
 
 
@@ -540,7 +554,9 @@ def fill_phone_fields(page: Page, config: LoginConfig) -> None:
     page.locator("#hndphTlsno").fill(config.phone_last)
 
 
-def fill_kakao_phone_segments(page: Page, config: LoginConfig, *, scope: Locator | None = None) -> None:
+def fill_kakao_phone_segments(
+    page: Page, config: LoginConfig, *, scope: Locator | None = None
+) -> None:
     """Kakao 본인인증: 통신사 없이 앞자리·중간·끝 전화번호만 입력.
 
     팝업/숨김 마크업이 겹칠 수 있어 드롭다운은 **보이는** 앵커만 사용하고,
@@ -598,7 +614,9 @@ def request_sms_code(page: Page, dialog_messages: list[str], timeout_ms: int) ->
     dialog_index = len(dialog_messages)
     scroll_to_page_bottom(page)
     print(f"[wait] Start response wait: hp-sms-request.json ({timeout_ms} ms)")
-    with page.expect_response(lambda response: "hp-sms-request.json" in response.url, timeout=timeout_ms) as response_info:
+    with page.expect_response(
+        lambda response: "hp-sms-request.json" in response.url, timeout=timeout_ms
+    ) as response_info:
         click_with_log(page.locator("#btnSendCrtfNo"), "Request SMS verification code")
 
     response = response_info.value
@@ -608,7 +626,9 @@ def request_sms_code(page: Page, dialog_messages: list[str], timeout_ms: int) ->
     if not response.ok:
         recent_dialogs = get_new_dialogs(dialog_messages, dialog_index)
         detail = recent_dialogs[-1] if recent_dialogs else f"HTTP {response.status}"
-        raise RuntimeError(f"SMS verification request failed with status {response.status}: {detail}")
+        raise RuntimeError(
+            f"SMS verification request failed with status {response.status}: {detail}"
+        )
 
     ensure_no_failure_dialogs(dialog_messages, dialog_index, "SMS verification request")
 
@@ -629,7 +649,9 @@ def request_sms_code(page: Page, dialog_messages: list[str], timeout_ms: int) ->
             "OTP input becomes available",
         )
     except PlaywrightTimeoutError as exc:
-        raise RuntimeError("SMS verification request did not leave the page in a usable OTP-entry state.") from exc
+        raise RuntimeError(
+            "SMS verification request did not leave the page in a usable OTP-entry state."
+        ) from exc
 
 
 def resolve_otp_code(config: LoginConfig) -> str:
@@ -674,13 +696,17 @@ def handle_post_otp_privacy_step(page: Page, timeout_ms: int) -> None:
     step_handled = False
     scroll_to_page_bottom(page)
 
-    if click_if_visible(page.locator('label[for="formChkAgree6_1"]'), "Handle post-OTP privacy consent"):
+    if click_if_visible(
+        page.locator('label[for="formChkAgree6_1"]'), "Handle post-OTP privacy consent"
+    ):
         click_visible_confirm_button()
         step_handled = True
 
     scroll_to_page_bottom(page)
 
-    if click_if_visible(page.locator('label[for="comformChkAll"]'), "Handle customer confirmation consent"):
+    if click_if_visible(
+        page.locator('label[for="comformChkAll"]'), "Handle customer confirmation consent"
+    ):
         click_visible_confirm_button()
         step_handled = True
 
@@ -729,7 +755,7 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
         page.locator(".modal_overlay:visible"),
     ]
     modal_candidates = [
-        page.locator('#uiPOPCtmAgre:visible, #uiPOPCtmAgreLayer:visible').first,
+        page.locator("#uiPOPCtmAgre:visible, #uiPOPCtmAgreLayer:visible").first,
         page.locator(':visible >> text="모바일 안내장 신청 안내"').first,
         page.locator(':visible >> text="모바일 안내장"').first,
     ]
@@ -972,7 +998,9 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
     )
 
     if forcibly_hidden:
-        print(f"[warn] Forcibly hid blocking post-login popup after failed dismiss strategy: {strategy_used or 'none'}")
+        print(
+            f"[warn] Forcibly hid blocking post-login popup after failed dismiss strategy: {strategy_used or 'none'}"
+        )
         if wait_for_popup_to_clear(1500):
             print("[step] Post-login popup dismissed")
             return
@@ -1003,7 +1031,9 @@ def shutdown_browser(page: Page, context, browser=None) -> None:
 
 
 def keep_script_alive_with_browser_open(page: Page, context) -> None:
-    print("[result] Keeping browser open. Close the browser window or press Ctrl+C to end the script.")
+    print(
+        "[result] Keeping browser open. Close the browser window or press Ctrl+C to end the script."
+    )
     sys.stdout.flush()
     sys.stderr.flush()
 

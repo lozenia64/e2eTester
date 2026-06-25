@@ -42,7 +42,7 @@ class RunView(BaseModel):
     created_by_user_name: str | None = None
 
     @classmethod
-    def from_run(cls, run: Run) -> "RunView":
+    def from_run(cls, run: Run) -> RunView:
         return cls(
             run_id=run.run_id,
             system_code=run.system_code,

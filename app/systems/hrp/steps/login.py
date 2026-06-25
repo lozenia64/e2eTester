@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 
-from playwright.sync_api import FrameLocator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import FrameLocator, Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.systems.access_common import browser
 
@@ -42,13 +43,19 @@ def _ensure_first_page(page: Page, base_url: str) -> None:
 def _auth_frame_ready(page: Page, *, timeout_ms: int = 1000) -> bool:
     """cubePopup 부모 div 는 is_visible() 이 false 인 경우가 있어 iframe 내용으로 판별한다."""
     try:
-        return _auth_frame(page).get_by_role("heading", name="사용자 인증").is_visible(timeout=timeout_ms)
+        return (
+            _auth_frame(page)
+            .get_by_role("heading", name="사용자 인증")
+            .is_visible(timeout=timeout_ms)
+        )
     except PlaywrightTimeoutError:
         return False
 
 
 def _wait_for_auth_popup(page: Page) -> FrameLocator:
-    page.locator('[id^="__POP_ID_"] iframe').wait_for(state="attached", timeout=browser.MAX_TIMEOUT_MS)
+    page.locator('[id^="__POP_ID_"] iframe').wait_for(
+        state="attached", timeout=browser.MAX_TIMEOUT_MS
+    )
     frame = _auth_frame(page)
     frame.get_by_role("heading", name="사용자 인증").wait_for(
         state="visible",

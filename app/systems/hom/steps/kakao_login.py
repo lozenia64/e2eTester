@@ -50,9 +50,7 @@ def _ensure_kakao_popup_visible(page):
     그 안의 `#sendKakaoCertf`(인증재요청)를 사용한다. Result 모달이 열려 있을 때 login CTA를 누르면 클릭이 가로막힌다.
     """
     if _is_kakao_result_modal_open(page):
-        raise RuntimeError(
-            "카카오 인증 결과 모달이 열려 있으나 인증재요청 버튼을 찾지 못했습니다."
-        )
+        raise RuntimeError("카카오 인증 결과 모달이 열려 있으나 인증재요청 버튼을 찾지 못했습니다.")
 
     popup = _kakao_popup(page)
     try:
@@ -64,13 +62,17 @@ def _ensure_kakao_popup_visible(page):
     print("[step] Kakao 인증 팝업 재오픈 (재시도)")
     login_cta = page.locator('a[href="#uiPOPKakaoLogin"]').first
     try:
-        common.wait_locator_visible_with_log(login_cta, common.MAX_TIMEOUT_MS, "카카오 탭 — 로그인 링크")
+        common.wait_locator_visible_with_log(
+            login_cta, common.MAX_TIMEOUT_MS, "카카오 탭 — 로그인 링크"
+        )
         common.click_with_log(login_cta, "카카오 인증 팝업 재오픈")
     except Exception:
         fallback = page.locator(
             'li:has-text("카카오 인증") a[href="#uiPOPKakaoLogin"], a[href="#uiPOPKakaoLogin"]'
         ).first
-        common.wait_locator_visible_with_log(fallback, common.MAX_TIMEOUT_MS, "카카오 탭 로그인 CTA (fallback)")
+        common.wait_locator_visible_with_log(
+            fallback, common.MAX_TIMEOUT_MS, "카카오 탭 로그인 CTA (fallback)"
+        )
         common.click_with_log(fallback, "카카오 인증 팝업 재오픈 (fallback)")
 
     common.wait_locator_visible_with_log(popup, common.MAX_TIMEOUT_MS, "카카오 인증 팝업")
@@ -113,7 +115,9 @@ def _find_visible_kakao_auth_request(page):
             pass
         try:
             return common.first_visible_locator(
-                scope.get_by_role("link", name=re.compile(r"인증\s*재?\s*요청|인증\s*요청|인증요청")),
+                scope.get_by_role(
+                    "link", name=re.compile(r"인증\s*재?\s*요청|인증\s*요청|인증요청")
+                ),
                 "Kakao 인증요청 링크",
             )
         except Exception:
@@ -141,18 +145,24 @@ def _wait_for_kakao_required_consents(page, timeout_ms: int, reason: str) -> Non
 def open_kakao_identity_popup(page) -> None:
     """로그인 허브에서 카카오 인증 카드의 로그인 링크를 눌러 팝업을 연다."""
     if LOGIN_HUB_URL_FRAGMENT not in page.url:
-        print(f"[warn] 로그인 허브 URL이 아닐 수 있음 (기대: …{LOGIN_HUB_URL_FRAGMENT}): {page.url}")
+        print(
+            f"[warn] 로그인 허브 URL이 아닐 수 있음 (기대: …{LOGIN_HUB_URL_FRAGMENT}): {page.url}"
+        )
 
     login_cta = page.locator('a[href="#uiPOPKakaoLogin"]').first
     try:
-        common.wait_locator_visible_with_log(login_cta, common.MAX_TIMEOUT_MS, "카카오 탭 — 로그인 링크")
+        common.wait_locator_visible_with_log(
+            login_cta, common.MAX_TIMEOUT_MS, "카카오 탭 — 로그인 링크"
+        )
         common.click_with_log(login_cta, "카카오 인증 탭 — 로그인 링크")
     except Exception:
         fallback = page.locator(
             'li:has-text("카카오 인증") a[href="#uiPOPKakaoLogin"], a[href="#uiPOPKakaoLogin"]'
         ).first
         try:
-            common.wait_locator_visible_with_log(fallback, common.MAX_TIMEOUT_MS, "카카오 탭 로그인 CTA (fallback)")
+            common.wait_locator_visible_with_log(
+                fallback, common.MAX_TIMEOUT_MS, "카카오 탭 로그인 CTA (fallback)"
+            )
             common.click_with_log(fallback, "카카오 인증 탭 — 로그인 (fallback)")
         except Exception as exc2:
             raise RuntimeError(
@@ -196,11 +206,15 @@ def fill_kakao_form(page, config: common.LoginConfig) -> None:
     print("[step] Fill Kakao auth form (이름, 생년월일, 휴대폰)")
     popup = _visible_kakao_popup(page)
 
-    name_f = common.first_visible_locator(popup.get_by_role("textbox", name="이름"), "Kakao 팝업 이름")
+    name_f = common.first_visible_locator(
+        popup.get_by_role("textbox", name="이름"), "Kakao 팝업 이름"
+    )
     common.click_with_log(name_f, "Kakao 이름 입력란")
     name_f.fill(config.name)
 
-    birth_f = common.first_visible_locator(popup.get_by_role("textbox", name="생년월일"), "Kakao 팝업 생년월일")
+    birth_f = common.first_visible_locator(
+        popup.get_by_role("textbox", name="생년월일"), "Kakao 팝업 생년월일"
+    )
     common.click_with_log(birth_f, "Kakao 생년월일 입력란")
     birth_f.fill(config.birthdate)
 
@@ -223,7 +237,9 @@ def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int)
         common.scroll_to_page_bottom(page)
         try:
             auth_req = popup.locator(KAKAO_AUTH_REQUEST_SELECTOR)
-            common.wait_locator_visible_with_log(auth_req, common.MAX_TIMEOUT_MS, "Kakao 인증요청 링크")
+            common.wait_locator_visible_with_log(
+                auth_req, common.MAX_TIMEOUT_MS, "Kakao 인증요청 링크"
+            )
         except Exception:
             auth_req = common.first_visible_locator(
                 popup.get_by_role("button", name=re.compile(r"인증\s*요청|인증요청")),
@@ -261,7 +277,9 @@ def click_kakao_auth_complete(page) -> None:
     if _is_kakao_result_modal_open(page):
         try:
             complete_link = page.locator(KAKAO_AUTH_COMPLETE_RESULT_SELECTOR).first
-            common.wait_locator_visible_with_log(complete_link, common.MAX_TIMEOUT_MS, "Kakao 인증완료 (#signReqRes)")
+            common.wait_locator_visible_with_log(
+                complete_link, common.MAX_TIMEOUT_MS, "Kakao 인증완료 (#signReqRes)"
+            )
             common.click_with_log(complete_link, "Click Kakao 인증완료 (#signReqRes)")
             common.wait_timeout_with_log(page, 1000, "Post-Kakao-인증완료 settle")
             return

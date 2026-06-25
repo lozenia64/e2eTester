@@ -25,3 +25,22 @@ jobs:
 
       - name: Run docs ↔ source consistency guard
         run: python3 scripts/check_docs_consistency.py --verbose
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff
+        run: python3 -m pip install "ruff>=0.15,<0.16"
+
+      - name: Lint (ruff check)
+        run: ruff check --output-format=github .
+
+      - name: Format check (ruff format --check)
+        run: ruff format --check .

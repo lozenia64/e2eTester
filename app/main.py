@@ -8,9 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-from app.auth.router import router as auth_router
-from app.auth.service import UserService
-from app.storage.sqlite_user_repository import SqliteUserRepository
+from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.api.routes_admin import router as admin_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_otp import router as otp_router
@@ -20,7 +18,10 @@ from app.api.routes_suites import router as suites_router
 from app.api.routes_systems import router as systems_router
 from app.api.ws_runs import router as ws_runs_router
 from app.api.ws_suites import router as ws_suites_router
-from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.auth.router import router as auth_router
+from app.auth.service import UserService
+from app.core.logging import bind_log_context, clear_log_context, configure_logging, get_logger
+from app.core.settings import get_settings
 from app.events.bus import EventBus
 from app.events.subscribers.email_notification import EmailNotificationSubscriber
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
@@ -45,10 +46,9 @@ from app.storage.sqlite_run_repository import SqliteRunRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
-from app.storage.suite_input_store import InMemorySuiteInputStore
-from app.core.settings import get_settings
-from app.core.logging import bind_log_context, clear_log_context, configure_logging, get_logger
 from app.storage.sqlite_support import DEFAULT_DB_PATH
+from app.storage.sqlite_user_repository import SqliteUserRepository
+from app.storage.suite_input_store import InMemorySuiteInputStore
 
 logger = get_logger(__name__)
 

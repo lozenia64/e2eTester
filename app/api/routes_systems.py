@@ -14,6 +14,6 @@ router = APIRouter(prefix="/api/systems", tags=["systems"])
 
 
 @router.get("")
-async def list_systems(run_service: "RunService" = Depends(get_run_service)):
+async def list_systems(run_service: RunService = Depends(get_run_service)):
     systems = run_service.list_systems()
     return [system.model_dump(mode="json") for system in systems]

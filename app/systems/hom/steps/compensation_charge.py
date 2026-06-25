@@ -127,11 +127,15 @@ def _find_visible_action(root, names: list[str | re.Pattern[str]], description: 
     return None
 
 
-def _click_named_action(page, names: list[str | re.Pattern[str]], description: str, *, scope=None) -> None:
+def _click_named_action(
+    page, names: list[str | re.Pattern[str]], description: str, *, scope=None
+) -> None:
     root = scope or page
     action = _find_visible_action(root, names, description)
     if action is None:
-        joined = ", ".join(pattern.pattern if hasattr(pattern, "pattern") else str(pattern) for pattern in names)
+        joined = ", ".join(
+            pattern.pattern if hasattr(pattern, "pattern") else str(pattern) for pattern in names
+        )
         raise RuntimeError(f"{description} 요소를 찾지 못했습니다: {joined}")
     common.click_with_log(action, description)
 
@@ -438,7 +442,9 @@ def _select_claim_type_other(page) -> None:
 
 
 def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
-    lookup = _first_visible_selector(page, CHARGE04_QUERY_SELECTOR, "청구 상세내용 조회(#searchBtn)")
+    lookup = _first_visible_selector(
+        page, CHARGE04_QUERY_SELECTOR, "청구 상세내용 조회(#searchBtn)"
+    )
     common.wait_locator_visible_with_log(lookup, timeout_ms, "청구 상세내용 조회(#searchBtn)")
     common.click_with_log(lookup, "청구 상세내용 조회")
     common.wait_timeout_with_log(page, 3000, "청구 상세내용 조회 완료 대기")
@@ -470,7 +476,10 @@ def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
             prefer_textarea=True,
         ):
             try:
-                if textarea.is_visible(timeout=800) and textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT:
+                if (
+                    textarea.is_visible(timeout=800)
+                    and textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT
+                ):
                     print(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
                     return
             except Exception:
@@ -648,21 +657,27 @@ def _wait_for_uploaded_item(page, frame_selector: str, description: str, timeout
     print(f"[wait] End upload reflection wait: {description}")
 
 
-def _upload_file_to_frame(page, frame_selectors: tuple[str, ...], file_path: Path, description: str) -> None:
+def _upload_file_to_frame(
+    page, frame_selectors: tuple[str, ...], file_path: Path, description: str
+) -> None:
     frame_selector = _resolve_visible_frame_selector(page, frame_selectors, description)
     frame = page.locator(frame_selector).first
     frame_locator = page.frame_locator(frame_selector)
     add_button = frame_locator.locator(CHARGE05_FILE_ADD_BUTTON_SELECTOR).first
     input_locator = frame_locator.locator(CHARGE05_FILE_INPUT_SELECTOR).first
     print(f"[upload] {description}: {file_path.name}")
-    common.wait_locator_visible_with_log(frame, common.MAX_TIMEOUT_MS, f"{description} 업로드 프레임")
+    common.wait_locator_visible_with_log(
+        frame, common.MAX_TIMEOUT_MS, f"{description} 업로드 프레임"
+    )
     try:
         with page.expect_file_chooser(timeout=3000) as chooser_info:
             add_button.click(timeout=common.MAX_TIMEOUT_MS)
         chooser_info.value.set_files(str(file_path))
     except Exception:
         input_locator.set_input_files(str(file_path))
-    _wait_for_uploaded_item(page, frame_selector, f"{description} 업로드 항목 반영", common.MAX_TIMEOUT_MS)
+    _wait_for_uploaded_item(
+        page, frame_selector, f"{description} 업로드 항목 반영", common.MAX_TIMEOUT_MS
+    )
     common.wait_timeout_with_log(page, 1000, f"{description} 업로드 반영 대기")
 
 
@@ -810,9 +825,13 @@ def _select_self_claimant_and_open_contracts(page, timeout_ms: int) -> None:
         page.get_by_role("table", name=re.compile(r"청구대상자\s*선택")),
         "청구대상자 선택 표",
     )
-    row = table.get_by_role("row").filter(
-        has=page.get_by_role("rowheader", name="본인"),
-    ).first
+    row = (
+        table.get_by_role("row")
+        .filter(
+            has=page.get_by_role("rowheader", name="본인"),
+        )
+        .first
+    )
     name_cell = common.first_visible_locator(
         row.locator("td"),
         "본인 행의 이름(피보험자) 셀",
@@ -826,7 +845,9 @@ def _select_self_claimant_and_open_contracts(page, timeout_ms: int) -> None:
         "청구가능계약 조회",
     )
     common.click_with_log(lookup, "청구가능계약 조회 클릭")
-    _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, timeout_ms, "청구가능계약 조회 popLoading")
+    _wait_for_overlay_to_clear(
+        page, POP_LOADING_SELECTOR, timeout_ms, "청구가능계약 조회 popLoading"
+    )
     common.wait_timeout_with_log(page, 300, "청구가능계약 조회 결과 안정화")
 
 
@@ -842,11 +863,15 @@ def _maybe_dismiss_claim_guide_popup(page, timeout_ms: int) -> bool:
     except Exception:
         confirm.click(force=True, timeout=min(timeout_ms, 3000))
     try:
-        _wait_for_overlay_to_clear(page, CLAIM_GUIDE_POPUP_ROOT, min(timeout_ms, 4000), "보험금청구 안내 팝업")
+        _wait_for_overlay_to_clear(
+            page, CLAIM_GUIDE_POPUP_ROOT, min(timeout_ms, 4000), "보험금청구 안내 팝업"
+        )
     except Exception:
         pass
     try:
-        _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, min(timeout_ms, 4000), "보험금청구 안내 후 popLoading")
+        _wait_for_overlay_to_clear(
+            page, POP_LOADING_SELECTOR, min(timeout_ms, 4000), "보험금청구 안내 후 popLoading"
+        )
     except Exception:
         pass
     return True
@@ -856,7 +881,9 @@ def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
     last_error: Exception | None = None
     for _ in range(max(1, timeout_ms // 500)):
         try:
-            _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, min(2000, timeout_ms), "신규접수 전 popLoading")
+            _wait_for_overlay_to_clear(
+                page, POP_LOADING_SELECTOR, min(2000, timeout_ms), "신규접수 전 popLoading"
+            )
         except Exception:
             pass
         if _maybe_dismiss_claim_guide_popup(page, min(2200, timeout_ms)):
@@ -875,7 +902,9 @@ def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
     else:
         raise RuntimeError(f"신규접수 링크 클릭 실패: {last_error}")
 
-    _wait_for_overlay_to_clear(page, POP_LOADING_SELECTOR, timeout_ms, "신규접수 클릭 후 popLoading")
+    _wait_for_overlay_to_clear(
+        page, POP_LOADING_SELECTOR, timeout_ms, "신규접수 클릭 후 popLoading"
+    )
     common.wait_timeout_with_log(page, 500, "신규·추가접수 안내 레이어 표시 대기")
     btn = page.get_by_role("button", name="신규접수")
     try:
@@ -886,7 +915,6 @@ def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
 
 
 def _agree_entire_summary_consent_and_apply(page, timeout_ms: int) -> None:
-    chk = page.locator(CHARGE03_ALL_CONSENT_INPUT_SELECTOR).first
     label = page.locator(CHARGE03_ALL_CONSENT_LABEL_SELECTOR).first
     common.wait_locator_visible_with_log(label, timeout_ms, "요약 동의서 전체동의 라벨")
     print("[click] [필수]보험금 청구를 위한 요약 동의서 — 전체동의 라벨")

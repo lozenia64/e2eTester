@@ -26,20 +26,20 @@ KAKAO_ENTRY_XPATH = (
 )
 KAKAO_ALERT_CONFIRM_SELECTOR = (
     ".modal.alert.show button.btn.ui_dialog_close, "
-    ".modal.alert.show button:has-text(\"확인\"), "
+    '.modal.alert.show button:has-text("확인"), '
     ".dialog.modal.alert.show button.btn.ui_dialog_close, "
-    ".dialog.modal.alert.show button:has-text(\"확인\")"
+    '.dialog.modal.alert.show button:has-text("확인")'
 )
-KAKAO_INCOMPLETE_MODAL_SELECTOR = (
-    ".modal.alert.show, .dialog.modal.alert.show, .dialog.modal.show"
-)
+KAKAO_INCOMPLETE_MODAL_SELECTOR = ".modal.alert.show, .dialog.modal.alert.show, .dialog.modal.show"
 
 KakaoAuthResult = Literal["success", "incomplete", "fatal"]
 
 
 def _kakao_form_root(page):
     root = page.locator("main")
-    common.wait_locator_visible_with_log(root.locator("#name"), common.MAX_TIMEOUT_MS, "카카오 인증 폼")
+    common.wait_locator_visible_with_log(
+        root.locator("#name"), common.MAX_TIMEOUT_MS, "카카오 인증 폼"
+    )
     return root
 
 
@@ -72,7 +72,9 @@ def _prepare_login_type_select_page(page) -> None:
             "로그인 방법 선택 제목",
         )
     except Exception:
-        common.wait_locator_visible_with_log(page.locator("main"), common.MAX_TIMEOUT_MS, "로그인 방법 선택 main")
+        common.wait_locator_visible_with_log(
+            page.locator("main"), common.MAX_TIMEOUT_MS, "로그인 방법 선택 main"
+        )
 
 
 def _find_kakao_auth_entry(page):

@@ -42,7 +42,9 @@ def resolve_env_value(name: str, dotenv_values: dict[str, str]) -> str | None:
     return dotenv_values.get(name)
 
 
-def resolve_env_with_source(name: str, dotenv_values: dict[str, str]) -> tuple[str | None, str | None]:
+def resolve_env_with_source(
+    name: str, dotenv_values: dict[str, str]
+) -> tuple[str | None, str | None]:
     raw = os.getenv(name)
     if raw is not None:
         return raw, "terminal"

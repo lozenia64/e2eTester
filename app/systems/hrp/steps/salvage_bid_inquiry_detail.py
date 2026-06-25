@@ -9,9 +9,9 @@ from app.systems.hrp.steps import salvage_bid_inquiry_common as common
 def _open_first_receipt_detail(page: Page, receipt_number: str) -> None:
     print(f"[step] Open bid detail for receipt: {receipt_number}")
     frame = common.list_frame(page)
-    receipt_cell = common.first_list_row(frame).get_by_role("cell").filter(
-        has_text=receipt_number
-    ).first
+    receipt_cell = (
+        common.first_list_row(frame).get_by_role("cell").filter(has_text=receipt_number).first
+    )
     receipt_cell.click(timeout=browser.MAX_TIMEOUT_MS)
 
     page.get_by_role("heading", name=common.DETAIL_HEADING, level=2).wait_for(

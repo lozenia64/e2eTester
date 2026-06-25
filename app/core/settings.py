@@ -59,14 +59,18 @@ class E2ESettings(BaseSettings):
     run_concurrency: int = Field(default=4, ge=1, validation_alias="E2E_RUN_CONCURRENCY")
 
     # Gemini / AI 실패 분석
-    failure_analyzer_enabled: bool = Field(default=False, validation_alias="E2E_FAILURE_ANALYZER_ENABLED")
+    failure_analyzer_enabled: bool = Field(
+        default=False, validation_alias="E2E_FAILURE_ANALYZER_ENABLED"
+    )
     gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
     gemini_models: str | None = Field(default=None, validation_alias="GEMINI_MODELS")
     gemini_ssl_verify: bool = Field(default=True, validation_alias="E2E_GEMINI_SSL_VERIFY")
 
     # 종료 메일
     email_enabled: bool = Field(default=False, validation_alias="E2E_EMAIL_ENABLED")
-    email_gmail_account: str | None = Field(default=None, validation_alias="E2E_EMAIL_GMAIL_ACCOUNT")
+    email_gmail_account: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_GMAIL_ACCOUNT"
+    )
     email_gmail_app_password: SecretStr | None = Field(
         default=None,
         validation_alias="E2E_EMAIL_GMAIL_APP_PASSWORD",
@@ -75,12 +79,24 @@ class E2ESettings(BaseSettings):
         default=None,
         validation_alias="E2E_EMAIL_OPERATOR_RECIPIENTS",
     )
-    email_recipients_hom: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HOM")
-    email_recipients_mhm: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_MHM")
-    email_recipients_fp: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_FP")
-    email_recipients_hrp: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HRP")
-    email_recipients_hwtc: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HWTC")
-    email_recipients_chbot: str | None = Field(default=None, validation_alias="E2E_EMAIL_RECIPIENTS_CHBOT")
+    email_recipients_hom: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HOM"
+    )
+    email_recipients_mhm: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_MHM"
+    )
+    email_recipients_fp: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_FP"
+    )
+    email_recipients_hrp: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HRP"
+    )
+    email_recipients_hwtc: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HWTC"
+    )
+    email_recipients_chbot: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_CHBOT"
+    )
 
     # 예약·보존
     schedule_tz: str = Field(default="Asia/Seoul", validation_alias="E2E_SCHEDULE_TZ")
