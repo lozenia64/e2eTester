@@ -261,7 +261,7 @@ cp .env.example .env
 ```bash
 E2E_FAILURE_ANALYZER_ENABLED=true
 GEMINI_API_KEY="실제_발급받은_API_KEY"
-GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
+GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview"
 E2E_GEMINI_SSL_VERIFY=true
 ```
 
@@ -279,7 +279,7 @@ cd e2eTester
 
 export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
-export GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
+export GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview"
 
 python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
@@ -291,7 +291,7 @@ cd e2eTester
 
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
-GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest" \
+GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview" \
 python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 ```
 
@@ -344,7 +344,7 @@ http://127.0.0.1:2222
 E2E_EMAIL_ENABLED=true
 E2E_EMAIL_GMAIL_ACCOUNT="sender@gmail.com"
 E2E_EMAIL_GMAIL_APP_PASSWORD="실제_앱비밀번호"
-GEMINI_MODELS="gemini-3.1-flash-lite|gemini-2.5-flash|gemini-2.0-flash|gemini-flash-latest"
+GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview"
 E2E_GEMINI_SSL_VERIFY=true
 E2E_EMAIL_RECIPIENTS_HOM="user1@company.com|user2@company.com"
 E2E_EMAIL_RECIPIENTS_MHM="user1@company.com|user2@company.com"
