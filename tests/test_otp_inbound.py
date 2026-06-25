@@ -1,13 +1,12 @@
 """인바운드 OTP 중계(POST /api/otp/inbound) 단위 테스트.
 
 브라우저/HTTP 서버 없이 ① OTP 추출 헬퍼 ② 라우트 핸들러(토큰 인증·에러 매핑) ③ RunService
-의 "대기 Run 자동 탐색" 선택 로직을 검증한다. 기존 테스트와 동일하게 ``asyncio.run`` 으로
-코루틴을 돌린다(pytest 비동기 플러그인 불필요).
+의 "대기 Run 자동 탐색" 선택 로직을 검증한다. 비동기 핸들러 테스트는 pytest-asyncio
+(asyncio_mode="auto")가 코루틴으로 실행한다.
 """
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -70,13 +69,13 @@ class _FakeRunService:
         return self._run
 
 
-def _call(**kwargs):
-    return asyncio.run(submit_inbound_otp(**kwargs))
+async def _call(**kwargs):
+    return await submit_inbound_otp(**kwargs)
 
 
-def test_route_disabled_when_token_unset():
+async def test_route_disabled_when_token_unset():
     with pytest.raises(HTTPException) as exc:
-        _call(
+        await _call(
             payload=InboundOtpRequest(code="123456"),
             x_otp_relay_token="anything",
             configured_token=None,
@@ -86,10 +85,10 @@ def test_route_disabled_when_token_unset():
     assert exc.value.status_code == 503
 
 
-def test_route_rejects_wrong_or_missing_token():
+async def test_route_rejects_wrong_or_missing_token():
     for header in ("wrong-token", None):
         with pytest.raises(HTTPException) as exc:
-            _call(
+            await _call(
                 payload=InboundOtpRequest(code="123456"),
                 x_otp_relay_token=header,
                 configured_token="secret",
@@ -99,9 +98,9 @@ def test_route_rejects_wrong_or_missing_token():
         assert exc.value.status_code == 401
 
 
-def test_route_rejects_invalid_code():
+async def test_route_rejects_invalid_code():
     with pytest.raises(HTTPException) as exc:
-        _call(
+        await _call(
             payload=InboundOtpRequest(text="no digits here"),
             x_otp_relay_token="secret",
             configured_token="secret",
@@ -111,10 +110,10 @@ def test_route_rejects_invalid_code():
     assert exc.value.status_code == 400
 
 
-def test_route_submits_code_and_returns_run():
+async def test_route_submits_code_and_returns_run():
     run = SimpleNamespace(run_id="run_42", status=RunStatus.RUNNING)
     fake = _FakeRunService(run=run)
-    result = _call(
+    result = await _call(
         payload=InboundOtpRequest(text="인증번호 778899"),
         x_otp_relay_token="secret",
         configured_token="secret",
@@ -125,10 +124,10 @@ def test_route_submits_code_and_returns_run():
     assert result == {"run_id": "run_42", "status": RunStatus.RUNNING.value}
 
 
-def test_route_maps_no_waiting_run_to_404():
+async def test_route_maps_no_waiting_run_to_404():
     fake = _FakeRunService(raises=KeyError("none"))
     with pytest.raises(HTTPException) as exc:
-        _call(
+        await _call(
             payload=InboundOtpRequest(code="123456"),
             x_otp_relay_token="secret",
             configured_token="secret",
@@ -178,7 +177,7 @@ def _service(runs, pending_ids, recorder):
     return svc
 
 
-def test_waiting_finder_submits_single_pending_run():
+async def test_waiting_finder_submits_single_pending_run():
     runs = [
         _run("a", RunStatus.PASSED),
         _run("b", RunStatus.WAITING_INPUT),
@@ -186,33 +185,33 @@ def test_waiting_finder_submits_single_pending_run():
     ]
     recorder: list = []
     svc = _service(runs, pending_ids={"b"}, recorder=recorder)
-    result = asyncio.run(svc.submit_otp_to_waiting("123456"))
+    result = await svc.submit_otp_to_waiting("123456")
     assert result.run_id == "b"
     assert recorder == [("b", "123456")]
 
 
-def test_waiting_finder_raises_when_none_waiting():
+async def test_waiting_finder_raises_when_none_waiting():
     runs = [_run("a", RunStatus.PASSED), _run("c", RunStatus.RUNNING)]
     svc = _service(runs, pending_ids=set(), recorder=[])
     with pytest.raises(KeyError):
-        asyncio.run(svc.submit_otp_to_waiting("123456"))
+        await svc.submit_otp_to_waiting("123456")
 
 
-def test_waiting_finder_ignores_waiting_without_pending():
+async def test_waiting_finder_ignores_waiting_without_pending():
     # 상태는 WAITING_INPUT 이지만 제어 스토어에 pending 이 없으면(경합) 후보에서 제외.
     runs = [_run("b", RunStatus.WAITING_INPUT)]
     svc = _service(runs, pending_ids=set(), recorder=[])
     with pytest.raises(KeyError):
-        asyncio.run(svc.submit_otp_to_waiting("123456"))
+        await svc.submit_otp_to_waiting("123456")
 
 
-def test_waiting_finder_picks_most_recent_when_multiple():
+async def test_waiting_finder_picks_most_recent_when_multiple():
     runs = [
         _run("old", RunStatus.WAITING_INPUT, minutes_ago=10),
         _run("new", RunStatus.WAITING_INPUT, minutes_ago=1),
     ]
     recorder: list = []
     svc = _service(runs, pending_ids={"old", "new"}, recorder=recorder)
-    result = asyncio.run(svc.submit_otp_to_waiting("123456"))
+    result = await svc.submit_otp_to_waiting("123456")
     assert result.run_id == "new"
     assert recorder == [("new", "123456")]

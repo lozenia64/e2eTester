@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -72,7 +71,7 @@ def _service(tmp_path: Path) -> RunService:
     )
 
 
-def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
+async def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
     service = _service(tmp_path)
     tz = ZoneInfo("Asia/Seoul")
     today_start = (
@@ -89,17 +88,15 @@ def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
         _run("run_error_today", status=RunStatus.ERROR, requested_at=today),
     ]
     for run in runs:
-        asyncio.run(service._repository.create_run(run))
+        await service._repository.create_run(run)
 
-    deleted = asyncio.run(
-        service.purge_runs(
-            statuses=RUN_DAILY_PURGE_STATUSES,
-            requested_before=today_start,
-        )
+    deleted = await service.purge_runs(
+        statuses=RUN_DAILY_PURGE_STATUSES,
+        requested_before=today_start,
     )
 
     assert set(deleted) == {"run_error_old", "run_cancel_old"}
-    remaining = {run.run_id: run.status for run in asyncio.run(service._repository.list_runs())}
+    remaining = {run.run_id: run.status for run in await service._repository.list_runs()}
     assert remaining == {
         "run_passed_old": RunStatus.PASSED,
         "run_anomaly_old": RunStatus.ANOMALY,
@@ -108,7 +105,7 @@ def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_path):
     assert not (tmp_path / "artifacts" / "run_error_old").exists()
 
 
-def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
+async def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
     service = _service(tmp_path)
     tz = ZoneInfo("Asia/Seoul")
     today_start = (
@@ -116,10 +113,8 @@ def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
     )
     yesterday = today_start - timedelta(hours=2)
 
-    asyncio.run(
-        service._repository.create_run(
-            _run("run_error_yesterday", status=RunStatus.ERROR, requested_at=yesterday),
-        )
+    await service._repository.create_run(
+        _run("run_error_yesterday", status=RunStatus.ERROR, requested_at=yesterday),
     )
 
     scheduler = RunRetentionScheduler(
@@ -128,7 +123,7 @@ def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
         timezone=tz,
         timezone_name="Asia/Seoul",
     )
-    result = asyncio.run(scheduler.purge_now())
+    result = await scheduler.purge_now()
 
     assert result.deleted_run_ids == ["run_error_yesterday"]
-    assert asyncio.run(service._repository.list_runs()) == []
+    assert await service._repository.list_runs() == []

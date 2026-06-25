@@ -27,6 +27,12 @@ ignore = [
              # 예외 체이닝 정비는 별도 후속 작업으로 분리한다(점진 적용).
 ]
 
+[tool.pytest.ini_options]
+# async def 테스트를 자동으로 asyncio 코루틴으로 실행(마커 불필요).
+# 수동 asyncio.run(scenario()) 래핑을 제거하기 위한 설정.
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 [tool.ruff.lint.per-file-ignores]
 # 테스트는 일부 import 미사용/픽스처 패턴을 허용
 "tests/*" = ["F401", "F811"]

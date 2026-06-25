@@ -5,7 +5,6 @@ Run 단위로 초→분 변환 시 내림(truncation)하지 않고, 초를 그�
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
@@ -49,7 +48,7 @@ def _passed_run(run_id: str, module_id: str) -> Run:
     )
 
 
-def test_saved_seconds_sums_without_per_run_truncation():
+async def test_saved_seconds_sums_without_per_run_truncation():
     """3 runs × 45s saved each = 135s total (not 0 from per-run // 60)."""
     module_id = "hom.login"
     registry = _FakeRegistry(
@@ -74,14 +73,14 @@ def test_saved_seconds_sums_without_per_run_truncation():
     )
     run_repo = InMemoryRunRepository()
     for i in range(3):
-        asyncio.run(run_repo.create_run(_passed_run(f"run_{i}", module_id)))
+        await run_repo.create_run(_passed_run(f"run_{i}", module_id))
 
     service = StatsService(
         run_repo=run_repo,
         suite_repo=_FakeSuiteRepo(),
         registry=registry,
     )
-    stats = asyncio.run(service.get_usage_stats())
+    stats = await service.get_usage_stats()
 
     assert len(stats.by_system) == 1
     assert stats.by_system[0].manual_seconds_saved == 135
@@ -89,7 +88,7 @@ def test_saved_seconds_sums_without_per_run_truncation():
     assert stats.by_user[0].by_system[0].manual_seconds_saved == 135
 
 
-def test_usage_stats_includes_anomaly_excludes_error():
+async def test_usage_stats_includes_anomaly_excludes_error():
     module_id = "hom.login"
     registry = _FakeRegistry(
         [
@@ -124,16 +123,16 @@ def test_usage_stats_includes_anomaly_excludes_error():
             selected_module_ids=[module_id],
         )
 
-    asyncio.run(run_repo.create_run(_passed_run("run_passed", module_id)))
-    asyncio.run(run_repo.create_run(_run("run_anomaly", RunStatus.ANOMALY)))
-    asyncio.run(run_repo.create_run(_run("run_error", RunStatus.ERROR)))
+    await run_repo.create_run(_passed_run("run_passed", module_id))
+    await run_repo.create_run(_run("run_anomaly", RunStatus.ANOMALY))
+    await run_repo.create_run(_run("run_error", RunStatus.ERROR))
 
     service = StatsService(
         run_repo=run_repo,
         suite_repo=_FakeSuiteRepo(),
         registry=registry,
     )
-    stats = asyncio.run(service.get_usage_stats())
+    stats = await service.get_usage_stats()
 
     assert stats.total_runs == 2
     assert stats.by_system[0].runs == 2

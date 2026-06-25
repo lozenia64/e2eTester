@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 from app.core.enums import RunStatus, SuiteStatus
@@ -64,24 +63,22 @@ class _FakeScheduleRepo:
         ]
 
 
-def test_ops_service_build_snapshot() -> None:
-    async def _run() -> dict:
-        queue = RunExecutionQueue(worker_count=2)
-        queue.start()
-        try:
-            service = OpsService(
-                settings=E2ESettings(),
-                run_repo=_FakeRunRepo(),
-                suite_repo=_FakeSuiteRepo(),
-                schedule_repo=_FakeScheduleRepo(),
-                run_queue=queue,
-                scheduler=None,
-            )
-            return await service.build_snapshot()
-        finally:
-            await queue.stop()
+async def test_ops_service_build_snapshot() -> None:
+    queue = RunExecutionQueue(worker_count=2)
+    queue.start()
+    try:
+        service = OpsService(
+            settings=E2ESettings(),
+            run_repo=_FakeRunRepo(),
+            suite_repo=_FakeSuiteRepo(),
+            schedule_repo=_FakeScheduleRepo(),
+            run_queue=queue,
+            scheduler=None,
+        )
+        snapshot = await service.build_snapshot()
+    finally:
+        await queue.stop()
 
-    snapshot = asyncio.run(_run())
     assert snapshot["runs"]["active_count"] == 1
     assert snapshot["suites"]["active_count"] == 1
     assert snapshot["schedules"]["enabled_count"] == 1

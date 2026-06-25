@@ -44,3 +44,21 @@ jobs:
 
       - name: Format check (ruff format --check)
         run: ruff format --check .
+
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (dev)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"  # 단위 테스트는 브라우저를 띄우지 않음
+        run: python3 -m pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: python3 -m pytest tests/ -q
