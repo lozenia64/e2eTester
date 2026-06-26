@@ -94,9 +94,7 @@ async def _assert_scope_filters(tmp_path: Path) -> None:
     today_ids = {item["run_id"] for item in await service.list_run_summaries(scope="today")}
     assert today_ids == {"run_today_passed", "run_yesterday_waiting"}
 
-    before_ids = {
-        item["run_id"] for item in await service.list_run_summaries(scope="before_today")
-    }
+    before_ids = {item["run_id"] for item in await service.list_run_summaries(scope="before_today")}
     assert before_ids == {"run_yesterday_passed"}
 
     all_ids = {item["run_id"] for item in await service.list_run_summaries()}
@@ -129,6 +127,8 @@ async def _assert_active_runs_not_dropped_at_limit(tmp_path: Path) -> None:
     for run in runs:
         await service._repository.save_run(run)
 
-    today_ids = {item["run_id"] for item in await service.list_run_summaries(scope="today", limit=3)}
+    today_ids = {
+        item["run_id"] for item in await service.list_run_summaries(scope="today", limit=3)
+    }
     assert "run_yesterday_waiting" in today_ids
     assert len(today_ids) == 3
