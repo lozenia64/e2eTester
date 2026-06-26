@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 
-from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import BaseWorkflowExecutor
+from app.runner.step_outcome import StepCompleted, StepOutcome
+from app.runner.workflow_engine import BaseWorkflowExecutor, StepContext, StepHandler
 from app.systems.access_common import browser, main_access
 
 
@@ -82,12 +82,12 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
     def _shutdown_browser(self, runtime: AccessRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
 
-    def _run_step(
-        self, runtime: AccessRuntime, module: ModuleDefinition, artifact_dir: Path
-    ) -> str:
-        if module.workflow_step == "main_access":
-            return main_access.run(runtime.page, runtime.base_url)
-        raise RuntimeError(f"Unsupported {self._system_code} workflow step: {module.workflow_step}")
+    def build_step_registry(self) -> Mapping[str, StepHandler]:
+        return {"main_access": self._step_main_access}
+
+    def _step_main_access(self, ctx: StepContext) -> StepOutcome:
+        runtime: AccessRuntime = ctx.runtime  # type: ignore[assignment]
+        return StepCompleted(main_access.run(runtime.page, runtime.base_url))
 
 
 def create_access_executor(

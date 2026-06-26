@@ -131,7 +131,7 @@ e2eTester/
         constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
         channel.py               # ChannelProfile / ChannelSteps (채널 어댑터 계약)
         runtime.py               # RepHomepageRuntime (PC·모바일 단일 런타임)
-        executor.py              # RepHomepageExecutor (단일 _run_step 시나리오 디스패치)
+        executor.py              # RepHomepageExecutor (단일 build_step_registry 시나리오 디스패치)
     systems/
       loader.py                  # execution_mode -> 시스템별 executor 로딩
       hom/
@@ -366,7 +366,7 @@ e2eTester/
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
 - `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사). Run 본문은 `RunView` 프로젝션을 거친다.
-- `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다(와이어 필드를 명시 선언 → 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않음). 현재 노출 형태는 기존 `run.model_dump` 와 1:1 동일.
+- `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다(와이어 필드를 명시 선언 → 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않음). 현재 노출 형태는 기존 `run.model_dump` 와 1:1 동일. Suite 도 동일한 규율을 따른다 — `SuiteView`(`app/orchestrator/suite_view.py`)가 Suite 읽기 모델 프로젝션이며, REST 응답·`suite_*` WS payload·스냅샷이 모두 `SuiteView.dump` 를 거친다(과거에는 Suite 쪽만 `suite.model_dump` 를 직접 호출해 이 규율을 우회하고 있었다).
 - `EventBus` 구독자: AI 실패 분석·종료 메일(부수 관심사).
 - `summarize_run`(`run_summary.py`): 최근 Run 요약 뷰.
 
@@ -483,12 +483,12 @@ manifest 에 들어 있는 정보:
 - `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터: `app/systems/loader.py` 로 executor 로딩, 세션별 단일 스레드 풀·런타임 수명·이벤트 루프↔실행 스레드 로그 브리지 소유)
 - `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — `execution_mode == "simulated"` 모듈을 브라우저 없이 매니페스트의 `simulated_duration_ms`/`simulated_outcome` 대로 처리하는 테스트 더블 어댑터. 시뮬레이션 로직이 더 이상 오케스트레이터에 인라인되지 않고 같은 포트 뒤의 어댑터로 분리됨)
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
-- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·OTP 일시정지(`WAITING_INPUT_PREFIX`) 해석·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol)
-- `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)와 `_run_step` 디스패치가 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
+- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·레지스트리 디스패치(`build_step_registry`)·OTP 일시정지를 **타입드 결과**(`StepOutcome`)로 해석(매직 문자열 `WAITING_INPUT::` 폐기, `app/runner/step_outcome.py`)·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol + 단계 핸들러에 넘기는 `StepContext`)
+- `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)의 `build_step_registry` 디스패치 테이블이 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
 - `app/scenarios/rep_homepage/channel.py` (`ChannelProfile` / `ChannelSteps`) — 채널(드라이버) 기술서와 셀렉터 어댑터 계약. `app/scenarios/rep_homepage/constants.py` 는 청구 본문 문구 등 charge↔result↔cancel 도메인 결합 규칙의 SSOT.
 - `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/hom/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "hom_workflow_step"`) — PC 채널 어댑터(`hom.steps`) 주입.
 - `app/systems/mhm/channel.py` (`MOBILE_CHANNEL`, `mobile=True`) / `app/systems/mhm/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "mhm_workflow_step"`) — 모바일 채널 어댑터(`mhm.steps`) 주입.
-- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, FP/HRP/HWTC/CHBOT 공통 베이스 — `main_access` + 시스템별 `_run_step` 확장)
+- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, FP/HRP/HWTC/CHBOT 공통 베이스 — `main_access` 단계 등록 + 시스템별 `build_step_registry` 가 `super().build_step_registry()` 와 병합해 단계 확장)
 - `app/systems/fp/executor.py` (`FpWorkflowExecutor`) / `app/systems/hrp/executor.py` (`HrpWorkflowExecutor`) / `app/systems/hwtc/executor.py` (`HwtcWorkflowExecutor`) / `app/systems/chbot/executor.py` (`ChbotWorkflowExecutor`)
 - `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
 - `app/runner/artifact_manager.py`
@@ -499,9 +499,9 @@ manifest 에 들어 있는 정보:
 - Run 단위로 Playwright 런타임 생성 (영속 프로파일 persistent context)
 - 하나의 browser/context/page를 공유
 - 모바일 채널(`ChannelProfile.mobile=True`, 예: MHM)은 공용 `build_runtime()` 에서 페이지 생성 직후 `apply_mobile_device_mode()` 로 모바일 디바이스 모드를 먼저 적용한 뒤 접속
-- 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → 공용 시나리오 실행기의 `_run_step` 디스패치, 채널은 `ChannelProfile.steps` 어댑터로 주입)
+- 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → 실행기의 `build_step_registry` 레지스트리 조회로 단계 핸들러 디스패치, 채널은 `ChannelProfile.steps` 어댑터로 주입)
 - 표준 출력/표준 에러를 가로채 모듈별 `execution.log` 와 라이브 WebSocket 로그로 저장
-- 휴대폰인증 단계는 OTP 미입력 시 `WAITING_INPUT::` 표식을 반환해 Run을 일시정지시킴
+- 휴대폰인증 단계는 OTP 미입력 시 단계 핸들러가 `StepNeedsInput(prompt)` 타입드 결과를 반환해 Run을 일시정지시킴(과거 `WAITING_INPUT::` 매직 문자열 반환 대체)
 
 이 구조를 택한 이유:
 
@@ -714,8 +714,8 @@ Suite (`/ws/suites/{suite_id}`):
 
 현재 payload 특징:
 
-- Run 이벤트는 `run.model_dump(mode="json")`
-- Suite 이벤트는 `suite.model_dump(mode="json")` (+ `step_index` 등 보조 필드)
+- Run 이벤트는 `RunView` 프로젝션(`RunView.dump(run)`) — 엔티티를 직접 `model_dump` 하지 않는다.
+- Suite 이벤트는 `SuiteView` 프로젝션(`SuiteView.dump(suite)`) (+ `step_index` 등 보조 필드) — REST 응답·WS 스냅샷·이벤트가 모두 이 경로를 거친다(과거의 직접 `suite.model_dump` 누수 제거).
 - Module 이벤트는 `module` 스냅샷과 `run_status`
 - Log 이벤트는 `module_id`, `message`
 

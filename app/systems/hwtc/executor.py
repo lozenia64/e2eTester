@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.screenshot import SELF_DEFENDER_HOST_FRAGMENTS
-from app.runner.workflow_engine import WAITING_INPUT_PREFIX
+from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
+from app.runner.workflow_engine import StepContext, StepHandler
 from app.systems.access_common import browser
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 from app.systems.hwtc.steps import phone_auth, video_playback
@@ -66,31 +67,45 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
             return False
         return True
 
-    def _run_step(self, runtime: HwtcRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
-        if module.workflow_step == "main_access":
-            return phone_auth.run_main_access(runtime.page, runtime.base_url)
-        if module.workflow_step == "phone_auth":
-            if not runtime.user_id or not runtime.password:
-                raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
-            if not runtime.phone_auth_sms_requested:
-                message = phone_auth.request_sms(
-                    runtime.page,
-                    user_id=runtime.user_id,
-                    password=runtime.password,
-                    base_url=runtime.base_url,
-                    dialog_messages=runtime.dialog_messages,
-                )
-                runtime.phone_auth_sms_requested = True
-                if not runtime.otp_code:
-                    return f"{WAITING_INPUT_PREFIX}{message}"
-            return phone_auth.submit_otp_and_login(
+    def build_step_registry(self) -> Mapping[str, StepHandler]:
+        # main_access 는 부모(접속 점검)와 달리 phone_auth 모듈의 진입 화면이라 덮어쓴다.
+        return {
+            **super().build_step_registry(),
+            "main_access": self._step_main_access,
+            "phone_auth": self._step_phone_auth,
+            "video_playback": self._step_video_playback,
+        }
+
+    def _step_main_access(self, ctx: StepContext) -> StepOutcome:
+        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
+        return StepCompleted(phone_auth.run_main_access(runtime.page, runtime.base_url))
+
+    def _step_phone_auth(self, ctx: StepContext) -> StepOutcome:
+        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
+        if not runtime.user_id or not runtime.password:
+            raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
+        if not runtime.phone_auth_sms_requested:
+            message = phone_auth.request_sms(
+                runtime.page,
+                user_id=runtime.user_id,
+                password=runtime.password,
+                base_url=runtime.base_url,
+                dialog_messages=runtime.dialog_messages,
+            )
+            runtime.phone_auth_sms_requested = True
+            if not runtime.otp_code:
+                return StepNeedsInput(message)
+        return StepCompleted(
+            phone_auth.submit_otp_and_login(
                 runtime.page,
                 otp_code=runtime.otp_code,
                 dialog_messages=runtime.dialog_messages,
             )
-        if module.workflow_step == "video_playback":
-            return video_playback.run(runtime.page, base_url=runtime.base_url)
-        return super()._run_step(runtime, module, artifact_dir)
+        )
+
+    def _step_video_playback(self, ctx: StepContext) -> StepOutcome:
+        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
+        return StepCompleted(video_playback.run(runtime.page, base_url=runtime.base_url))
 
     def update_otp_code(self, runtime: HwtcRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

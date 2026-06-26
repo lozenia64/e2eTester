@@ -22,6 +22,7 @@ from app.core.status_labels import (
 )
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
 from app.orchestrator.run_service import RunService
+from app.orchestrator.suite_view import SuiteView
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import SuiteControlStorePort, SuiteInputStorePort, SuiteRepositoryPort
 
@@ -567,7 +568,8 @@ class SuiteService:
     async def _publish_event(
         self, event_type: str, suite: SuiteRun, extra: dict | None = None
     ) -> None:
-        payload = suite.model_dump(mode="json")
+        # 엔티티를 직접 직렬화하지 않고 읽기 모델 프로젝션을 거친다(RunView 와 동일 규율).
+        payload = SuiteView.dump(suite)
         if extra:
             payload.update(extra)
         await self._repository.publish(

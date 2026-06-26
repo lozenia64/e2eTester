@@ -8,7 +8,11 @@ from app.api.dependencies import get_registry, get_suite_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.models import StartSuiteRequest, SubmitOtpRequest
-from app.orchestrator.suite_view import filter_suite_for_user, resolve_suite_request_for_user
+from app.orchestrator.suite_view import (
+    SuiteView,
+    filter_suite_for_user,
+    resolve_suite_request_for_user,
+)
 
 if TYPE_CHECKING:
     from app.orchestrator.suite_service import SuiteService
@@ -53,7 +57,7 @@ async def start_suite(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     suite = filter_suite_for_user(suite, current_user)
-    return suite.model_dump(mode="json")
+    return SuiteView.dump(suite)
 
 
 @router.get("/{suite_id}")
@@ -67,7 +71,7 @@ async def get_suite(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Suite not found") from exc
     suite = filter_suite_for_user(suite, current_user)
-    return suite.model_dump(mode="json")
+    return SuiteView.dump(suite)
 
 
 @router.post("/{suite_id}/cancel")
@@ -83,7 +87,7 @@ async def cancel_suite(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     suite = filter_suite_for_user(suite, current_user)
-    return suite.model_dump(mode="json")
+    return SuiteView.dump(suite)
 
 
 @router.post("/{suite_id}/otp")
@@ -98,4 +102,4 @@ async def submit_suite_otp(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Suite not waiting for OTP") from exc
     suite = filter_suite_for_user(suite, current_user)
-    return suite.model_dump(mode="json")
+    return SuiteView.dump(suite)
