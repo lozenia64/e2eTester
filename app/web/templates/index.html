@@ -4,6 +4,14 @@
 
 {% block content %}
 {% set tone_pill = {'red': 'bg-red-100 text-red-700', 'orange': 'bg-orange-100 text-orange-700', 'yellow': 'bg-amber-100 text-amber-700', 'blue': 'bg-blue-100 text-blue-700'} %}
+{% set system_visual = {
+    'hom': {'accent': 'indigo', 'channel': 'pc'},
+    'mhm': {'accent': 'sky', 'channel': 'mobile'},
+    'fp': {'accent': 'amber', 'channel': 'pc'},
+    'hrp': {'accent': 'rose', 'channel': 'pc'},
+    'hwtc': {'accent': 'emerald', 'channel': 'pc'},
+    'chbot': {'accent': 'cyan', 'channel': 'mobile'},
+} %}
 
 <!-- 페이지 헤더 -->
 <div>
@@ -63,28 +71,31 @@
         <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템</h2>
         <p class="text-sm text-gray-500">카드를 클릭해 펼친 뒤 입력값을 채우고 실행하세요. 맨 위 카드에서 전체 시스템 순차 점검도 시작할 수 있습니다.</p>
     </div>
-    <div class="space-y-3" id="suite-section">
-        <details class="group overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm ring-1 ring-inset ring-violet-100">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 transition hover:bg-violet-50/40 [&::-webkit-details-marker]:hidden">
-                <div class="flex min-w-0 items-center gap-4">
-                    <span class="inline-flex shrink-0 items-center rounded-md bg-violet-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">SUITE</span>
-                    <div class="min-w-0">
-                        <h3 class="text-base font-bold text-gray-900">전체 시스템 순차 점검</h3>
-                        <p class="truncate text-sm text-gray-500">등록된 {{ systems|length }}개 시스템 · 전체 모듈 · HOM·MHM 인증 각각 설정</p>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2" id="suite-section">
+        <details class="system-card system-card--suite group col-span-full">
+            <summary class="system-card__summary">
+                <div class="system-card__identity">
+                    <span class="system-card__icon" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 15l3 3m0 0l3-3m-3 3V9"/></svg>
+                    </span>
+                    <div class="system-card__text">
+                        <span class="system-card__code">SUITE</span>
+                        <h3 class="system-card__title">전체 시스템 순차 점검</h3>
+                        <p class="system-card__desc">등록된 {{ systems|length }}개 시스템 · 전체 모듈 · HOM·MHM 인증 각각 설정</p>
                     </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-3">
-                    <span class="hidden items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200 sm:inline-flex">시스템 {{ systems|length }}개</span>
-                    <span class="hidden items-center rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700 sm:inline-flex">순차 실행</span>
-                    <svg class="h-5 w-5 shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                <div class="system-card__meta">
+                    <span class="system-card__chip">시스템 {{ systems|length }}개</span>
+                    <span class="system-card__chip system-card__chip--highlight">순차 실행</span>
+                    <svg class="system-card__chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                 </div>
             </summary>
-            <form id="suite-form" class="grid gap-x-4 gap-y-5 border-t border-gray-100 px-6 py-6 sm:grid-cols-2">
+            <form id="suite-form" class="system-card__body grid gap-x-4 gap-y-5 sm:grid-cols-2">
                 <p class="sm:col-span-2 text-xs leading-relaxed text-gray-500">선택한 시스템을 display_order 순으로 실행합니다. 한 시스템이 실패해도 다음 시스템 점검은 계속됩니다.</p>
 
                 <label class="form-field flex flex-col gap-1.5">
                     <span class="text-sm font-medium text-gray-700">브라우저 실행 모드 <span class="text-red-500">*</span></span>
-                    <select name="browser_mode" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" required>
+                    <select name="browser_mode" class="form-control form-control--muted" required>
                         <option value="headed" selected>실제 브라우저 창 열기</option>
                         <option value="headless">백그라운드 실행</option>
                     </select>
@@ -153,7 +164,7 @@
                             >
                                 <span class="text-sm font-medium text-gray-700">{{ field.label }}{% if field.required %} <span class="text-red-500">*</span>{% endif %}</span>
                                 {% if field.type == "select" %}
-                                <select name="{{ field.key }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" {% if field.required %}required{% endif %}>
+                                <select name="{{ field.key }}" class="form-control form-control--muted" {% if field.required %}required{% endif %}>
                                     {% for option in field.options %}
                                     {% set option_unsupported = field.key == 'auth_method' and system.supported_auth_methods and option.value not in system.supported_auth_methods %}
                                     <option value="{{ option.value }}"{% if option.value == field.default %} selected{% endif %}{% if option_unsupported %} disabled{% endif %}>{{ option.label }}{% if option_unsupported %} (준비 중){% endif %}</option>
@@ -165,7 +176,7 @@
                                     name="{{ field.key }}"
                                     value="{{ field.default }}"
                                     placeholder="{{ field.placeholder }}"
-                                    class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    class="form-control form-control--muted"
                                     {% if field.required %}required{% endif %}
                                 >
                                 {% endif %}
@@ -219,19 +230,19 @@
 
                         <label class="form-field flex flex-col gap-1.5 is-hidden" data-role="schedule-monthly">
                             <span class="text-xs font-semibold text-gray-700">매월 며칠</span>
-                            <select data-role="schedule-dom" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"></select>
+                            <select data-role="schedule-dom" class="form-control form-control--violet"></select>
                         </label>
 
                         <label class="form-field flex flex-col gap-1.5" data-role="schedule-time-wrap">
                             <span class="text-xs font-semibold text-gray-700">실행 시각</span>
-                            <input type="time" data-role="schedule-time" value="09:00" step="60" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200">
+                            <input type="time" data-role="schedule-time" value="09:00" step="60" class="form-control form-control--violet">
                         </label>
 
                         <div class="sm:col-span-2 is-hidden" data-role="schedule-interval">
                             <span class="text-xs font-semibold text-gray-700">반복 간격</span>
                             <div class="mt-2 flex items-center gap-2">
                                 <span class="text-sm text-gray-500">매</span>
-                                <input type="number" data-role="schedule-interval-n" value="1" min="1" max="23" class="block w-20 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-center text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200">
+                                <input type="number" data-role="schedule-interval-n" value="1" min="1" max="23" class="form-control form-control--violet form-control--narrow">
                                 <div class="sched-seg sched-seg-sm" role="group" aria-label="반복 단위">
                                     <button type="button" class="sched-seg-btn" data-role="schedule-interval-unit" data-unit="minute">분</button>
                                     <button type="button" class="sched-seg-btn is-active" data-role="schedule-interval-unit" data-unit="hour">시간</button>
@@ -254,7 +265,7 @@
                     <div class="mt-4 flex flex-wrap items-end gap-3">
                         <label class="form-field flex flex-1 flex-col gap-1.5" style="min-width: 12rem;">
                             <span class="text-xs font-semibold text-gray-700">예약 이름 <span class="font-normal text-gray-400">(선택)</span></span>
-                            <input type="text" data-role="schedule-name" placeholder="매일 오전 전체 점검" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200">
+                            <input type="text" data-role="schedule-name" placeholder="매일 오전 전체 점검" class="form-control form-control--violet">
                         </label>
                         <button type="button" data-role="suite-schedule-register" class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-60">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m4-4H8"/></svg>
@@ -273,24 +284,37 @@
         </details>
 
         {% for system in systems %}
-        <details class="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 transition hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
-                <div class="flex min-w-0 items-center gap-4">
-                    <span class="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ system.system_code|upper }}</span>
-                    <div class="min-w-0">
-                        <h3 class="text-base font-bold text-gray-900">{{ system.name }}</h3>
-                        <p class="truncate text-sm text-gray-500">{{ system.description }}</p>
+        {% set visual = system_visual.get(system.system_code, {'accent': 'indigo', 'channel': 'pc'}) %}
+        <details class="system-card system-card--accent-{{ visual.accent }} system-card--channel-{{ visual.channel }} group">
+            <summary class="system-card__summary">
+                <div class="system-card__identity">
+                    <span class="system-card__icon" aria-hidden="true">
+                        {% if visual.channel == 'mobile' %}
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path stroke-linecap="round" d="M11 18.5h2"/></svg>
+                        {% else %}
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path stroke-linecap="round" d="M8 20h8"/></svg>
+                        {% endif %}
+                    </span>
+                    <div class="system-card__text">
+                        <span class="system-card__code">{{ system.system_code|upper }}</span>
+                        <h3 class="system-card__title">{{ system.name }}</h3>
+                        <p class="system-card__desc">{{ system.description }}</p>
                     </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-3">
-                    <span class="hidden items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200 sm:inline-flex">모듈 {{ system.modules|length }}개</span>
-                    <span class="hidden items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 sm:inline-flex">실행 가능</span>
-                    <svg class="h-5 w-5 shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                <div class="system-card__meta">
+                    <span class="system-card__chip">모듈 {{ system.modules|length }}개</span>
+                    <span class="system-card__chip system-card__chip--channel">{% if visual.channel == 'mobile' %}모바일{% else %}PC{% endif %}</span>
+                    {% if system.supported_auth_methods %}
+                    <span class="system-card__chip">인증 필요</span>
+                    {% else %}
+                    <span class="system-card__chip">접속 전용</span>
+                    {% endif %}
+                    <svg class="system-card__chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                 </div>
             </summary>
-            <form class="system-form grid gap-x-4 gap-y-5 border-t border-gray-100 px-6 py-6 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
+            <form class="system-form system-card__body grid gap-x-4 gap-y-5 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
                 <script type="application/json" data-role="system-definition">{{ systems_payload[system.system_code] | tojson }}</script>
-                <section class="sm:col-span-2 rounded-2xl border border-gray-200 bg-gray-50/80 p-5 shadow-sm" data-role="module-selector">
+                <section class="system-card__section sm:col-span-2" data-role="module-selector">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h4 class="text-sm font-bold text-gray-900">실행 모듈 선택</h4>
@@ -298,7 +322,7 @@
                         </div>
                         <p class="text-xs font-medium text-gray-500" data-role="module-selection-summary">모듈 선택 준비 중</p>
                     </div>
-                    <div class="module-graph-viewport mt-4 overflow-x-auto pb-2">
+                    <div class="module-graph-viewport mt-4 pb-2">
                         <div class="module-graph-canvas" data-role="module-graph-canvas">
                             <svg class="module-graph-edges" data-role="module-graph-edges" aria-hidden="true"></svg>
                             <div class="module-graph-grid" data-role="module-graph-grid"></div>
@@ -319,7 +343,7 @@
                 >
                     <span class="text-sm font-medium text-gray-700">{{ field.label }}{% if field.required %} <span class="text-red-500">*</span>{% endif %}</span>
                     {% if field.type == "select" %}
-                    <select name="{{ field.key }}" class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" {% if field.required %}required{% endif %}>
+                    <select name="{{ field.key }}" class="form-control form-control--muted" {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
                         {% set option_unsupported = field.key == 'auth_method' and system.supported_auth_methods and option.value not in system.supported_auth_methods %}
                         <option value="{{ option.value }}"{% if option.value == field.default %} selected{% endif %}{% if option_unsupported %} disabled{% endif %}>{{ option.label }}{% if option_unsupported %} (준비 중){% endif %}</option>
@@ -331,7 +355,7 @@
                         name="{{ field.key }}"
                         value="{{ field.default }}"
                         placeholder="{{ field.placeholder }}"
-                        class="block w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        class="form-control form-control--muted"
                         {% if field.required %}required{% endif %}
                     >
                     {% endif %}
@@ -382,13 +406,13 @@
                         <!-- 날짜 선택 (매월) -->
                         <label class="form-field flex flex-col gap-1.5 is-hidden" data-role="schedule-monthly">
                             <span class="text-xs font-semibold text-gray-700">매월 며칠</span>
-                            <select data-role="schedule-dom" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"></select>
+                            <select data-role="schedule-dom" class="form-control form-control--violet"></select>
                         </label>
 
                         <!-- 실행 시각 (매일/평일/매주/매월) -->
                         <label class="form-field flex flex-col gap-1.5" data-role="schedule-time-wrap">
                             <span class="text-xs font-semibold text-gray-700">실행 시각</span>
-                            <input type="time" data-role="schedule-time" value="09:00" step="60" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                            <input type="time" data-role="schedule-time" value="09:00" step="60" class="form-control form-control--violet">
                         </label>
 
                         <!-- 반복 간격 (주기 반복) -->
@@ -396,7 +420,7 @@
                             <span class="text-xs font-semibold text-gray-700">반복 간격</span>
                             <div class="mt-2 flex items-center gap-2">
                                 <span class="text-sm text-gray-500">매</span>
-                                <input type="number" data-role="schedule-interval-n" value="1" min="1" max="23" class="block w-20 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-center text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                                <input type="number" data-role="schedule-interval-n" value="1" min="1" max="23" class="form-control form-control--violet form-control--narrow">
                                 <div class="sched-seg sched-seg-sm" role="group" aria-label="반복 단위">
                                     <button type="button" class="sched-seg-btn" data-role="schedule-interval-unit" data-unit="minute">분</button>
                                     <button type="button" class="sched-seg-btn is-active" data-role="schedule-interval-unit" data-unit="hour">시간</button>
@@ -421,7 +445,7 @@
                     <div class="mt-4 flex flex-wrap items-end gap-3">
                         <label class="form-field flex flex-1 flex-col gap-1.5" style="min-width: 12rem;">
                             <span class="text-xs font-semibold text-gray-700">예약 이름 <span class="font-normal text-gray-400">(선택)</span></span>
-                            <input type="text" data-role="schedule-name" placeholder="매일 오전 점검" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                            <input type="text" data-role="schedule-name" placeholder="매일 오전 점검" class="form-control form-control--violet">
                         </label>
                         <button type="button" data-role="schedule-register" class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m4-4H8"/></svg>
