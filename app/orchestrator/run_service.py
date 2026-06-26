@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import functools
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
@@ -27,6 +27,7 @@ from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
+from app.scheduling.scheduler import schedule_today_start_utc
 from app.storage.ports import (
     RunControlStorePort,
     RunInputStorePort,
@@ -122,6 +123,7 @@ class RunService:
         actor_context: ActorContext | None = None,
         run_status: RunStatus | None = None,
         run_statuses: frozenset[RunStatus] | None = None,
+        scope: Literal["today", "before_today"] | None = None,
     ) -> list[dict]:
         if user_id is not None:
             runs = await self._repository.list_runs_by_user(user_id)
@@ -129,20 +131,60 @@ class RunService:
             runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
 
+        active_statuses = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+        today_start_utc = schedule_today_start_utc() if scope is not None else None
+
         normalized_name_query = (user_name_query or "").strip().casefold()
-        summaries: list[dict] = []
-        for run in runs:
+
+        def _matches_filters(run: Run, summary: dict) -> bool:
             if run_statuses is not None and run.status not in run_statuses:
-                continue
+                return False
             if run_status is not None and run.status != run_status:
-                continue
-            summary = summarize_run(run, actor_context=actor_context)
+                return False
             if system_code and summary.get("system_code") != system_code:
-                continue
+                return False
             if normalized_name_query:
                 actor_name = (summary.get("created_by_user_name") or "").casefold()
                 if normalized_name_query not in actor_name:
+                    return False
+            return True
+
+        def _run_at_utc(run: Run) -> datetime:
+            return (
+                run.requested_at
+                if run.requested_at.tzinfo is not None
+                else run.requested_at.replace(tzinfo=UTC)
+            )
+
+        if scope == "today":
+            active_summaries: list[dict] = []
+            today_finished_summaries: list[dict] = []
+            for run in runs:
+                run_at = _run_at_utc(run)
+                is_active = run.status in active_statuses
+                if not is_active and run_at < today_start_utc:
                     continue
+                summary = summarize_run(run, actor_context=actor_context)
+                if not _matches_filters(run, summary):
+                    continue
+                if is_active:
+                    active_summaries.append(summary)
+                else:
+                    today_finished_summaries.append(summary)
+            remaining = max(0, limit - len(active_summaries))
+            return active_summaries + today_finished_summaries[:remaining]
+
+        summaries: list[dict] = []
+        for run in runs:
+            if scope is not None:
+                run_at = _run_at_utc(run)
+                is_active = run.status in active_statuses
+                if scope == "before_today":
+                    if is_active or run_at >= today_start_utc:
+                        continue
+            summary = summarize_run(run, actor_context=actor_context)
+            if not _matches_filters(run, summary):
+                continue
             summaries.append(summary)
             if len(summaries) >= limit:
                 break

@@ -57,30 +57,6 @@
     </div>
 </div>
 
-<!-- 진행 중 / 최근 Run -->
-<section id="runs-section" class="space-y-4 is-hidden">
-    <div class="flex flex-wrap items-end justify-between gap-2">
-        <div>
-            <h2 class="text-lg font-bold tracking-tight text-gray-900">진행 중 / 최근 Run</h2>
-            <p class="text-sm text-gray-500">카드를 클릭하면 해당 Run 화면으로 돌아갑니다.</p>
-        </div>
-        <p class="text-xs text-gray-400">메모리 기반 이력 · 서버를 재시작하면 사라집니다</p>
-    </div>
-    <div id="runs-list" class="space-y-3"></div>
-</section>
-
-<!-- 예약 실행 -->
-<section id="schedules-section" class="space-y-4 is-hidden">
-    <div class="flex flex-wrap items-end justify-between gap-2">
-        <div>
-            <h2 class="text-lg font-bold tracking-tight text-gray-900">예약 실행</h2>
-            <p class="text-sm text-gray-500">설정한 일정에 따라 Run 이 자동 생성됩니다. 시스템 카드를 펼쳐 예약을 추가하세요.</p>
-        </div>
-        <p class="text-xs text-gray-400">메모리 기반 · 서버를 재시작하면 사라집니다</p>
-    </div>
-    <div id="schedules-list" class="space-y-3"></div>
-</section>
-
 <!-- 시스템 목록 -->
 <div class="space-y-4">
     <div>
@@ -465,4 +441,28 @@
 
     </div>
 </div>
+
+<!-- 진행 중 / 최근 Run -->
+<section id="runs-section" class="space-y-4 is-hidden">
+    <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+            <h2 class="text-lg font-bold tracking-tight text-gray-900">진행 중 / 최근 Run</h2>
+            <p class="text-sm text-gray-500">오늘 실행된 Run과 진행 중인 Run · 카드를 클릭하면 해당 Run 화면으로 이동합니다.</p>
+        </div>
+        <a href="/runs/history" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800">이전 Run 보기 →</a>
+    </div>
+    <div id="runs-list" class="space-y-3"></div>
+</section>
+
+<!-- 예약 실행 -->
+<section id="schedules-section" class="space-y-4 is-hidden">
+    <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+            <h2 class="text-lg font-bold tracking-tight text-gray-900">예약 실행</h2>
+            <p class="text-sm text-gray-500">설정한 일정에 따라 Run 이 자동 생성됩니다. 시스템 카드를 펼쳐 예약을 추가하세요.</p>
+        </div>
+        <p class="text-xs text-gray-400">메모리 기반 · 서버를 재시작하면 사라집니다</p>
+    </div>
+    <div id="schedules-list" class="space-y-3"></div>
+</section>
 {% endblock %}

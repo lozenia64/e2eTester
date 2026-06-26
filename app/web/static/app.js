@@ -780,13 +780,51 @@ function renderRunList(runs) {
 
 async function refreshRunList() {
     try {
-        const response = await fetch("/api/runs");
+        const response = await fetch("/api/runs?scope=today");
         if (!response.ok) {
             return;
         }
         renderRunList(await response.json());
     } catch (error) {
         console.error("Run 목록 갱신 실패", error);
+    }
+}
+
+const RUN_HISTORY_LIMIT = 100;
+
+async function bindRunsHistory() {
+    const list = document.getElementById("runs-history-list");
+    if (!list) {
+        return;
+    }
+    const statusEl = document.getElementById("runs-history-status");
+    try {
+        const response = await fetch(`/api/runs?scope=before_today&limit=${RUN_HISTORY_LIMIT}`);
+        if (!response.ok) {
+            if (statusEl) {
+                statusEl.textContent = "Run 목록을 불러오지 못했습니다.";
+            }
+            return;
+        }
+        const runs = await response.json();
+        list.innerHTML = "";
+        if (runs.length === 0) {
+            if (statusEl) {
+                statusEl.textContent = "이전 Run 이력이 없습니다.";
+            }
+            return;
+        }
+        if (statusEl) {
+            statusEl.classList.add("is-hidden");
+        }
+        for (const run of runs) {
+            list.appendChild(createRunListItem(run));
+        }
+    } catch (error) {
+        console.error("Run 이력 로드 실패", error);
+        if (statusEl) {
+            statusEl.textContent = "Run 목록을 불러오지 못했습니다.";
+        }
     }
 }
 
@@ -2559,6 +2597,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindSystemButtons();
     bindSuiteForm();
     bindRunsOverview();
+    bindRunsHistory();
     bindSchedulesOverview();
     bindLogControls();
     startRuntimeTicker();
