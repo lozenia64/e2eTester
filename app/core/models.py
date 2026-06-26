@@ -24,6 +24,11 @@ class ModuleDefinition(BaseModel):
     workflow_name: str | None = None
     workflow_step: str | None = None
     estimated_manual_seconds: int = 0
+    # 이 모듈이 실행 도중 사람 입력(휴대폰 OTP 등)을 요구해 Run 을 WAITING_INPUT 으로
+    # 일시정지시킬 수 있는지를 **매니페스트가 선언**한다(일시정지 '정책'의 단일 출처). 실행
+    # 어댑터는 입력이 필요하다는 '사실'(StepNeedsInput)만 보고할 뿐, 일시정지를 '허가'하는
+    # 권한은 도메인이 이 플래그로 가진다 — 선언하지 않은 모듈의 입력 요구는 정책 위반(ERROR).
+    requires_user_input: bool = False
 
 
 class RunFormOption(BaseModel):

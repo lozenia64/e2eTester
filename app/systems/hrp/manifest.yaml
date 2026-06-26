@@ -52,6 +52,7 @@ modules:
     execution_mode: hrp_workflow_step
     workflow_name: hrp_access
     workflow_step: login
+    requires_user_input: true
     estimated_manual_seconds: 120
   - module_id: hrp.salvage.bid.inquiry.list
     system_code: hrp

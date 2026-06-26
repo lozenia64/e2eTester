@@ -357,11 +357,12 @@ e2eTester/
 
 ### 5.3 Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/run_service.py` 다. `RunService` 는 **실행 순서와 부작용 조율**(영속·이벤트 발행·게이트웨이 호출)을 담당하는 애플리케이션 서비스이며, "무엇이 합법한 상태 전이인가"라는 규칙·불변식·상태 변경은 도메인 애그리거트 `RunAggregate` 에 위임한다. Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다(브라우저 없이 단위 테스트 가능).
+현재 구현 핵심은 `app/orchestrator/run_service.py` 다. `RunService` 는 **실행 순서와 부작용 조율**(영속·이벤트 발행·게이트웨이 호출)을 담당하는 애플리케이션 서비스이며, "무엇을 할지"(결정)와 "무엇이 합법한 상태 변경인가"(전이)는 두 순수 도메인 컴포넌트 `RunStateMachine`·`RunAggregate` 에 위임한다. Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다(브라우저 없이 단위 테스트 가능).
 
 위임 구조:
 
-- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 전이 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 과거 `RunService._execute_run` 에 흩어져 있던 규칙(선행 모듈 차단·결과 기록·종료 상태 판정·취소 마킹·재기동 봉인)을 이 한곳으로 모아 I/O 없이 단독 단위 테스트한다(`tests/test_run_aggregate.py`).
+- `RunStateMachine`(`app/domain/run_state_machine.py`): 실행 루프의 **결정 규칙(명시적 전이표)** 소유자. `(상태·신호) → 명령` 으로 매핑하는 순수 함수(`decide_module_entry` → `CancelRemaining`/`BlockModule`/`ExecuteModule`, `decide_post_step` → `CancelRemaining`/`PauseForInput`/`CompleteStep`/`RejectUnexpectedInput`). 과거 `_execute_run_inner` 의 절차적 for 루프에 if/return 으로 흩어져 있던 분기(취소 관측·선행 차단·OTP 일시정지·결과 기록)를 이 표 한곳으로 끌어내 I/O 없이 단독 단위 테스트한다(`tests/test_run_state_machine.py`). `RunService` 는 이 명령을 받아 효과(I/O)만 수행하는 얇은 해석기다.
+- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 **전이(변경)** 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 결정(`RunStateMachine`)이 "무엇을 할지"를, 이 애그리거트가 "그 변경을 어떻게 적용할지"를 책임진다(I/O 없이 `tests/test_run_aggregate.py` 로 단독 테스트).
 - `RunPlanner`(`run_planner.py`): 입력값 검증·모듈 선택·인증 수단 검증, manifest 기준 모듈 리스트 생성(순수 로직).
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
@@ -461,6 +462,7 @@ manifest 에 들어 있는 정보:
 - 모듈 순서와 의존성
 - `workflow_step`
 - 모듈별 `timeout_seconds`
+- `requires_user_input`: 이 모듈이 사람 입력(휴대폰 OTP 등)으로 Run 을 일시정지시킬 수 있는지를 **선언**한다(일시정지 정책의 단일 출처). 도메인(`RunStateMachine.decide_post_step`)이 이 선언을 근거로 일시정지를 허가하며, 선언하지 않은 모듈이 입력을 요구하면 정책 위반(`RejectUnexpectedInput` → ERROR)으로 처리한다.
 
 실행 규칙:
 
@@ -501,7 +503,7 @@ manifest 에 들어 있는 정보:
 - 모바일 채널(`ChannelProfile.mobile=True`, 예: MHM)은 공용 `build_runtime()` 에서 페이지 생성 직후 `apply_mobile_device_mode()` 로 모바일 디바이스 모드를 먼저 적용한 뒤 접속
 - 단계형 모듈을 순차 실행 (manifest의 `workflow_step` → 실행기의 `build_step_registry` 레지스트리 조회로 단계 핸들러 디스패치, 채널은 `ChannelProfile.steps` 어댑터로 주입)
 - 표준 출력/표준 에러를 가로채 모듈별 `execution.log` 와 라이브 WebSocket 로그로 저장
-- 휴대폰인증 단계는 OTP 미입력 시 단계 핸들러가 `StepNeedsInput(prompt)` 타입드 결과를 반환해 Run을 일시정지시킴(과거 `WAITING_INPUT::` 매직 문자열 반환 대체)
+- 휴대폰인증 단계는 OTP 미입력 시 단계 핸들러가 `StepNeedsInput(prompt)` 타입드 결과로 입력 필요 '사실'만 보고한다(과거 `WAITING_INPUT::` 매직 문자열 반환 대체). 일시정지를 '허가'하는 정책은 어댑터가 아니라 도메인이 매니페스트의 `requires_user_input` 선언으로 가진다 — 선언한 모듈만 `WAITING_INPUT` 으로 일시정지하고, 선언하지 않은 모듈의 입력 요구는 ERROR 로 거부된다.
 
 이 구조를 택한 이유:
 
