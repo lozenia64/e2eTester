@@ -18,7 +18,7 @@ class StepAdapter(Protocol):
     각 step 모듈은 `run(...)` 또는 시나리오가 호출하는 전용 함수를 노출한다.
     시그니처는 단계마다 다르므로(예: 로그인은 dialog_messages 를, 증명서는
     artifact_dir 를 추가로 받는다) 여기서는 존재만 표시하고, 호출은
-    `RepHomepageExecutor._run_step` 의 단일 디스패치가 책임진다.
+    `RepHomepageExecutor` 의 단계 핸들러(`build_step_registry`)가 책임진다.
     """
 
 
@@ -27,7 +27,7 @@ class ChannelSteps:
     """채널(드라이버)이 시나리오에 제공하는 도메인 액션 어댑터 묶음.
 
     각 항목은 해당 채널의 step 모듈(예: ``app.systems.hom.steps.compensation_charge``)이며,
-    시나리오 디스패치가 채널과 무관하게 호출하는 단일 계약이다. PC/모바일은 같은 이름의
+    시나리오의 단계 핸들러가 채널과 무관하게 호출하는 단일 계약이다. PC/모바일은 같은 이름의
     액션을 서로 다른 셀렉터·UI 텍스트로 구현해 여기에 주입한다.
     """
 

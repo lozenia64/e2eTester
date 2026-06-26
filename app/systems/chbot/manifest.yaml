@@ -98,6 +98,7 @@ modules:
     execution_mode: chbot_workflow_step
     workflow_name: chbot_access
     workflow_step: simple_auth
+    requires_user_input: true
     estimated_manual_seconds: 180
   - module_id: chbot.contract.list
     system_code: chbot

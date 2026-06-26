@@ -52,6 +52,7 @@ modules:
     execution_mode: hwtc_workflow_step
     workflow_name: hwtc_access
     workflow_step: phone_auth
+    requires_user_input: true
     estimated_manual_seconds: 120
   - module_id: hwtc.video.playback
     system_code: hwtc

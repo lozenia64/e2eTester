@@ -82,6 +82,7 @@ modules:
     execution_mode: fp_workflow_step
     workflow_name: fp_access
     workflow_step: identity_verification
+    requires_user_input: true
     estimated_manual_seconds: 180
   - module_id: fp.document.writing
     system_code: fp
@@ -95,4 +96,5 @@ modules:
     execution_mode: fp_workflow_step
     workflow_name: fp_access
     workflow_step: document_writing
+    requires_user_input: true
     estimated_manual_seconds: 240

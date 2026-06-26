@@ -130,6 +130,22 @@ async def suite_dashboard(
     )
 
 
+@router.get("/runs/history", response_class=HTMLResponse)
+async def runs_history(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    if current_user.role == "admin":
+        return RedirectResponse(url="/admin", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "runs_history.html",
+        {"current_user": current_user},
+    )
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def run_dashboard(
     request: Request,

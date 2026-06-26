@@ -43,6 +43,14 @@ def _resolve_timezone() -> tuple[ZoneInfo, str]:
         return ZoneInfo("UTC"), "UTC"
 
 
+def schedule_today_start_utc() -> datetime:
+    """스케줄 타임존 기준 '오늘' 00:00:00 을 UTC 로 반환한다."""
+    tz, _ = _resolve_timezone()
+    now_local = datetime.now(tz)
+    today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return today_start_local.astimezone(UTC)
+
+
 class SchedulerService:
     """예약(Schedule) CRUD 와, cron 기준으로 Run/Suite 를 자동 트리거하는 백그라운드 루프.
 

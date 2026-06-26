@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
-from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import WAITING_INPUT_PREFIX
+from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
+from app.runner.workflow_engine import StepContext, StepHandler
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 from app.systems.hrp.steps import login, salvage_bid_inquiry_detail, salvage_bid_inquiry_list
 
@@ -37,30 +37,45 @@ class HrpWorkflowExecutor(AccessWorkflowExecutor):
             otp_code=(input_data.get("otp_code") or "").strip(),
         )
 
-    def _run_step(self, runtime: HrpRuntime, module: ModuleDefinition, artifact_dir: Path) -> str:
-        if module.workflow_step == "login":
-            if not runtime.user_id or not runtime.password:
-                raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
-            if not runtime.login_otp_requested:
-                message = login.request_otp(
-                    runtime.page,
-                    user_id=runtime.user_id,
-                    password=runtime.password,
-                    base_url=runtime.base_url,
-                )
-                runtime.login_otp_requested = True
-                if not runtime.otp_code:
-                    return f"{WAITING_INPUT_PREFIX}{message}"
-            return login.submit_otp_and_login(
+    def build_step_registry(self) -> Mapping[str, StepHandler]:
+        return {
+            **super().build_step_registry(),
+            "login": self._step_login,
+            "salvage_bid_inquiry_list": self._step_salvage_bid_inquiry_list,
+            "salvage_bid_inquiry_detail": self._step_salvage_bid_inquiry_detail,
+        }
+
+    def _step_login(self, ctx: StepContext) -> StepOutcome:
+        runtime: HrpRuntime = ctx.runtime  # type: ignore[assignment]
+        if not runtime.user_id or not runtime.password:
+            raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
+        if not runtime.login_otp_requested:
+            message = login.request_otp(
+                runtime.page,
+                user_id=runtime.user_id,
+                password=runtime.password,
+                base_url=runtime.base_url,
+            )
+            runtime.login_otp_requested = True
+            if not runtime.otp_code:
+                return StepNeedsInput(message)
+        return StepCompleted(
+            login.submit_otp_and_login(
                 runtime.page,
                 otp_code=runtime.otp_code,
                 dialog_messages=runtime.dialog_messages,
             )
-        if module.workflow_step == "salvage_bid_inquiry_list":
-            return salvage_bid_inquiry_list.run(runtime.page, base_url=runtime.base_url)
-        if module.workflow_step == "salvage_bid_inquiry_detail":
-            return salvage_bid_inquiry_detail.run(runtime.page, base_url=runtime.base_url)
-        return super()._run_step(runtime, module, artifact_dir)
+        )
+
+    def _step_salvage_bid_inquiry_list(self, ctx: StepContext) -> StepOutcome:
+        runtime: HrpRuntime = ctx.runtime  # type: ignore[assignment]
+        return StepCompleted(salvage_bid_inquiry_list.run(runtime.page, base_url=runtime.base_url))
+
+    def _step_salvage_bid_inquiry_detail(self, ctx: StepContext) -> StepOutcome:
+        runtime: HrpRuntime = ctx.runtime  # type: ignore[assignment]
+        return StepCompleted(
+            salvage_bid_inquiry_detail.run(runtime.page, base_url=runtime.base_url)
+        )
 
     def update_otp_code(self, runtime: HrpRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

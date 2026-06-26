@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import contextlib
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -10,11 +11,8 @@ from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.screenshot import capture_screenshot
+from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
-
-# 단계 모듈이 OTP 등 사용자 입력 대기로 Run 을 일시정지시킬 때 쓰는 in-band 표식.
-# (반환 문자열이 이 프리픽스로 시작하면 WAITING_INPUT 으로 해석한다.)
-WAITING_INPUT_PREFIX = "WAITING_INPUT::"
 
 
 @runtime_checkable
@@ -34,6 +32,24 @@ class WorkflowRuntime(Protocol):
     closed: bool
 
 
+@dataclass(frozen=True)
+class StepContext:
+    """단계 핸들러에 넘기는 실행 컨텍스트.
+
+    if/elif 디스패치가 단계마다 서로 다른 인자(``page``/``config``/``artifact_dir`` 등)를
+    직접 풀어 넘기던 것을, 핸들러가 필요한 만큼 꺼내 쓰는 단일 컨텍스트로 통일한다.
+    """
+
+    runtime: WorkflowRuntime
+    module: ModuleDefinition
+    artifact_dir: Path
+
+
+# workflow_step → 단계 핸들러. 핸들러는 컨텍스트를 받아 타입드 결과를 돌려준다(문자열·매직
+# 프리픽스 없음). 새 단계 = 레지스트리에 한 줄 등록(거대한 if/elif 디스패치 폐기, OCP).
+StepHandler = Callable[[StepContext], StepOutcome]
+
+
 class BaseWorkflowExecutor(ABC):
     """Playwright 기반 시스템 실행기의 공용 골격.
 
@@ -47,16 +63,25 @@ class BaseWorkflowExecutor(ABC):
     대기(`WAITING_INPUT`)는 모듈 종료가 아니므로 캡처하지 않는다.
 
     시스템별 차이는 추상 메서드로만 표현한다.
-    - `execution_mode` : manifest 의 `execution_mode` 와 매칭되는 식별자
-    - `build_runtime`   : 브라우저/페이지 기동 (시스템 전용)
-    - `_run_step`       : workflow_step → 실제 단계 함수 디스패치 (시스템 전용)
-    - `_shutdown_browser`: 브라우저 종료 호출 (시그니처가 시스템마다 다름)
+    - `execution_mode`     : manifest 의 `execution_mode` 와 매칭되는 식별자
+    - `build_runtime`      : 브라우저/페이지 기동 (시스템 전용)
+    - `build_step_registry`: workflow_step → 단계 핸들러 매핑 (시스템 전용; if/elif 대체)
+    - `_shutdown_browser`  : 브라우저 종료 호출 (시그니처가 시스템마다 다름)
+
+    단계 디스패치는 더 이상 각 실행기의 ``_run_step`` if/elif 체인이 아니라, 실행기가
+    선언하는 ``build_step_registry`` (workflow_step → 핸들러) 매핑을 이 골격이 조회·호출한다.
+    "지원하지 않는 단계" 오류도 여기 한곳에서 던진다(실행기마다 복제하던 ``raise`` 제거).
+    핸들러는 매직 문자열이 아니라 ``StepOutcome`` (``StepCompleted``/``StepNeedsInput``)을
+    돌려주므로, 일시정지 신호가 반환값에 밀입국하지 않는다.
     """
 
     execution_mode: str
 
     def __init__(self, artifact_manager: ArtifactManager) -> None:
         self._artifact_manager = artifact_manager
+        # workflow_step → 핸들러 레지스트리. 핸들러는 인스턴스 상태가 아니라 호출 시점의
+        # StepContext 만 참조하므로, 생성자에서 한 번 구성해 둔다.
+        self._step_handlers: Mapping[str, StepHandler] = dict(self.build_step_registry())
 
     @staticmethod
     def _resolve_headless(input_data: dict[str, str]) -> bool:
@@ -82,6 +107,7 @@ class BaseWorkflowExecutor(ABC):
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
         artifact_dir = self._artifact_manager.module_dir(run_id, module.module_id)
         dialog_index = len(runtime.dialog_messages)
+        context = StepContext(runtime=runtime, module=module, artifact_dir=artifact_dir)
 
         status = ModuleStatus.PASSED
         message = ""
@@ -93,15 +119,14 @@ class BaseWorkflowExecutor(ABC):
             tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
             with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
                 try:
-                    raw_message = self._run_step(runtime, module, artifact_dir)
-                    if isinstance(raw_message, str) and raw_message.startswith(
-                        WAITING_INPUT_PREFIX
-                    ):
-                        status = ModuleStatus.WAITING_INPUT
-                        message = raw_message.split("::", 1)[1]
-                    else:
-                        status = ModuleStatus.PASSED
-                        message = raw_message
+                    # 매직 문자열 파싱이 아니라 타입드 결과 매칭으로 제어 전이를 만든다.
+                    match self._dispatch_step(context):
+                        case StepNeedsInput(prompt=prompt):
+                            status = ModuleStatus.WAITING_INPUT
+                            message = prompt
+                        case StepCompleted(message=completed_message):
+                            status = ModuleStatus.PASSED
+                            message = completed_message
                 except RuntimeError as exc:
                     status = ModuleStatus.ANOMALY
                     message = str(exc)
@@ -136,6 +161,15 @@ class BaseWorkflowExecutor(ABC):
             screenshot_path=screenshot_path if screenshot_path.exists() else None,
         )
 
+    def _dispatch_step(self, context: StepContext) -> StepOutcome:
+        """workflow_step 을 레지스트리에서 찾아 핸들러로 디스패치한다(단일 진입점)."""
+        handler = self._step_handlers.get(context.module.workflow_step)
+        if handler is None:
+            raise RuntimeError(
+                f"Unsupported {self.execution_mode} workflow step: {context.module.workflow_step}"
+            )
+        return handler(context)
+
     def close_runtime(self, runtime: WorkflowRuntime) -> None:
         if runtime.closed:
             return
@@ -166,14 +200,14 @@ class BaseWorkflowExecutor(ABC):
     ) -> WorkflowRuntime: ...
 
     @abstractmethod
-    def _run_step(
-        self, runtime: WorkflowRuntime, module: ModuleDefinition, artifact_dir: Path
-    ) -> str:
-        """workflow_step 을 실제 단계 함수로 디스패치한다.
+    def build_step_registry(self) -> Mapping[str, StepHandler]:
+        """workflow_step → 단계 핸들러 매핑을 돌려준다(if/elif 디스패치 대체).
 
-        `artifact_dir` 은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며,
-        다운로드 등 파일 산출물이 필요한 단계만 사용한다. 스크린샷은 공용 엔진이 책임지므로
-        단계 함수에 스크린샷 경로를 넘기지 않는다.
+        핸들러는 ``StepContext`` 를 받아 ``StepOutcome`` 을 돌려준다. ``StepContext.artifact_dir``
+        은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며, 다운로드 등
+        파일 산출물이 필요한 단계만 사용한다. 스크린샷은 공용 엔진이 책임지므로 핸들러에
+        스크린샷 경로를 넘기지 않는다. 서브클래스는 ``super().build_step_registry()`` 와 병합해
+        부모가 제공하는 단계(예: ``main_access``)를 물려받거나 덮어쓸 수 있다.
         """
         ...
 

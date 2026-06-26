@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from app.api.dependencies import get_suite_service
 from app.auth.dependencies import get_user_service
 from app.auth.jwt import decode_token
-from app.orchestrator.suite_view import filter_suite_event_for_user, filter_suite_for_user
+from app.orchestrator.suite_view import (
+    SuiteView,
+    filter_suite_event_for_user,
+    filter_suite_for_user,
+)
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
@@ -50,7 +54,7 @@ async def suite_updates(
                 "event_type": "snapshot",
                 "suite_id": suite.suite_id,
                 "suite_status": suite.status,
-                "payload": suite.model_dump(mode="json"),
+                "payload": SuiteView.dump(suite),
             }
         )
         while True:

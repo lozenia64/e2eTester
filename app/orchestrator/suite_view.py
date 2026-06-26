@@ -1,7 +1,70 @@
 from __future__ import annotations
 
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
 from app.auth.models import User
-from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun
+from app.core.enums import SuiteStatus
+from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep
+from app.core.status_labels import suite_status_label
+
+
+class SuiteView(BaseModel):
+    """Suite 의 **읽기 모델(프레젠테이션 프로젝션)** — ``RunView`` 의 Suite 짝.
+
+    Suite 엔티티(쓰기 모델)를 외부(REST 응답·WebSocket payload·스냅샷)로 내보낼 때, 엔티티를
+    그대로 ``model_dump`` 하지 않고 이 프로젝션을 거친다. 와이어로 나가는 필드를 여기서
+    *명시적으로* 선언하므로, 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않는다. 과거
+    Suite 직렬화는 REST 4곳·WS 스냅샷·이벤트 발행에서 제각각 ``suite.model_dump`` 를 직접
+    호출해, RunView 가 세운 "엔티티를 직접 직렬화하지 않는다"는 규율을 Suite 쪽에서만 깨고
+    있었다 — 이 클래스로 그 경로를 단일화한다.
+
+    단계 항목은 이미 공개에 안전한 ``SuiteStep`` 을 그대로 재사용한다(필드 드리프트 방지).
+    노출 필드는 기존 ``suite.model_dump`` 와 동일하며, ``RunView`` 와 동일하게 표시용
+    ``status_label`` 만 추가로 싣는다.
+    """
+
+    suite_id: str
+    status: SuiteStatus
+    status_label: str
+    steps: list[SuiteStep]
+    current_step_index: int = 0
+    requested_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    active_run_id: str | None = None
+    awaiting_input_run_id: str | None = None
+    awaiting_input_prompt: str | None = None
+    browser_mode: str = "headed"
+    selected_system_codes: list[str] = Field(default_factory=list)
+    created_by_user_id: str | None = None
+    created_by_user_name: str | None = None
+
+    @classmethod
+    def from_suite(cls, suite: SuiteRun) -> SuiteView:
+        return cls(
+            suite_id=suite.suite_id,
+            status=suite.status,
+            status_label=suite_status_label(suite.status),
+            steps=suite.steps,
+            current_step_index=suite.current_step_index,
+            requested_at=suite.requested_at,
+            started_at=suite.started_at,
+            ended_at=suite.ended_at,
+            active_run_id=suite.active_run_id,
+            awaiting_input_run_id=suite.awaiting_input_run_id,
+            awaiting_input_prompt=suite.awaiting_input_prompt,
+            browser_mode=suite.browser_mode,
+            selected_system_codes=suite.selected_system_codes,
+            created_by_user_id=suite.created_by_user_id,
+            created_by_user_name=suite.created_by_user_name,
+        )
+
+    @classmethod
+    def dump(cls, suite: SuiteRun) -> dict:
+        """Suite → 와이어 JSON(dict). 엔티티를 직접 ``model_dump`` 하지 않는 단일 경로."""
+        return cls.from_suite(suite).model_dump(mode="json")
 
 
 def resolve_suite_request_for_user(

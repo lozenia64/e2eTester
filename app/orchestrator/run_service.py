@@ -3,13 +3,22 @@ from __future__ import annotations
 import asyncio
 import functools
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.models import Run, RunModule
 from app.domain.run_aggregate import RunAggregate
+from app.domain.run_state_machine import (
+    BlockModule,
+    CancelRemaining,
+    CompleteStep,
+    ExecuteModule,
+    PauseForInput,
+    RejectUnexpectedInput,
+    RunStateMachine,
+)
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.orchestrator.run_comparator import RunComparator
@@ -18,6 +27,7 @@ from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
+from app.scheduling.scheduler import schedule_today_start_utc
 from app.storage.ports import (
     RunControlStorePort,
     RunInputStorePort,
@@ -113,6 +123,7 @@ class RunService:
         actor_context: ActorContext | None = None,
         run_status: RunStatus | None = None,
         run_statuses: frozenset[RunStatus] | None = None,
+        scope: Literal["today", "before_today"] | None = None,
     ) -> list[dict]:
         if user_id is not None:
             runs = await self._repository.list_runs_by_user(user_id)
@@ -120,20 +131,60 @@ class RunService:
             runs = await self._repository.list_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
 
+        active_statuses = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+        today_start_utc = schedule_today_start_utc() if scope is not None else None
+
         normalized_name_query = (user_name_query or "").strip().casefold()
-        summaries: list[dict] = []
-        for run in runs:
+
+        def _matches_filters(run: Run, summary: dict) -> bool:
             if run_statuses is not None and run.status not in run_statuses:
-                continue
+                return False
             if run_status is not None and run.status != run_status:
-                continue
-            summary = summarize_run(run, actor_context=actor_context)
+                return False
             if system_code and summary.get("system_code") != system_code:
-                continue
+                return False
             if normalized_name_query:
                 actor_name = (summary.get("created_by_user_name") or "").casefold()
                 if normalized_name_query not in actor_name:
+                    return False
+            return True
+
+        def _run_at_utc(run: Run) -> datetime:
+            return (
+                run.requested_at
+                if run.requested_at.tzinfo is not None
+                else run.requested_at.replace(tzinfo=UTC)
+            )
+
+        if scope == "today":
+            active_summaries: list[dict] = []
+            today_finished_summaries: list[dict] = []
+            for run in runs:
+                run_at = _run_at_utc(run)
+                is_active = run.status in active_statuses
+                if not is_active and run_at < today_start_utc:
                     continue
+                summary = summarize_run(run, actor_context=actor_context)
+                if not _matches_filters(run, summary):
+                    continue
+                if is_active:
+                    active_summaries.append(summary)
+                else:
+                    today_finished_summaries.append(summary)
+            remaining = max(0, limit - len(active_summaries))
+            return active_summaries + today_finished_summaries[:remaining]
+
+        summaries: list[dict] = []
+        for run in runs:
+            if scope is not None:
+                run_at = _run_at_utc(run)
+                is_active = run.status in active_statuses
+                if scope == "before_today":
+                    if is_active or run_at >= today_start_utc:
+                        continue
+            summary = summarize_run(run, actor_context=actor_context)
+            if not _matches_filters(run, summary):
+                continue
             summaries.append(summary)
             if len(summaries) >= limit:
                 break
@@ -447,15 +498,21 @@ class RunService:
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
                 current_module = module
-                if await self._control_store.is_cancel_requested(run.run_id):
+                # 결정(무엇을 할지)은 순수 상태머신이, 효과(I/O)는 이 루프가 책임진다.
+                entry = RunStateMachine.decide_module_entry(
+                    cancel_requested=await self._control_store.is_cancel_requested(run.run_id),
+                    dependencies_satisfied=aggregate.dependencies_satisfied(module),
+                )
+                if isinstance(entry, CancelRemaining):
                     forced_status = RunStatus.CANCELLED
                     await self._mark_modules_cancelled(run, ordered_modules[index:])
                     break
-                if not aggregate.dependencies_satisfied(module):
+                if isinstance(entry, BlockModule):
                     aggregate.block_for_dependencies(module)
                     await self._repository.save_run(run)
                     await self._events.module_event("module_finished", run, module)
                     continue
+                assert isinstance(entry, ExecuteModule)
 
                 await self._transition_to_queued(run, module)
                 await asyncio.sleep(0.6)
@@ -484,18 +541,40 @@ class RunService:
                     handle, run.run_id, definition, on_log
                 )
 
-                if execution_result.status == ModuleStatus.WAITING_INPUT:
-                    if await self._control_store.is_cancel_requested(run.run_id):
-                        # OTP 대기로 멈추려는 순간 취소가 요청된 경우, 일시정지하지 않고 바로 중단한다.
-                        forced_status = RunStatus.CANCELLED
-                        await self._mark_modules_cancelled(run, ordered_modules[index:])
-                        break
+                # 일시정지로 멈추려는 순간에만 취소를 재확인한다(정상 종료의 취소는 다음 진입에서).
+                cancel_requested = (
+                    await self._control_store.is_cancel_requested(run.run_id)
+                    if execution_result.status == ModuleStatus.WAITING_INPUT
+                    else False
+                )
+                post = RunStateMachine.decide_post_step(
+                    step_status=execution_result.status,
+                    cancel_requested=cancel_requested,
+                    module_requires_user_input=definition.requires_user_input,
+                )
+                if isinstance(post, CancelRemaining):
+                    forced_status = RunStatus.CANCELLED
+                    await self._mark_modules_cancelled(run, ordered_modules[index:])
+                    break
+                if isinstance(post, PauseForInput):
                     await self._pause_for_input(
                         run, module, index, definition, handle, execution_result
                     )
                     should_finalize = False
                     paused = True
                     return
+                if isinstance(post, RejectUnexpectedInput):
+                    # 매니페스트가 일시정지를 허가하지 않은 모듈이 입력을 요구함 → 정책 위반.
+                    await self._fail_module(
+                        run,
+                        module,
+                        RuntimeError(
+                            "모듈이 사용자 입력을 요구했으나 매니페스트에 "
+                            "requires_user_input 이 선언되지 않았습니다."
+                        ),
+                    )
+                    continue
+                assert isinstance(post, CompleteStep)
 
                 self._record_module_result(aggregate, module, execution_result)
                 aggregate.finish_timing(module)
