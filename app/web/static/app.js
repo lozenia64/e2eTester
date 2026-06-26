@@ -44,10 +44,67 @@ function isModuleIssueStatus(status) {
     return normalized === "anomaly" || normalized === "error";
 }
 
-const MODULE_GRAPH_COLUMN_WIDTH = 172;
-const MODULE_GRAPH_ROW_HEIGHT = 76;
-const MODULE_GRAPH_ROW_GAP = 16;
-const MODULE_GRAPH_COLUMN_GAP = 14;
+const MODULE_GRAPH_MIN_ROW_HEIGHT = 26;
+const MODULE_GRAPH_MAX_ROW_HEIGHT = 40;
+const MODULE_GRAPH_MIN_GAP = 4;
+const MODULE_GRAPH_MAX_GAP = 6;
+const MODULE_GRAPH_MAX_VIEWPORT_HEIGHT = 200;
+const moduleGraphResizeObservers = new WeakMap();
+
+function computeModuleGraphMetrics(columnCount, rowCount, availableWidth, availableHeight) {
+    let rowGap = MODULE_GRAPH_MAX_GAP;
+    let columnGap = MODULE_GRAPH_MAX_GAP;
+    let rowHeight = MODULE_GRAPH_MAX_ROW_HEIGHT;
+
+    const totalHeight = (height, gap) => (rowCount * height) + (Math.max(rowCount - 1, 0) * gap);
+
+    if (totalHeight(rowHeight, rowGap) > availableHeight) {
+        const gapSpace = Math.max(rowCount - 1, 0) * rowGap;
+        rowHeight = Math.floor((availableHeight - gapSpace) / rowCount);
+        rowHeight = Math.max(MODULE_GRAPH_MIN_ROW_HEIGHT, Math.min(MODULE_GRAPH_MAX_ROW_HEIGHT, rowHeight));
+    }
+
+    if (totalHeight(rowHeight, rowGap) > availableHeight && rowCount > 1) {
+        rowGap = Math.floor((availableHeight - (rowCount * rowHeight)) / (rowCount - 1));
+        rowGap = Math.max(MODULE_GRAPH_MIN_GAP, Math.min(MODULE_GRAPH_MAX_GAP, rowGap));
+    }
+
+    if (columnCount >= 8) {
+        rowHeight = Math.min(rowHeight, 28);
+        columnGap = MODULE_GRAPH_MIN_GAP;
+    } else if (columnCount >= 5) {
+        rowHeight = Math.min(rowHeight, 32);
+        columnGap = Math.min(columnGap, 5);
+    }
+
+    if (availableWidth > 0 && columnCount > 1) {
+        const minColumnWidth = 44;
+        const widthLimitedGap = Math.floor(
+            (availableWidth - (columnCount * minColumnWidth)) / (columnCount - 1),
+        );
+        if (widthLimitedGap < columnGap) {
+            columnGap = Math.max(MODULE_GRAPH_MIN_GAP, widthLimitedGap);
+        }
+    }
+
+    return { rowHeight, rowGap, columnGap };
+}
+
+function ensureModuleGraphResizeObserver(form) {
+    const viewport = form.querySelector(".module-graph-viewport");
+    if (!viewport || moduleGraphResizeObservers.has(viewport)) {
+        return;
+    }
+
+    const observer = new ResizeObserver(() => {
+        window.requestAnimationFrame(() => {
+            fitModuleGraphToViewport(form);
+            drawModuleGraph(form);
+        });
+    });
+    observer.observe(viewport);
+    moduleGraphResizeObservers.set(viewport, observer);
+}
 
 function parseSystemDefinition(form) {
     const script = form.querySelector('[data-role="system-definition"]');
@@ -207,7 +264,7 @@ function createModuleGraphNode(module, position, index) {
     button.setAttribute("aria-pressed", "true");
 
     const header = document.createElement("div");
-    header.className = "flex items-center gap-3";
+    header.className = "module-graph-node__header";
 
     const order = document.createElement("span");
     order.className = "module-graph-order";
@@ -303,6 +360,37 @@ function buildModuleSelectionWarnings(form, selectedModuleIds) {
     return warnings;
 }
 
+function fitModuleGraphToViewport(form) {
+    const viewport = form.querySelector(".module-graph-viewport");
+    const canvas = form.querySelector('[data-role="module-graph-canvas"]');
+    const grid = form.querySelector('[data-role="module-graph-grid"]');
+    if (!viewport || !canvas || !grid) {
+        return;
+    }
+
+    const columnCount = Math.max(Number(canvas.dataset.columnCount) || 1, 1);
+    const rowCount = Math.max(Number(canvas.dataset.rowCount) || 1, 1);
+    const availableWidth = viewport.clientWidth || viewport.getBoundingClientRect().width;
+    const availableHeight = MODULE_GRAPH_MAX_VIEWPORT_HEIGHT;
+    const { rowHeight, rowGap, columnGap } = computeModuleGraphMetrics(
+        columnCount,
+        rowCount,
+        availableWidth,
+        availableHeight,
+    );
+    const canvasHeight = (rowCount * rowHeight) + (Math.max(rowCount - 1, 0) * rowGap);
+
+    canvas.style.width = "100%";
+    canvas.style.height = `${canvasHeight}px`;
+    grid.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${rowCount}, ${rowHeight}px)`;
+    grid.style.rowGap = `${rowGap}px`;
+    grid.style.columnGap = `${columnGap}px`;
+
+    viewport.dataset.graphCompact = columnCount >= 8 ? "dense" : columnCount >= 5 ? "compact" : "";
+    ensureModuleGraphResizeObserver(form);
+}
+
 function drawModuleGraph(form) {
     const canvas = form.querySelector('[data-role="module-graph-canvas"]');
     const grid = form.querySelector('[data-role="module-graph-grid"]');
@@ -395,12 +483,11 @@ function renderModuleSelector(form) {
         grid.appendChild(createModuleGraphNode(module, position, index));
     }
 
-    canvas.style.width = `${Math.max(modules.length > 0 ? maxDepth + 1 : 1, 1) * MODULE_GRAPH_COLUMN_WIDTH}px`;
-    canvas.style.height = `${(Math.max(maxRow + 1, 1) * MODULE_GRAPH_ROW_HEIGHT) + (Math.max(maxRow, 0) * MODULE_GRAPH_ROW_GAP)}px`;
-    grid.style.gridTemplateColumns = `repeat(${Math.max(maxDepth + 1, 1)}, minmax(220px, 1fr))`;
-    grid.style.gridTemplateRows = `repeat(${Math.max(maxRow + 1, 1)}, ${MODULE_GRAPH_ROW_HEIGHT}px)`;
-    grid.style.rowGap = `${MODULE_GRAPH_ROW_GAP}px`;
-    grid.style.columnGap = `${MODULE_GRAPH_COLUMN_GAP}px`;
+    const columnCount = Math.max(maxDepth + 1, 1);
+    const rowCount = Math.max(maxRow + 1, 1);
+    canvas.dataset.columnCount = String(columnCount);
+    canvas.dataset.rowCount = String(rowCount);
+    fitModuleGraphToViewport(form);
 
     grid.addEventListener("click", (event) => {
         const button = event.target.closest('[data-role="module-graph-node"]');
@@ -450,7 +537,10 @@ function bindModuleSelectors() {
         if (details) {
             details.addEventListener("toggle", () => {
                 if (details.open) {
-                    window.requestAnimationFrame(() => drawModuleGraph(form));
+                    window.requestAnimationFrame(() => {
+                        fitModuleGraphToViewport(form);
+                        drawModuleGraph(form);
+                    });
                 }
             });
         }
@@ -461,10 +551,31 @@ function bindModuleSelectors() {
         window.clearTimeout(resizeTimer);
         resizeTimer = window.setTimeout(() => {
             for (const form of document.querySelectorAll(".system-form")) {
+                fitModuleGraphToViewport(form);
                 drawModuleGraph(form);
             }
         }, 80);
     });
+}
+
+function bindSystemCardExpand() {
+    const section = document.getElementById("suite-section");
+    if (!section) {
+        return;
+    }
+    const systemCards = section.querySelectorAll("details.system-card:not(.system-card--suite)");
+    for (const card of systemCards) {
+        card.addEventListener("toggle", () => {
+            if (!card.open) {
+                return;
+            }
+            for (const sibling of systemCards) {
+                if (sibling !== card) {
+                    sibling.open = false;
+                }
+            }
+        });
+    }
 }
 
 async function readErrorMessage(response) {
@@ -2594,6 +2705,7 @@ function updateComparisonPanel(runPayload) {
 
 document.addEventListener("DOMContentLoaded", () => {
     bindModuleSelectors();
+    bindSystemCardExpand();
     bindSystemButtons();
     bindSuiteForm();
     bindRunsOverview();
