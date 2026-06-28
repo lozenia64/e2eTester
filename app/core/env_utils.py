@@ -9,30 +9,24 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE_PATH = _REPO_ROOT / ".env"
 
 
 def load_dotenv_file(env_path: Path = DEFAULT_ENV_FILE_PATH) -> dict[str, str]:
+    """`.env` 파일을 ``{이름: 값}`` 으로 읽는다(출처 추적용 보조 경로).
+
+    표준 ``python-dotenv`` 로 파싱한다. ``interpolate=False`` 로 두어 토큰/비밀번호에
+    들어갈 수 있는 ``$`` 가 변수 확장으로 변형되지 않게 하고(과거 자체 파서와 동일한 리터럴
+    동작 유지), 값이 없는 키(``KEY`` 단독 줄)는 과거처럼 제외해 반환 타입을 ``dict[str, str]``
+    로 유지한다.
+    """
     if not env_path.exists():
         return {}
-
-    values: dict[str, str] = {}
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-
-        if value and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[key] = value
-    return values
+    values = dotenv_values(env_path, interpolate=False, encoding="utf-8")
+    return {key: value for key, value in values.items() if value is not None}
 
 
 def resolve_env_value(name: str, dotenv_values: dict[str, str]) -> str | None:
