@@ -138,7 +138,9 @@ async def lifespan(app: FastAPI):
     suite_input_store = InMemorySuiteInputStore()
     suite_service = SuiteService(
         registry=registry,
-        run_service=run_service,
+        # 사가는 구체 RunService 가 아니라 명령 포트(RunCommandPort)에만 의존한다 — RunService 는
+        # 그 포트를 구조적으로 만족하므로 그대로 주입한다(배선은 컴포지션 루트가 독점).
+        run_commands=run_service,
         repository=suite_repository,
         event_bus=event_bus,
         cancel_store=suite_control_store,

@@ -107,14 +107,18 @@ e2eTester/
       report_renderer.py
     domain/
       run_aggregate.py           # RunAggregate: Run 상태 전이 규칙·불변식(순수 도메인, I/O 무지)
+      run_state_machine.py       # RunStateMachine: Run 실행 결정 전이표(순수)
+      suite_aggregate.py         # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
+      suite_state_machine.py     # SuiteStateMachine: Suite 사가 결정 전이표(순수, RunStateMachine 과 동형)
     orchestrator/
       run_service.py             # RunService: 실행 순서·부작용 조율(규칙은 RunAggregate 에 위임)
+      run_command_port.py        # RunCommandPort: 사가→하위 Run 명령 포트(의존성 역전; RunService 가 구조적 만족)
       run_planner.py             # RunPlanner: 요청 검증 + 모듈 실행 계획(순수)
       run_comparator.py          # RunComparator: 직전 Run 대비 비교(저장소 의존)
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
-      suite_service.py           # SuiteService: 이벤트 기반 Saga(RunFinished 구동, 폴링 없음)
+      suite_service.py           # SuiteService: 이벤트 기반 Saga(결정=SuiteStateMachine, 변경=SuiteAggregate 에 위임)
       stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
     registry/
       loader.py
@@ -411,7 +415,11 @@ Module:
 
 ### 5.3.1 Suite Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/suite_service.py` 다. **이벤트 기반 Saga(프로세스 매니저)** 로 동작한다 — 과거의 `_execute_suite` 백그라운드 루프(하위 Run 의 WebSocket 이벤트 큐 구독 + `get_run` 2초 폴링으로 종료 감지)는 제거됐다.
+현재 구현 핵심은 `app/orchestrator/suite_service.py` 다. **이벤트 기반 Saga(프로세스 매니저)** 로 동작한다 — 과거의 `_execute_suite` 백그라운드 루프(하위 Run 의 WebSocket 이벤트 큐 구독 + `get_run` 2초 폴링으로 종료 감지)는 제거됐다. Run 쪽과 마찬가지로 **결정·변경을 순수 도메인으로 분리**한다(서비스 안의 인라인 `suite.status = …`/`step.status = …` 변이 제거):
+
+- `SuiteStateMachine`(`app/domain/suite_state_machine.py`): 사가의 **결정 규칙(전이표)**. `decide_after_run_finished` → `RecordAndAdvance`/`RecordAndCancel`(하위 Run 결과를 스텝 상태로 매핑 + 전진/취소 판정), `decide_advance` → `StartStep`/`FinalizeSuite`/`CancelSuite`. `RunStateMachine` 과 동형의 순수 함수이며 `tests/test_suite_state_machine.py` 로 단독 테스트.
+- `SuiteAggregate`(`app/domain/suite_aggregate.py`): Suite 상태 **전이(변경)·불변식의 단일 소유자**. `SuiteRun` 모델을 감싸 `begin`/`start_step`/`link_run`/`record_step_result`/`mark_step_error`/`mark_waiting_input`/`mark_resumed`/`finalize`/`seal_interrupted`/`next_pending_index`/`compute_final_status` 같은 순수 메서드(await·I/O 없음, 시계만 참조)를 노출한다. `RunAggregate` 와 동형이며 `tests/test_suite_aggregate.py` 로 단독 테스트. `SuiteService` 는 결정을 받아 효과(영속·이벤트·하위 Run 명령)만 수행하는 얇은 해석기다.
+- `RunCommandPort`(`app/orchestrator/run_command_port.py`): 사가가 하위 Run 을 구동하기 위한 **명령 포트**(`validate_run_request`/`start_run`/`cancel_run`/`submit_otp`/`get_run` 을 선언한 `Protocol`). `SuiteService` 는 구체 `RunService` 가 아니라 이 포트에 의존하며, `RunService` 가 구조적으로(structural typing) 이를 만족해 컴포지션 루트가 `run_commands=run_service` 로 주입한다(사가가 애플리케이션 서비스에 용접되지 않음).
 
 역할:
 
