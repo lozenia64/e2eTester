@@ -3,18 +3,24 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 
-import bcrypt
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
 
 from app.auth.models import CreateUserRequest, User
 from app.storage.user_repository import UserRepositoryPort
 
+# 첫 해셔(Argon2id)가 신규 비밀번호 해싱에 쓰이고, 모든 해셔가 검증에 쓰인다.
+# 기존에 저장된 bcrypt 해시도 그대로 검증되며, 로그인 시 Argon2id 로 자동 재해싱된다.
+_password_hash = PasswordHash((Argon2Hasher(), BcryptHasher()))
+
 
 def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return _password_hash.hash(password)
 
 
 def _verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    return _password_hash.verify(password, hashed)
 
 
 class UserService:
@@ -47,8 +53,12 @@ class UserService:
             return None
         if not user.is_active:
             return None
-        if not _verify_password(password, user.hashed_password):
+        valid, upgraded_hash = _password_hash.verify_and_update(password, user.hashed_password)
+        if not valid:
             return None
+        # 레거시 bcrypt 해시는 로그인 성공 시 Argon2id 로 1회 재해싱해 영속화한다.
+        if upgraded_hash is not None:
+            user = await self._repo.save(user.model_copy(update={"hashed_password": upgraded_hash}))
         return user
 
     async def get_user(self, user_id: str) -> User:
