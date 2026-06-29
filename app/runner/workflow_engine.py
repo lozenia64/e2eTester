@@ -22,27 +22,50 @@ class WorkflowRuntime(Protocol):
     공용 실행 엔진(`BaseWorkflowExecutor`)이 시스템에 무관하게 의존하는 속성만 선언한다.
     각 시스템의 구체 런타임 dataclass 는 이 외에 시스템 전용 필드(config, base_url 등)를
     자유롭게 추가한다.
+
+    **인프라 관심사는 여기 없다.** 실행 스레드 풀은 게이트웨이 세션(`LocalExecutionGateway`)이
+    소유하며, 더 이상 런타임에 ``executor`` 로 매달리지 않는다(도메인 런타임은 자기 브라우저
+    상태만 안다).
     """
 
     playwright_manager: object
     context: object
     page: object
     dialog_messages: list[str]
-    executor: object | None
     closed: bool
 
 
 @dataclass(frozen=True)
 class StepContext:
-    """단계 핸들러에 넘기는 실행 컨텍스트.
+    """단계 핸들러에 넘기는 실행 **능력(capability) 인터페이스**.
 
-    if/elif 디스패치가 단계마다 서로 다른 인자(``page``/``config``/``artifact_dir`` 등)를
-    직접 풀어 넘기던 것을, 핸들러가 필요한 만큼 꺼내 쓰는 단일 컨텍스트로 통일한다.
+    핸들러가 전역(stdout)·런타임 내부를 직접 들쑤시지 않고, 필요한 능력을 이 컨텍스트에서만
+    꺼내 쓰도록 한다:
+
+    - ``page`` / ``dialog_messages`` : 모든 런타임이 만족하는 ``WorkflowRuntime`` 계약을 통해
+      노출되는 공통 능력(핸들러가 ``ctx.runtime`` 을 구체 타입으로 캐스팅하지 않아도 된다).
+    - ``log``                        : 단계 로그 한 줄을 흘려보내는 **명시적 로깅 능력**.
+      과거에는 단계가 ``print()`` 하면 엔진이 stdout 을 가로채는 **암묵적 계약**이었다. 이제
+      엔진이 로그 싱크를 주입하므로 단계는 ``ctx.log(...)`` 로 의도를 명시한다(기존 ``print``
+      경로도 호환을 위해 그대로 stdout 리다이렉트로 수집된다).
+    - ``artifact_dir``               : 다운로드 등 파일 산출물이 필요한 단계만 사용.
+
+    ``runtime`` 은 시스템 전용 상태(config 등)가 필요한 핸들러를 위해 그대로 노출하되, 공통
+    능력은 위 접근자로 쓰는 것을 권장한다.
     """
 
     runtime: WorkflowRuntime
     module: ModuleDefinition
     artifact_dir: Path
+    log: Callable[[str], None] = print
+
+    @property
+    def page(self) -> object:
+        return self.runtime.page
+
+    @property
+    def dialog_messages(self) -> list[str]:
+        return self.runtime.dialog_messages
 
 
 # workflow_step → 단계 핸들러. 핸들러는 컨텍스트를 받아 타입드 결과를 돌려준다(문자열·매직
@@ -107,7 +130,6 @@ class BaseWorkflowExecutor(ABC):
         screenshot_path = self._artifact_manager.screenshot_path(run_id, module.module_id)
         artifact_dir = self._artifact_manager.module_dir(run_id, module.module_id)
         dialog_index = len(runtime.dialog_messages)
-        context = StepContext(runtime=runtime, module=module, artifact_dir=artifact_dir)
 
         status = ModuleStatus.PASSED
         message = ""
@@ -116,7 +138,14 @@ class BaseWorkflowExecutor(ABC):
         # 단계 실행 → 모듈 종료 시 스크린샷까지 모두 로그 리다이렉트 안에서 처리해
         # 캡처 과정의 로그도 execution.log / WebSocket 으로 함께 흘려보낸다.
         with log_path.open("w", encoding="utf-8") as log_file:
-            tee = LineWriter(lambda line: write_log_line(line, emit_log, log_file))
+            # 명시적 로깅 능력(ctx.log)과 stdout print() 모두 같은 싱크(파일+WebSocket)로 모은다.
+            def sink(line: str) -> None:
+                write_log_line(line, emit_log, log_file)
+
+            tee = LineWriter(sink)
+            context = StepContext(
+                runtime=runtime, module=module, artifact_dir=artifact_dir, log=sink
+            )
             with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
                 try:
                     # 매직 문자열 파싱이 아니라 타입드 결과 매칭으로 제어 전이를 만든다.

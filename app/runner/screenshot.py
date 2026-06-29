@@ -12,10 +12,19 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from playwright.sync_api import Page
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+if TYPE_CHECKING:
+    # 타입 주석 전용(런타임 미평가) — 이 모듈은 브라우저 없이도 import 가능해야 한다.
+    from playwright.sync_api import Page
+
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+except ModuleNotFoundError:  # pragma: no cover - 브라우저 미설치(엔진 단위 테스트) 환경
+
+    class PlaywrightTimeoutError(Exception):
+        """playwright 미설치 환경용 플레이스홀더(실제 캡처는 브라우저가 있을 때만 호출됨)."""
+
 
 SCREENSHOT_TIMEOUT_MS: Final[int] = 20000
 SCREENSHOT_RETRY_TIMEOUT_MS: Final[int] = 5000

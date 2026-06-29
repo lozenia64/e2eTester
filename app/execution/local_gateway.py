@@ -16,10 +16,17 @@ from app.systems.loader import load_workflow_executors
 
 @dataclass
 class _Session:
-    """게이트웨이 내부에만 존재하는 라이브 세션 상태. 핸들 밖으로 새지 않는다."""
+    """게이트웨이 내부에만 존재하는 라이브 세션 상태(=워커 경계 객체). 핸들 밖으로 새지 않는다.
+
+    실행 스레드(단일 스레드 풀)는 **세션이 명시적으로 소유**한다. 과거에는 이 풀을
+    ``runtime.executor`` 로 도메인 런타임에 몽키패치해, 모든 시스템 런타임이 게이트웨이를 위해
+    ``executor`` 필드를 들고 있어야 했다(인프라 관심사가 도메인 모델로 누수). 이제 풀은 여기
+    세션에만 있고, 시스템 런타임은 브라우저/페이지 같은 자기 상태만 가진다.
+    """
 
     execution_mode: str
     runtime: Any
+    executor: ThreadPoolExecutor
 
 
 class LocalExecutionGateway(ExecutionGateway):
@@ -72,9 +79,11 @@ class LocalExecutionGateway(ExecutionGateway):
         except Exception:
             thread_pool.shutdown(wait=False, cancel_futures=True)
             raise
-        runtime.executor = thread_pool
+        # 스레드 풀은 세션이 명시적으로 소유한다(런타임에 몽키패치하지 않는다).
         session_id = uuid4().hex
-        self._sessions[session_id] = _Session(execution_mode=execution_mode, runtime=runtime)
+        self._sessions[session_id] = _Session(
+            execution_mode=execution_mode, runtime=runtime, executor=thread_pool
+        )
         return ExecutionHandle(execution_mode=execution_mode, session_id=session_id)
 
     async def run_step(
@@ -108,7 +117,7 @@ class LocalExecutionGateway(ExecutionGateway):
         drain_task = asyncio.create_task(drain_logs())
         try:
             return await self._run_on_session_thread(
-                runtime,
+                session.executor,
                 executor.execute_step,
                 runtime,
                 run_id,
@@ -126,7 +135,7 @@ class LocalExecutionGateway(ExecutionGateway):
         session = self._require_session(handle)
         executor = self._require_executor(session.execution_mode)
         await self._run_on_session_thread(
-            session.runtime, executor.update_otp_code, session.runtime, value
+            session.executor, executor.update_otp_code, session.runtime, value
         )
 
     async def close_session(self, handle: ExecutionHandle) -> None:
@@ -135,24 +144,19 @@ class LocalExecutionGateway(ExecutionGateway):
             # 이미 닫혔거나 알 수 없는 세션이면 조용히 무시한다(idempotent).
             return
         executor = self._executors.get(session.execution_mode)
-        runtime = session.runtime
-        if executor is None or runtime is None:
-            return
-        thread_pool = getattr(runtime, "executor", None)
         try:
-            await self._run_on_session_thread(runtime, executor.close_runtime, runtime)
+            if executor is not None and session.runtime is not None:
+                await self._run_on_session_thread(
+                    session.executor, executor.close_runtime, session.runtime
+                )
         finally:
-            if thread_pool is not None:
-                thread_pool.shutdown(wait=True, cancel_futures=True)
-                runtime.executor = None
+            # 세션이 소유한 스레드 풀은 세션 종료와 함께 정리한다(런타임에 매달려 있지 않다).
+            session.executor.shutdown(wait=True, cancel_futures=True)
 
     @staticmethod
-    async def _run_on_session_thread(runtime, fn, *args):
-        """세션 전용 스레드(있으면)에서 호출을 수행한다. 없으면 임시 스레드로 폴백."""
-        thread_pool = getattr(runtime, "executor", None)
-        if thread_pool is None:
-            return await asyncio.to_thread(fn, *args)
-        return await asyncio.get_running_loop().run_in_executor(thread_pool, fn, *args)
+    async def _run_on_session_thread(pool: ThreadPoolExecutor, fn, *args):
+        """세션 전용 단일 스레드 풀에서 동기 호출을 수행한다(Playwright 스레드 어피니티 보존)."""
+        return await asyncio.get_running_loop().run_in_executor(pool, fn, *args)
 
     def _require_executor(self, execution_mode: str):
         executor = self._executors.get(execution_mode)

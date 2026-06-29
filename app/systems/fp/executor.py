@@ -34,7 +34,6 @@ class FpWorkflowExecutor(AccessWorkflowExecutor):
             context=base.context,
             page=base.page,
             dialog_messages=base.dialog_messages,
-            executor=base.executor,
             closed=base.closed,
             name=(input_data.get("name") or "").strip(),
             ssn_front=(input_data.get("ssn_front") or "").strip(),

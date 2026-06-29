@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from app.runner.artifact_manager import ArtifactManager
@@ -18,7 +17,7 @@ class AccessRuntime:
     context: object
     page: object
     dialog_messages: list[str]
-    executor: ThreadPoolExecutor | None = None
+    # 실행 스레드 풀은 게이트웨이 세션이 소유한다(런타임은 인프라 필드를 들지 않는다).
     closed: bool = False
 
 
@@ -87,7 +86,8 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
 
     def _step_main_access(self, ctx: StepContext) -> StepOutcome:
         runtime: AccessRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(main_access.run(runtime.page, runtime.base_url))
+        # page 는 공통 능력(ctx.page), base_url 은 이 시스템 전용 상태(runtime).
+        return StepCompleted(main_access.run(ctx.page, runtime.base_url))
 
 
 def create_access_executor(

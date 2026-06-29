@@ -7,7 +7,6 @@ dataclass 였다. 채널 차이는 데이터(`channel: ChannelProfile`)로 들�
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,7 +22,7 @@ class RepHomepageRuntime:
     context: object
     page: object
     dialog_messages: list[str]
-    executor: ThreadPoolExecutor | None = None
+    # 실행 스레드 풀은 게이트웨이 세션이 소유한다(런타임은 자기 브라우저 상태만 안다).
     # 휴대폰인증은 SMS 요청 → (OTP 대기) → OTP 제출 두 단계로 나뉘므로, 이미 SMS 를
     # 요청했는지를 런타임에 들고 OTP 재개 시 같은 세션에서 이어서 진행한다.
     phone_login_sms_requested: bool = False
