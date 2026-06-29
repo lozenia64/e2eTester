@@ -110,66 +110,60 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
 
     def _step_main_access(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(runtime.channel.steps.main_access.run(runtime.page, runtime.config))
+        return StepCompleted(runtime.channel.steps.main_access.run(ctx.page, runtime.config))
 
     def _step_login(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         steps = runtime.channel.steps
         if runtime.config.auth_method == "kakao":
-            steps.login_move.run(runtime.page)
+            steps.login_move.run(ctx.page)
             return StepCompleted(
-                steps.kakao_login.run(runtime.page, runtime.config, runtime.dialog_messages)
+                steps.kakao_login.run(ctx.page, runtime.config, ctx.dialog_messages)
             )
         if not runtime.phone_login_sms_requested:
-            steps.login_move.run(runtime.page)
-            message = steps.phone_login.request_sms(
-                runtime.page, runtime.config, runtime.dialog_messages
-            )
+            steps.login_move.run(ctx.page)
+            message = steps.phone_login.request_sms(ctx.page, runtime.config, ctx.dialog_messages)
             runtime.phone_login_sms_requested = True
             if not runtime.config.otp_code:
                 return StepNeedsInput(message)
         return StepCompleted(
-            steps.phone_login.submit_otp_and_login(
-                runtime.page, runtime.config, runtime.dialog_messages
-            )
+            steps.phone_login.submit_otp_and_login(ctx.page, runtime.config, ctx.dialog_messages)
         )
 
     def _step_contract_list(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(runtime.channel.steps.contract_list.run(runtime.page, runtime.config))
+        return StepCompleted(runtime.channel.steps.contract_list.run(ctx.page, runtime.config))
 
     def _step_contract_detail(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(
-            runtime.channel.steps.contract_detail.run(runtime.page, runtime.config)
-        )
+        return StepCompleted(runtime.channel.steps.contract_detail.run(ctx.page, runtime.config))
 
     def _step_compensation_charge(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
-            runtime.channel.steps.compensation_charge.run(runtime.page, runtime.config)
+            runtime.channel.steps.compensation_charge.run(ctx.page, runtime.config)
         )
 
     def _step_compensation_result(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
-            runtime.channel.steps.compensation_result.run(runtime.page, runtime.config)
+            runtime.channel.steps.compensation_result.run(ctx.page, runtime.config)
         )
 
     def _step_compensation_cancel(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
-            runtime.channel.steps.compensation_cancel.run(runtime.page, runtime.config)
+            runtime.channel.steps.compensation_cancel.run(ctx.page, runtime.config)
         )
 
     def _step_long_term_policy_certificate(self, ctx: StepContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
             runtime.channel.steps.long_term_policy_certificate.run(
-                runtime.page,
+                ctx.page,
                 runtime.config,
                 ctx.artifact_dir,
-                runtime.dialog_messages,
+                ctx.dialog_messages,
             )
         )
 

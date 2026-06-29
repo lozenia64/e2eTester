@@ -137,6 +137,19 @@ class RunAggregate:
         module.current_url = current_url
         module.dialog_messages = list(dialog_messages)
 
+    def note_module_message(self, module: RunModule, message: str) -> None:
+        """실행 중 모듈의 최신 메시지(마지막 로그 줄)를 갱신한다.
+
+        로그 스트리밍 핫패스에서 호출된다. 로그 본문은 별도 로그 스토어가 소유하지만 "모듈의
+        현재 메시지"는 도메인 상태이므로, 직접 ``module.message = ...`` 하지 않고 이 경로로만
+        바꿔 **애그리거트가 유일한 변이자**라는 불변을 지킨다.
+        """
+        module.message = message
+
+    def attach_failure_analysis(self, module: RunModule, analysis) -> None:
+        """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
+        module.failure_analysis = analysis
+
     def finish_timing(self, module: RunModule) -> None:
         """모듈 종료 시각·소요시간 확정(정상 종료 경로)."""
         module.ended_at = datetime.now(UTC)

@@ -35,7 +35,6 @@ class ChbotWorkflowExecutor(AccessWorkflowExecutor):
             context=runtime.context,
             page=runtime.page,
             dialog_messages=runtime.dialog_messages,
-            executor=runtime.executor,
             closed=runtime.closed,
             name=(input_data.get("name") or "").strip(),
             birthdate=(input_data.get("birthdate") or "").strip(),

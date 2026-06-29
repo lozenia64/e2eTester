@@ -55,7 +55,7 @@ FastAPI app
 현재 구조의 핵심 특징:
 
 - 웹 요청과 실행 orchestration은 같은 프로세스에 있다. 단, **오케스트레이션(상태머신)과 브라우저 실행(부작용)은 `ExecutionGateway` 포트(`app/execution/gateway.py`)로 분리**되어 있다. `RunService` 는 불투명하고 **직렬화 가능한** `ExecutionHandle`(frozen `execution_mode` + `session_id` 토큰, 라이브 런타임 참조 없음)만 들고 `open_session`/`run_step`/`submit_input`/`close_session` 을 호출할 뿐, Playwright 도 스레드 풀도 직접 다루지 않는다. 라이브 런타임은 게이트웨이 내부 세션 레지스트리(`_sessions`, `session_id` 키)에만 있어 오케스트레이터/`PendingOtpState` 로 새지 않는다.
-- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다. 실행 스레드 → 이벤트 루프 로그 브리지는 **논블로킹**이다: 실행 스레드는 `loop.call_soon_threadsafe(queue.put_nowait, line)` 로 큐에 넣기만 하고(즉시 반환, 이벤트 루프 완료를 기다리지 않음), `run_step` 안의 async 드레인 태스크가 `asyncio.Queue` 를 FIFO 로 비우며 로그 콜백을 순서대로 호출한다(느린 이벤트 루프가 더는 브라우저 스레드를 라인 단위로 막지 못함; 센티넬로 드레인 완료를 await 하므로 순서·"`module_finished` 이전 로그 flush" 불변식은 유지). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
+- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다. **이 스레드 풀은 게이트웨이의 `_Session`(명시적 "워커 경계" 객체)이 소유한다 — 과거처럼 `runtime.executor` 로 도메인 런타임에 몽키패치하지 않는다.** 예전에는 모든 시스템 런타임 dataclass 와 `WorkflowRuntime` Protocol 이 오직 게이트웨이를 위해 `executor` 필드를 들고 있어야 했다(인프라 관심사가 도메인 런타임으로 누수). 이제 풀은 세션에만 있고, `close_session` 이 세션이 소유한 풀을 정리한다. 실행 스레드 → 이벤트 루프 로그 브리지는 **논블로킹**이다: 실행 스레드는 `loop.call_soon_threadsafe(queue.put_nowait, line)` 로 큐에 넣기만 하고(즉시 반환, 이벤트 루프 완료를 기다리지 않음), `run_step` 안의 async 드레인 태스크가 `asyncio.Queue` 를 FIFO 로 비우며 로그 콜백을 순서대로 호출한다(느린 이벤트 루프가 더는 브라우저 스레드를 라인 단위로 막지 못함; 센티넬로 드레인 완료를 await 하므로 순서·"`module_finished` 이전 로그 flush" 불변식은 유지). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
 - 이 포트가 곧 "워커 경계"의 in-process 구현이다. 동일 포트로 별도 워커 프로세스/Playwright MCP 구현체를 끼우면 오케스트레이터를 손대지 않고 실행을 격리할 수 있다.
 - AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
@@ -107,14 +107,18 @@ e2eTester/
       report_renderer.py
     domain/
       run_aggregate.py           # RunAggregate: Run 상태 전이 규칙·불변식(순수 도메인, I/O 무지)
+      run_state_machine.py       # RunStateMachine: Run 실행 결정 전이표(순수)
+      suite_aggregate.py         # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
+      suite_state_machine.py     # SuiteStateMachine: Suite 사가 결정 전이표(순수, RunStateMachine 과 동형)
     orchestrator/
       run_service.py             # RunService: 실행 순서·부작용 조율(규칙은 RunAggregate 에 위임)
+      run_command_port.py        # RunCommandPort: 사가→하위 Run 명령 포트(의존성 역전; RunService 가 구조적 만족)
       run_planner.py             # RunPlanner: 요청 검증 + 모듈 실행 계획(순수)
       run_comparator.py          # RunComparator: 직전 Run 대비 비교(저장소 의존)
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
-      suite_service.py           # SuiteService: 이벤트 기반 Saga(RunFinished 구동, 폴링 없음)
+      suite_service.py           # SuiteService: 이벤트 기반 Saga(결정=SuiteStateMachine, 변경=SuiteAggregate 에 위임)
       stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
     registry/
       loader.py
@@ -192,6 +196,7 @@ e2eTester/
         steps/
     storage/
       ports.py                   # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule
+      records.py                 # 영속 DTO + 매퍼(RunRecord/SuiteRecord 등): 도메인 ↔ 온디스크 스키마 분리, 로그 제외는 타입 수준
       sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py       # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       sqlite_run_repository.py   # SQLite Run 상태 어댑터(기본 사용, blob 에 로그 제외)
@@ -364,7 +369,7 @@ e2eTester/
 위임 구조:
 
 - `RunStateMachine`(`app/domain/run_state_machine.py`): 실행 루프의 **결정 규칙(명시적 전이표)** 소유자. `(상태·신호) → 명령` 으로 매핑하는 순수 함수(`decide_module_entry` → `CancelRemaining`/`BlockModule`/`ExecuteModule`, `decide_post_step` → `CancelRemaining`/`PauseForInput`/`CompleteStep`/`RejectUnexpectedInput`). 과거 `_execute_run_inner` 의 절차적 for 루프에 if/return 으로 흩어져 있던 분기(취소 관측·선행 차단·OTP 일시정지·결과 기록)를 이 표 한곳으로 끌어내 I/O 없이 단독 단위 테스트한다(`tests/test_run_state_machine.py`). `RunService` 는 이 명령을 받아 효과(I/O)만 수행하는 얇은 해석기다.
-- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 **전이(변경)** 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 결정(`RunStateMachine`)이 "무엇을 할지"를, 이 애그리거트가 "그 변경을 어떻게 적용할지"를 책임진다(I/O 없이 `tests/test_run_aggregate.py` 로 단독 테스트).
+- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 **전이(변경)** 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 결정(`RunStateMachine`)이 "무엇을 할지"를, 이 애그리거트가 "그 변경을 어떻게 적용할지"를 책임진다(I/O 없이 `tests/test_run_aggregate.py` 로 단독 테스트). **애그리거트는 도메인 상태의 유일한 변이자다** — 로그 스트리밍(`note_module_message`)·AI 실패 분석 부착(`attach_failure_analysis`) 같은 잔여 직접 변이까지 애그리거트 메서드로 흡수해, `app/domain/` 밖에서 `run.x = y` 류의 직접 도메인 필드 대입이 존재하지 않는다(grep 으로 증명 가능).
 - `RunPlanner`(`run_planner.py`): 입력값 검증·모듈 선택·인증 수단 검증, manifest 기준 모듈 리스트 생성(순수 로직).
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
@@ -411,7 +416,11 @@ Module:
 
 ### 5.3.1 Suite Orchestrator 계층
 
-현재 구현 핵심은 `app/orchestrator/suite_service.py` 다. **이벤트 기반 Saga(프로세스 매니저)** 로 동작한다 — 과거의 `_execute_suite` 백그라운드 루프(하위 Run 의 WebSocket 이벤트 큐 구독 + `get_run` 2초 폴링으로 종료 감지)는 제거됐다.
+현재 구현 핵심은 `app/orchestrator/suite_service.py` 다. **이벤트 기반 Saga(프로세스 매니저)** 로 동작한다 — 과거의 `_execute_suite` 백그라운드 루프(하위 Run 의 WebSocket 이벤트 큐 구독 + `get_run` 2초 폴링으로 종료 감지)는 제거됐다. Run 쪽과 마찬가지로 **결정·변경을 순수 도메인으로 분리**한다(서비스 안의 인라인 `suite.status = …`/`step.status = …` 변이 제거):
+
+- `SuiteStateMachine`(`app/domain/suite_state_machine.py`): 사가의 **결정 규칙(전이표)**. `decide_after_run_finished` → `RecordAndAdvance`/`RecordAndCancel`(하위 Run 결과를 스텝 상태로 매핑 + 전진/취소 판정), `decide_advance` → `StartStep`/`FinalizeSuite`/`CancelSuite`. `RunStateMachine` 과 동형의 순수 함수이며 `tests/test_suite_state_machine.py` 로 단독 테스트.
+- `SuiteAggregate`(`app/domain/suite_aggregate.py`): Suite 상태 **전이(변경)·불변식의 단일 소유자**. `SuiteRun` 모델을 감싸 `begin`/`start_step`/`link_run`/`record_step_result`/`mark_step_error`/`mark_waiting_input`/`mark_resumed`/`finalize`/`seal_interrupted`/`next_pending_index`/`compute_final_status` 같은 순수 메서드(await·I/O 없음, 시계만 참조)를 노출한다. `RunAggregate` 와 동형이며 `tests/test_suite_aggregate.py` 로 단독 테스트. `SuiteService` 는 결정을 받아 효과(영속·이벤트·하위 Run 명령)만 수행하는 얇은 해석기다.
+- `RunCommandPort`(`app/orchestrator/run_command_port.py`): 사가가 하위 Run 을 구동하기 위한 **명령 포트**(`validate_run_request`/`start_run`/`cancel_run`/`submit_otp`/`get_run` 을 선언한 `Protocol`). `SuiteService` 는 구체 `RunService` 가 아니라 이 포트에 의존하며, `RunService` 가 구조적으로(structural typing) 이를 만족해 컴포지션 루트가 `run_commands=run_service` 로 주입한다(사가가 애플리케이션 서비스에 용접되지 않음).
 
 역할:
 
@@ -487,7 +496,7 @@ manifest 에 들어 있는 정보:
 - `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터: `app/systems/loader.py` 로 executor 로딩, 세션별 단일 스레드 풀·런타임 수명·이벤트 루프↔실행 스레드 로그 브리지 소유)
 - `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — `execution_mode == "simulated"` 모듈을 브라우저 없이 매니페스트의 `simulated_duration_ms`/`simulated_outcome` 대로 처리하는 테스트 더블 어댑터. 시뮬레이션 로직이 더 이상 오케스트레이터에 인라인되지 않고 같은 포트 뒤의 어댑터로 분리됨)
 - `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
-- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·레지스트리 디스패치(`build_step_registry`)·OTP 일시정지를 **타입드 결과**(`StepOutcome`)로 해석(매직 문자열 `WAITING_INPUT::` 폐기, `app/runner/step_outcome.py`)·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol + 단계 핸들러에 넘기는 `StepContext`)
+- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·레지스트리 디스패치(`build_step_registry`)·OTP 일시정지를 **타입드 결과**(`StepOutcome`)로 해석(매직 문자열 `WAITING_INPUT::` 폐기, `app/runner/step_outcome.py`)·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol(인프라 `executor` 필드 없음) + 단계 핸들러에 넘기는 `StepContext` **능력 인터페이스**: `log`(명시적 로깅 능력 — `print()` stdout 가로채기의 암묵적 계약을 대체, 기존 `print` 도 호환 유지)·`page`·`dialog_messages`·`artifact_dir`. `screenshot.py` 의 playwright import 를 지연시켜 엔진을 **브라우저 없이 import·단위 테스트** 가능하게 함 — `tests/test_step_context.py`/`tests/test_local_gateway_session.py`)
 - `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)의 `build_step_registry` 디스패치 테이블이 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
 - `app/scenarios/rep_homepage/channel.py` (`ChannelProfile` / `ChannelSteps`) — 채널(드라이버) 기술서와 셀렉터 어댑터 계약. `app/scenarios/rep_homepage/constants.py` 는 청구 본문 문구 등 charge↔result↔cancel 도메인 결합 규칙의 SSOT.
 - `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/hom/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "hom_workflow_step"`) — PC 채널 어댑터(`hom.steps`) 주입.
@@ -517,11 +526,14 @@ manifest 에 들어 있는 정보:
 
 저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`RunControlStorePort`/`RunInputStorePort`/`SuiteRepositoryPort`/`SuiteControlStorePort`/`SuiteInputStorePort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다. 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다 — Run 은 `RunControlStorePort`/`RunInputStorePort`, Suite 는 `SuiteControlStorePort`/`SuiteInputStorePort`.
 
-**집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않으며**(어댑터의 `save_run` 이 `model_dump_json(exclude=...)` 으로 방어적으로 제외), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
+**영속 DTO ↔ 도메인 엔티티 분리(persistence model):** 저장소 포트는 도메인(`Run`/`SuiteRun`)으로 말하지만, 어댑터는 도메인 엔티티를 직접 직렬화하지 않고 **영속 DTO**(`app/storage/records.py` 의 `RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord` + `from_domain`/`to_domain` 매퍼)로 매핑한다. SQLite·인메모리 **두 어댑터가 같은 매퍼**를 쓰므로, 과거 어댑터마다 중복되던 "로그 strip" 매직(`_PERSIST_EXCLUDE` exclude / `_persist_copy` deep-copy 후 비우기)이 사라졌다. 온디스크 JSON 형태는 종전과 동일해 기존 SQLite 데이터와 호환된다.
+
+**집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않는다 — `RunModuleRecord` 스키마에 `logs` 필드가 아예 없어 blob 에 들어갈 수 없는 타입 수준 사실**이지(어댑터의 방어적 exclude 가 아니라), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
 
 현재 구현:
 
 - `app/storage/ports.py` — 저장소 포트(Protocol) 정의 (`RunRepositoryPort` 는 Run 상태만, `RunLogStorePort` 는 로그 스트림만 책임)
+- `app/storage/records.py` — 영속 DTO(`RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord`) + `from_domain`/`to_domain` 매퍼. 모든 어댑터가 도메인 엔티티를 직접 직렬화하지 않고 이 레코드를 거친다(영속 스키마 ↔ 도메인 분리; `RunModuleRecord` 에 `logs` 없음). `tests/test_storage_records.py` 로 라운드트립·로그 제외·DB 호환 검증.
 - `app/storage/sqlite_support.py` — `JsonTableStore`(stdlib `sqlite3` + `asyncio.to_thread`, JSON blob 테이블) · `DEFAULT_DB_PATH`
 - `app/storage/listener_registry.py` — `ListenerRegistry`(run_id/suite_id 별 WebSocket 리스너 큐, 프로세스-로컬 휘발성)
 - `app/storage/sqlite_run_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 사용되는 SQLite 어댑터**(`app/main.py` 에서 주입)

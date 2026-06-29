@@ -30,7 +30,6 @@ class HrpWorkflowExecutor(AccessWorkflowExecutor):
             context=base.context,
             page=base.page,
             dialog_messages=base.dialog_messages,
-            executor=base.executor,
             closed=base.closed,
             user_id=(input_data.get("user_id") or "").strip(),
             password=(input_data.get("password") or "").strip(),

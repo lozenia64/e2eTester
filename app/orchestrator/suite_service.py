@@ -4,7 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from app.core.enums import RunStatus, SuiteStatus
+from app.core.enums import SuiteStatus
 from app.core.logging import get_logger
 from app.core.models import (
     Run,
@@ -15,32 +15,23 @@ from app.core.models import (
     SystemDefinition,
 )
 from app.core.status_labels import (
-    RUN_ERROR_STATUSES,
     SUITE_ANOMALY_STATUSES,
     SUITE_ERROR_STATUSES,
     SUITE_TERMINAL_OUTCOME_STATUSES,
 )
+from app.domain.suite_aggregate import SuiteAggregate
+from app.domain.suite_state_machine import (
+    CancelSuite,
+    FinalizeSuite,
+    RecordAndCancel,
+    StartStep,
+    SuiteStateMachine,
+)
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
-from app.orchestrator.run_service import RunService
+from app.orchestrator.run_command_port import RunCommandPort
 from app.orchestrator.suite_view import SuiteView
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import SuiteControlStorePort, SuiteInputStorePort, SuiteRepositoryPort
-
-_TERMINAL_SUITE = {
-    SuiteStatus.PASSED,
-    SuiteStatus.ANOMALY,
-    SuiteStatus.ERROR,
-    SuiteStatus.FAILED,
-    SuiteStatus.CANCELLED,
-}
-_TERMINAL_STEP = {
-    SuiteStatus.PASSED,
-    SuiteStatus.ANOMALY,
-    SuiteStatus.ERROR,
-    SuiteStatus.FAILED,
-    SuiteStatus.CANCELLED,
-    SuiteStatus.SKIPPED,
-}
 
 logger = get_logger(__name__)
 
@@ -48,25 +39,31 @@ logger = get_logger(__name__)
 class SuiteService:
     """전체 시스템 순차 점검(Suite)을 **이벤트 기반 Saga(프로세스 매니저)** 로 진행한다.
 
-    과거에는 ``_execute_suite`` 가 한 번의 백그라운드 루프로 돌면서, 각 스텝마다 하위 Run 의
-    **프레젠테이션(WebSocket) 이벤트 큐를 구독하고 동시에 ``get_run`` 을 폴링**해 종료를 감지했다
-    (제어 평면을 프레젠테이션 채널로 운전하는 결합). 이제는 하위 Run 의 **도메인 이벤트**
-    (``RunFinished``/``RunWaitingInput``/``RunResumed``)를 ``EventBus`` 로 구독해 한 스텝씩
-    전진한다 — 폴링도, WS 큐 구독도 없다. Suite 취소 의도는 서비스-인스턴스 메모리 set 이
-    아니라 영속 ``SuiteControlStorePort`` 가, 시스템별 입력값은 ``SuiteInputStorePort`` 가 소유한다.
+    이 클래스는 *순서*(스텝 시작 → ``RunFinished`` 대기 → 다음 스텝)와 *부작용*(영속·WebSocket
+    이벤트 발행·하위 Run 명령)만 책임진다. "무엇이 합법한 상태 전이인가"라는 **결정 규칙** 은
+    순수 ``SuiteStateMachine`` 에, **상태 변경·불변식** 은 도메인 애그리거트 ``SuiteAggregate``
+    에 위임한다 — 둘 다 I/O 없이 단독으로 단위 테스트된다(``RunStateMachine``/``RunAggregate``
+    와 동형). 과거 이 서비스 곳곳에 흩어져 있던 ``suite.status = ...`` / ``step.status = ...``
+    인라인 변이는 모두 애그리거트로 옮겨졌다.
+
+    하위 Run 의 종료/일시정지/재개는 ``EventBus`` 의 도메인 이벤트
+    (``RunFinished``/``RunWaitingInput``/``RunResumed``)로 감지한다 — 폴링도, 프레젠테이션(WS)
+    큐 구독도 없다. 하위 Run 을 구동하는 의존성은 구체 ``RunService`` 가 아니라 **명령 포트**
+    (``RunCommandPort``)다 — 사가가 애플리케이션 서비스에 용접되지 않는다. Suite 취소 의도는
+    영속 ``SuiteControlStorePort`` 가, 시스템별 입력값은 ``SuiteInputStorePort`` 가 소유한다.
     """
 
     def __init__(
         self,
         registry: ModuleRegistry,
-        run_service: RunService,
+        run_commands: RunCommandPort,
         repository: SuiteRepositoryPort,
         event_bus: EventBus,
         cancel_store: SuiteControlStorePort,
         input_store: SuiteInputStorePort,
     ) -> None:
         self._registry = registry
-        self._run_service = run_service
+        self._run_commands = run_commands
         self._repository = repository
         self._event_bus = event_bus
         self._cancel_store = cancel_store
@@ -95,20 +92,12 @@ class SuiteService:
 
         ``RunService.reconcile_interrupted_runs`` 와 같은 이유로, 영속 저장소에서 복원된
         진행 중 Suite 는 이어받을 수 없으므로 종료로 봉인한다(인메모리에서는 no-op).
+        봉인 규칙(어떤 상태가 '진행 중'인가)은 도메인 애그리거트가 가진다.
         """
-        active = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
         count = 0
         for suite in await self._repository.list_suites():
-            if suite.status not in active:
+            if not SuiteAggregate(suite).seal_interrupted():
                 continue
-            suite.status = SuiteStatus.CANCELLED
-            suite.ended_at = suite.ended_at or datetime.now(UTC)
-            suite.active_run_id = None
-            suite.awaiting_input_run_id = None
-            suite.awaiting_input_prompt = None
-            for step in suite.steps:
-                if step.status in active:
-                    step.status = SuiteStatus.CANCELLED
             await self._repository.save_suite(suite)
             await self._cancel_store.delete(suite.suite_id)
             await self._input_store.delete(suite.suite_id)
@@ -232,7 +221,7 @@ class SuiteService:
             merged_input = self._merge_input(
                 normalized_mode, system.system_code, normalized_systems
             )
-            self._run_service.validate_run_request(
+            self._run_commands.validate_run_request(
                 system.system_code, merged_input, selected_module_ids=None
             )
         return normalized_mode, normalized_systems, resolved_system_codes
@@ -296,8 +285,7 @@ class SuiteService:
         )
 
         # RUNNING 으로 전이하고 첫 스텝부터 Saga 를 시작한다(이후 진행은 RunFinished 구동).
-        suite.status = SuiteStatus.RUNNING
-        suite.started_at = datetime.now(UTC)
+        SuiteAggregate(suite).begin()
         await self._repository.save_suite(suite)
         await self._publish_event("suite_started", suite)
         logger.info("Suite 시작", log_event="suite.started", suite_id=suite.suite_id)
@@ -306,7 +294,7 @@ class SuiteService:
 
     async def cancel_suite(self, suite_id: str) -> SuiteRun:
         suite = await self._repository.get_suite(suite_id)
-        if suite.status in _TERMINAL_SUITE:
+        if SuiteAggregate(suite).is_terminal():
             raise ValueError("이미 종료된 전체 점검은 취소할 수 없습니다.")
         # 취소 의도를 영속한다 — 활성 Run 취소가 비동기로 마무리되거나, 다음 스텝 진입 직전
         # advance 가 이 플래그를 읽어 협력적으로 중단한다.
@@ -320,7 +308,7 @@ class SuiteService:
         active_run_id = suite.active_run_id
         if active_run_id:
             try:
-                await self._run_service.cancel_run(active_run_id)
+                await self._run_commands.cancel_run(active_run_id)
             except (KeyError, ValueError):
                 pass
             # 활성 Run 취소 → RunFinished(CANCELLED) → on_run_finished 가 Suite 를 마무리한다.
@@ -333,7 +321,7 @@ class SuiteService:
         suite = await self._repository.get_suite(suite_id)
         if suite.awaiting_input_run_id is None:
             raise KeyError(f"Suite is not waiting for OTP: {suite_id}")
-        await self._run_service.submit_otp(suite.awaiting_input_run_id, otp_code)
+        await self._run_commands.submit_otp(suite.awaiting_input_run_id, otp_code)
         return await self._repository.get_suite(suite_id)
 
     # --- 이벤트 핸들러(Saga) ---------------------------------------------
@@ -348,28 +336,21 @@ class SuiteService:
                 suite = await self._repository.get_suite(run.suite_id)
             except KeyError:
                 return
-            if suite.status in _TERMINAL_SUITE:
+            aggregate = SuiteAggregate(suite)
+            if aggregate.is_terminal():
                 return
-            index, step = self._find_step(suite, run.run_id)
-            if step is None or step.status in _TERMINAL_STEP:
+            index, step = aggregate.find_step(run.run_id)
+            if step is None or aggregate.is_step_terminal(step):
                 return
-            if run.status == RunStatus.PASSED:
-                step.status = SuiteStatus.PASSED
-            elif run.status == RunStatus.CANCELLED:
-                step.status = SuiteStatus.CANCELLED
-            elif run.status in RUN_ERROR_STATUSES:
-                step.status = SuiteStatus.ERROR
-            else:
-                step.status = SuiteStatus.ANOMALY
-            suite.active_run_id = None
-            suite.awaiting_input_run_id = None
-            suite.awaiting_input_prompt = None
+            # 결정(스텝 상태 매핑 + 전진/취소)은 순수 상태머신이, 변경은 애그리거트가 한다.
+            decision = SuiteStateMachine.decide_after_run_finished(
+                run_status=run.status,
+                cancel_requested=await self._cancel_store.is_cancel_requested(run.suite_id),
+            )
+            aggregate.record_step_result(step, decision.step_status)
             await self._repository.save_suite(suite)
             await self._publish_event("suite_step_finished", suite, {"step_index": index})
-            cancelled = (
-                run.status == RunStatus.CANCELLED
-                or await self._cancel_store.is_cancel_requested(run.suite_id)
-            )
+            cancelled = isinstance(decision, RecordAndCancel)
         if cancelled:
             await self._finalize_cancelled(run.suite_id)
         else:
@@ -384,11 +365,10 @@ class SuiteService:
                 suite = await self._repository.get_suite(run.suite_id)
             except KeyError:
                 return
-            if suite.status in _TERMINAL_SUITE:
+            aggregate = SuiteAggregate(suite)
+            if aggregate.is_terminal():
                 return
-            suite.status = SuiteStatus.WAITING_INPUT
-            suite.awaiting_input_run_id = run.run_id
-            suite.awaiting_input_prompt = run.awaiting_input_prompt
+            aggregate.mark_waiting_input(run.run_id, run.awaiting_input_prompt)
             await self._repository.save_suite(suite)
             await self._publish_event("suite_waiting_input", suite, {"run_id": run.run_id})
             logger.info(
@@ -407,11 +387,10 @@ class SuiteService:
                 suite = await self._repository.get_suite(run.suite_id)
             except KeyError:
                 return
-            if suite.status in _TERMINAL_SUITE:
+            aggregate = SuiteAggregate(suite)
+            if aggregate.is_terminal():
                 return
-            suite.status = SuiteStatus.RUNNING
-            suite.awaiting_input_run_id = None
-            suite.awaiting_input_prompt = None
+            aggregate.mark_resumed()
             await self._repository.save_suite(suite)
             await self._publish_event("suite_resumed", suite)
             logger.info(
@@ -426,32 +405,39 @@ class SuiteService:
         while True:
             async with self._lock_for(suite_id):
                 suite = await self._repository.get_suite(suite_id)
-                if suite.status in _TERMINAL_SUITE:
+                aggregate = SuiteAggregate(suite)
+                if aggregate.is_terminal():
                     return
-                if await self._cancel_store.is_cancel_requested(suite_id):
-                    await self._finalize_locked(suite, SuiteStatus.CANCELLED, cancel_remaining=True)
+                # 결정(취소/종료/다음 스텝)은 순수 상태머신이, 변경은 애그리거트가 한다.
+                decision = SuiteStateMachine.decide_advance(
+                    cancel_requested=await self._cancel_store.is_cancel_requested(suite_id),
+                    next_pending_index=aggregate.next_pending_index(),
+                )
+                if isinstance(decision, CancelSuite):
+                    await self._finalize_locked(
+                        aggregate, SuiteStatus.CANCELLED, cancel_remaining=True
+                    )
                     finalized = (suite, SuiteStatus.CANCELLED)
                     break
-                next_index = self._next_pending_index(suite)
-                if next_index is None:
-                    final_status = self._compute_suite_final_status(suite)
-                    await self._finalize_locked(suite, final_status)
+                if isinstance(decision, FinalizeSuite):
+                    final_status = aggregate.compute_final_status()
+                    await self._finalize_locked(aggregate, final_status)
                     finalized = (suite, final_status)
                     break
+                assert isinstance(decision, StartStep)
 
-                step = suite.steps[next_index]
-                suite.current_step_index = next_index
-                step.status = SuiteStatus.RUNNING
-                suite.active_run_id = None
+                step = aggregate.start_step(decision.index)
                 await self._repository.save_suite(suite)
-                await self._publish_event("suite_step_started", suite, {"step_index": next_index})
+                await self._publish_event(
+                    "suite_step_started", suite, {"step_index": decision.index}
+                )
 
                 systems_input = await self._input_store.get(suite_id) or {}
                 merged_input = self._merge_input(
                     suite.browser_mode, step.system_code, systems_input
                 )
                 try:
-                    run = await self._run_service.start_run(
+                    run = await self._run_commands.start_run(
                         step.system_code,
                         merged_input,
                         selected_module_ids=None,
@@ -461,18 +447,21 @@ class SuiteService:
                         user_name=suite.created_by_user_name,
                     )
                 except (KeyError, ValueError) as exc:
-                    step.status = SuiteStatus.ERROR
+                    aggregate.mark_step_error(step)
                     await self._repository.save_suite(suite)
                     await self._publish_event(
-                        "suite_step_finished", suite, {"step_index": next_index, "error": str(exc)}
+                        "suite_step_finished",
+                        suite,
+                        {"step_index": decision.index, "error": str(exc)},
                     )
                     continue  # 다음 PENDING 스텝으로(락 재획득)
 
-                step.run_id = run.run_id
-                suite.active_run_id = run.run_id
+                aggregate.link_run(step, run.run_id)
                 await self._repository.save_suite(suite)
                 await self._publish_event(
-                    "suite_step_run_linked", suite, {"step_index": next_index, "run_id": run.run_id}
+                    "suite_step_run_linked",
+                    suite,
+                    {"step_index": decision.index, "run_id": run.run_id},
                 )
                 return  # RunFinished 를 기다린다
 
@@ -490,27 +479,21 @@ class SuiteService:
                 suite = await self._repository.get_suite(suite_id)
             except KeyError:
                 return
-            if suite.status in _TERMINAL_SUITE:
+            aggregate = SuiteAggregate(suite)
+            if aggregate.is_terminal():
                 return
-            await self._finalize_locked(suite, SuiteStatus.CANCELLED, cancel_remaining=True)
+            await self._finalize_locked(aggregate, SuiteStatus.CANCELLED, cancel_remaining=True)
         # CANCELLED 는 통합 메일 대상이 아니므로 SuiteFinished 도메인 이벤트를 발행하지 않는다.
 
     async def _finalize_locked(
         self,
-        suite: SuiteRun,
+        aggregate: SuiteAggregate,
         status: SuiteStatus,
         cancel_remaining: bool = False,
     ) -> None:
         """락을 쥔 상태에서 Suite 를 종료로 봉인한다(SuiteFinished 발행은 호출자 책임)."""
-        if cancel_remaining:
-            for step in suite.steps:
-                if step.status not in _TERMINAL_STEP:
-                    step.status = SuiteStatus.CANCELLED
-        suite.status = status
-        suite.ended_at = datetime.now(UTC)
-        suite.active_run_id = None
-        suite.awaiting_input_run_id = None
-        suite.awaiting_input_prompt = None
+        aggregate.finalize(status, cancel_remaining=cancel_remaining)
+        suite = aggregate.suite
         await self._repository.save_suite(suite)
         await self._publish_event("suite_finished", suite)
         await self._cancel_store.delete(suite.suite_id)
@@ -528,7 +511,7 @@ class SuiteService:
             if not step.run_id:
                 continue
             try:
-                runs.append(await self._run_service.get_run(step.run_id))
+                runs.append(await self._run_commands.get_run(step.run_id))
             except KeyError:
                 continue
         return runs
@@ -541,29 +524,6 @@ class SuiteService:
             lock = asyncio.Lock()
             self._locks[suite_id] = lock
         return lock
-
-    @staticmethod
-    def _next_pending_index(suite: SuiteRun) -> int | None:
-        for index, step in enumerate(suite.steps):
-            if step.status == SuiteStatus.PENDING:
-                return index
-        return None
-
-    @staticmethod
-    def _compute_suite_final_status(suite: SuiteRun) -> SuiteStatus:
-        """Suite 종료 상태: ERROR > ANOMALY > PASSED."""
-        if any(step.status in SUITE_ERROR_STATUSES for step in suite.steps):
-            return SuiteStatus.ERROR
-        if any(step.status in SUITE_ANOMALY_STATUSES for step in suite.steps):
-            return SuiteStatus.ANOMALY
-        return SuiteStatus.PASSED
-
-    @staticmethod
-    def _find_step(suite: SuiteRun, run_id: str) -> tuple[int, SuiteStep | None]:
-        for index, step in enumerate(suite.steps):
-            if step.run_id == run_id:
-                return index, step
-        return -1, None
 
     async def _publish_event(
         self, event_type: str, suite: SuiteRun, extra: dict | None = None

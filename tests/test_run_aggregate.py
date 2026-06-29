@@ -184,3 +184,25 @@ def test_seal_interrupted_only_for_active_runs():
     done = _run([_module("a", 0, status=ModuleStatus.PASSED)], status=RunStatus.PASSED)
     assert RunAggregate(done).seal_interrupted() is False
     assert done.status == RunStatus.PASSED
+
+
+def test_note_module_message_updates_message_via_aggregate():
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    RunAggregate(_run([module])).note_module_message(module, "마지막 로그 줄")
+    assert module.message == "마지막 로그 줄"
+
+
+def test_attach_failure_analysis_via_aggregate():
+    from app.core.models import FailureAnalysis
+
+    module = _module("a", 0, status=ModuleStatus.ERROR)
+    analysis = FailureAnalysis(
+        category="c",
+        probable_cause="p",
+        retryable=False,
+        user_summary="u",
+        developer_details="d",
+        recommended_action="r",
+    )
+    RunAggregate(_run([module])).attach_failure_analysis(module, analysis)
+    assert module.failure_analysis is analysis
