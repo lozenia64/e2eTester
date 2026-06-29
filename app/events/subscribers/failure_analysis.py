@@ -11,6 +11,7 @@ from app.core.models import (
     RunModule,
 )
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
+from app.domain.run_aggregate import RunAggregate
 from app.events.bus import EventBus, RunFinished
 from app.orchestrator.run_event_publisher import RunEventPublisher
 
@@ -62,7 +63,8 @@ class FailureAnalysisSubscriber:
             analysis = await self._analyze(run, module, definition)
             if analysis is None:
                 continue
-            module.failure_analysis = analysis
+            # 직접 module.failure_analysis = ... 하지 않고 애그리거트 경로로만 변이한다.
+            RunAggregate(run).attach_failure_analysis(module, analysis)
             await self._repository.save_run(run)
             # 분석 결과를 모듈 카드에 반영하도록 module_finished 를 다시 발행한다.
             await self._events.module_event("module_finished", run, module)

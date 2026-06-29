@@ -196,6 +196,7 @@ e2eTester/
         steps/
     storage/
       ports.py                   # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule
+      records.py                 # 영속 DTO + 매퍼(RunRecord/SuiteRecord 등): 도메인 ↔ 온디스크 스키마 분리, 로그 제외는 타입 수준
       sqlite_support.py          # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py       # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       sqlite_run_repository.py   # SQLite Run 상태 어댑터(기본 사용, blob 에 로그 제외)
@@ -368,7 +369,7 @@ e2eTester/
 위임 구조:
 
 - `RunStateMachine`(`app/domain/run_state_machine.py`): 실행 루프의 **결정 규칙(명시적 전이표)** 소유자. `(상태·신호) → 명령` 으로 매핑하는 순수 함수(`decide_module_entry` → `CancelRemaining`/`BlockModule`/`ExecuteModule`, `decide_post_step` → `CancelRemaining`/`PauseForInput`/`CompleteStep`/`RejectUnexpectedInput`). 과거 `_execute_run_inner` 의 절차적 for 루프에 if/return 으로 흩어져 있던 분기(취소 관측·선행 차단·OTP 일시정지·결과 기록)를 이 표 한곳으로 끌어내 I/O 없이 단독 단위 테스트한다(`tests/test_run_state_machine.py`). `RunService` 는 이 명령을 받아 효과(I/O)만 수행하는 얇은 해석기다.
-- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 **전이(변경)** 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 결정(`RunStateMachine`)이 "무엇을 할지"를, 이 애그리거트가 "그 변경을 어떻게 적용할지"를 책임진다(I/O 없이 `tests/test_run_aggregate.py` 로 단독 테스트).
+- `RunAggregate`(`app/domain/run_aggregate.py`): Run 상태 **전이(변경)** 규칙·불변식의 **단일 소유자**. `Run` 모델을 감싸 `begin`/`block_for_dependencies`/`mark_queued`/`mark_running`/`record_result`/`finish_timing`/`fail_module`/`mark_waiting_input`/`resume_after_input`/`cancel_modules`/`finalize`/`compute_final_status`/`select_failure_target`/`seal_interrupted` 같은 **순수 메서드**(await·I/O 없음, 시계만 참조)를 노출한다. 결정(`RunStateMachine`)이 "무엇을 할지"를, 이 애그리거트가 "그 변경을 어떻게 적용할지"를 책임진다(I/O 없이 `tests/test_run_aggregate.py` 로 단독 테스트). **애그리거트는 도메인 상태의 유일한 변이자다** — 로그 스트리밍(`note_module_message`)·AI 실패 분석 부착(`attach_failure_analysis`) 같은 잔여 직접 변이까지 애그리거트 메서드로 흡수해, `app/domain/` 밖에서 `run.x = y` 류의 직접 도메인 필드 대입이 존재하지 않는다(grep 으로 증명 가능).
 - `RunPlanner`(`run_planner.py`): 입력값 검증·모듈 선택·인증 수단 검증, manifest 기준 모듈 리스트 생성(순수 로직).
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
@@ -525,11 +526,14 @@ manifest 에 들어 있는 정보:
 
 저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`RunControlStorePort`/`RunInputStorePort`/`SuiteRepositoryPort`/`SuiteControlStorePort`/`SuiteInputStorePort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다. 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다 — Run 은 `RunControlStorePort`/`RunInputStorePort`, Suite 는 `SuiteControlStorePort`/`SuiteInputStorePort`.
 
-**집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않으며**(어댑터의 `save_run` 이 `model_dump_json(exclude=...)` 으로 방어적으로 제외), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
+**영속 DTO ↔ 도메인 엔티티 분리(persistence model):** 저장소 포트는 도메인(`Run`/`SuiteRun`)으로 말하지만, 어댑터는 도메인 엔티티를 직접 직렬화하지 않고 **영속 DTO**(`app/storage/records.py` 의 `RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord` + `from_domain`/`to_domain` 매퍼)로 매핑한다. SQLite·인메모리 **두 어댑터가 같은 매퍼**를 쓰므로, 과거 어댑터마다 중복되던 "로그 strip" 매직(`_PERSIST_EXCLUDE` exclude / `_persist_copy` deep-copy 후 비우기)이 사라졌다. 온디스크 JSON 형태는 종전과 동일해 기존 SQLite 데이터와 호환된다.
+
+**집합체(aggregate) 경계:** Run **상태**(status·모듈 전이·comparison)와 **모듈 로그**는 서로 다른 집합체다. 로그는 한 줄씩 추가되는 고빈도 텔레메트리라, Run blob 을 통째로 다시 쓰는 대신 `RunLogStorePort` 의 append-only 스토어에 한 줄당 한 번 INSERT 한다. **영속 Run blob 에는 모듈 로그가 담기지 않는다 — `RunModuleRecord` 스키마에 `logs` 필드가 아예 없어 blob 에 들어갈 수 없는 타입 수준 사실**이지(어댑터의 방어적 exclude 가 아니라), 읽기 시 `RunService.get_run` 이 로그 스토어에서 로그를 읽어 Run 읽기 모델에 하이드레이션한다(쓰기 모델/읽기 모델 분리). 이로써 로그 한 줄마다 Run 전체를 재직렬화하던 핫패스 쓰기(O(N²))가 사라지고, Run blob 쓰기는 상태 전이 시점으로만 한정된다.
 
 현재 구현:
 
 - `app/storage/ports.py` — 저장소 포트(Protocol) 정의 (`RunRepositoryPort` 는 Run 상태만, `RunLogStorePort` 는 로그 스트림만 책임)
+- `app/storage/records.py` — 영속 DTO(`RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord`) + `from_domain`/`to_domain` 매퍼. 모든 어댑터가 도메인 엔티티를 직접 직렬화하지 않고 이 레코드를 거친다(영속 스키마 ↔ 도메인 분리; `RunModuleRecord` 에 `logs` 없음). `tests/test_storage_records.py` 로 라운드트립·로그 제외·DB 호환 검증.
 - `app/storage/sqlite_support.py` — `JsonTableStore`(stdlib `sqlite3` + `asyncio.to_thread`, JSON blob 테이블) · `DEFAULT_DB_PATH`
 - `app/storage/listener_registry.py` — `ListenerRegistry`(run_id/suite_id 별 WebSocket 리스너 큐, 프로세스-로컬 휘발성)
 - `app/storage/sqlite_run_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 사용되는 SQLite 어댑터**(`app/main.py` 에서 주입)

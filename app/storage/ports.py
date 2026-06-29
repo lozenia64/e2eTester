@@ -20,8 +20,11 @@ class RunRepositoryPort(Protocol):
 
     이 포트는 Run 의 권위 있는 상태(status·모듈 전이·comparison 등)만 책임진다.
     **모듈 로그는 이 집합체에 속하지 않는다** — 고빈도 append-only 텔레메트리라
-    별도 ``RunLogStorePort`` 가 소유하며, 영속 Run blob 에는 로그가 담기지 않는다(구현체의
-    ``save_run`` 이 방어적으로 strip 한다). 로그를 붙인 읽기 모델 조립은 ``RunService.get_run``
+    별도 ``RunLogStorePort`` 가 소유하며, 영속 Run blob 에는 로그가 담기지 않는다. 포트는
+    도메인 ``Run`` 으로 말하지만(코어의 언어), 구현 어댑터는 도메인 엔티티를 직접 직렬화하지
+    않고 영속 DTO ``RunRecord``(``app/storage/records.py``)로 매핑한다 — ``RunRecord`` 스키마에
+    ``logs`` 필드가 아예 없으므로 로그 제외가 어댑터의 방어적 코드가 아니라 **타입 수준 사실**
+    이다(영속 스키마 ↔ 도메인 엔티티 분리). 로그를 붙인 읽기 모델 조립은 ``RunService.get_run``
     의 책임이다.
     """
 

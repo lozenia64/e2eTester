@@ -683,8 +683,7 @@ class RunService:
                 error=str(exc),
             )
         await self._mark_modules_cancelled(run, self._planner.ordered_selected_run_modules(run))
-        run.awaiting_input_module_id = None
-        run.awaiting_input_prompt = None
+        # awaiting_input_* 정리는 _finalize_run → RunAggregate.finalize 가 책임진다(직접 변이 금지).
         await self._finalize_run(run, RunStatus.CANCELLED)
 
     async def _mark_modules_cancelled(self, run: Run, modules: list[RunModule]) -> None:
@@ -746,7 +745,7 @@ class RunService:
         trimmed = line.strip()
         if not trimmed:
             return
-        module.message = trimmed
+        RunAggregate(run).note_module_message(module, trimmed)
         # 로그는 별도 append-only 스토어로 한 줄씩 INSERT(O(1)). Run blob 은 여기서 저장하지
         # 않는다 — 상태 전이 시점에만 save_run 한다(핫패스 full-blob 쓰기 제거). 라이브 전파는
         # WebSocket ``module_log`` 이벤트가 담당하고, 누적 로그는 읽기 시 하이드레이션한다.
