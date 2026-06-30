@@ -69,8 +69,10 @@ e2eTester/
   app/
     ai/
       failure_analyzer.py
+      gemini_client.py
       gemini_http.py
       gemini_models.py
+      gemini_schemas.py
     api/
       routes_dashboard.py
       routes_runs.py
@@ -88,9 +90,13 @@ e2eTester/
       service.py
       models.py
     core/
-      enums.py
+      enums.py                     # RunStatus/SuiteStatus/ModuleStatus (PASSED/ANOMALY/ERROR/...)
       env_utils.py
+      logging.py                   # 구조적 로거 + 로그 컨텍스트 바인딩
       models.py
+      ops_buffer.py                # 최근 운영 이벤트 링 버퍼(관리자 운영 관측)
+      settings.py                  # E2ESettings (환경변수 기반 설정)
+      status_labels.py             # 상태 라벨·집계 분류(정상/이상징후/점검실패) SSOT
     execution/
       gateway.py                 # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
       composite_gateway.py       # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
@@ -118,13 +124,17 @@ e2eTester/
       run_event_publisher.py     # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
       run_view.py                # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
       run_summary.py             # summarize_run: 최근 Run 요약 뷰
+      run_actor.py               # resolve_run_actor: 표시·집계용 실행자(user) 해석
       suite_service.py           # SuiteService: 이벤트 기반 Saga(결정=SuiteStateMachine, 변경=SuiteAggregate 에 위임)
       stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
+      stats_charts.py            # 통계 차트 데이터 구성
+      ops_service.py             # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
     registry/
       loader.py
     scheduling/
       cron.py
       scheduler.py
+      run_retention.py           # 일일 점검실패·취소 Run 보존 정리 배치
     runner/
       artifact_manager.py
       screenshot.py              # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
@@ -206,6 +216,8 @@ e2eTester/
       sqlite_suite_control_store.py # SQLite Suite 제어 상태 어댑터(취소 의도, suite_control 테이블)
       sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
       sqlite_user_repository.py    # SQLite 사용자 어댑터(기본 사용)
+      user_repository.py           # 인메모리 사용자 어댑터(테스트용)
+      module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
       sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
       run_control_store.py       # 인메모리 Run 제어 상태 어댑터
       run_input_store.py         # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
@@ -388,13 +400,26 @@ e2eTester/
 
 현재 상태 전이:
 
+**종료 결과는 3분류다(이진 PASSED/FAILED 아님).** 도메인은 단계 결과를 `정상`/`이상징후`/`점검실패` 로 나눈다 — 이 구분이 보존 정리·관리자 통계·메일 정책을 가른다(`app/core/enums.py`, `app/core/status_labels.py`).
+
+- `PASSED`(정상): 단계가 `StepCompleted` 로 끝남.
+- `ANOMALY`(이상징후): 단계 핸들러가 `RuntimeError` 를 던짐 — 점검 자체는 정상 동작했고 **대상 사이트에서 의미 있는 이상(검증 실패)을 발견**한 상태. 보존 정리에서 **유지**되고 관리자 통계에 **포함**된다.
+- `ERROR`(점검실패): 그 외 예외(셀렉터·런타임 크래시 등) — **점검 도구 자체가 제대로 실행되지 못한** 상태. 일일 보존 정리에서 **삭제**되고 관리자 통계에서 **제외**된다.
+- `FAILED`: **레거시 호환 값**. 신규 기록에는 쓰지 않으며, 과거 SQLite/JSON 데이터를 읽을 때 집계·표시상 `이상징후(ANOMALY)`로 취급한다.
+
+종료 판정 우선순위(`RunAggregate.compute_final_status`): **ERROR > ANOMALY > PASSED**. 모듈 중 하나라도 ERROR 면 Run 은 ERROR, ERROR 없이 ANOMALY 가 있으면 ANOMALY, 모두 PASSED 면 PASSED.
+
+UI 라벨(`app/core/status_labels.py`): `PASSED`→정상, `ANOMALY`→이상징후, `ERROR`→점검실패, `CANCELLED`→취소.
+
 Run:
 
 - `PENDING`
 - `RUNNING`
 - `WAITING_INPUT`
-- `PASSED`
-- `FAILED`
+- `PASSED` (정상)
+- `ANOMALY` (이상징후 — 점검은 수행됐고 사이트 이상 발견)
+- `ERROR` (점검실패 — 점검 도구 오류)
+- `FAILED` (레거시 호환; 표시·집계 시 이상징후로 취급)
 - `CANCELLED` (사용자가 취소한 Run)
 
 Module:
@@ -403,8 +428,10 @@ Module:
 - `QUEUED`
 - `RUNNING`
 - `WAITING_INPUT`
-- `PASSED`
-- `FAILED`
+- `PASSED` (정상)
+- `ANOMALY` (이상징후)
+- `ERROR` (점검실패)
+- `FAILED` (레거시 호환; 이상징후로 취급)
 - `BLOCKED`
 - `SKIPPED`
 - `CANCELLED` (Run 취소로 실행되지 않거나 중단된 모듈)
@@ -437,13 +464,15 @@ Module:
 
 Suite / SuiteStep 상태:
 
-Suite:
+Suite (Run 과 동일하게 3분류 종료 결과):
 
 - `PENDING`
 - `RUNNING`
 - `WAITING_INPUT`
-- `PASSED` (선택된 시스템이 모두 통과)
-- `FAILED` (선택된 시스템 중 하나라도 실패)
+- `PASSED` (선택된 시스템이 모두 정상)
+- `ANOMALY` (이상징후 — 점검은 됐고 일부 시스템에서 사이트 이상 발견)
+- `ERROR` (점검실패 — 일부 시스템의 점검 도구 오류)
+- `FAILED` (레거시 호환; 표시·집계 시 이상징후로 취급)
 - `CANCELLED`
 
 SuiteStep (시스템 단위):
@@ -587,7 +616,7 @@ manifest 에 들어 있는 정보:
 역할:
 
 - **부수 관심사로 분리됨**: 오케스트레이터/Suite 서비스가 인라인으로 보내지 않고, `RunFinished`/`SuiteFinished` 이벤트를 받은 구독자가 발송 정책(취소 Run 제외, Suite 소속 Run 은 통합 메일로 갈음)까지 소유한다.
-- Run이 최종 종료(`PASSED`/`FAILED`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
+- Run이 최종 종료(`PASSED`/`ANOMALY`/`ERROR`, 레거시 `FAILED` 포함 — `RUN_TERMINAL_OUTCOME_STATUSES`)되면 Gmail SMTP로 결과 메일을 보낸다. (`WAITING_INPUT` 등 중간 상태에서는 보내지 않음)
 - **Suite** 가 최종 종료되면 포함 시스템 Run 결과를 통합한 메일 1통을 보낸다. `SKIPPED` 시스템은 제외로 표시한다.
 - 수신자는 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}` 로 구분한다. (예: `E2E_EMAIL_RECIPIENTS_HOM`, `E2E_EMAIL_RECIPIENTS_MHM`, `E2E_EMAIL_RECIPIENTS_FP`, … — 여러 명은 `|` 로 구분)
 - Suite 메일 수신자는 실행된(선택된) 시스템들의 수신자 집합을 합친다.
@@ -603,10 +632,11 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/scheduling/cron.py` — 외부 의존성 없는 최소 cron(5필드 `분 시 일 월 요일`) 파서·다음 실행 시각 계산기. `* , - /` 와 요일 0/7(일요일)을 지원하고, 일·요일이 모두 제한되면 둘 중 하나만 맞아도 실행하는 표준 cron 규칙을 따른다.
+- `app/scheduling/cron.py` — 5필드 cron(`분 시 일 월 요일`) 파서·다음 실행 시각 계산기. 파싱·매칭·다음 실행 계산·경계 처리를 **`croniter` 라이브러리**(`requirements.txt` 의 `croniter>=2.0,<7.0`)에 위임하는 얇은 래퍼이며, 공개 API(`parse_cron`/`CronSchedule.matches`/`next_run_after`)만 유지한다.
 - `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
 - `app/storage/sqlite_schedule_repository.py` (`SqliteScheduleRepository`, 기본 사용) / `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 예약 저장소. SQLite 어댑터는 `ScheduleRepositoryPort` 를 구현해 재시작 후에도 예약이 남는다.
 - `app/api/routes_schedules.py` — 예약 REST API.
+- `app/scheduling/run_retention.py` (`RunRetentionService` + `RunRetentionScheduler`) — **일일 Run 보존 정리 배치**(별개의 백그라운드 루프). `app/main.py` lifespan 에서 `from_env` 로 만들어 task 로 띄운다.
 
 역할:
 
@@ -616,13 +646,42 @@ manifest 에 들어 있는 정보:
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
-- **이력 비교**: Run 이 `PASSED`/`FAILED` 로 종료되면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
+- **일일 보존 정리**: `RunRetentionScheduler` 가 매일 cron 시각(기본 `0 3 * * *`, 기준 타임존 `E2E_SCHEDULE_TZ`)에 당일 00:00 이전 `requested_at` 의 **점검실패(`ERROR`)·취소(`CANCELLED`)** Run 을 DB·로그·아티팩트째 삭제한다(`정상`·`이상징후`는 유지 — `RUN_DAILY_PURGE_STATUSES`). 기본 활성(`E2E_RUN_RETENTION_ENABLED=true`)이며 `E2E_RUN_RETENTION_ENABLED=false` 로 끄거나 `E2E_RUN_RETENTION_CRON` 으로 주기를 바꾼다. 60초마다 cron 일치 여부를 확인하고 하루 한 번만 정리한다.
+- **이력 비교**: Run 이 종료 결과(`PASSED`/`ANOMALY`/`ERROR`, 레거시 `FAILED` 포함)로 끝나면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.
 
 제약:
 
 - 예약은 SQLite 에 영속되어 재시작 후에도 남는다. 비교 기준선은 같은 시스템의 직전 종료 Run(역시 영속) 을 조회해 계산하므로, 재시작 후에도 이력만 있으면 정상 동작한다. 단, 서버 다운 중 지나간 예약은 catch-up 하지 않고 다음 cron 시각으로 미룬다.
 - 예약 실행은 무인 실행이라, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가 포함되면 해당 Run/Suite 는 `WAITING_INPUT` 에서 멈출 수 있다.
 - 입력값(`input_data`, `suite_systems`)은 PII 를 포함할 수 있어 예약 요약(API/UI)에는 직렬화하지 않는다. Suite 예약 요약에는 `selected_system_count`, `step_total` 등 선택 시스템 수만 노출한다.
+
+### 5.10 인증·관리자·운영 관측 계층
+
+대시보드는 JWT 쿠키 기반 로그인 뒤에서 동작하며, 관리자 전용 운영/통계 화면이 따로 있다.
+
+**인증(`app/auth/`):**
+
+- `app/auth/jwt.py` / `service.py` / `models.py` / `router.py` / `dependencies.py` — JWT 쿠키 발급·검증, 사용자 CRUD, 비밀번호 변경, 사용자별 허용 시스템(`PUT /api/admin/users/{id}/systems`) 관리.
+- 사용자 저장소는 포트-어댑터다: `app/storage/sqlite_user_repository.py`(기본) / `user_repository.py`(인메모리).
+- 로그인 라우트(`/login`, `/auth/*`, `/account/password`)와 의존성 주입은 `app/auth/dependencies.py`(`get_user_service`).
+- Run 목록은 사용자 스코프가 적용된다(비관리자는 자기 Run 만; `tests/test_run_list_scope.py`).
+
+**관리자 통계(`StatsService`, `app/orchestrator/stats_service.py`):**
+
+- `GET /api/admin/stats/usage` — 사용자·시스템별 사용량 통계. 집계 대상은 `ADMIN_VISIBLE_RUN_STATUSES`(= 정상 + 이상징후) 로, **점검실패(`ERROR`)·취소는 제외**한다.
+- `GET /api/admin/stats/savings/csv` — 절감 시간 통계 CSV. **모듈별 수동 업무 시간 설정**(`ModuleSettings`)을 기준으로 자동화가 절감한 시간을 산출한다.
+- `app/orchestrator/stats_charts.py` — 통계 차트 데이터 구성. `app/orchestrator/run_actor.py`(`resolve_run_actor`/`load_actor_context`) — Suite·예약 하위 Run 처럼 저장 시점에 실행자 이름이 빠진 Run 의 표시·집계용 실행자(user_id/이름)를 상위 엔티티·사용자 조회로 보완.
+- **모듈별 수동 업무 시간 설정**: `GET/PUT /api/admin/module-settings*` 로 시스템·모듈별 수동 업무 시간을 저장한다. 저장소는 `ModuleSettingsRepositoryPort`(`app/storage/module_settings_repository.py`) + 기본 `SqliteModuleSettingsRepository`. 관리 화면은 `/admin/modules`(시스템 카드당 저장 버튼 1개로 변경분 일괄 저장).
+
+**운영 관측(`OpsService`, `app/orchestrator/ops_service.py`):**
+
+- `GET /api/admin/ops/snapshot` / `GET /admin/ops` — 진행 중 Run/Suite, 예약, 실행 큐(`RunExecutionQueue`) 상태, 최근 운영 이벤트 스냅샷.
+- 최근 운영 이벤트는 프로세스 내 링 버퍼 `app/core/ops_buffer.py`(`OpsEventBuffer`, 기본 250건, 프로세스-로컬 휘발성)에서 읽는다.
+- 구조적 로깅: `app/core/logging.py`(`get_logger`/로그 컨텍스트 바인딩)와 `app/main.py` 의 요청 로그 컨텍스트 미들웨어가 `request_id`·HTTP 메서드/경로를 모든 로그에 바인딩한다. 설정은 `app/core/settings.py`(`E2ESettings`, `get_settings`).
+
+**관리자 Run 관리:**
+
+- `GET /api/admin/runs` — 전체 Run 목록(시스템·사용자 필터). `DELETE /api/admin/runs/{run_id}` — Run 영구 삭제(DB·로그·아티팩트). 일일 보존 정리 배치(§5.9)도 같은 삭제 경로(`RunService.purge_runs`)를 쓴다.
 
 ## 6. 시스템 시나리오 문서
 
@@ -689,7 +748,7 @@ artifacts/
 
 - 사용자 입력 대기(`WAITING_INPUT`, 예: 휴대폰 OTP 대기)는 모듈 종료가 아니라 일시정지이므로 그 시점에는 스크린샷을 찍지 않는다. OTP 제출 후 모듈이 실제로 끝날 때 캡처된다.
 - 초기 단계에서 페이지/브라우저 자체가 깨지면 스크린샷이 없을 수 있다.
-- `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 등록된 시스템 manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. 시뮬레이션은 `SimulatedExecutionGateway`(포트 어댑터)가 `execution_mode == "simulated"` 모듈에 한해 `simulated_duration_ms`/`simulated_outcome` 대로 처리하며, 아티팩트는 생성되지 않는다. 실제 실행기가 없는 **알 수 없는** `execution_mode` 는 더 이상 조용히 시뮬레이션되지 않고 `open_session` 에서 예외가 나 해당 모듈이 명확히 FAILED 처리된다.
+- `ModuleDefinition.execution_mode` 의 기본값은 `simulated` 지만 현재 등록된 시스템 manifest는 모두 워크플로 단계 모드를 쓰므로 시뮬레이션 경로는 사용되지 않는다. 시뮬레이션은 `SimulatedExecutionGateway`(포트 어댑터)가 `execution_mode == "simulated"` 모듈에 한해 `simulated_duration_ms`/`simulated_outcome` 대로 처리하며, 아티팩트는 생성되지 않는다. 실제 실행기가 없는 **알 수 없는** `execution_mode` 는 더 이상 조용히 시뮬레이션되지 않고 `open_session` 에서 예외가 나 해당 모듈이 명확히 `ERROR`(점검실패) 처리된다.
 
 아직 없는 것:
 
