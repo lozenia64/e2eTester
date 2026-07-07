@@ -1382,22 +1382,50 @@ def _build_suite_plain_text(context: dict) -> str:
     return "\n".join(lines)
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _read_png_size(path: Path) -> tuple[int, int] | None:
+    """PNG 헤더(IHDR)에서 원본 픽셀 크기를 읽는다(의존성 없이 24바이트만 읽음).
+
+    렌더러가 Outlook 호환 width/height 속성을 계산하려면 원본 비율이 필요하다.
+    PNG 가 아니거나 읽기에 실패하면 None(렌더러는 기존 기본 크기로 렌더링).
+    """
+    try:
+        with path.open("rb") as stream:
+            header = stream.read(24)
+    except OSError:
+        return None
+    if len(header) < 24 or header[:8] != _PNG_SIGNATURE or header[12:16] != b"IHDR":
+        return None
+    width = int.from_bytes(header[16:20], "big")
+    height = int.from_bytes(header[20:24], "big")
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
 def _serialize_inline_screenshots(selection: EmailContentSelection) -> list[dict]:
-    return [
-        {
-            "cid": inline.cid,
-            "seq": inline.artifact.seq,
-            "order": inline.artifact.order,
-            "module_id": inline.artifact.module_id,
-            "module_name": inline.artifact.module_name,
-            "system_code": (inline.artifact.system_code or "").upper(),
-            "run_id": inline.artifact.run_id,
-            "relative_path": inline.artifact.relative_path,
-            "status": inline.status,
-            "status_label": inline.status_label,
-        }
-        for inline in selection.inline_screenshots
-    ]
+    serialized: list[dict] = []
+    for inline in selection.inline_screenshots:
+        image_size = _read_png_size(inline.artifact.path)
+        serialized.append(
+            {
+                "cid": inline.cid,
+                "seq": inline.artifact.seq,
+                "order": inline.artifact.order,
+                "module_id": inline.artifact.module_id,
+                "module_name": inline.artifact.module_name,
+                "system_code": (inline.artifact.system_code or "").upper(),
+                "run_id": inline.artifact.run_id,
+                "relative_path": inline.artifact.relative_path,
+                "status": inline.status,
+                "status_label": inline.status_label,
+                "image_width": image_size[0] if image_size else None,
+                "image_height": image_size[1] if image_size else None,
+            }
+        )
+    return serialized
 
 
 def _email_attachment_summary(selection: EmailContentSelection) -> dict:

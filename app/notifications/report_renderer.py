@@ -48,6 +48,17 @@ NEUTRAL_SOFT_BG = "#f1f3f5"
 INFO_COLOR = "#2563eb"
 INFO_SOFT_BG = "#eef3ff"
 
+# --- 스크린샷 크기 규칙 -------------------------------------------------------------
+# Outlook(윈도우)은 Word 렌더링 엔진이라 CSS max-width/height 를 무시하고 HTML
+# width/height '속성'만 존중한다. 따라서 스크린샷은 실제 픽셀 크기를 읽어 px 속성으로
+# 고정해야 모든 클라이언트에서 같은 크기로 나온다. Outlook 은 96dpi 기준이므로
+# 높이 상한 11cm = 11 / 2.54 * 96 ≈ 416px.
+SCREENSHOT_MAX_HEIGHT_PX = 416
+# 가로형(PC) 스크린샷 1장 배치 시 최대 표시 너비.
+SCREENSHOT_FULL_MAX_WIDTH_PX = 600
+# 세로형(모바일) 스크린샷은 가로 2장 배치하므로 셀 폭에 맞는 최대 표시 너비.
+SCREENSHOT_PAIR_MAX_WIDTH_PX = 280
+
 _STATUS_LABELS = (
     {key.value: value for key, value in MODULE_STATUS_LABELS.items()}
     | {key.value: value for key, value in RUN_STATUS_LABELS.items()}
@@ -379,22 +390,64 @@ def _omitted_warning(email_summary: dict, gemini_summary: dict) -> str:
     return "".join(blocks)
 
 
-def _screenshot_image_html(image_src: str, module_title: str) -> str:
-    """Outlook 호환 CID 이미지 마크업."""
+def _screenshot_display_size(
+    width: int, height: int, max_width: int = SCREENSHOT_FULL_MAX_WIDTH_PX
+) -> tuple[int, int]:
+    """원본 픽셀 크기를 높이 상한(11cm≈416px)·너비 상한에 맞게 비율 유지 축소한다.
+
+    확대는 하지 않는다(원본보다 작을 때 늘리면 흐려진다).
+    """
+    scale = min(SCREENSHOT_MAX_HEIGHT_PX / height, max_width / width, 1.0)
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def _screenshot_image_html(
+    image_src: str, module_title: str, display_size: tuple[int, int] | None = None
+) -> str:
+    """Outlook 호환 CID 이미지 마크업.
+
+    원본 크기를 알면 축소 계산한 px 를 width/height '속성'으로 고정한다(Outlook 은
+    CSS 크기를 무시하므로 속성이 유일하게 확실한 수단). 크기를 모르면 기존처럼
+    너비 600px 기준으로 렌더링한다.
+    """
     safe_title = escape(module_title)
     safe_src = image_src.replace('"', "")
+    if display_size is None:
+        size_attrs = 'width="600"'
+        size_style = "width:100%;max-width:600px;height:auto;"
+    else:
+        display_width, display_height = display_size
+        size_attrs = f'width="{display_width}" height="{display_height}"'
+        size_style = f"width:{display_width}px;height:{display_height}px;"
     return (
         '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
         'style="border-collapse:collapse;"><tr><td align="center" '
         f'style="padding:0;line-height:0;font-size:0;background:{SOFT_BG};">'
-        f'<img src="{safe_src}" alt="{safe_title} 스크린샷" width="600" border="0" '
-        f'style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;'
+        f'<img src="{safe_src}" alt="{safe_title} 스크린샷" {size_attrs} border="0" '
+        f'style="display:inline-block;{size_style}border:0;outline:none;'
         f'text-decoration:none;-ms-interpolation-mode:bicubic;" />'
         "</td></tr></table>"
     )
 
 
-def _screenshot_card(screenshot: dict, observation: str = "") -> str:
+def _screenshot_original_size(screenshot: dict) -> tuple[int, int] | None:
+    width = screenshot.get("image_width")
+    height = screenshot.get("image_height")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        return width, height
+    return None
+
+
+def _is_portrait_screenshot(screenshot: dict) -> bool:
+    size = _screenshot_original_size(screenshot)
+    return size is not None and size[1] > size[0]
+
+
+def _screenshot_card(
+    screenshot: dict,
+    observation: str = "",
+    max_image_width: int = SCREENSHOT_FULL_MAX_WIDTH_PX,
+) -> str:
     """모듈별 CID 인라인 스크린샷 카드."""
     status = screenshot.get("status") or ""
     status_label = screenshot.get("status_label") or _status_label(status)
@@ -405,6 +458,12 @@ def _screenshot_card(screenshot: dict, observation: str = "") -> str:
     if not cid:
         return ""
     image_src = f"cid:{cid}"
+    original_size = _screenshot_original_size(screenshot)
+    display_size = (
+        _screenshot_display_size(*original_size, max_width=max_image_width)
+        if original_size
+        else None
+    )
     observation_html = ""
     if observation.strip():
         observation_html = (
@@ -433,10 +492,26 @@ def _screenshot_card(screenshot: dict, observation: str = "") -> str:
         f"</tr></table>"
         f'<div style="margin-top:12px;border:1px solid {BORDER};border-radius:10px;overflow:hidden;'
         f'background:{SOFT_BG};line-height:0;font-size:0;">'
-        f"{_screenshot_image_html(image_src, module_title)}"
+        f"{_screenshot_image_html(image_src, module_title, display_size)}"
         f"</div>"
         f"{observation_html}"
         f"</div></td></tr></table>"
+    )
+
+
+def _screenshot_pair_row(left_card: str, right_card: str | None) -> str:
+    """세로형(모바일) 스크린샷 카드 2장을 나란히 배치하는 2열 테이블 행.
+
+    Outlook(Word 엔진)은 flexbox/float 를 지원하지 않으므로 테이블 셀 분할이
+    유일하게 안전한 다단 배치 수단이다.
+    """
+    right_html = right_card if right_card else "&nbsp;"
+    return (
+        '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
+        'style="border-collapse:collapse;"><tr>'
+        f'<td width="50%" valign="top" style="padding:0 6px 0 0;">{left_card}</td>'
+        f'<td width="50%" valign="top" style="padding:0 0 0 6px;">{right_html}</td>'
+        "</tr></table>"
     )
 
 
@@ -454,7 +529,7 @@ def _screenshot_gallery(
     ]
     if not filtered:
         return ""
-    cards: list[str] = []
+    entries: list[tuple[bool, str]] = []
     for screenshot in sorted(filtered, key=lambda item: (item.get("order", 0), item.get("seq", 0))):
         module_id = screenshot.get("module_id") or ""
         observation = (findings_by_module.get(module_id) or {}).get("screen_observation", "")
@@ -462,12 +537,35 @@ def _screenshot_gallery(
             observation_text = observation
         else:
             observation_text = ""
-        card = _screenshot_card(screenshot, observation_text)
+        portrait = _is_portrait_screenshot(screenshot)
+        card = _screenshot_card(
+            screenshot,
+            observation_text,
+            max_image_width=(
+                SCREENSHOT_PAIR_MAX_WIDTH_PX if portrait else SCREENSHOT_FULL_MAX_WIDTH_PX
+            ),
+        )
         if card:
-            cards.append(card)
-    if not cards:
+            entries.append((portrait, card))
+    if not entries:
         return ""
-    return "".join(cards)
+    # 세로형(모바일) 카드는 연속 2장씩 나란히 묶어 상하 스크롤을 줄이고,
+    # 가로형(PC) 카드는 가독성을 위해 한 장씩 전체 폭으로 배치한다.
+    blocks: list[str] = []
+    index = 0
+    while index < len(entries):
+        portrait, card = entries[index]
+        if not portrait:
+            blocks.append(card)
+            index += 1
+            continue
+        next_card = None
+        if index + 1 < len(entries) and entries[index + 1][0]:
+            next_card = entries[index + 1][1]
+            index += 1
+        blocks.append(_screenshot_pair_row(card, next_card))
+        index += 1
+    return "".join(blocks)
 
 
 def _attachment_notice_body(attachment: dict, gemini_summary: dict) -> str:
