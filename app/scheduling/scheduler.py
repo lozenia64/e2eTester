@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
+import secrets
 from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.core.enums import RunStatus, SuiteStatus
+from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.logging import get_logger
 from app.core.models import (
     SUITE_SCHEDULE_SYSTEM_CODE,
@@ -41,6 +43,11 @@ def _resolve_timezone() -> tuple[ZoneInfo, str]:
             timezone=name,
         )
         return ZoneInfo("UTC"), "UTC"
+
+
+def _new_trigger_token() -> str:
+    """모바일 즉시 점검 URL 용 예약별 비밀 토큰(URL-safe, 추측 불가)."""
+    return secrets.token_urlsafe(24)
 
 
 def schedule_today_start_utc() -> datetime:
@@ -96,6 +103,7 @@ class SchedulerService:
             cron=request.cron.strip(),
             timezone=self._timezone_name,
             enabled=request.enabled,
+            trigger_token=_new_trigger_token(),
             input_data=sanitized_input,
             selected_module_ids=resolved_module_ids,
             created_at=datetime.now(UTC),
@@ -129,6 +137,7 @@ class SchedulerService:
             cron=request.cron.strip(),
             timezone=self._timezone_name,
             enabled=request.enabled,
+            trigger_token=_new_trigger_token(),
             browser_mode=browser_mode,
             suite_systems=normalized_systems,
             selected_system_codes=resolved_system_codes,
@@ -152,9 +161,17 @@ class SchedulerService:
             ]
         summaries: list[dict] = []
         for schedule in schedules:
+            await self._ensure_trigger_token(schedule)
             await self._refresh_last_execution_status(schedule)
             summaries.append(schedule.to_summary())
         return summaries
+
+    async def _ensure_trigger_token(self, schedule: Schedule) -> None:
+        """토큰 도입 이전에 만든 예약(레거시 행)에 트리거 토큰을 지연 발급한다."""
+        if schedule.trigger_token:
+            return
+        schedule.trigger_token = _new_trigger_token()
+        await self._repository.save(schedule)
 
     async def delete_schedule(self, schedule_id: str) -> None:
         await self._repository.get(schedule_id)  # KeyError -> 404
@@ -191,6 +208,100 @@ class SchedulerService:
         payload = run.model_dump(mode="json")
         payload["schedule_kind"] = "system"
         return payload
+
+    # --- 모바일 즉시 점검 트리거 (예약별 비밀 토큰 인증) ---------------------
+
+    async def find_by_trigger_token(self, token: str) -> Schedule | None:
+        """트리거 토큰으로 예약을 찾는다(상수 시간 비교; 없으면 None)."""
+        if not token:
+            return None
+        found: Schedule | None = None
+        for schedule in await self._repository.list():
+            if schedule.trigger_token and hmac.compare_digest(schedule.trigger_token, token):
+                found = schedule
+        return found
+
+    async def trigger_now(self, schedule_id: str) -> dict:
+        """모바일 트리거 진입점: 즉시 실행하되, 직전 실행이 아직 진행 중이면 **새로 만들지
+        않고** 그 실행에 합류한다(페이지 새로고침/중복 탭이 실 사이트 점검을 이중 발사하지
+        않게 하는 멱등 가드 — cron 루프의 overlap 스킵과 같은 정책)."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        if await self._last_execution_active(schedule):
+            payload = await self.trigger_status(schedule_id)
+            payload["already_running"] = True
+            return payload
+        if schedule.schedule_kind == "suite":
+            await self._trigger_suite(schedule)
+        else:
+            await self._trigger_run(schedule)
+        await self._repository.save(schedule)
+        payload = await self.trigger_status(schedule_id)
+        payload["already_running"] = False
+        return payload
+
+    async def trigger_status(self, schedule_id: str) -> dict:
+        """모바일 트리거 페이지가 폴링하는 최근 실행 상태 요약(입력값/전체 blob 미노출)."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        await self._refresh_last_execution_status(schedule)
+        payload: dict = {
+            "schedule_id": schedule.schedule_id,
+            "schedule_kind": schedule.schedule_kind,
+            "name": schedule.name,
+            "system_code": schedule.system_code,
+            "system_name": schedule.system_name,
+            "last_run_at": schedule.last_run_at.isoformat() if schedule.last_run_at else None,
+            "status": None,
+            "waiting_input": False,
+            "progress": None,
+        }
+        if schedule.schedule_kind == "suite":
+            if not schedule.last_suite_id:
+                return payload
+            try:
+                suite = await self._suite_service.get_suite(schedule.last_suite_id)
+            except KeyError:
+                return payload
+            terminal_steps = sum(
+                1 for step in suite.steps if step.status not in _ACTIVE_SUITE_STATUSES
+            )
+            payload.update(
+                {
+                    "status": suite.status.value,
+                    "waiting_input": suite.status == SuiteStatus.WAITING_INPUT,
+                    "progress": f"{terminal_steps}/{len(suite.steps)}",
+                }
+            )
+            return payload
+        if not schedule.last_run_id:
+            return payload
+        try:
+            run = await self._run_service.get_run(schedule.last_run_id)
+        except KeyError:
+            return payload
+        countable = [m for m in run.modules if m.status != ModuleStatus.SKIPPED]
+        passed = sum(1 for m in countable if m.status == ModuleStatus.PASSED)
+        payload.update(
+            {
+                "status": run.status.value,
+                "waiting_input": run.status == RunStatus.WAITING_INPUT,
+                "awaiting_prompt": run.awaiting_input_prompt,
+                "progress": f"{passed}/{len(countable)}",
+            }
+        )
+        return payload
+
+    async def submit_trigger_otp(self, schedule_id: str, otp_code: str) -> dict:
+        """모바일 트리거 페이지에서 입력한 OTP 를 예약의 최근 실행(Run/Suite)에 전달한다."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        if schedule.schedule_kind == "suite":
+            if not schedule.last_suite_id:
+                raise KeyError("이 예약으로 실행된 Suite 가 없습니다.")
+            await self._suite_service.submit_otp(schedule.last_suite_id, otp_code)
+        else:
+            if not schedule.last_run_id:
+                raise KeyError("이 예약으로 실행된 Run 이 없습니다.")
+            await self._run_service.submit_otp(schedule.last_run_id, otp_code)
+        return await self.trigger_status(schedule_id)
 
     # --- 백그라운드 루프 --------------------------------------------------
 
