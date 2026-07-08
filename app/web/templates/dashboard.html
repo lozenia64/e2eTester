@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}일간 점검 대시보드{% endblock %}
+
+{% block content %}
+<style>
+  /* ── 일간 점검 대시보드 (scoped: .dash-*) ─────────────────────────────
+     상태 색은 dataviz 예약 팔레트(good/warning/serious/critical)를 쓰고,
+     항상 라벨과 함께 노출한다(색 단독으로 의미를 전달하지 않음). */
+  .dash {
+    --st-passed: #0ca30c;
+    --st-anomaly: #fab219;
+    --st-error: #d03b3b;
+    --st-running: #2a78d6;
+    --st-blocked: #ec835a;
+    --st-idle: #b6b4ad;
+    --st-track: #ecebe6;
+    --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  }
+  .dash-tone-passed { color: var(--st-passed); }
+  .dash-tone-anomaly { color: var(--st-anomaly); }
+  .dash-tone-error { color: var(--st-error); }
+  .dash-tone-running { color: var(--st-running); }
+  .dash-tone-blocked, .dash-tone-cancelled, .dash-tone-skipped { color: var(--st-blocked); }
+  .dash-tone-not_inspected { color: var(--st-idle); }
+
+  /* 진입 애니메이션: 카드가 아래에서 떠오르며 페이드인(스태거) */
+  .dash-reveal {
+    opacity: 0;
+    transform: translateY(16px) scale(.985);
+    transition: opacity .55s var(--ease-spring), transform .55s var(--ease-spring);
+    will-change: opacity, transform;
+  }
+  .dash-reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* 시스템 카드 hover 미세 인터랙션 */
+  .dash-card {
+    transition: transform .35s var(--ease-spring), box-shadow .35s var(--ease-spring);
+  }
+  .dash-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px -20px rgba(30, 41, 59, .35);
+  }
+
+  /* 라디얼 링 */
+  .dash-ring__track { stroke: var(--st-track); }
+  .dash-ring__value {
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 1.1s var(--ease-spring);
+  }
+
+  /* 모듈 칩: 좌측 상태 색 dot + 이름 */
+  .dash-chip {
+    transition: background-color .25s ease, transform .25s var(--ease-spring);
+  }
+  .dash-chip__dot {
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+  }
+  /* 실행 중 dot 은 은은한 펄스 */
+  .dash-chip--running .dash-chip__dot {
+    animation: dash-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes dash-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent); }
+    50% { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 6%, transparent); }
+  }
+
+  /* 시스템 요약 세그먼트 바 */
+  .dash-seg {
+    height: 100%;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .9s var(--ease-spring);
+  }
+  .dash-seg.is-in { transform: scaleX(1); }
+
+  /* 상단 지표 카드의 숫자 */
+  .dash-kpi__value { font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-reveal { transition: none; opacity: 1; transform: none; }
+    .dash-ring__value { transition: none; }
+    .dash-seg { transition: none; transform: scaleX(1); }
+    .dash-chip--running .dash-chip__dot { animation: none; }
+    .dash-card { transition: none; }
+  }
+</style>
+
+<div class="dash space-y-6">
+  <!-- 페이지 헤더 -->
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Daily Inspection</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">일간 점검 현황</h1>
+      <p class="mt-1.5 text-sm text-gray-500">접근 가능한 전체 시스템·모듈의 오늘 점검 상태를 한눈에 확인합니다.</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="dash-date" class="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 shadow-sm ring-1 ring-gray-200"></span>
+      <button id="dash-refresh" type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        새로고침
+      </button>
+    </div>
+  </div>
+
+  <!-- 상단 요약(Bento) : 히어로 통과율 + KPI -->
+  <div class="grid gap-4 lg:grid-cols-4">
+    <!-- 히어로 : 전체 통과율 라디얼 -->
+    <div class="dash-reveal dash-card lg:col-span-2 flex items-center gap-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div class="relative h-32 w-32 shrink-0">
+        <svg viewBox="0 0 120 120" class="h-full w-full">
+          <circle class="dash-ring__track" cx="60" cy="60" r="52" fill="none" stroke-width="12"></circle>
+          <circle id="dash-hero-ring" class="dash-ring__value dash-tone-passed" cx="60" cy="60" r="52" fill="none"
+                  stroke="currentColor" stroke-width="12" stroke-dasharray="326.7" stroke-dashoffset="326.7"></circle>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="dash-hero-rate" class="dash-kpi__value text-3xl font-bold text-gray-900">0<span class="text-lg text-gray-400">%</span></span>
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">통과율</span>
+        </div>
+      </div>
+      <div class="min-w-0">
+        <p class="text-sm font-semibold text-gray-900">오늘 전체 점검 상태</p>
+        <p id="dash-hero-caption" class="mt-1 text-sm text-gray-500">데이터를 불러오는 중…</p>
+        <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background: var(--st-passed)"></span><span class="text-gray-500">정상</span></span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background: var(--st-anomaly)"></span><span class="text-gray-500">이상징후</span></span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background: var(--st-error)"></span><span class="text-gray-500">점검실패</span></span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background: var(--st-running)"></span><span class="text-gray-500">진행 중</span></span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background: var(--st-idle)"></span><span class="text-gray-500">미점검</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI 타일 4종 -->
+    <div class="dash-reveal dash-card rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <p class="text-xs font-semibold text-gray-400">점검 완료 시스템</p>
+      <p class="mt-2 flex items-baseline gap-1">
+        <span class="dash-kpi__value text-3xl font-bold text-gray-900" data-kpi="systems_all_passed">0</span>
+        <span class="text-sm font-medium text-gray-400">/ <span data-kpi="systems">0</span> 시스템</span>
+      </p>
+      <p class="mt-1 text-xs text-gray-400">전 모듈 정상</p>
+    </div>
+    <div class="dash-reveal dash-card grid grid-cols-2 gap-3 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div>
+        <p class="text-xs font-semibold text-gray-400">이상징후</p>
+        <p class="dash-kpi__value mt-1 text-2xl font-bold" style="color: var(--st-anomaly)" data-kpi="anomaly">0</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-400">점검실패</p>
+        <p class="dash-kpi__value mt-1 text-2xl font-bold" style="color: var(--st-error)" data-kpi="error">0</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-400">진행 중</p>
+        <p class="dash-kpi__value mt-1 text-2xl font-bold" style="color: var(--st-running)" data-kpi="running">0</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-400">미점검</p>
+        <p class="dash-kpi__value mt-1 text-2xl font-bold" style="color: var(--st-idle)" data-kpi="not_inspected">0</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 시스템별 그래프 그리드 -->
+  <div class="flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-gray-700">시스템별 점검 그래프</h2>
+    <a href="/runs/execute" class="text-xs font-semibold text-indigo-600 hover:underline">점검 실행 →</a>
+  </div>
+  <div id="dash-systems" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
+
+  <!-- 빈 상태 -->
+  <div id="dash-empty" class="hidden rounded-2xl border border-dashed border-gray-200 bg-white/60 p-12 text-center">
+    <p class="text-sm font-semibold text-gray-600">접근 가능한 시스템이 없습니다.</p>
+    <p class="mt-1 text-xs text-gray-400">관리자에게 시스템 접근 권한을 요청하세요.</p>
+  </div>
+  <!-- 로드 실패 -->
+  <div id="dash-error" class="hidden rounded-2xl border border-red-100 bg-red-50 p-6 text-center">
+    <p class="text-sm font-semibold text-red-700">점검 현황을 불러오지 못했습니다.</p>
+    <p class="mt-1 text-xs text-red-400">잠시 후 새로고침해 주세요.</p>
+  </div>
+</div>
+
+<!-- 시스템 카드 템플릿 -->
+<template id="dash-system-template">
+  <article class="dash-reveal dash-card overflow-hidden rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h3 class="truncate text-sm font-bold text-gray-900" data-field="name"></h3>
+        <p class="mt-0.5 text-xs text-gray-400" data-field="latest"></p>
+      </div>
+      <span class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold" data-field="status-pill"></span>
+    </div>
+
+    <div class="mt-4 flex items-center gap-4">
+      <!-- 라디얼 링 -->
+      <div class="relative h-20 w-20 shrink-0">
+        <svg viewBox="0 0 120 120" class="h-full w-full">
+          <circle class="dash-ring__track" cx="60" cy="60" r="52" fill="none" stroke-width="12"></circle>
+          <circle data-field="ring" class="dash-ring__value" cx="60" cy="60" r="52" fill="none"
+                  stroke="currentColor" stroke-width="12" stroke-dasharray="326.7" stroke-dashoffset="326.7"></circle>
+        </svg>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span class="dash-kpi__value text-lg font-bold text-gray-900" data-field="rate">0<span class="text-[10px] text-gray-400">%</span></span>
+        </div>
+      </div>
+      <!-- 세그먼트 바 + 카운트 -->
+      <div class="min-w-0 flex-1">
+        <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100" data-field="segbar"></div>
+        <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs" data-field="counts"></div>
+      </div>
+    </div>
+
+    <!-- 모듈 칩 (전체 모듈 노출) -->
+    <div class="mt-4 border-t border-gray-100 pt-3">
+      <div class="flex flex-wrap gap-1.5" data-field="modules"></div>
+    </div>
+  </article>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard.js?v=1" defer></script>
+{% endblock %}

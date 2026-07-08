@@ -27,20 +27,38 @@ async def dashboard_home(
     current_user: User = Depends(get_current_user),
     run_service: RunService = Depends(get_run_service),
 ):
+    """일간 점검 현황 대시보드(로그인 후 첫 화면). 데이터는 JS 가 `/api/dashboard/daily` 로 로드."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    if current_user.role == "admin":
+        return RedirectResponse(url="/admin", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/runs/execute", response_class=HTMLResponse)
+async def run_execute(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    run_service: RunService = Depends(get_run_service),
+):
+    """시스템 단위 점검 실행 화면(기존 대시보드의 Run 트리거 UI)."""
     if isinstance(current_user, RedirectResponse):
         return current_user
     if current_user.role == "admin":
         return RedirectResponse(url="/admin", status_code=302)
     systems = run_service.list_systems()
-    if current_user.role != "admin":
-        systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
+    systems = [s for s in systems if s.system_code in current_user.allowed_system_codes]
     systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
     system_codes = [system.system_code for system in systems]
     analyzer_status = GeminiFailureAnalyzer.inspect_env_status()
     email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
     return templates.TemplateResponse(
         request,
-        "index.html",
+        "execute.html",
         {
             "systems": systems,
             "systems_payload": systems_payload,

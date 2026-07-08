@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.api.routes_admin import router as admin_router
+from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_otp import router as otp_router
 from app.api.routes_runs import router as runs_router
@@ -250,6 +251,7 @@ app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(dashboard_router)
+app.include_router(daily_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
 app.include_router(otp_router)

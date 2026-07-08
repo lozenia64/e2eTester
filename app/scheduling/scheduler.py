@@ -58,6 +58,12 @@ def schedule_today_start_utc() -> datetime:
     return today_start_local.astimezone(UTC)
 
 
+def schedule_today_label() -> str:
+    """스케줄 타임존 기준 '오늘' 날짜 라벨(YYYY-MM-DD)."""
+    tz, _ = _resolve_timezone()
+    return datetime.now(tz).strftime("%Y-%m-%d")
+
+
 class SchedulerService:
     """예약(Schedule) CRUD 와, cron 기준으로 Run/Suite 를 자동 트리거하는 백그라운드 루프.
 
