@@ -96,8 +96,6 @@ async def submit_trigger_otp(
     try:
         return await schedule_service.submit_trigger_otp(schedule.schedule_id, payload.otp_code)
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404, detail="OTP 입력을 기다리는 실행이 없습니다."
-        ) from exc
+        raise HTTPException(status_code=404, detail="OTP 입력을 기다리는 실행이 없습니다.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

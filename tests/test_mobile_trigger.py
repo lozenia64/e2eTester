@@ -95,17 +95,17 @@ class _FakeSuiteService:
 
 
 def _schedule(**overrides) -> Schedule:
-    defaults = dict(
-        schedule_id="sch_test1",
-        schedule_kind="system",
-        system_code="hom",
-        system_name="대표홈페이지(PC)",
-        name="아침 점검",
-        cron="0 7 * * 1-5",
-        timezone="Asia/Seoul",
-        trigger_token="tok_secret",
-        created_at=datetime.now(UTC),
-    )
+    defaults = {
+        "schedule_id": "sch_test1",
+        "schedule_kind": "system",
+        "system_code": "hom",
+        "system_name": "대표홈페이지(PC)",
+        "name": "아침 점검",
+        "cron": "0 7 * * 1-5",
+        "timezone": "Asia/Seoul",
+        "trigger_token": "tok_secret",
+        "created_at": datetime.now(UTC),
+    }
     defaults.update(overrides)
     return Schedule(**defaults)
 
