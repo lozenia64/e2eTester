@@ -169,6 +169,9 @@ class Schedule(BaseModel):
     cron: str
     timezone: str
     enabled: bool = True
+    # 모바일 즉시 점검 URL(/m/{token}) 인증용 예약별 비밀 토큰. 예약 삭제가 곧 URL 폐기다.
+    # to_summary 로는 소유자 화면(URL 복사 버튼)에만 노출되고 응답 어디에도 로그로 남기지 않는다.
+    trigger_token: str | None = None
     input_data: dict[str, str] = Field(default_factory=dict)
     selected_module_ids: list[str] | None = None
     browser_mode: str | None = None
@@ -198,6 +201,7 @@ class Schedule(BaseModel):
             "cron": self.cron,
             "timezone": self.timezone,
             "enabled": self.enabled,
+            "trigger_token": self.trigger_token,
             "selected_module_ids": list(self.selected_module_ids or []),
             "module_count": len(self.selected_module_ids)
             if self.selected_module_ids is not None

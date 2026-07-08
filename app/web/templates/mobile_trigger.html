@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>모바일 즉시 점검 · {{ schedule.name or schedule.system_name }}</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+            background: #f3f4f6; color: #111827; min-height: 100vh;
+            display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px;
+        }
+        .card {
+            width: 100%; max-width: 420px; background: #fff; border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 24px; margin-top: 8vh;
+        }
+        .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6366f1; }
+        h1 { font-size: 20px; font-weight: 700; margin-top: 4px; }
+        .meta { font-size: 13px; color: #6b7280; margin-top: 4px; }
+        .status-box { margin-top: 20px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+        .status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+        .badge-running { background: #e0e7ff; color: #4338ca; }
+        .badge-passed { background: #d1fae5; color: #047857; }
+        .badge-anomaly { background: #fef3c7; color: #b45309; }
+        .badge-error { background: #fee2e2; color: #b91c1c; }
+        .badge-waiting { background: #fce7f3; color: #be185d; }
+        .badge-cancelled { background: #e5e7eb; color: #4b5563; }
+        .progress { font-size: 14px; color: #374151; font-variant-numeric: tabular-nums; }
+        .message { margin-top: 12px; font-size: 13px; color: #6b7280; line-height: 1.5; word-break: keep-all; }
+        .spinner {
+            width: 16px; height: 16px; border: 2px solid #c7d2fe; border-top-color: #4f46e5;
+            border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; vertical-align: -3px; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .otp-form { margin-top: 16px; display: none; }
+        .otp-form.is-visible { display: block; }
+        .otp-form label { font-size: 13px; font-weight: 600; color: #374151; display: block; margin-bottom: 6px; }
+        .otp-row { display: flex; gap: 8px; }
+        .otp-row input {
+            flex: 1; min-width: 0; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px;
+            font-size: 18px; letter-spacing: .2em; text-align: center;
+        }
+        button {
+            border: 0; border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 700;
+            background: #4f46e5; color: #fff; cursor: pointer;
+        }
+        button:disabled { opacity: .5; cursor: default; }
+        .rerun { margin-top: 16px; width: 100%; display: none; }
+        .rerun.is-visible { display: block; }
+        .footnote { margin-top: 16px; font-size: 11px; color: #9ca3af; text-align: center; word-break: keep-all; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <p class="eyebrow">E2E 모바일 즉시 점검</p>
+        <h1>{{ schedule.name or schedule.system_name }}</h1>
+        <p class="meta">{{ schedule.system_name }}{% if schedule.schedule_kind == 'suite' %} · 전체 순차 점검{% endif %}</p>
+
+        <section class="status-box" aria-live="polite">
+            <div class="status-row">
+                <span class="badge badge-running" data-role="status-badge"><span class="spinner"></span>실행 요청 중</span>
+                <span class="progress" data-role="progress"></span>
+            </div>
+            <p class="message" data-role="message">점검 실행을 요청하고 있습니다. 잠시만 기다려 주세요.</p>
+        </section>
+
+        <form class="otp-form" data-role="otp-form" autocomplete="one-time-code">
+            <label for="otp-input">휴대폰으로 받은 인증번호를 입력하세요</label>
+            <div class="otp-row">
+                <input id="otp-input" data-role="otp-input" type="text" inputmode="numeric" pattern="\d{4,8}" maxlength="8" placeholder="000000" required>
+                <button type="submit" data-role="otp-submit">제출</button>
+            </div>
+        </form>
+
+        <button type="button" class="rerun" data-role="rerun">다시 점검 실행</button>
+        <p class="footnote">이 URL은 예약에 저장된 시스템·인증 정보로 점검을 실행합니다. URL이 유출되면 대시보드에서 해당 예약을 삭제하세요.</p>
+    </main>
+
+    <script>
+        const TRIGGER_TOKEN = {{ trigger_token | tojson }};
+        const POLL_MS = 3000;
+        const ACTIVE_STATUSES = new Set(["PENDING", "RUNNING", "WAITING_INPUT"]);
+        const STATUS_VIEW = {
+            PENDING: { label: "진행 중", cls: "badge-running", spin: true },
+            RUNNING: { label: "진행 중", cls: "badge-running", spin: true },
+            WAITING_INPUT: { label: "인증번호 대기", cls: "badge-waiting", spin: false },
+            PASSED: { label: "정상", cls: "badge-passed", spin: false },
+            ANOMALY: { label: "이상징후", cls: "badge-anomaly", spin: false },
+            FAILED: { label: "이상징후", cls: "badge-anomaly", spin: false },
+            ERROR: { label: "점검실패", cls: "badge-error", spin: false },
+            CANCELLED: { label: "취소됨", cls: "badge-cancelled", spin: false },
+        };
+
+        const badge = document.querySelector('[data-role="status-badge"]');
+        const progressNode = document.querySelector('[data-role="progress"]');
+        const messageNode = document.querySelector('[data-role="message"]');
+        const otpForm = document.querySelector('[data-role="otp-form"]');
+        const otpInput = document.querySelector('[data-role="otp-input"]');
+        const otpSubmit = document.querySelector('[data-role="otp-submit"]');
+        const rerunButton = document.querySelector('[data-role="rerun"]');
+        let pollTimer = null;
+
+        function render(payload, note) {
+            const view = STATUS_VIEW[payload.status] ?? { label: payload.status ?? "-", cls: "badge-cancelled", spin: false };
+            badge.className = `badge ${view.cls}`;
+            badge.innerHTML = view.spin ? '<span class="spinner"></span>' : "";
+            badge.append(view.label);
+            progressNode.textContent = payload.progress ? `통과 ${payload.progress}` : "";
+
+            if (payload.waiting_input) {
+                messageNode.textContent = payload.awaiting_prompt || "본인인증 문자(OTP)가 도착하면 아래에 인증번호를 입력하세요.";
+            } else if (note) {
+                messageNode.textContent = note;
+            } else if (ACTIVE_STATUSES.has(payload.status)) {
+                messageNode.textContent = "점검이 진행 중입니다. 이 화면을 열어두면 상태가 자동 갱신됩니다.";
+            } else if (payload.status) {
+                messageNode.textContent = `점검이 종료되었습니다. (${payload.last_run_at ? new Date(payload.last_run_at).toLocaleString("ko-KR") : ""})`;
+            } else {
+                messageNode.textContent = "아직 이 예약으로 실행된 점검이 없습니다.";
+            }
+
+            otpForm.classList.toggle("is-visible", Boolean(payload.waiting_input));
+            rerunButton.classList.toggle("is-visible", Boolean(payload.status) && !ACTIVE_STATUSES.has(payload.status));
+
+            if (ACTIVE_STATUSES.has(payload.status)) {
+                schedulePoll();
+            }
+        }
+
+        function renderError(message) {
+            badge.className = "badge badge-error";
+            badge.textContent = "요청 실패";
+            messageNode.textContent = message;
+            rerunButton.classList.add("is-visible");
+        }
+
+        function schedulePoll() {
+            clearTimeout(pollTimer);
+            pollTimer = setTimeout(poll, POLL_MS);
+        }
+
+        async function readErrorDetail(response) {
+            try {
+                const body = await response.json();
+                return body.detail || `요청이 실패했습니다. (HTTP ${response.status})`;
+            } catch {
+                return `요청이 실패했습니다. (HTTP ${response.status})`;
+            }
+        }
+
+        async function poll() {
+            try {
+                const response = await fetch(`/api/trigger/${encodeURIComponent(TRIGGER_TOKEN)}/status`);
+                if (!response.ok) {
+                    throw new Error(await readErrorDetail(response));
+                }
+                render(await response.json());
+            } catch (error) {
+                messageNode.textContent = `상태 조회에 실패했습니다: ${error.message}`;
+                schedulePoll();
+            }
+        }
+
+        async function fire() {
+            rerunButton.disabled = true;
+            badge.className = "badge badge-running";
+            badge.innerHTML = '<span class="spinner"></span>실행 요청 중';
+            messageNode.textContent = "점검 실행을 요청하고 있습니다. 잠시만 기다려 주세요.";
+            try {
+                const response = await fetch(`/api/trigger/${encodeURIComponent(TRIGGER_TOKEN)}`, { method: "POST" });
+                if (!response.ok) {
+                    throw new Error(await readErrorDetail(response));
+                }
+                const payload = await response.json();
+                render(payload, payload.already_running ? "이미 진행 중인 점검이 있어 해당 점검에 연결했습니다." : "점검을 시작했습니다.");
+            } catch (error) {
+                renderError(`점검 실행 요청에 실패했습니다: ${error.message}`);
+            } finally {
+                rerunButton.disabled = false;
+            }
+        }
+
+        otpForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const code = otpInput.value.trim();
+            if (!code) {
+                return;
+            }
+            otpSubmit.disabled = true;
+            try {
+                const response = await fetch(`/api/trigger/${encodeURIComponent(TRIGGER_TOKEN)}/otp`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ otp_code: code }),
+                });
+                if (!response.ok) {
+                    throw new Error(await readErrorDetail(response));
+                }
+                otpInput.value = "";
+                render(await response.json(), "인증번호를 제출했습니다. 점검을 계속 진행합니다.");
+            } catch (error) {
+                messageNode.textContent = `인증번호 제출에 실패했습니다: ${error.message}`;
+            } finally {
+                otpSubmit.disabled = false;
+            }
+        });
+
+        rerunButton.addEventListener("click", fire);
+
+        // 접속 즉시 실행: GET(이 페이지)은 부수효과가 없고, 실제 실행은 여기서의 POST 가 담당한다.
+        fire();
+    </script>
+</body>
+</html>

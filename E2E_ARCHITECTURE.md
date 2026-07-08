@@ -336,7 +336,11 @@ e2eTester/
 - `POST /api/schedules/suites` (전체 점검 cron 예약 등록, `selected_system_codes` 포함)
 - `POST /api/schedules/{schedule_id}/toggle` (활성/비활성 전환)
 - `POST /api/schedules/{schedule_id}/run-now` (즉시 1회 실행)
-- `DELETE /api/schedules/{schedule_id}` (예약 삭제)
+- `DELETE /api/schedules/{schedule_id}` (예약 삭제 — 모바일 트리거 URL 도 함께 폐기)
+- `GET /m/{trigger_token}` (모바일 즉시 점검 HTML — 예약별 비밀 토큰 인증, JWT 불필요. **부수효과 없음**: 실제 실행은 페이지 스크립트가 아래 POST 를 호출한다 — 메신저 링크 미리보기·브라우저 프리페치가 실 사이트 점검을 오발사하지 않게 하는 설계)
+- `POST /api/trigger/{trigger_token}` (예약 "지금 실행"과 동일한 즉시 실행 — 직전 실행이 아직 진행 중이면 새로 만들지 않고 `already_running: true` 로 그 실행에 합류)
+- `GET /api/trigger/{trigger_token}/status` (최근 실행 상태 요약 폴링 — 상태·통과 개수·OTP 대기 여부만, 입력값/전체 blob 미노출)
+- `POST /api/trigger/{trigger_token}/otp` (대기 중 실행에 OTP 제출·재개)
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/runs` (전체 Run 목록, admin 전용; `system_code`·`user_name` 필터, `limit` 지원)
@@ -636,6 +640,7 @@ manifest 에 들어 있는 정보:
 - `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
 - `app/storage/sqlite_schedule_repository.py` (`SqliteScheduleRepository`, 기본 사용) / `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 예약 저장소. SQLite 어댑터는 `ScheduleRepositoryPort` 를 구현해 재시작 후에도 예약이 남는다.
 - `app/api/routes_schedules.py` — 예약 REST API.
+- `app/api/routes_trigger.py` + `app/web/templates/mobile_trigger.html` — **모바일 즉시 점검 트리거**. 예약별 비밀 `trigger_token`(생성 시 발급, 레거시 예약은 목록 조회 시 지연 발급)으로 JWT 없이 접근하는 `/m/{trigger_token}` 페이지와 `POST /api/trigger/{trigger_token}` 실행 API. 홈 화면 예약 카드의 "모바일 URL" 버튼으로 URL 을 복사한다.
 - `app/scheduling/run_retention.py` (`RunRetentionService` + `RunRetentionScheduler`) — **일일 Run 보존 정리 배치**(별개의 백그라운드 루프). `app/main.py` lifespan 에서 `from_env` 로 만들어 task 로 띄운다.
 
 역할:
@@ -645,6 +650,7 @@ manifest 에 들어 있는 정보:
 - 예약은 `schedule_kind` 가 `system`(개별 Run) 또는 `suite`(전체 점검) 이다.
 - 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
 - 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
+- **모바일 즉시 점검(트리거 URL)**: 예약마다 발급되는 비밀 `trigger_token` 으로 `/m/{trigger_token}` 에 접속하면, 대시보드 로그인 없이 그 예약의 "지금 실행"과 동일한 점검이 실행된다. GET 페이지 자체는 부수효과가 없고(링크 미리보기·프리페치 오발사 방지) 페이지 스크립트가 `POST /api/trigger/{trigger_token}` 을 호출한다. 직전 실행이 진행 중이면 이중 발사 대신 그 실행에 합류하고(`SchedulerService.trigger_now` 의 멱등 가드), OTP 대기 시 같은 페이지에서 인증번호를 제출해 재개할 수 있다. 토큰 대조는 상수 시간 비교(`hmac.compare_digest`)이고 불일치는 일괄 404 이며, 예약 삭제가 곧 URL 폐기다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
 - **일일 보존 정리**: `RunRetentionScheduler` 가 매일 cron 시각(기본 `0 3 * * *`, 기준 타임존 `E2E_SCHEDULE_TZ`)에 당일 00:00 이전 `requested_at` 의 **점검실패(`ERROR`)·취소(`CANCELLED`)** Run 을 DB·로그·아티팩트째 삭제한다(`정상`·`이상징후`는 유지 — `RUN_DAILY_PURGE_STATUSES`). 기본 활성(`E2E_RUN_RETENTION_ENABLED=true`)이며 `E2E_RUN_RETENTION_ENABLED=false` 로 끄거나 `E2E_RUN_RETENTION_CRON` 으로 주기를 바꾼다. 60초마다 cron 일치 여부를 확인하고 하루 한 번만 정리한다.
 - **이력 비교**: Run 이 종료 결과(`PASSED`/`ANOMALY`/`ERROR`, 레거시 `FAILED` 포함)로 끝나면 `RunComparator`(`app/orchestrator/run_comparator.py`, `RunService` 에 주입)가 같은 시스템의 직전 종료 Run 을 기준선으로 `newly_failed`(새로 실패)/`recovered`(복구)/`still_failing`(계속 실패) 모듈을 계산해 `Run.comparison` 에 담는다. (종료 메일이 참조하므로 이벤트 구독자가 아니라 finalize 시점에 결정적으로 계산한다.) Run 화면의 "직전 실행 대비 변화" 패널과 종료 메일(고정 템플릿의 "직전 실행 대비 변화" 섹션 · Gemini 콘텐츠 프롬프트 · 평문)에 반영된다.

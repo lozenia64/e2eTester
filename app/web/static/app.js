@@ -1286,6 +1286,11 @@ function createScheduleListItem(schedule) {
     const right = document.createElement("div");
     right.className = "flex shrink-0 items-center gap-2";
     right.appendChild(createScheduleActionButton("지금 실행", "run-now", schedule.schedule_id, "border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50"));
+    if (schedule.trigger_token) {
+        const copyButton = createScheduleActionButton("모바일 URL", "copy-mobile-url", schedule.schedule_id, "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50");
+        copyButton.dataset.triggerToken = schedule.trigger_token;
+        right.appendChild(copyButton);
+    }
     right.appendChild(createScheduleActionButton(schedule.enabled ? "비활성화" : "활성화", "toggle", schedule.schedule_id, "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"));
     right.appendChild(createScheduleActionButton("삭제", "delete", schedule.schedule_id, "border-red-300 bg-white text-red-600 hover:bg-red-50"));
 
@@ -1327,6 +1332,16 @@ async function handleScheduleAction(event) {
     const action = button.dataset.scheduleAction;
     const scheduleId = button.dataset.scheduleId;
     if (action === "delete" && !window.confirm("이 예약을 삭제하시겠습니까?")) {
+        return;
+    }
+    if (action === "copy-mobile-url") {
+        const mobileUrl = `${window.location.origin}/m/${button.dataset.triggerToken}`;
+        try {
+            await navigator.clipboard.writeText(mobileUrl);
+            showToast("모바일 즉시 점검 URL을 복사했습니다. 접속만 하면 이 예약의 점검이 실행됩니다.");
+        } catch (error) {
+            window.prompt("아래 모바일 즉시 점검 URL을 직접 복사하세요.", mobileUrl);
+        }
         return;
     }
 
