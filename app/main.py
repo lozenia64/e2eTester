@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
@@ -248,6 +249,16 @@ async def request_log_context_middleware(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
 app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
+
+_FAVICON_ICO = Path("app/web/static/favicon.ico")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico() -> FileResponse:
+    """브라우저가 루트로 자동 요청하는 /favicon.ico 를 인증 없이 제공한다."""
+    return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
+
+
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(dashboard_router)
