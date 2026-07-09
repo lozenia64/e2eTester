@@ -11,8 +11,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.api.routes_admin import router as admin_router
+from app.api.routes_anomalies import router as anomalies_router
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_insights import router as insights_router
 from app.api.routes_otp import router as otp_router
 from app.api.routes_presets import router as presets_router
 from app.api.routes_runs import router as runs_router
@@ -34,6 +36,7 @@ from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.orchestrator.insights_service import InsightsService
 from app.orchestrator.ops_service import OpsService
 from app.orchestrator.preset_service import PresetService
 from app.orchestrator.run_service import RunService
@@ -44,6 +47,7 @@ from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
 from app.scheduling.scheduler import SchedulerService
 from app.storage.run_input_store import InMemoryRunInputStore
+from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
@@ -183,6 +187,19 @@ async def lifespan(app: FastAPI):
         schedule_repo=schedule_repository,
     )
 
+    # 운영 인텔리전스: 이상징후 인박스(처리상태 SQLite 영속) + 시스템 인사이트(헬스/타임라인/딥다이브).
+    # 집계는 순수 빌더가, I/O 는 서비스가 담당한다(StatsService 와 같은 얇은 인터프리터 패턴).
+    anomaly_handling_store = SqliteAnomalyHandlingStore(db_path)
+    app.state.anomaly_store = anomaly_handling_store
+    app.state.insights_service = InsightsService(
+        run_repo=repository,
+        registry=registry,
+        anomaly_store=anomaly_handling_store,
+        user_service=user_service,
+        suite_repo=suite_repository,
+        schedule_repo=schedule_repository,
+    )
+
     # 재기동 시 이어받을 수 없는(브라우저 세션이 사라진) 진행 중 Run/Suite 를 CANCELLED 로 봉인.
     interrupted_runs = await run_service.reconcile_interrupted_runs()
     interrupted_suites = await suite_service.reconcile_interrupted_suites()
@@ -275,6 +292,8 @@ app.include_router(admin_router)
 app.include_router(dashboard_router)
 app.include_router(daily_router)
 app.include_router(systems_router)
+app.include_router(insights_router)
+app.include_router(anomalies_router)
 app.include_router(runs_router)
 app.include_router(presets_router)
 app.include_router(otp_router)

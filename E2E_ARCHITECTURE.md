@@ -323,7 +323,16 @@ e2eTester/
 - `GET /runs/history` (당일 이전 Run 이력 HTML, 비관리자; admin 은 `/admin` 으로 리다이렉트)
 - `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
+- `GET /anomalies` (이상징후 인박스 HTML — 팀 전체 이상건 작업목록; admin 포함 모든 로그인 사용자, 리다이렉트 없음)
+- `GET /insights` (시스템 인사이트 HTML — 헬스/타임라인/모듈 딥다이브 3탭; admin 포함)
+- `GET /systems/{system_code}/insights` (특정 시스템 프리셀렉트 인사이트 HTML)
 - `GET /api/systems`
+- `GET /api/systems/{system_code}/health` (시스템 헬스 대시보드 데이터 — 통과율 스코어·일별 추이·모듈 안정성 랭킹·캘린더 히트맵; `days` 쿼리)
+- `GET /api/systems/{system_code}/timeline` (시스템 수직 타임라인 — Run 카드·회귀 시작점·recovered/newly_failed 변화 칩; `limit` 쿼리)
+- `GET /api/systems/{system_code}/modules/breakdown` (모듈 딥다이브 — depends_on 파이프라인 노드·소요/실패유형 분포·스크린샷 스트립·단계별 누적 소요)
+- `GET /api/anomalies` (이상징후 인박스 — ANOMALY/ERROR 모듈 + 처리상태·담당자·메모; 비관리자는 `allowed_system_codes` 스코프)
+- `GET /api/anomalies/assignees` (담당자 배정 드롭다운용 사용자 목록)
+- `PATCH /api/anomalies/{module_run_id}` (이상건 처리상태/담당자/메모 갱신 — `module_run_id` = `{run_id}::{module_id}`)
 - `GET /api/dashboard/daily` (로그인 사용자의 접근 가능 시스템별 **일간 점검 현황** — 시스템·모듈 단위 오늘(KST) 점검 상태 집계, PII 미포함)
 - `GET /api/runs` (Run 요약 목록; `scope=today|before_today`, `limit` 쿼리 지원 — 생략 시 기존과 동일 전체 목록, 기본 limit 50)
 - `POST /api/runs/systems/{system_code}`

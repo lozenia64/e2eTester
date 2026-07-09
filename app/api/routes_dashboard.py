@@ -164,6 +164,77 @@ async def runs_history(
     )
 
 
+def _accessible_systems(current_user: User, run_service: RunService) -> list[dict]:
+    """시스템 선택기용 — 접근 가능한 시스템(관리자는 전체)을 display_order 순으로."""
+    systems = run_service.list_systems()
+    if current_user.role != "admin":
+        allowed = set(current_user.allowed_system_codes)
+        systems = [s for s in systems if s.system_code in allowed]
+    systems = sorted(systems, key=lambda s: (s.display_order, s.name))
+    return [{"system_code": s.system_code, "name": s.name} for s in systems]
+
+
+@router.get("/anomalies", response_class=HTMLResponse)
+async def anomalies_inbox(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """이상징후 인박스(팀 전체 작업목록). 관리자도 접근 가능(리다이렉트 없음)."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "anomalies.html",
+        {"current_user": current_user},
+    )
+
+
+@router.get("/insights", response_class=HTMLResponse)
+async def insights_index(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    run_service: RunService = Depends(get_run_service),
+):
+    """시스템 인사이트(헬스/타임라인/모듈 딥다이브 3탭). 관리자도 접근 가능."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    systems = _accessible_systems(current_user, run_service)
+    return templates.TemplateResponse(
+        request,
+        "insights.html",
+        {
+            "current_user": current_user,
+            "systems": systems,
+            "selected_code": systems[0]["system_code"] if systems else None,
+        },
+    )
+
+
+@router.get("/systems/{system_code}/insights", response_class=HTMLResponse)
+async def system_insights(
+    request: Request,
+    system_code: str,
+    current_user: User = Depends(get_current_user),
+    run_service: RunService = Depends(get_run_service),
+):
+    """특정 시스템으로 프리셀렉트된 인사이트 화면."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    systems = _accessible_systems(current_user, run_service)
+    codes = {s["system_code"] for s in systems}
+    if system_code not in codes:
+        raise HTTPException(status_code=404, detail="시스템을 찾을 수 없습니다.")
+    return templates.TemplateResponse(
+        request,
+        "insights.html",
+        {
+            "current_user": current_user,
+            "systems": systems,
+            "selected_code": system_code,
+        },
+    )
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def run_dashboard(
     request: Request,

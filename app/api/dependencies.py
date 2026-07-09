@@ -19,6 +19,7 @@ from starlette.requests import HTTPConnection
 if TYPE_CHECKING:
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
+    from app.orchestrator.insights_service import InsightsService
     from app.orchestrator.ops_service import OpsService
     from app.orchestrator.preset_service import PresetService
     from app.orchestrator.run_service import RunService
@@ -39,6 +40,10 @@ def get_suite_service(connection: HTTPConnection) -> SuiteService:
 
 def get_stats_service(connection: HTTPConnection) -> StatsService:
     return connection.app.state.stats_service
+
+
+def get_insights_service(connection: HTTPConnection) -> InsightsService:
+    return connection.app.state.insights_service
 
 
 def get_preset_service(connection: HTTPConnection) -> PresetService:
