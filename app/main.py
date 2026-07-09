@@ -14,6 +14,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_otp import router as otp_router
+from app.api.routes_presets import router as presets_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_schedules import router as schedules_router
 from app.api.routes_suites import router as suites_router
@@ -34,6 +35,7 @@ from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.ops_service import OpsService
+from app.orchestrator.preset_service import PresetService
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
@@ -43,6 +45,7 @@ from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionServ
 from app.scheduling.scheduler import SchedulerService
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
+from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_repository import SqliteRunRepository
@@ -133,6 +136,14 @@ async def lifespan(app: FastAPI):
     )
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
     app.state.module_settings_repo = module_settings_repository
+
+    # 인증 프리셋: 사용자별 인증 수단·정보 저장 세트. 인증 정보(PII 가능)를 의도적으로 영속하며
+    # 저장 시 RunService 로 검증한다(실행 가능한 조합만 저장).
+    preset_repository = SqlitePresetRepository(db_path)
+    app.state.preset_service = PresetService(
+        repository=preset_repository,
+        run_service=run_service,
+    )
 
     suite_repository = SqliteSuiteRepository(db_path)
     schedule_repository = SqliteScheduleRepository(db_path)
@@ -265,6 +276,7 @@ app.include_router(dashboard_router)
 app.include_router(daily_router)
 app.include_router(systems_router)
 app.include_router(runs_router)
+app.include_router(presets_router)
 app.include_router(otp_router)
 app.include_router(schedules_router)
 app.include_router(trigger_router)
