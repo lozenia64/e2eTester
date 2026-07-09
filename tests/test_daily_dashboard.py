@@ -34,7 +34,9 @@ def _sysdef(code: str, module_ids: list[str], *, order: int = 100) -> SystemDefi
     )
 
 
-def _run(code: str, statuses: dict[str, ModuleStatus], *, at: datetime, status=RunStatus.PASSED) -> Run:
+def _run(
+    code: str, statuses: dict[str, ModuleStatus], *, at: datetime, status=RunStatus.PASSED
+) -> Run:
     return Run(
         run_id=f"run_{code}_{at.timestamp()}",
         system_code=code,
@@ -59,16 +61,22 @@ def test_no_runs_marks_all_modules_not_inspected():
     assert sys["pass_rate"] == 0
     assert sys["counts"]["not_inspected"] == 2
     assert sys["latest_run_id"] is None
-    assert all(m["tone"] == "not_inspected" and m["status_label"] == "미점검" for m in sys["modules"])
+    assert all(
+        m["tone"] == "not_inspected" and m["status_label"] == "미점검" for m in sys["modules"]
+    )
     assert data["totals"]["not_inspected"] == 2
     assert data["totals"]["systems_all_passed"] == 0
 
 
 def test_latest_meaningful_status_wins_and_skips_non_results():
     systems = [_sysdef("hom", ["a", "b"])]
-    early = _run("hom", {"a": ModuleStatus.PASSED, "b": ModuleStatus.PASSED}, at=GEN_AT - timedelta(hours=2))
+    early = _run(
+        "hom", {"a": ModuleStatus.PASSED, "b": ModuleStatus.PASSED}, at=GEN_AT - timedelta(hours=2)
+    )
     # 최신 Run 에서 b 는 SKIPPED(결과 아님) → 이전 Run 의 PASSED 로 채워져야 한다.
-    late = _run("hom", {"a": ModuleStatus.ERROR, "b": ModuleStatus.SKIPPED}, at=GEN_AT - timedelta(hours=1))
+    late = _run(
+        "hom", {"a": ModuleStatus.ERROR, "b": ModuleStatus.SKIPPED}, at=GEN_AT - timedelta(hours=1)
+    )
     data = build_daily_dashboard(systems, [early, late], generated_at=GEN_AT, date_label="d")
 
     sys = data["systems"][0]

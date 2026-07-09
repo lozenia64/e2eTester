@@ -27,9 +27,7 @@ if TYPE_CHECKING:
 
 # 모듈의 '오늘 점검 결과'로 채택하지 않는 상태(아직 도달 못 했거나 대상에서 제외).
 # 이 상태는 더 오래된 Run 쪽으로 계속 탐색한다.
-_NON_RESULT_STATUSES = frozenset(
-    {ModuleStatus.PENDING, ModuleStatus.QUEUED, ModuleStatus.SKIPPED}
-)
+_NON_RESULT_STATUSES = frozenset({ModuleStatus.PENDING, ModuleStatus.QUEUED, ModuleStatus.SKIPPED})
 
 
 def _module_bucket(status: ModuleStatus | None) -> str:
@@ -111,9 +109,7 @@ def _system_view(system: SystemDefinition, system_runs: list[Run]) -> dict[str, 
         "pass_rate": pass_rate,
         "counts": counts,
         "latest_run_id": latest_run.run_id if latest_run else None,
-        "latest_run_at": (
-            latest_run.requested_at.isoformat() if latest_run else None
-        ),
+        "latest_run_at": (latest_run.requested_at.isoformat() if latest_run else None),
         "latest_run_status": str(latest_run.status) if latest_run else None,
         "latest_run_status_label": (
             run_status_label(latest_run.status) if latest_run else "미점검"
@@ -166,8 +162,7 @@ def build_daily_dashboard(
     totals["systems_all_passed"] = sum(
         1
         for v in system_views
-        if v["module_total"] > 0
-        and v["counts"]["passed"] == v["module_total"]
+        if v["module_total"] > 0 and v["counts"]["passed"] == v["module_total"]
     )
 
     return {
