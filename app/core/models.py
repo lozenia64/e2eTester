@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.enums import AnomalyState, ModuleStatus, RunStatus, SuiteStatus
 
 
 class ModuleDefinition(BaseModel):
@@ -119,6 +119,25 @@ class RunComparison(BaseModel):
     newly_failed: list[str] = Field(default_factory=list)
     recovered: list[str] = Field(default_factory=list)
     still_failing: list[str] = Field(default_factory=list)
+
+
+class AnomalyHandling(BaseModel):
+    """한 이상건(ANOMALY/ERROR 모듈)의 **처리 레코드**(이상징후 인박스 전용 영속 상태).
+
+    Run 은 시간순 실행 기록이라 "누가 봤고 조치했는지"를 담지 못하므로, 모듈-Run 단위로
+    처리상태·담당자·메모를 별도 스토어(``AnomalyHandlingStorePort``)에 둔다. 스토어에 행이 없는
+    이상건은 기본 ``UNRESOLVED`` 로 간주하므로, 정상적으로 처리 안 된 이상건까지 미리 행을
+    만들지 않는다(사용자가 처음 상태를 바꿀 때 upsert).
+    """
+
+    # f"{run_id}::{module_id}" — 이상건(모듈 실행 1건)의 안정적 식별자.
+    module_run_id: str
+    state: AnomalyState = AnomalyState.UNRESOLVED
+    assignee_user_id: str | None = None
+    assignee_name: str | None = None
+    memo: str = ""
+    updated_at: datetime | None = None
+    updated_by_user_id: str | None = None
 
 
 class PendingExecution(BaseModel):

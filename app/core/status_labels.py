@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.enums import AnomalyState, ModuleStatus, RunStatus, SuiteStatus
 
 # 레거시 FAILED 는 과거 Run/모듈 JSON 호환용. 집계·표시 시 ANOMALY 로 취급한다.
 MODULE_ANOMALY_STATUSES = frozenset({ModuleStatus.ANOMALY, ModuleStatus.FAILED})
@@ -58,8 +58,19 @@ SUITE_STATUS_LABELS: dict[SuiteStatus, str] = {
 }
 
 
+ANOMALY_STATE_LABELS: dict[AnomalyState, str] = {
+    AnomalyState.UNRESOLVED: "미확인",
+    AnomalyState.ACKNOWLEDGED: "확인함",
+    AnomalyState.RESOLVED: "처리완료",
+}
+
+
 def run_status_label(status: RunStatus) -> str:
     return RUN_STATUS_LABELS.get(status, str(status))
+
+
+def anomaly_state_label(state: AnomalyState) -> str:
+    return ANOMALY_STATE_LABELS.get(state, str(state))
 
 
 def module_status_label(status: ModuleStatus) -> str:

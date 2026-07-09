@@ -13,6 +13,7 @@ import asyncio
 from typing import Protocol
 
 from app.core.models import (
+    AnomalyHandling,
     AuthPreset,
     DashboardEvent,
     PendingExecution,
@@ -149,6 +150,19 @@ class ScheduleRepositoryPort(Protocol):
     async def get(self, schedule_id: str) -> Schedule: ...
     async def list(self) -> list[Schedule]: ...
     async def delete(self, schedule_id: str) -> None: ...
+
+
+class AnomalyHandlingStorePort(Protocol):
+    """이상징후 인박스 **처리 레코드**(``AnomalyHandling``)의 저장 경계.
+
+    ANOMALY/ERROR 로 끝난 모듈(이상건)마다 처리상태·담당자·메모를 모듈-Run 단위로 보관한다.
+    이상건 자체는 Run 스캔으로 매번 새로 도출하고, 이 스토어는 그 위에 얹히는 '조치' 메타데이터만
+    소유한다(행이 없으면 기본 ``UNRESOLVED``). ``module_run_id`` = ``f"{run_id}::{module_id}"``.
+    """
+
+    async def get(self, module_run_id: str) -> AnomalyHandling | None: ...
+    async def list(self) -> list[AnomalyHandling]: ...
+    async def upsert(self, handling: AnomalyHandling) -> AnomalyHandling: ...
 
 
 class PresetRepositoryPort(Protocol):
