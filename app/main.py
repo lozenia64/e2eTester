@@ -257,6 +257,8 @@ _FAVICON_ICO = Path("app/web/static/favicon.ico")
 async def favicon_ico() -> FileResponse:
     """브라우저가 루트로 자동 요청하는 /favicon.ico 를 인증 없이 제공한다."""
     return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
+
+
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(dashboard_router)
