@@ -738,7 +738,7 @@ async function startSystemRun(systemCode, button, form) {
     }
 
     button.disabled = true;
-    button.textContent = "실행 중...";
+    button.textContent = "시작 중...";
 
     try {
         const response = await fetch(`/api/runs/systems/${systemCode}`, {
@@ -761,7 +761,7 @@ async function startSystemRun(systemCode, button, form) {
         window.location.href = `/runs/${run.run_id}`;
     } catch (error) {
         button.disabled = false;
-        button.textContent = "실행";
+        button.textContent = "점검 시작";
         setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "Run 생성에 실패했습니다.");
         console.error(error);
     }
@@ -1888,7 +1888,7 @@ function updateSuiteSystemSelectorState(form) {
     const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
     const totalCount = checkboxes.length;
     if (summary) {
-        summary.textContent = `${selectedCount} / ${totalCount} 시스템 선택`;
+        summary.textContent = `${selectedCount} / ${totalCount} 선택 · ${totalCount - selectedCount}개 제외`;
     }
 
     const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
