@@ -21,13 +21,14 @@ from app.domain.run_state_machine import (
 )
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
+from app.orchestrator.daily_dashboard import build_daily_dashboard
 from app.orchestrator.run_comparator import RunComparator
 from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.scheduling.scheduler import schedule_today_start_utc
+from app.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 from app.storage.ports import (
     RunControlStorePort,
     RunInputStorePort,
@@ -40,6 +41,10 @@ if TYPE_CHECKING:
     from app.orchestrator.run_actor import ActorContext
 
 logger = get_logger(__name__)
+
+
+def _as_utc(moment: datetime) -> datetime:
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
 class RunService:
@@ -189,6 +194,35 @@ class RunService:
             if len(summaries) >= limit:
                 break
         return summaries
+
+    async def get_daily_dashboard(
+        self,
+        *,
+        allowed_system_codes: list[str] | None = None,
+    ) -> dict:
+        """사용자 대시보드용 **일간 점검 현황**을 집계한다(읽기 전용 뷰).
+
+        접근 가능한 시스템(``allowed_system_codes`` 미지정 시 전체)의 KST 오늘 Run 을 모아
+        시스템·모듈별 최신 점검 상태를 만든다. PII 입력값은 포함하지 않는다(파생 상태만).
+        """
+        systems = self._registry.list_systems()
+        if allowed_system_codes is not None:
+            allowed = set(allowed_system_codes)
+            systems = [s for s in systems if s.system_code in allowed]
+
+        today_start_utc = schedule_today_start_utc()
+        today_runs = [
+            run
+            for run in await self._repository.list_runs()
+            if _as_utc(run.requested_at) >= today_start_utc
+        ]
+
+        return build_daily_dashboard(
+            systems,
+            today_runs,
+            generated_at=datetime.now(UTC),
+            date_label=schedule_today_label(),
+        )
 
     async def delete_run(self, run_id: str) -> None:
         run = await self._repository.get_run(run_id)

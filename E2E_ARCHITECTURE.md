@@ -276,11 +276,14 @@ e2eTester/
 현재 구현:
 
 - `app/api/routes_dashboard.py`
+- `app/api/routes_daily.py` (일간 점검 현황 데이터 API)
 - `app/web/templates/base.html`
-- `app/web/templates/index.html`
+- `app/web/templates/dashboard.html` (일간 점검 현황 대시보드 — 로그인 후 첫 화면)
+- `app/web/templates/execute.html` (시스템 단위 점검 실행 — 기존 홈의 Run 트리거 UI)
 - `app/web/templates/run.html`
 - `app/web/templates/suite.html`
 - `app/web/static/app.js`
+- `app/web/static/dashboard.js` (일간 대시보드 렌더링 — 라디얼 링·세그먼트 바·카운트업 애니메이션)
 - `app/web/static/app.css`
 
 역할:
@@ -294,7 +297,8 @@ e2eTester/
 
 현재 UX 특징:
 
-- 홈 화면은 “시스템 실행”과 “전체 순차 점검”을 함께 제공한다. **시스템** 섹션(SUITE + 개별 시스템 카드)이 상태 메트릭 직후 상단에 배치되고, **진행 중 / 최근 Run** 패널은 시스템 목록 하단에 위치한다.
+- 로그인 후 첫 화면은 **일간 점검 현황 대시보드**(`GET /`, `dashboard.html`)다. 접근 가능한 전체 시스템·모듈의 오늘(KST) 점검 상태를 전체 통과율 히어로 링·KPI 타일·시스템별 그래프 카드(라디얼 링 + 세그먼트 바 + 모듈 상태 칩)로 보여 준다. 데이터는 `dashboard.js` 가 `GET /api/dashboard/daily` 로 불러와 라디얼 링 채우기·카운트업·스태거 진입 애니메이션으로 렌더링하며, 30초마다 자동 갱신(탭 비활성 시 일시정지)하고 `prefers-reduced-motion` 을 존중한다. 상태 색은 라벨과 항상 함께 노출한다.
+- **점검 실행** 화면(`GET /runs/execute`, `execute.html`)은 기존 홈의 Run 트리거 UI로, “시스템 실행”과 “전체 순차 점검”을 함께 제공한다. **시스템** 섹션(SUITE + 개별 시스템 카드)이 상태 메트릭 직후 상단에 배치되고, **진행 중 / 최근 Run** 패널은 시스템 목록 하단에 위치한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
 - 홈 **진행 중 / 최근 Run** 패널은 `GET /api/runs?scope=today` 요약을 주기적으로 불러와 렌더링한다 — 진행 중(PENDING/RUNNING/WAITING_INPUT) Run 은 날짜와 무관하게 포함하고, 그 외 Run 은 KST(`E2E_SCHEDULE_TZ`) 당일 `requested_at` 만 표시한다(최대 8건, 진행 중 우선). 당일·진행 중 Run 이 없으면 섹션을 숨긴다.
 - **Run 이력** 페이지(`GET /runs/history`)에서 당일 이전 Run 을 `GET /api/runs?scope=before_today` 로 조회한다(SQLite 영속 — 서버 재시작 후에도 이력이 남음).
@@ -307,7 +311,8 @@ e2eTester/
 
 현재 구현:
 
-- `GET /` (홈 대시보드 HTML)
+- `GET /` (로그인 후 첫 화면 — 일간 점검 현황 대시보드 HTML, 비관리자; admin 은 `/admin` 으로 리다이렉트. 데이터는 페이지 스크립트가 `GET /api/dashboard/daily` 로 로드)
+- `GET /runs/execute` (시스템 단위 점검 실행 HTML — Run 트리거 UI, 비관리자; admin 은 `/admin` 으로 리다이렉트)
 - `GET /login` (로그인 HTML)
 - `POST /auth/login` (폼 또는 JSON 로그인 → JWT 쿠키)
 - `POST /auth/logout`
@@ -318,6 +323,7 @@ e2eTester/
 - `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
 - `GET /api/systems`
+- `GET /api/dashboard/daily` (로그인 사용자의 접근 가능 시스템별 **일간 점검 현황** — 시스템·모듈 단위 오늘(KST) 점검 상태 집계, PII 미포함)
 - `GET /api/runs` (Run 요약 목록; `scope=today|before_today`, `limit` 쿼리 지원 — 생략 시 기존과 동일 전체 목록, 기본 limit 50)
 - `POST /api/runs/systems/{system_code}`
 - `GET /api/runs/{run_id}`
