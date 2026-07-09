@@ -1,6 +1,6 @@
 system_code: hrp
 name: 현장출동 홈페이지(PC)
-description: 현장출동(이글PRM) 메인 접속, 로그인, 잔존물 입찰 조회 점검
+description: 접속 · 로그인 · 잔존물 입찰 조회 점검
 display_order: 30
 supported_auth_methods:
   - phone

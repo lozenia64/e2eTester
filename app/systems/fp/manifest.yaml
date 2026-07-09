@@ -1,6 +1,6 @@
 system_code: fp
 name: 영업가족 위촉서류 등록(PC)
-description: 영업가족 위촉서류 등록 사이트 메인화면 접속 및 본인인증·서류작성 점검
+description: 접속 · 본인인증 · 서류작성 점검
 display_order: 40
 supported_auth_methods:
   - phone
@@ -72,7 +72,7 @@ modules:
     estimated_manual_seconds: 120
   - module_id: fp.identity.verification
     system_code: fp
-    name: FP 본인인증
+    name: 본인인증
     description: 영업가족 계약서 작성 본인확인(개인정보 동의·휴대폰 OTP) 후 계약서 체결하기까지 진행합니다.
     group: login
     order: 20
@@ -86,7 +86,7 @@ modules:
     estimated_manual_seconds: 180
   - module_id: fp.document.writing
     system_code: fp
-    name: FP 서류작성
+    name: 서류작성
     description: 계약서 작성 화면에서 정보보호서약서(순번 8) 전자서명·휴대폰 인증 후 작성완료 화면까지 진행합니다.
     group: workflow
     order: 30

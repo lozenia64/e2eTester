@@ -19,8 +19,8 @@
 `manifest.yaml` `order` 기준:
 
 1. `fp.main.access` — 메인화면 접속 (`workflow_step: main_access`, `timeout_seconds: 120`)
-2. `fp.identity.verification` — FP 본인인증 (`workflow_step: identity_verification`, `timeout_seconds: 300`)
-3. `fp.document.writing` — FP 서류작성 (`workflow_step: document_writing`, `timeout_seconds: 420`)
+2. `fp.identity.verification` — 본인인증 (`workflow_step: identity_verification`, `timeout_seconds: 300`)
+3. `fp.document.writing` — 서류작성 (`workflow_step: document_writing`, `timeout_seconds: 420`)
 
 의존성 그래프:
 
@@ -37,7 +37,7 @@
 3. 초기 안내 팝업이 있으면 `닫기` 형태 버튼으로 정리한다(`app/systems/access_common/browser.py` 의 `maybe_close_popup`).
 4. 메인화면 스크린샷(`final.png`)을 남기고 "메인화면 접속 성공"으로 종료한다.
 
-### 3.2 FP 본인인증 (`fp.identity.verification`)
+### 3.2 본인인증 (`fp.identity.verification`)
 
 메인화면 접속 직후 동일 브라우저 세션에서 진행한다.
 
@@ -76,7 +76,7 @@
 | 완료 | 계약서 체결하기 | `#submitBtn` |
 | 완료 | 계약서 작성 화면 | `/fp/loan/sales02.do` |
 
-### 3.3 FP 서류작성 (`fp.document.writing`)
+### 3.3 서류작성 (`fp.document.writing`)
 
 본인인증 직후 동일 브라우저 세션에서 `/fp/loan/sales02.do` 계약서 작성 화면으로 이어진다.
 

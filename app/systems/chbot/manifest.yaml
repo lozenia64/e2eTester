@@ -1,6 +1,6 @@
 system_code: chbot
 name: 챗봇(모바일)
-description: 챗봇(모바일) 메인화면 접속, 간편본인인증, 계약조회 점검
+description: 접속 · 간편본인인증 · 계약조회 점검
 display_order: 60
 supported_auth_methods:
   - phone

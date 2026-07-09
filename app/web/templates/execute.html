@@ -15,9 +15,9 @@
 
 <!-- 페이지 헤더 -->
 <div>
-    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">System Trigger</p>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">시스템 단위 E2E 실행</h1>
-    <p class="mt-1.5 text-sm text-gray-500">시스템 버튼을 누르면 Run이 생성되고, 각 기능 모듈 상태가 실시간 노드 대시보드로 전개됩니다.</p>
+    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Run Inspection</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">점검 실행</h1>
+    <p class="mt-1.5 text-sm text-gray-500">시스템 카드를 펼쳐 점검을 시작하면 Run이 생성되고, 모듈별 진행 상태가 실시간으로 갱신됩니다.</p>
 </div>
 
 <!-- 상태 카드 -->
@@ -69,7 +69,7 @@
 <div class="space-y-4">
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템</h2>
-        <p class="text-sm text-gray-500">카드를 클릭해 펼친 뒤 입력값을 채우고 실행하세요. 맨 위 카드에서 전체 시스템 순차 점검도 시작할 수 있습니다.</p>
+        <p class="text-sm text-gray-500">카드를 펼쳐 입력값을 채운 뒤 점검을 시작하세요. 맨 위 카드에서 전체 시스템 순차 점검도 시작할 수 있습니다.</p>
     </div>
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2" id="suite-section">
         <details class="system-card system-card--suite group col-span-full">
@@ -81,7 +81,7 @@
                     <div class="system-card__text">
                         <span class="system-card__code">SUITE</span>
                         <h3 class="system-card__title">전체 시스템 순차 점검</h3>
-                        <p class="system-card__desc">등록된 {{ systems|length }}개 시스템 · 전체 모듈 · HOM·MHM 인증 각각 설정</p>
+                        <p class="system-card__desc">등록된 {{ systems|length }}개 시스템 · 전체 모듈 · 시스템별 인증 정보 개별 설정</p>
                     </div>
                 </div>
                 <div class="system-card__meta">
@@ -106,9 +106,9 @@
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h4 class="text-sm font-bold text-gray-900">실행 시스템 선택</h4>
-                            <p class="mt-1 text-xs leading-relaxed text-gray-500">체크 해제한 시스템은 전체 점검에서 건너뜁니다(SKIPPED).</p>
+                            <p class="mt-1 text-xs leading-relaxed text-gray-500">체크 해제한 시스템은 전체 점검에서 제외됩니다(SKIPPED).</p>
                         </div>
-                        <p class="text-xs font-medium text-gray-600" data-role="suite-system-selection-summary">{{ systems|length }} / {{ systems|length }} 시스템 선택</p>
+                        <p class="text-xs font-medium text-gray-600" data-role="suite-system-selection-summary">{{ systems|length }} / {{ systems|length }} 선택 · 0개 제외</p>
                     </div>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button type="button" data-role="suite-system-select-all" class="inline-flex items-center rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50">전체 선택</button>
@@ -199,12 +199,12 @@
                         </span>
                         <div class="min-w-0 flex-1">
                             <h4 class="text-sm font-bold text-gray-900">예약 실행</h4>
-                            <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 전체 시스템 순차 점검을 자동 실행합니다. <span class="font-medium text-violet-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
+                            <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 맞춰 전체 점검을 자동으로 실행합니다. <span class="font-medium text-violet-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
                         </div>
                         <svg class="h-5 w-5 shrink-0 text-violet-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                     </summary>
                     <div class="border-t border-violet-100/70 px-5 pb-5 pt-4">
-                    <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 선택한 시스템·브라우저 모드·HOM/MHM 인증 정보로 전체 모듈을 순차 실행합니다. 무인 실행이라 OTP 대기에서 멈출 수 있습니다.</p>
+                    <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 선택한 시스템·브라우저 모드·시스템별 인증 정보로 전체 모듈을 순차 실행합니다. 무인 실행이라 OTP 대기에서 멈출 수 있습니다.</p>
 
                     <div class="sched-seg mt-4" role="group" aria-label="반복 주기">
                         <button type="button" class="sched-seg-btn is-active" data-role="schedule-mode" data-mode="daily">매일</button>
@@ -371,12 +371,12 @@
                         </span>
                         <div class="min-w-0 flex-1">
                             <h4 class="text-sm font-bold text-gray-900">예약 실행</h4>
-                            <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 맞춰 자동으로 Run 을 실행합니다. <span class="font-medium text-indigo-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
+                            <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 맞춰 점검을 자동으로 실행합니다. <span class="font-medium text-indigo-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
                         </div>
                         <svg class="h-5 w-5 shrink-0 text-indigo-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                     </summary>
                     <div class="border-t border-indigo-100/70 px-5 pb-5 pt-4">
-                    <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 입력한 값·모듈 선택 그대로 자동 실행됩니다. 무인 실행이라 인증 단계가 포함되면 OTP 대기에서 멈출 수 있습니다.</p>
+                    <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 입력한 값·모듈 선택 그대로 자동 실행됩니다. 무인 실행이라 OTP 대기에서 멈출 수 있습니다.</p>
 
                     <!-- 반복 주기 선택 (세그먼트) -->
                     <div class="sched-seg mt-4" role="group" aria-label="반복 주기">
@@ -457,7 +457,7 @@
                 </details>
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
                     <p class="is-hidden text-sm font-medium text-red-600" data-role="form-feedback" role="alert"></p>
-                    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60" data-system-code="{{ system.system_code }}">실행</button>
+                    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60" data-system-code="{{ system.system_code }}">점검 시작</button>
                 </div>
             </form>
         </details>
@@ -485,7 +485,7 @@
             <h2 class="text-lg font-bold tracking-tight text-gray-900">예약 실행</h2>
             <p class="text-sm text-gray-500">설정한 일정에 따라 Run 이 자동 생성됩니다. 시스템 카드를 펼쳐 예약을 추가하세요.</p>
         </div>
-        <p class="text-xs text-gray-400">메모리 기반 · 서버를 재시작하면 사라집니다</p>
+        <p class="text-xs text-gray-400">등록한 예약은 저장되어 서버를 재시작해도 유지됩니다</p>
     </div>
     <div id="schedules-list" class="space-y-3"></div>
 </section>

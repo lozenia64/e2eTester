@@ -1,6 +1,6 @@
 system_code: hom
 name: 대표홈페이지(PC)
-description: 주요업무 전체 일일점검
+description: 접속 · 로그인 · 계약 조회 · 보험금청구 · 증명서 발급 점검
 display_order: 10
 supported_auth_methods:
   - phone

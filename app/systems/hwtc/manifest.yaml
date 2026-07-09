@@ -1,6 +1,6 @@
 system_code: hwtc
 name: 연수원(PC)
-description: 연수원(SLS) 메인 접속, 휴대폰 인증, IT교육 동영상 재생 점검
+description: 접속 · 로그인 · 동영상 재생 점검
 display_order: 50
 supported_auth_methods:
   - phone
