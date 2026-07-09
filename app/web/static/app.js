@@ -649,6 +649,325 @@ function collectFormInput(form) {
     return inputData;
 }
 
+// ===== 인증 프리셋 (내 점검 세트) =====================================
+// 사용자별·시스템별 인증 수단/정보 저장 세트. 개별 점검에서는 폼을 원클릭으로 채우고,
+// 전체 점검에서는 시스템별로 프리셋을 골라 인증 정보를 공급한다.
+
+let presetsBySystem = {};
+// 전체 점검에서 시스템별로 고른 프리셋 id: systemCode -> preset_id
+const suitePresetSelection = new Map();
+
+const AUTH_METHOD_LABELS = {
+    phone: "휴대폰인증",
+    kakao: "카카오인증",
+    finance_certificate: "금융인증서",
+    public_certificate: "공동인증서",
+};
+
+function authMethodLabel(method) {
+    return AUTH_METHOD_LABELS[method] ?? (method || "인증");
+}
+
+function presetSummaryText(preset) {
+    const parts = [authMethodLabel(preset.auth_method)];
+    const data = preset.input_data ?? {};
+    if (data.name) {
+        parts.push(data.name);
+    }
+    if (data.phone_number) {
+        parts.push(data.phone_number);
+    }
+    return parts.join(" · ");
+}
+
+async function loadPresets() {
+    // 프리셋 UI 가 없는 화면(대시보드 등)에서는 조용히 종료.
+    if (!document.querySelector('[data-role="preset-panel"], [data-role="suite-preset-list"]')) {
+        return;
+    }
+    try {
+        const response = await fetch("/api/presets");
+        if (!response.ok) {
+            throw new Error(`프리셋 조회 실패 (${response.status})`);
+        }
+        const presets = await response.json();
+        presetsBySystem = {};
+        for (const preset of presets) {
+            (presetsBySystem[preset.system_code] ??= []).push(preset);
+        }
+    } catch (error) {
+        console.error(error);
+        presetsBySystem = {};
+    }
+    renderAllPresetUI();
+}
+
+function renderAllPresetUI() {
+    renderIndividualPresetPanels();
+    renderSuitePresetLists();
+    const suiteForm = document.getElementById("suite-form");
+    if (suiteForm) {
+        updateSuiteSystemSelectorState(suiteForm);
+    }
+}
+
+// ----- 개별 점검 카드의 프리셋 칩 --------------------------------------
+function renderIndividualPresetPanels() {
+    for (const panel of document.querySelectorAll('[data-role="preset-panel"]')) {
+        const systemCode = panel.dataset.systemCode;
+        const list = panel.querySelector('[data-role="preset-list"]');
+        const form = panel.closest("form");
+        if (!list || !form) {
+            continue;
+        }
+        list.dataset.loading = "false";
+        list.innerHTML = "";
+        const presets = presetsBySystem[systemCode] ?? [];
+        if (presets.length === 0) {
+            const empty = document.createElement("span");
+            empty.className = "preset-empty";
+            empty.textContent = "저장된 프리셋이 없습니다. 아래에 정보를 입력한 뒤 저장하면 다음부터 원클릭으로 불러옵니다.";
+            list.appendChild(empty);
+            continue;
+        }
+        for (const preset of presets) {
+            list.appendChild(buildPresetChip(preset, form));
+        }
+    }
+}
+
+function buildPresetChip(preset, form) {
+    const chip = document.createElement("div");
+    chip.className = "preset-chip";
+    chip.dataset.presetId = preset.preset_id;
+
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "preset-chip__apply";
+    apply.title = "이 프리셋으로 폼을 채웁니다";
+    apply.innerHTML = `<span class="preset-chip__name"></span><span class="preset-chip__meta"></span>`;
+    apply.querySelector(".preset-chip__name").textContent = preset.name;
+    apply.querySelector(".preset-chip__meta").textContent = presetSummaryText(preset);
+    apply.addEventListener("click", () => {
+        applyPresetToForm(form, preset);
+        chip.classList.add("preset-chip--just-applied");
+        window.setTimeout(() => chip.classList.remove("preset-chip--just-applied"), 900);
+        const feedback = form.querySelector('[data-role="preset-feedback"]');
+        setInlineFeedback(feedback, `‘${preset.name}’ 프리셋을 적용했습니다.`, "success");
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "preset-chip__delete";
+    remove.title = "프리셋 삭제";
+    remove.setAttribute("aria-label", `${preset.name} 프리셋 삭제`);
+    remove.innerHTML = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`;
+    remove.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        if (!window.confirm(`‘${preset.name}’ 프리셋을 삭제할까요?`)) {
+            return;
+        }
+        await deletePresetById(preset.preset_id, form);
+    });
+
+    chip.append(apply, remove);
+    return chip;
+}
+
+function applyPresetToForm(form, preset) {
+    const data = preset.input_data ?? {};
+    // auth_method 를 먼저 반영해야 조건부 필드(show_when)의 표시/숨김이 올바르게 계산된다.
+    const keys = Object.keys(data).sort((left, right) => {
+        if (left === "auth_method") return -1;
+        if (right === "auth_method") return 1;
+        return 0;
+    });
+    for (const key of keys) {
+        const field = form.querySelector(`[name="${key}"]`);
+        if (field) {
+            field.value = data[key];
+        }
+    }
+    syncConditionalFields(form);
+    applyModuleSelection(form, preset.selected_module_ids ?? null);
+}
+
+function applyModuleSelection(form, moduleIds) {
+    const nodes = getModuleGraphNodes(form);
+    if (nodes.length === 0) {
+        return;
+    }
+    if (moduleIds == null) {
+        for (const node of nodes) {
+            node.dataset.selected = "true";
+        }
+    } else {
+        const selected = new Set(moduleIds);
+        for (const node of nodes) {
+            node.dataset.selected = selected.has(node.dataset.moduleId) ? "true" : "false";
+        }
+    }
+    updateModuleSelectorState(form);
+}
+
+async function submitPresetSave(systemCode, form, nameInput, saveForm, feedback, confirmButton) {
+    const name = String(nameInput.value ?? "").trim();
+    if (!name) {
+        setInlineFeedback(feedback, "프리셋 이름을 입력하세요.");
+        nameInput.focus();
+        return;
+    }
+    const selectedModuleIds = getSelectedModuleIds(form);
+    confirmButton.disabled = true;
+    try {
+        const response = await fetch("/api/presets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                system_code: systemCode,
+                name,
+                input_data: collectFormInput(form),
+                selected_module_ids: selectedModuleIds,
+            }),
+        });
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `프리셋 저장에 실패했습니다. (${response.status})`);
+        }
+        const preset = await response.json();
+        (presetsBySystem[systemCode] ??= []).push(preset);
+        renderAllPresetUI();
+        saveForm.classList.add("is-hidden");
+        nameInput.value = "";
+        setInlineFeedback(feedback, `‘${preset.name}’ 프리셋을 저장했습니다.`, "success");
+    } catch (error) {
+        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "프리셋 저장에 실패했습니다.");
+        console.error(error);
+    } finally {
+        confirmButton.disabled = false;
+    }
+}
+
+async function deletePresetById(presetId, form) {
+    try {
+        const response = await fetch(`/api/presets/${presetId}`, { method: "DELETE" });
+        if (!response.ok) {
+            const errorBody = await readErrorMessage(response);
+            throw new Error(errorBody || `프리셋 삭제에 실패했습니다. (${response.status})`);
+        }
+        for (const code of Object.keys(presetsBySystem)) {
+            presetsBySystem[code] = presetsBySystem[code].filter((item) => item.preset_id !== presetId);
+        }
+        for (const [code, chosen] of suitePresetSelection.entries()) {
+            if (chosen === presetId) {
+                suitePresetSelection.delete(code);
+            }
+        }
+        renderAllPresetUI();
+        if (form) {
+            setInlineFeedback(form.querySelector('[data-role="preset-feedback"]'), "프리셋을 삭제했습니다.", "success");
+        }
+    } catch (error) {
+        showToast(error.message.replace(/^Error:\s*/, "") || "프리셋 삭제에 실패했습니다.");
+        console.error(error);
+    }
+}
+
+function bindPresetPanels() {
+    for (const panel of document.querySelectorAll('[data-role="preset-panel"]')) {
+        const systemCode = panel.dataset.systemCode;
+        const form = panel.closest("form");
+        const saveOpen = panel.querySelector('[data-role="preset-save-open"]');
+        const saveForm = panel.querySelector('[data-role="preset-save-form"]');
+        const nameInput = panel.querySelector('[data-role="preset-name-input"]');
+        const saveConfirm = panel.querySelector('[data-role="preset-save-confirm"]');
+        const saveCancel = panel.querySelector('[data-role="preset-save-cancel"]');
+        const feedback = panel.querySelector('[data-role="preset-feedback"]');
+        if (!form || !saveOpen || !saveForm || !nameInput || !saveConfirm || !saveCancel) {
+            continue;
+        }
+        saveOpen.addEventListener("click", () => {
+            saveForm.classList.toggle("is-hidden");
+            setInlineFeedback(feedback, "");
+            if (!saveForm.classList.contains("is-hidden")) {
+                nameInput.value = "";
+                nameInput.focus();
+            }
+        });
+        saveCancel.addEventListener("click", () => {
+            saveForm.classList.add("is-hidden");
+            setInlineFeedback(feedback, "");
+        });
+        saveConfirm.addEventListener("click", () => {
+            submitPresetSave(systemCode, form, nameInput, saveForm, feedback, saveConfirm);
+        });
+        nameInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                submitPresetSave(systemCode, form, nameInput, saveForm, feedback, saveConfirm);
+            }
+        });
+    }
+}
+
+// ----- 전체 점검의 시스템별 프리셋 선택 --------------------------------
+function renderSuitePresetLists() {
+    const suiteForm = document.getElementById("suite-form");
+    if (!suiteForm) {
+        return;
+    }
+    for (const list of suiteForm.querySelectorAll('[data-role="suite-preset-list"]')) {
+        const systemCode = list.dataset.systemCode;
+        const presets = presetsBySystem[systemCode] ?? [];
+        list.dataset.loading = "false";
+        list.innerHTML = "";
+
+        const chosen = suitePresetSelection.get(systemCode);
+        const chosenStillExists = presets.some((preset) => preset.preset_id === chosen);
+        if (!chosenStillExists) {
+            suitePresetSelection.delete(systemCode);
+        }
+        // 프리셋이 정확히 1개면 편의상 자동 선택(모호하지 않음). 2개 이상이면 명시적 선택을 요구.
+        if (!suitePresetSelection.has(systemCode) && presets.length === 1) {
+            suitePresetSelection.set(systemCode, presets[0].preset_id);
+        }
+
+        if (presets.length === 0) {
+            const empty = document.createElement("span");
+            empty.className = "preset-empty preset-empty--warn";
+            empty.textContent = "저장된 프리셋이 없습니다. 개별 점검 화면에서 먼저 저장하세요.";
+            list.appendChild(empty);
+            continue;
+        }
+        for (const preset of presets) {
+            list.appendChild(buildSuitePresetChip(suiteForm, systemCode, preset));
+        }
+    }
+}
+
+function buildSuitePresetChip(suiteForm, systemCode, preset) {
+    const isActive = suitePresetSelection.get(systemCode) === preset.preset_id;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `preset-chip preset-chip--radio${isActive ? " is-active" : ""}`;
+    chip.dataset.presetId = preset.preset_id;
+    chip.setAttribute("aria-pressed", isActive ? "true" : "false");
+    chip.innerHTML = `<span class="preset-chip__check" aria-hidden="true"><svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span><span class="preset-chip__body"><span class="preset-chip__name"></span><span class="preset-chip__meta"></span></span>`;
+    chip.querySelector(".preset-chip__name").textContent = preset.name;
+    chip.querySelector(".preset-chip__meta").textContent = presetSummaryText(preset);
+    chip.addEventListener("click", () => {
+        if (suitePresetSelection.get(systemCode) === preset.preset_id) {
+            suitePresetSelection.delete(systemCode);
+        } else {
+            suitePresetSelection.set(systemCode, preset.preset_id);
+        }
+        renderSuitePresetLists();
+        updateSuiteSystemSelectorState(suiteForm);
+        setInlineFeedback(suiteForm.querySelector('[data-role="suite-feedback"]'), "");
+    });
+    return chip;
+}
+
 function syncConditionalFields(form) {
     const conditionalFields = form.querySelectorAll(".conditional-field");
     for (const field of conditionalFields) {
@@ -1846,21 +2165,6 @@ async function rerunRun(button) {
     }
 }
 
-function collectInputFromContainer(container) {
-    const inputData = {};
-    if (!container) {
-        return inputData;
-    }
-    const fields = container.querySelectorAll("input, select, textarea");
-    for (const field of fields) {
-        if (field.disabled || !field.name) {
-            continue;
-        }
-        inputData[field.name] = String(field.value ?? "").trim();
-    }
-    return inputData;
-}
-
 function readSelectedSuiteSystemCodes(form) {
     const codes = [];
     for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
@@ -1882,6 +2186,33 @@ function readSuiteScopeSystemCodes(form) {
     return codes;
 }
 
+function suiteSystemCheckbox(form, systemCode) {
+    return form.querySelector(
+        `[data-role="suite-system-checkbox"][data-system-code="${systemCode}"]`,
+    );
+}
+
+function suiteSystemNeedsAuth(form, systemCode) {
+    return suiteSystemCheckbox(form, systemCode)?.dataset.authRequired === "true";
+}
+
+// 전체 점검에서 "선택됐으나 아직 적용할 프리셋이 없는" 인증 필요 시스템 목록.
+// (프리셋 자체가 없거나, 저장된 프리셋을 하나도 고르지 않은 경우)
+function suiteMissingPresetSystems(form) {
+    const missing = [];
+    for (const systemCode of readSelectedSuiteSystemCodes(form)) {
+        if (!suiteSystemNeedsAuth(form, systemCode)) {
+            continue;
+        }
+        const chosen = suitePresetSelection.get(systemCode);
+        const presets = presetsBySystem[systemCode] ?? [];
+        if (!chosen || !presets.some((preset) => preset.preset_id === chosen)) {
+            missing.push(systemCode);
+        }
+    }
+    return missing;
+}
+
 function updateSuiteSystemSelectorState(form) {
     const summary = form.querySelector('[data-role="suite-system-selection-summary"]');
     const checkboxes = [...form.querySelectorAll('[data-role="suite-system-checkbox"]')];
@@ -1896,16 +2227,22 @@ function updateSuiteSystemSelectorState(form) {
         const systemCode = panel.dataset.suiteAuthFor;
         const isSelected = selectedCodes.has(systemCode);
         panel.classList.toggle("is-hidden", !isSelected);
-        for (const field of panel.querySelectorAll("input, select, textarea")) {
-            if (!field.dataset.suiteInitiallyRequired) {
-                field.dataset.suiteInitiallyRequired = field.required ? "true" : "false";
-            }
-            field.disabled = !isSelected;
-            if (!isSelected) {
-                field.removeAttribute("required");
-            } else if (field.dataset.suiteInitiallyRequired === "true") {
-                field.setAttribute("required", "");
-            }
+
+        const status = panel.querySelector('[data-role="suite-preset-status"]');
+        if (!status) {
+            continue;
+        }
+        const presets = presetsBySystem[systemCode] ?? [];
+        const chosen = suitePresetSelection.get(systemCode);
+        if (presets.length === 0) {
+            status.textContent = "프리셋 없음";
+            status.className = "suite-preset-status suite-preset-status--warn";
+        } else if (chosen && presets.some((preset) => preset.preset_id === chosen)) {
+            status.textContent = "선택됨";
+            status.className = "suite-preset-status suite-preset-status--ok";
+        } else {
+            status.textContent = "미선택";
+            status.className = "suite-preset-status suite-preset-status--pending";
         }
     }
 }
@@ -1914,12 +2251,18 @@ function collectSuiteRequest(form) {
     const browserMode = String(form.querySelector('[name="browser_mode"]')?.value ?? "headed").trim();
     const systems = {};
     const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
-    for (const panel of form.querySelectorAll(".suite-system-panel")) {
-        const systemCode = panel.dataset.systemCode;
-        if (!systemCode || !selectedCodes.has(systemCode)) {
+    for (const systemCode of selectedCodes) {
+        if (!suiteSystemNeedsAuth(form, systemCode)) {
+            systems[systemCode] = {};
             continue;
         }
-        systems[systemCode] = collectInputFromContainer(panel);
+        const chosen = suitePresetSelection.get(systemCode);
+        const preset = (presetsBySystem[systemCode] ?? []).find(
+            (item) => item.preset_id === chosen,
+        );
+        if (preset) {
+            systems[systemCode] = { ...preset.input_data };
+        }
     }
     return {
         browser_mode: browserMode,
@@ -1939,24 +2282,14 @@ async function startSuiteRun(button, form) {
         return;
     }
 
-    for (const panel of form.querySelectorAll(".suite-system-panel")) {
-        const systemCode = panel.dataset.systemCode;
-        if (!selectedCodes.includes(systemCode)) {
-            continue;
-        }
-        const authMethod = panel.querySelector('[name="auth_method"]')?.value;
-        if (
-            (systemCode === "hom" || systemCode === "mhm")
-            && authMethod
-            && authMethod !== "phone"
-            && authMethod !== "kakao"
-        ) {
-            setInlineFeedback(
-                feedback,
-                `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 실행할 수 있습니다.`,
-            );
-            return;
-        }
+    const missing = suiteMissingPresetSystems(form);
+    if (missing.length > 0) {
+        setInlineFeedback(
+            feedback,
+            `프리셋을 선택해야 하는 시스템: ${missing.map((code) => code.toUpperCase()).join(", ")}. `
+            + "프리셋이 없으면 개별 점검 화면에서 먼저 저장하거나, 해당 시스템의 선택을 해제하세요.",
+        );
+        return;
     }
 
     button.disabled = true;
@@ -2003,24 +2336,13 @@ async function registerSuiteSchedule(form, button) {
         return;
     }
 
-    for (const panel of form.querySelectorAll(".suite-system-panel")) {
-        const systemCode = panel.dataset.systemCode;
-        if (!selectedCodes.includes(systemCode)) {
-            continue;
-        }
-        const authMethod = panel.querySelector('[name="auth_method"]')?.value;
-        if (
-            (systemCode === "hom" || systemCode === "mhm")
-            && authMethod
-            && authMethod !== "phone"
-            && authMethod !== "kakao"
-        ) {
-            setInlineFeedback(
-                feedback,
-                `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 예약할 수 있습니다.`,
-            );
-            return;
-        }
+    const missing = suiteMissingPresetSystems(form);
+    if (missing.length > 0) {
+        setInlineFeedback(
+            feedback,
+            `프리셋을 선택해야 하는 시스템: ${missing.map((code) => code.toUpperCase()).join(", ")}.`,
+        );
+        return;
     }
 
     button.disabled = true;
@@ -2058,9 +2380,6 @@ function bindSuiteForm() {
     const form = document.getElementById("suite-form");
     if (!form) {
         return;
-    }
-    for (const panel of form.querySelectorAll(".suite-system-panel")) {
-        bindConditionalFields(panel);
     }
     for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
         checkbox.addEventListener("change", () => {
@@ -2723,6 +3042,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bindSystemCardExpand();
     bindSystemButtons();
     bindSuiteForm();
+    bindPresetPanels();
+    loadPresets();
     bindRunsOverview();
     bindRunsHistory();
     bindSchedulesOverview();

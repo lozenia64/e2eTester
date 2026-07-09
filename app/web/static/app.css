@@ -823,3 +823,244 @@ body {
     color: #9ca3af;
     text-align: center;
 }
+
+/* ===== 인증 프리셋 (내 점검 세트) ===================================== */
+.preset-panel {
+    border-radius: 1rem;
+    border: 1px solid #e9e5ff;
+    background:
+        radial-gradient(120% 140% at 0% 0%, rgb(238 233 255 / 0.7) 0%, rgb(255 255 255 / 0) 42%),
+        #fbfaff;
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+.preset-panel__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.preset-panel__star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 0.5rem;
+    color: #7c3aed;
+    background: rgb(124 58 237 / 0.1);
+}
+
+.preset-btn-ghost,
+.preset-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    border-radius: 0.6rem;
+    padding: 0.42rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.preset-btn-ghost {
+    border: 1px solid #ddd6fe;
+    background: #fff;
+    color: #6d28d9;
+}
+
+.preset-btn-ghost:hover {
+    background: #f5f3ff;
+}
+
+.preset-btn-primary {
+    border: 1px solid transparent;
+    background: #7c3aed;
+    color: #fff;
+}
+
+.preset-btn-primary:hover {
+    background: #6d28d9;
+}
+
+.preset-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.preset-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.preset-empty {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: #9ca3af;
+}
+
+.preset-empty--warn {
+    color: #b45309;
+}
+
+/* 개별 점검 카드의 적용/삭제 겸용 칩 */
+.preset-chip {
+    display: inline-flex;
+    align-items: stretch;
+    overflow: hidden;
+    border-radius: 0.7rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.preset-chip:hover {
+    border-color: #c4b5fd;
+    box-shadow: 0 4px 12px rgb(124 58 237 / 0.12);
+}
+
+.preset-chip--just-applied {
+    border-color: #34d399;
+    box-shadow: 0 0 0 3px rgb(52 211 153 / 0.25);
+}
+
+.preset-chip__apply {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    text-align: left;
+}
+
+.preset-chip__name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.preset-chip__meta {
+    font-size: 0.68rem;
+    color: #9ca3af;
+}
+
+.preset-chip__delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    border-left: 1px solid #f1f1f4;
+    color: #b6b8c0;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.preset-chip__delete:hover {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+/* 전체 점검의 라디오(단일 선택) 칩 */
+.preset-chip--radio {
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem 0.45rem 0.6rem;
+    cursor: pointer;
+}
+
+.preset-chip__check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    border: 1.5px solid #d1d5db;
+    color: transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.preset-chip__body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+}
+
+.preset-chip--radio.is-active {
+    border-color: #7c3aed;
+    background: #f5f3ff;
+    box-shadow: 0 0 0 3px rgb(124 58 237 / 0.14);
+}
+
+.preset-chip--radio.is-active .preset-chip__check {
+    border-color: #7c3aed;
+    background: #7c3aed;
+    color: #fff;
+}
+
+.preset-save-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.preset-name-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* 전체 점검 시스템별 프리셋 선택 패널 */
+.suite-preset-panel {
+    border-radius: 0.85rem;
+    border: 1px solid #ececf2;
+    background: #fff;
+    padding: 0.85rem 1rem 1rem;
+}
+
+.suite-preset-panel__head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.suite-preset-status {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.suite-preset-status--ok {
+    color: #047857;
+    background: #d1fae5;
+}
+
+.suite-preset-status--pending {
+    color: #6d28d9;
+    background: #ede9fe;
+}
+
+.suite-preset-status--warn {
+    color: #b45309;
+    background: #fef3c7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .preset-chip,
+    .preset-chip__check,
+    .preset-chip__delete,
+    .preset-btn-ghost,
+    .preset-btn-primary {
+        transition: none;
+    }
+}

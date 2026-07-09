@@ -300,6 +300,7 @@ e2eTester/
 - 로그인 후 첫 화면은 **일간 점검 현황 대시보드**(`GET /`, `dashboard.html`)다. 접근 가능한 전체 시스템·모듈의 오늘(KST) 점검 상태를 전체 통과율 히어로 링·KPI 타일·시스템별 그래프 카드(라디얼 링 + 세그먼트 바 + 모듈 상태 칩)로 보여 준다. 데이터는 `dashboard.js` 가 `GET /api/dashboard/daily` 로 불러와 라디얼 링 채우기·카운트업·스태거 진입 애니메이션으로 렌더링하며, 30초마다 자동 갱신(탭 비활성 시 일시정지)하고 `prefers-reduced-motion` 을 존중한다. 상태 색은 라벨과 항상 함께 노출한다.
 - **점검 실행** 화면(`GET /runs/execute`, `execute.html`)은 기존 홈의 Run 트리거 UI로, “시스템 실행”과 “전체 순차 점검”을 함께 제공한다. **시스템** 섹션(SUITE + 개별 시스템 카드)이 상태 메트릭 직후 상단에 배치되고, **진행 중 / 최근 Run** 패널은 시스템 목록 하단에 위치한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
+- **인증 프리셋(내 점검 세트)**: 매번 인증 정보를 다시 입력하는 반복을 없애기 위해, 사용자가 자주 쓰는 인증 수단·정보(+선택 모듈)를 이름 붙여 저장하고 원클릭으로 불러온다. 개별 시스템 카드에는 프리셋 칩 행 + "현재 설정 저장" 버튼이 있고, 칩을 클릭하면 폼(인증 수단·조건부 인증 정보·브라우저 모드·모듈 선택)이 그대로 채워진다. **전체 점검(SUITE) 카드에서는 인증 정보를 직접 입력할 수 없고**, 선택한 시스템마다 저장된 프리셋을 하나씩 골라야 한다 — 프리셋이 없거나 고르지 않은(인증이 필요한) 시스템은 실행/예약이 차단된다(제출 시 검증 + 시스템별 상태 배지 `선택됨`/`미선택`/`프리셋 없음`). 프리셋은 사용자별로 격리되고 소유자만 조회/수정/삭제한다. 프런트 로직은 `app/web/static/app.js`(`loadPresets`/`renderIndividualPresetPanels`/`renderSuitePresetLists`), 스타일은 `app/web/static/app.css`(`.preset-*`).
 - 홈 **진행 중 / 최근 Run** 패널은 `GET /api/runs?scope=today` 요약을 주기적으로 불러와 렌더링한다 — 진행 중(PENDING/RUNNING/WAITING_INPUT) Run 은 날짜와 무관하게 포함하고, 그 외 Run 은 KST(`E2E_SCHEDULE_TZ`) 당일 `requested_at` 만 표시한다(최대 8건, 진행 중 우선). 당일·진행 중 Run 이 없으면 섹션을 숨긴다.
 - **Run 이력** 페이지(`GET /runs/history`)에서 당일 이전 Run 을 `GET /api/runs?scope=before_today` 로 조회한다(SQLite 영속 — 서버 재시작 후에도 이력이 남음).
 - 개별 시스템 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
@@ -331,6 +332,10 @@ e2eTester/
 - `POST /api/runs/{run_id}/otp`
 - `POST /api/runs/{run_id}/cancel`
 - `POST /api/runs/{run_id}/rerun`
+- `GET /api/presets` (로그인 사용자의 인증 프리셋 목록; `system_code` 쿼리로 시스템 필터, 소유자 본인에게만 `input_data` 포함)
+- `POST /api/presets` (인증 프리셋 저장 — `system_code`·`name`·`input_data`·`selected_module_ids`, `RunService.validate_run_request` 로 검증)
+- `PUT /api/presets/{preset_id}` (프리셋 이름/인증 정보/모듈 선택 수정, 소유자 전용)
+- `DELETE /api/presets/{preset_id}` (프리셋 삭제, 소유자 전용)
 - `GET /api/suites` (최근 Suite 요약 목록)
 - `POST /api/suites` (`browser_mode`, `systems`, `selected_system_codes` 로 Suite 생성)
 - `GET /api/suites/{suite_id}`
@@ -579,6 +584,7 @@ manifest 에 들어 있는 정보:
 - `app/storage/sqlite_run_log_store.py` — **기본 사용되는** 모듈 로그 append-only SQLite 어댑터(`run_logs` 테이블, 한 줄당 한 행, `ORDER BY id` 로 입력 순서 복원)
 - `app/storage/run_repository.py` / `suite_repository.py` / `schedule_repository.py` — 인메모리 어댑터(단위 테스트·영속 불요 실행용)
 - `app/storage/run_log_store.py` — `InMemoryRunLogStore`(로그 스트림 인메모리 어댑터)
+- `app/storage/sqlite_preset_repository.py` — 인증 프리셋(`AuthPreset`) SQLite 어댑터(`PresetRepositoryPort`, `auth_presets` 테이블). Run/Suite 입력값과 달리 **의도적으로 PII 를 영속**한다(프리셋의 목적이 인증 정보 저장). 사용자별 격리는 `PresetService`(`app/orchestrator/preset_service.py`)가 강제하고, 응답에는 소유자 본인에게만 `input_data` 를 돌려준다.
 
 역할:
 

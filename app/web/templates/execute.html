@@ -121,6 +121,7 @@
                                 type="checkbox"
                                 data-role="suite-system-checkbox"
                                 data-system-code="{{ system.system_code }}"
+                                data-auth-required="{{ 'true' if system.supported_auth_methods else 'false' }}"
                                 value="{{ system.system_code }}"
                                 checked
                                 class="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
@@ -135,59 +136,26 @@
                     </ul>
                 </section>
 
-                <div class="sm:col-span-2 space-y-3">
+                <div class="sm:col-span-2 space-y-3" data-role="suite-preset-region">
+                    <div class="flex items-start gap-2 rounded-xl bg-violet-50 px-3.5 py-2.5 text-xs leading-relaxed text-violet-700 ring-1 ring-inset ring-violet-100">
+                        <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>전체 점검에서는 인증 정보를 직접 입력할 수 없습니다. 선택한 시스템마다 저장된 <b>프리셋</b>을 하나씩 골라 주세요. 프리셋이 없는 시스템은 <a href="/runs/execute" class="font-semibold underline">개별 점검 화면</a>에서 먼저 저장해야 합니다.</span>
+                    </div>
                     {% for system in systems %}
                     {% if system.supported_auth_methods %}
-                    <details class="group/suite-auth overflow-hidden rounded-xl border border-gray-200 bg-gray-50/60" data-suite-auth-for="{{ system.system_code }}">
-                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
-                            <div class="flex min-w-0 items-center gap-3">
-                                <span class="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2 py-1 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ system.system_code|upper }}</span>
-                                <div class="min-w-0">
-                                    <h4 class="text-sm font-bold text-gray-900">{{ system.name }}</h4>
-                                    <p class="text-xs text-gray-500">인증 정보 · 모듈 {{ system.modules|length }}개</p>
-                                </div>
+                    <section class="suite-preset-panel" data-suite-auth-for="{{ system.system_code }}" data-system-code="{{ system.system_code }}">
+                        <div class="suite-preset-panel__head">
+                            <span class="inline-flex shrink-0 items-center rounded-md bg-indigo-50 px-2 py-1 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ system.system_code|upper }}</span>
+                            <div class="min-w-0 flex-1">
+                                <h4 class="text-sm font-bold text-gray-900">{{ system.name }}</h4>
+                                <p class="text-xs text-gray-500">적용할 인증 프리셋을 선택하세요</p>
                             </div>
-                            <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open/suite-auth:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                        </summary>
-                        <div class="suite-system-panel grid gap-x-4 gap-y-4 border-t border-gray-100 bg-white px-4 py-4 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
-                            {% for field in system.run_form %}
-                            {% if field.key != 'browser_mode' %}
-                            <label
-                                class="form-field flex flex-col gap-1.5{% if field.show_when %} conditional-field{% endif %}"
-                                {% if field.show_when %}
-                                {% set _sw_key = field.show_when.keys()|list|first %}
-                                {% set _sw_val = field.show_when[_sw_key] %}
-                                data-show-when-key="{{ _sw_key }}"
-                                data-show-when-value="{% if _sw_val is string %}{{ _sw_val }}{% else %}{{ _sw_val|join(',') }}{% endif %}"
-                                data-required="{{ 'true' if field.required else 'false' }}"
-                                {% endif %}
-                            >
-                                <span class="text-sm font-medium text-gray-700">{{ field.label }}{% if field.required %} <span class="text-red-500">*</span>{% endif %}</span>
-                                {% if field.type == "select" %}
-                                <select name="{{ field.key }}" class="form-control form-control--muted" {% if field.required %}required{% endif %}>
-                                    {% for option in field.options %}
-                                    {% set option_unsupported = field.key == 'auth_method' and system.supported_auth_methods and option.value not in system.supported_auth_methods %}
-                                    <option value="{{ option.value }}"{% if option.value == field.default %} selected{% endif %}{% if option_unsupported %} disabled{% endif %}>{{ option.label }}{% if option_unsupported %} (준비 중){% endif %}</option>
-                                    {% endfor %}
-                                </select>
-                                {% else %}
-                                <input
-                                    type="{{ field.type }}"
-                                    name="{{ field.key }}"
-                                    value="{{ field.default }}"
-                                    placeholder="{{ field.placeholder }}"
-                                    class="form-control form-control--muted"
-                                    {% if field.required %}required{% endif %}
-                                >
-                                {% endif %}
-                                {% if field.help_text %}
-                                <small class="text-xs leading-relaxed text-gray-400">{{ field.help_text }}</small>
-                                {% endif %}
-                            </label>
-                            {% endif %}
-                            {% endfor %}
+                            <span class="suite-preset-status" data-role="suite-preset-status" aria-live="polite"></span>
                         </div>
-                    </details>
+                        <div class="preset-chip-row mt-3" data-role="suite-preset-list" data-system-code="{{ system.system_code }}" data-loading="true">
+                            <span class="preset-empty">프리셋을 불러오는 중…</span>
+                        </div>
+                    </section>
                     {% endif %}
                     {% endfor %}
                 </div>
@@ -314,6 +282,36 @@
             </summary>
             <form class="system-form system-card__body grid gap-x-4 gap-y-5 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
                 <script type="application/json" data-role="system-definition">{{ systems_payload[system.system_code] | tojson }}</script>
+                {% if system.supported_auth_methods %}
+                <section class="preset-panel sm:col-span-2" data-role="preset-panel" data-system-code="{{ system.system_code }}">
+                    <div class="preset-panel__head">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="preset-panel__star" aria-hidden="true">
+                                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.06 6.6.79-4.87 4.53 1.28 6.52L12 17.9l-5.91 3.5 1.28-6.52L2.5 9.35l6.6-.79L12 2.5z"/></svg>
+                                </span>
+                                <h4 class="text-sm font-bold text-gray-900">내 점검 프리셋</h4>
+                            </div>
+                            <p class="mt-1 text-xs leading-relaxed text-gray-500">자주 쓰는 인증 수단·정보를 저장해 두고 클릭 한 번으로 폼을 채웁니다.</p>
+                        </div>
+                        <button type="button" data-role="preset-save-open" class="preset-btn-ghost">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            현재 설정 저장
+                        </button>
+                    </div>
+                    <div class="preset-chip-row" data-role="preset-list" data-loading="true">
+                        <span class="preset-empty" data-role="preset-loading">프리셋을 불러오는 중…</span>
+                    </div>
+                    <div class="preset-save-form is-hidden" data-role="preset-save-form">
+                        <input type="text" data-role="preset-name-input" placeholder="프리셋 이름 (예: 홍길동 휴대폰인증)" maxlength="40" class="form-control form-control--muted preset-name-input">
+                        <div class="flex shrink-0 items-center gap-1.5">
+                            <button type="button" data-role="preset-save-confirm" class="preset-btn-primary">저장</button>
+                            <button type="button" data-role="preset-save-cancel" class="preset-btn-ghost">취소</button>
+                        </div>
+                    </div>
+                    <p class="is-hidden mt-1 text-xs font-medium" data-role="preset-feedback" role="alert"></p>
+                </section>
+                {% endif %}
                 <section class="system-card__section sm:col-span-2" data-role="module-selector">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
