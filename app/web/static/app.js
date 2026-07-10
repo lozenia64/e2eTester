@@ -1190,31 +1190,236 @@ function createRunListItem(run) {
     return card;
 }
 
-function renderRunList(runs) {
+// ─────────────────────────────────────────────────────────────────────────────
+// 진행 중 / 최근 Run: "사용자 실행 단위" 가로 스트립.
+// 전체 점검(Suite) 1회 = 1행(Suite 리드 카드 → 시스템별 Run 칩 파이프라인),
+// 개별 실행 = 기존 Run 카드 1행. GitLab pipeline mini-graph 패턴을 따라
+// 행에서는 결과 요약만 보여 주고 상세는 클릭해 들어간다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Run 을 실행 단위(suite 그룹 / 개별 run)로 묶는다. runs 는 최신순 입력이므로
+// 그룹 순서는 "그 실행에서 가장 최근에 만들어진 Run" 위치를 따른다.
+function buildExecutionGroups(runs, suites) {
+    const suiteById = new Map((suites ?? []).map((suite) => [suite.suite_id, suite]));
+    const groups = [];
+    const suiteGroups = new Map();
+    for (const run of runs) {
+        if (run.suite_id) {
+            let group = suiteGroups.get(run.suite_id);
+            if (!group) {
+                group = { type: "suite", suiteId: run.suite_id, suite: suiteById.get(run.suite_id) ?? null, runs: [] };
+                suiteGroups.set(run.suite_id, group);
+                groups.push(group);
+            }
+            group.runs.push(run);
+        } else {
+            groups.push({ type: "run", runs: [run] });
+        }
+    }
+    for (const group of suiteGroups.values()) {
+        // 스텝 실행 순서(왼쪽→오른쪽)로 정렬해 suite → run1 → run2 … 를 만든다.
+        group.runs.sort((left, right) => new Date(left.requested_at) - new Date(right.requested_at));
+    }
+    return groups;
+}
+
+function isExecutionGroupActive(group) {
+    if (group.type === "suite" && group.suite) {
+        return ACTIVE_RUN_STATUSES.has(String(group.suite.status ?? "").toLowerCase());
+    }
+    return group.runs.some((run) => ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
+}
+
+// run-chip--* 상태 톤 클래스 키(팔레트는 STATUS_BADGE_CLASSES 와 동일).
+function runChipToneKey(status) {
+    const normalized = normalizeOutcomeStatus(status);
+    if (normalized === "waiting_input") {
+        return "waiting";
+    }
+    if (normalized === "queued") {
+        return "pending";
+    }
+    const known = new Set(["pending", "running", "passed", "anomaly", "error", "blocked", "skipped", "cancelled"]);
+    return known.has(normalized) ? normalized : "pending";
+}
+
+function createRunChip(run) {
+    const status = String(run.status ?? "").toLowerCase();
+    const chip = document.createElement("a");
+    chip.href = `/runs/${run.run_id}`;
+    chip.className = `run-chip run-chip--${runChipToneKey(status)}`;
+    chip.title = `${run.system_name ?? run.system_code ?? ""} · ${statusDisplayLabel(run)}`;
+
+    const dot = document.createElement("span");
+    dot.className = "run-chip__dot";
+    dot.setAttribute("aria-hidden", "true");
+    chip.appendChild(dot);
+
+    const code = document.createElement("span");
+    code.className = "run-chip__code";
+    code.textContent = String(run.system_code ?? "").toUpperCase();
+    chip.appendChild(code);
+
+    const detail = document.createElement("span");
+    detail.className = "run-chip__detail";
+    detail.textContent =
+        status === "waiting_input" ? "입력 대기" : `${run.module_passed ?? 0}/${run.module_total ?? 0}`;
+    chip.appendChild(detail);
+    return chip;
+}
+
+function createRunChipConnector() {
+    const connector = document.createElement("span");
+    connector.className = "run-chip-connector";
+    connector.setAttribute("aria-hidden", "true");
+    return connector;
+}
+
+// /api/suites 응답을 못 받았을 때 Run 들만으로 최소 Suite 요약을 유도한다.
+function summarizeSuiteFromRuns(runsAsc) {
+    const statuses = runsAsc.map((run) => String(run.status ?? "").toLowerCase());
+    let status = "passed";
+    if (statuses.some((value) => value === "waiting_input")) {
+        status = "waiting_input";
+    } else if (statuses.some((value) => ACTIVE_RUN_STATUSES.has(value))) {
+        status = "running";
+    } else if (statuses.some((value) => normalizeOutcomeStatus(value) === "error")) {
+        status = "error";
+    } else if (statuses.some((value) => normalizeOutcomeStatus(value) === "anomaly")) {
+        status = "anomaly";
+    } else if (statuses.every((value) => value === "cancelled")) {
+        status = "cancelled";
+    }
+    return {
+        status,
+        requested_at: runsAsc[0]?.requested_at ?? null,
+        step_selected_total: runsAsc.length,
+        step_passed: statuses.filter((value) => value === "passed").length,
+        step_skipped: 0,
+    };
+}
+
+function createSuiteStripRow(group) {
+    const suite = group.suite ?? summarizeSuiteFromRuns(group.runs);
+    const isWaiting = String(suite.status ?? "").toLowerCase() === "waiting_input";
+
+    const strip = document.createElement("div");
+    strip.className = `run-strip run-strip--suite${isWaiting ? " run-strip--waiting" : ""}`;
+
+    const lead = document.createElement("a");
+    lead.href = `/suites/${group.suiteId}`;
+    lead.className = "run-strip__lead";
+
+    const icon = document.createElement("span");
+    icon.className = "run-strip__icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML =
+        '<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 15l3 3m0 0l3-3m-3 3V9"/></svg>';
+    lead.appendChild(icon);
+
+    const leadText = document.createElement("div");
+    leadText.className = "run-strip__lead-text";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "run-strip__title-row";
+
+    const codeChip = document.createElement("span");
+    codeChip.className = "run-strip__code";
+    codeChip.textContent = "SUITE";
+    titleRow.appendChild(codeChip);
+
+    const title = document.createElement("h3");
+    title.className = "run-strip__title";
+    title.textContent = "전체 점검";
+    titleRow.appendChild(title);
+
+    const statusPill = document.createElement("span");
+    statusPill.className = statusBadgeClassName(suite.status);
+    statusPill.textContent = statusDisplayLabel(suite);
+    titleRow.appendChild(statusPill);
+
+    if (isWaiting) {
+        const waitingBadge = document.createElement("span");
+        waitingBadge.className = "inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-semibold text-white";
+        waitingBadge.textContent = "⚠ 입력 대기 중";
+        titleRow.appendChild(waitingBadge);
+    }
+    leadText.appendChild(titleRow);
+
+    const meta = document.createElement("p");
+    meta.className = "run-strip__meta";
+    const selectedTotal = suite.step_selected_total ?? group.runs.length;
+    const metaParts = [
+        group.suiteId,
+        formatRunTimestamp(suite.requested_at),
+        `통과 ${suite.step_passed ?? 0}/${selectedTotal}`,
+    ];
+    if (suite.step_skipped) {
+        metaParts.push(`제외 ${suite.step_skipped}`);
+    }
+    meta.textContent = metaParts.filter(Boolean).join(" · ");
+    leadText.appendChild(meta);
+
+    lead.appendChild(leadText);
+    strip.appendChild(lead);
+
+    const track = document.createElement("div");
+    track.className = "run-strip__track";
+    group.runs.forEach((run, index) => {
+        if (index > 0) {
+            track.appendChild(createRunChipConnector());
+        }
+        track.appendChild(createRunChip(run));
+    });
+
+    // 아직 Run 이 만들어지지 않은 남은 스텝은 자리 표시 칩으로 알린다.
+    const remaining = selectedTotal - group.runs.length;
+    if (remaining > 0) {
+        track.appendChild(createRunChipConnector());
+        const ghost = document.createElement("span");
+        ghost.className = "run-chip run-chip--ghost";
+        ghost.textContent = `대기 ${remaining}`;
+        track.appendChild(ghost);
+    }
+    strip.appendChild(track);
+    return strip;
+}
+
+function renderRunList(runs, suites) {
     const section = document.getElementById("runs-section");
     const list = document.getElementById("runs-list");
     if (!section || !list) {
         return;
     }
 
-    const activeRuns = runs.filter((run) => ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
-    const finishedRuns = runs.filter((run) => !ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
-    const visibleRuns = [...activeRuns, ...finishedRuns].slice(0, RUN_LIST_LIMIT);
+    const groups = buildExecutionGroups(runs, suites);
+    const activeGroups = groups.filter((group) => isExecutionGroupActive(group));
+    const finishedGroups = groups.filter((group) => !isExecutionGroupActive(group));
+    const visibleGroups = [...activeGroups, ...finishedGroups].slice(0, RUN_LIST_LIMIT);
 
-    section.classList.toggle("is-hidden", visibleRuns.length === 0);
+    section.classList.toggle("is-hidden", visibleGroups.length === 0);
     list.innerHTML = "";
-    for (const run of visibleRuns) {
-        list.appendChild(createRunListItem(run));
+    for (const group of visibleGroups) {
+        list.appendChild(group.type === "suite" ? createSuiteStripRow(group) : createRunListItem(group.runs[0]));
     }
 }
 
 async function refreshRunList() {
     try {
-        const response = await fetch("/api/runs?scope=today");
-        if (!response.ok) {
+        const [runsResult, suitesResult] = await Promise.allSettled([
+            fetch("/api/runs?scope=today"),
+            fetch("/api/suites"),
+        ]);
+        if (runsResult.status !== "fulfilled" || !runsResult.value.ok) {
             return;
         }
-        renderRunList(await response.json());
+        const runs = await runsResult.value.json();
+        // Suite 요약은 그룹 헤더 강화용 — 실패해도 Run 기반 요약으로 대체한다.
+        let suites = [];
+        if (suitesResult.status === "fulfilled" && suitesResult.value.ok) {
+            suites = await suitesResult.value.json();
+        }
+        renderRunList(runs, suites);
     } catch (error) {
         console.error("Run 목록 갱신 실패", error);
     }
