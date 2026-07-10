@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}예약 점검 관리 센터{% endblock %}
+
+{% block content %}
+<style>
+  /* ── 예약 점검 관리 센터 (scoped: .schedc-*) ─────────────────────────── */
+  .schedc {
+    --st-passed: #0ca30c;
+    --st-anomaly: #fab219;
+    --st-error: #d03b3b;
+    --st-idle: #b6b4ad;
+    --st-active: #4f46e5;
+    --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  }
+
+  .schedc-reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity .5s var(--ease-spring), transform .5s var(--ease-spring);
+  }
+  .schedc-reveal.is-in { opacity: 1; transform: none; }
+
+  /* 세그먼트(뷰 스위처 / cron 빌더) */
+  .schedc-seg { display: inline-flex; padding: 3px; border-radius: 11px; background: #f3f4f6; }
+  .schedc-seg__btn {
+    padding: 5px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    color: #6b7280; transition: all .2s var(--ease-spring); white-space: nowrap;
+  }
+  .schedc-seg__btn[aria-pressed="true"] { background: #fff; color: #111827; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .schedc-seg--sm .schedc-seg__btn { padding: 3px 10px; font-size: 11px; }
+
+  /* 토글 스위치 */
+  .schedc-switch {
+    position: relative; display: inline-flex; height: 20px; width: 36px; flex-shrink: 0;
+    cursor: pointer; border-radius: 9999px; background: #d1d5db; transition: background .2s;
+  }
+  .schedc-switch[aria-checked="true"] { background: #4f46e5; }
+  .schedc-switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; height: 16px; width: 16px;
+    border-radius: 9999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    transition: transform .2s var(--ease-spring);
+  }
+  .schedc-switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .schedc-switch[data-busy="1"] { opacity: .5; pointer-events: none; }
+
+  /* 실행 이력 점 스트립 */
+  .schedc-dot {
+    width: 10px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    background: var(--st-idle); transition: transform .15s var(--ease-spring);
+  }
+  .schedc-dot:hover { transform: scaleY(1.25); }
+  .schedc-dot[data-state="PASSED"] { background: var(--st-passed); }
+  .schedc-dot[data-state="ANOMALY"] { background: var(--st-anomaly); }
+  .schedc-dot[data-state="ERROR"] { background: var(--st-error); }
+  .schedc-dot[data-state="active"] { background: var(--st-active); animation: schedc-pulse 1.6s ease-in-out infinite; }
+
+  @keyframes schedc-pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+  /* 캘린더 블록 칩 */
+  .schedc-block {
+    display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+    border-radius: 7px; padding: 2px 6px; font-size: 10px; font-weight: 700;
+    line-height: 1.4; cursor: pointer; border: 1px solid transparent;
+    transition: transform .15s var(--ease-spring), box-shadow .15s var(--ease-spring);
+  }
+  .schedc-block:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -6px rgba(30,41,59,.5); }
+  .schedc-block[data-state="planned"] { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+  .schedc-block[data-state="PASSED"] { background: #e8f7e8; color: #15803d; }
+  .schedc-block[data-state="ANOMALY"] { background: #fdf2d7; color: #b45309; }
+  .schedc-block[data-state="ERROR"] { background: #fdeaea; color: #b91c1c; }
+  .schedc-block[data-state="CANCELLED"] { background: #f3f4f6; color: #6b7280; }
+  .schedc-block[data-state="active"] { background: #eef2ff; color: #4f46e5; animation: schedc-pulse 1.6s ease-in-out infinite; }
+  .schedc-block[data-state="missed"] {
+    color: #6b7280; border-color: #d1d5db;
+    background: repeating-linear-gradient(135deg, #f9fafb 0 4px, #e5e7eb 4px 8px);
+  }
+  .schedc-block[data-suite="1"] { border-width: 2px; border-color: #a78bfa; }
+  .schedc-block[data-unplanned="1"] { border-style: dashed; border-color: currentColor; opacity: .9; }
+
+  .schedc-cal-grid { display: grid; grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr)); }
+  .schedc-cal-grid > * { min-width: 0; }
+
+  /* 상세 드로어 */
+  .schedc-drawer-backdrop {
+    position: fixed; inset: 0; z-index: 60; background: rgba(15,23,42,.35);
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  .schedc-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 61; width: min(30rem, 100vw);
+    background: #fff; box-shadow: -18px 0 50px -25px rgba(15,23,42,.5);
+    transform: translateX(102%); transition: transform .35s var(--ease-spring);
+    display: flex; flex-direction: column;
+  }
+  .schedc.is-drawer-open .schedc-drawer { transform: none; }
+  .schedc.is-drawer-open .schedc-drawer-backdrop { opacity: 1; pointer-events: auto; }
+
+  .schedc-field {
+    width: 100%; border-radius: 10px; border: 1px solid #e5e7eb; background: #fff;
+    padding: 8px 12px; font-size: 13px; color: #111827;
+  }
+  .schedc-field:focus { outline: none; border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .schedc-field::placeholder { color: #c3c6cf; }
+
+  .schedc-dow-chip {
+    width: 30px; height: 30px; border-radius: 9px; font-size: 11px; font-weight: 700;
+    color: #6b7280; background: #f3f4f6; transition: all .15s;
+  }
+  .schedc-dow-chip[aria-pressed="true"] { background: #4f46e5; color: #fff; }
+
+  .schedc-issue-card { border-left-width: 4px; }
+  .schedc-issue-card[data-issue="stuck"] { border-left-color: var(--st-error); }
+  .schedc-issue-card[data-issue="failing"] { border-left-color: #f97316; }
+  .schedc-issue-card[data-issue="missed"] { border-left-color: var(--st-anomaly); }
+  .schedc-issue-card[data-issue="stale"] { border-left-color: var(--st-idle); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .schedc-reveal, .schedc-drawer, .schedc-switch::after, .schedc-block, .schedc-dot { transition: none; animation: none; }
+    .schedc-reveal { opacity: 1; transform: none; }
+    .schedc-block[data-state="active"], .schedc-dot[data-state="active"] { animation: none; }
+  }
+</style>
+
+<div class="schedc space-y-6">
+  <!-- 헤더 -->
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Schedule Control Room</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">예약 점검 관리 센터</h1>
+      <p class="mt-1.5 text-sm text-gray-500">무인 점검 예약을 한 곳에서 <b>감시 → 관리 → 튜닝</b>합니다. 문제 예약은 자동으로 위에 떠오릅니다.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="schedc-tz" class="text-[11px] text-gray-400"></span>
+      <button id="schedc-refresh" type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        새로고침
+      </button>
+      <a href="/runs/execute" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        새 예약 만들기
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI 스트립 -->
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <p class="text-xs font-semibold text-gray-400">전체 예약</p>
+      <p class="mt-1 text-2xl font-bold text-gray-900"><span data-kpi="total">–</span><span class="ml-1 text-sm font-semibold text-gray-400">개</span></p>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <p class="text-xs font-semibold text-gray-400">활성 예약</p>
+      <p class="mt-1 text-2xl font-bold text-indigo-600"><span data-kpi="active">–</span><span class="ml-1 text-sm font-semibold text-gray-400">개</span></p>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <p class="text-xs font-semibold text-gray-400">오늘 예정</p>
+      <p class="mt-1 text-2xl font-bold text-gray-900"><span data-kpi="today_planned">–</span><span class="ml-1 text-sm font-semibold text-gray-400">건</span></p>
+    </div>
+    <button type="button" id="schedc-kpi-attention" class="rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm ring-2 ring-transparent transition hover:ring-amber-300">
+      <p class="text-xs font-semibold text-gray-400">조치 필요</p>
+      <p class="mt-1 text-2xl font-bold" style="color: var(--st-error)"><span data-kpi="attention">–</span><span class="ml-1 text-sm font-semibold text-gray-400">건</span></p>
+    </button>
+  </div>
+
+  <!-- ⚠️ 조치 필요 (문제 예약 자동 승격 — 정상 예약은 여기 나타나지 않음) -->
+  <section id="schedc-attention" class="hidden space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+    <div class="flex items-center gap-2">
+      <svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+      <h2 class="text-sm font-bold text-amber-800">조치 필요</h2>
+      <span class="text-xs text-amber-600">무인 점검이 조용히 죽지 않도록, 문제가 있는 예약만 여기로 승격됩니다.</span>
+    </div>
+    <div id="schedc-attention-list" class="grid gap-2 md:grid-cols-2"></div>
+  </section>
+
+  <!-- 뷰 스위처 + 필터 -->
+  <div class="flex flex-wrap items-center gap-2">
+    <div class="schedc-seg" role="tablist" aria-label="보기 전환">
+      <button type="button" class="schedc-seg__btn" data-view-btn="list" aria-pressed="true">
+        목록
+      </button>
+      <button type="button" class="schedc-seg__btn" data-view-btn="calendar" aria-pressed="false">
+        시간표 캘린더
+      </button>
+    </div>
+    <input id="schedc-search" type="search" placeholder="예약 이름·시스템 검색"
+           class="schedc-field !w-48 !py-1.5 !text-xs" data-list-only>
+    <select id="schedc-filter-kind" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm" data-list-only>
+      <option value="all">전체 유형</option>
+      <option value="system">개별 시스템</option>
+      <option value="suite">전체 점검(Suite)</option>
+    </select>
+    <select id="schedc-filter-state" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm" data-list-only>
+      <option value="all">전체 상태</option>
+      <option value="on">켜짐</option>
+      <option value="off">꺼짐</option>
+      <option value="paused">일시 중지</option>
+      <option value="attention">조치 필요</option>
+    </select>
+    <span id="schedc-visible-count" class="ml-auto text-xs text-gray-400"></span>
+  </div>
+
+  <!-- 목록 뷰 -->
+  <section id="schedc-list-view" class="space-y-3">
+    <div class="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <table class="min-w-full divide-y divide-gray-100 text-sm">
+        <thead>
+          <tr class="text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <th class="px-4 py-3">예약</th>
+            <th class="px-4 py-3">반복 주기</th>
+            <th class="px-4 py-3">다음 실행</th>
+            <th class="px-4 py-3">마지막 결과</th>
+            <th class="px-4 py-3 text-right">동작</th>
+          </tr>
+        </thead>
+        <tbody id="schedc-table-body" class="divide-y divide-gray-50"></tbody>
+      </table>
+      <div id="schedc-list-empty" class="hidden p-12 text-center">
+        <p class="text-sm font-semibold text-gray-600">표시할 예약이 없습니다.</p>
+        <p class="mt-1 text-xs text-gray-400">점검 실행 화면의 예약 등록 폼에서 첫 예약을 만들어 보세요.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 캘린더 뷰 (계획 vs 실적) -->
+  <section id="schedc-calendar-view" class="hidden space-y-3">
+    <!-- 커버리지 진단 바 -->
+    <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div class="flex flex-wrap items-center gap-2">
+        <p class="text-xs font-bold text-gray-700">최근 24시간 점검 커버리지</p>
+        <span class="text-[11px] text-gray-400">어느 시스템도 점검 공백에 빠지지 않았는지 자동 진단합니다.</span>
+      </div>
+      <div id="schedc-coverage" class="mt-2.5 flex flex-wrap gap-2"></div>
+      <p id="schedc-cluster-warnings" class="mt-2 hidden text-[11px] font-medium text-amber-600"></p>
+    </div>
+
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="schedc-week-prev" class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="이전 주">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+          </button>
+          <button type="button" id="schedc-week-today" class="rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100">이번 주</button>
+          <button type="button" id="schedc-week-next" class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="다음 주">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+          </button>
+          <span id="schedc-week-label" class="ml-1 text-sm font-bold text-gray-800"></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-gray-500">
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="planned"></i>예정</span>
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="PASSED"></i>정상</span>
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="ANOMALY"></i>이상징후</span>
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="ERROR"></i>점검실패</span>
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="missed"></i>누락</span>
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="planned" data-suite="1"></i>Suite</span>
+        </div>
+      </div>
+      <div id="schedc-calendar-grid" class="overflow-x-auto p-3"></div>
+      <div id="schedc-calendar-empty" class="hidden p-12 text-center">
+        <p class="text-sm font-semibold text-gray-600">이 주에는 계획된 점검이 없습니다.</p>
+        <p class="mt-1 text-xs text-gray-400">예약을 켜면 cron 주기가 시간표에 펼쳐집니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="schedc-loading" class="rounded-2xl border border-gray-100 bg-white p-12 text-center text-sm text-gray-400">불러오는 중…</div>
+  <div id="schedc-error" class="hidden rounded-2xl border border-red-100 bg-red-50 p-6 text-center">
+    <p class="text-sm font-semibold text-red-700">예약 정보를 불러오지 못했습니다.</p>
+    <p class="mt-1 text-xs text-red-400">잠시 후 새로고침해 주세요.</p>
+  </div>
+
+  <!-- 상세 드로어 (라이프사이클 매니저) -->
+  <div class="schedc-drawer-backdrop" id="schedc-drawer-backdrop"></div>
+  <aside class="schedc-drawer" id="schedc-drawer" role="dialog" aria-modal="true" aria-label="예약 상세">
+    <div class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span id="schedc-drawer-kind" class="rounded-md bg-gray-900 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"></span>
+          <span id="schedc-drawer-system" class="truncate text-xs font-semibold text-gray-500"></span>
+        </div>
+        <h2 id="schedc-drawer-title" class="mt-1 truncate text-lg font-bold text-gray-900"></h2>
+        <p id="schedc-drawer-sub" class="mt-0.5 text-[11px] text-gray-400"></p>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <button type="button" id="schedc-drawer-toggle" class="schedc-switch" role="switch" aria-checked="false" title="예약 켜기/끄기"></button>
+        <button type="button" id="schedc-drawer-close" class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="닫기">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="schedc-drawer-body" class="flex-1 space-y-5 overflow-y-auto px-5 py-4"></div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="schedc-systems-data">{{ systems_payload | tojson }}</script>
+<script src="/static/schedules.js?v=1" defer></script>
+{% endblock %}

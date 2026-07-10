@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -179,6 +179,19 @@ SUITE_SCHEDULE_SYSTEM_CODE = "suite"
 SUITE_SCHEDULE_SYSTEM_NAME = "전체 시스템 순차 점검"
 
 
+class ScheduleChangeEntry(BaseModel):
+    """예약 변경 이력 한 건(누가 언제 무엇을 바꿨나 — 예약 관리 센터 상세에 노출)."""
+
+    at: datetime
+    action: str  # created / updated / enabled / disabled / paused / pause_cleared / auto_resumed / duplicated
+    detail: str = ""
+    user_name: str | None = None
+
+
+# 예약 change_log 보존 한도(오래된 항목부터 잘려 나간다 — blob 비대 방지).
+SCHEDULE_CHANGE_LOG_LIMIT = 30
+
+
 class Schedule(BaseModel):
     schedule_id: str
     schedule_kind: str = "system"
@@ -207,6 +220,35 @@ class Schedule(BaseModel):
     last_run_status: RunStatus | None = None
     last_suite_id: str | None = None
     last_suite_status: SuiteStatus | None = None
+    # --- 예약 점검 관리 센터(관제 보드/라이프사이클) 필드 ---------------------
+    # cron 주기가 왔지만 직전 실행이 진행 중이라 건너뛴 마지막 시각(관제 보드 '실행 누락' 신호).
+    last_skipped_at: datetime | None = None
+    # 이 시각까지 일시 중지(사이트 정기점검 기간 등). enabled 와 별개로 발사를 게이트하며,
+    # 시각이 지나면 스케줄러 tick 이 자동으로 해제(자동 재개)한다.
+    paused_until: datetime | None = None
+    # 마지막으로 비활성화된 시각(관제 보드 '꺼진 지 오래' 판정용).
+    disabled_at: datetime | None = None
+    updated_at: datetime | None = None
+    change_log: list[ScheduleChangeEntry] = Field(default_factory=list)
+
+    def record_change(
+        self,
+        action: str,
+        detail: str = "",
+        user_name: str | None = None,
+        at: datetime | None = None,
+    ) -> None:
+        """변경 이력을 append 하고 보존 한도를 넘는 오래된 항목을 잘라낸다."""
+        self.change_log.append(
+            ScheduleChangeEntry(
+                at=at or datetime.now(UTC),
+                action=action,
+                detail=detail,
+                user_name=user_name,
+            )
+        )
+        if len(self.change_log) > SCHEDULE_CHANGE_LOG_LIMIT:
+            self.change_log = self.change_log[-SCHEDULE_CHANGE_LOG_LIMIT:]
 
     def to_summary(self) -> dict:
         """API/UI 노출용 요약. input_data 는 PII 가 있을 수 있어 직렬화하지 않는다."""
@@ -239,7 +281,31 @@ class Schedule(BaseModel):
             "last_run_status": self.last_run_status.value if self.last_run_status else None,
             "last_suite_id": self.last_suite_id,
             "last_suite_status": self.last_suite_status.value if self.last_suite_status else None,
+            "last_skipped_at": self.last_skipped_at.isoformat() if self.last_skipped_at else None,
+            "paused_until": self.paused_until.isoformat() if self.paused_until else None,
+            "disabled_at": self.disabled_at.isoformat() if self.disabled_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+    def to_detail(self) -> dict:
+        """상세 드로어용 — 요약 + 변경 이력 + 수정 폼 보조 정보.
+
+        input_data 값(PII)은 여기서도 직렬화하지 않는다. 수정 폼이 "저장된 값 유지 / 새 값으로
+        교체"를 구분할 수 있도록 어떤 키가 저장돼 있는지(키 이름)만 노출한다.
+        """
+        payload = self.to_summary()
+        payload["change_log"] = [
+            {
+                "at": entry.at.isoformat(),
+                "action": entry.action,
+                "detail": entry.detail,
+                "user_name": entry.user_name,
+            }
+            for entry in reversed(self.change_log)
+        ]
+        payload["input_data_keys"] = sorted(self.input_data.keys())
+        payload["created_by_user_name"] = self.created_by_user_name
+        return payload
 
 
 class SystemUsageStat(BaseModel):
@@ -381,6 +447,28 @@ class CreateSuiteScheduleRequest(BaseModel):
     enabled: bool = True
 
 
+class UpdateScheduleRequest(BaseModel):
+    """예약 in-place 수정 요청 — None 인 필드는 기존 값을 유지한다.
+
+    ``input_data`` 는 제공된 키만 덮어쓴다(빈 문자열 값은 무시). 저장된 인증값(PII)을
+    화면에 되돌려주지 않고도 교체할 수 있게 하는 병합 규약이다.
+    """
+
+    name: str | None = None
+    cron: str | None = None
+    input_data: dict[str, str] | None = None
+    selected_module_ids: list[str] | None = None
+    # suite 예약 전용
+    browser_mode: str | None = None
+    selected_system_codes: list[str] | None = None
+
+
+class PauseScheduleRequest(BaseModel):
+    """일시 중지(~시각까지) 요청. ``paused_until=None`` 은 즉시 재개."""
+
+    paused_until: datetime | None = None
+
+
 class SuiteStep(BaseModel):
     system_code: str
     system_name: str
@@ -405,6 +493,9 @@ class SuiteRun(BaseModel):
     selected_system_codes: list[str] = Field(default_factory=list)
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
+    # Run 과 동일한 출처 추적 — 예약 관리 센터가 schedule_id 로 Suite 이력을 조회한다.
+    triggered_by: str = "manual"
+    schedule_id: str | None = None
 
 
 class SuiteEvent(BaseModel):

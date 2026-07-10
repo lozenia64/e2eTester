@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import (
     get_registry,
@@ -14,8 +15,10 @@ from app.auth.models import User
 from app.core.models import (
     CreateScheduleRequest,
     CreateSuiteScheduleRequest,
+    PauseScheduleRequest,
     Schedule,
     StartSuiteRequest,
+    UpdateScheduleRequest,
 )
 from app.orchestrator.suite_view import resolve_suite_request_for_user
 
@@ -49,6 +52,41 @@ async def list_schedules(
 ):
     user_id_filter = None if current_user.role == "admin" else current_user.user_id
     return await schedule_service.list_schedules(user_id=user_id_filter)
+
+
+@router.get("/board")
+async def schedule_board(
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+):
+    """관제 보드 — KPI + 문제 예약 분류(stuck/failing/missed/stale) 파생 필드 포함 목록."""
+    user_id_filter = None if current_user.role == "admin" else current_user.user_id
+    return await schedule_service.board(user_id=user_id_filter)
+
+
+@router.get("/calendar")
+async def schedule_calendar(
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+):
+    """점검 시간표 — cron 미래 전개(계획) + schedule-triggered 실행(실적/누락) + 커버리지."""
+    now = datetime.now(UTC)
+    start = from_ if from_ is not None else now - timedelta(days=3)
+    end = to if to is not None else now + timedelta(days=4)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=UTC)
+    user_id_filter = None if current_user.role == "admin" else current_user.user_id
+    allowed = None if current_user.role == "admin" else current_user.allowed_system_codes
+    try:
+        return await schedule_service.calendar(
+            start, end, user_id=user_id_filter, allowed_system_codes=allowed
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/systems/{system_code}")
@@ -123,12 +161,101 @@ async def toggle_schedule(
     schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
     _assert_can_manage_schedule(schedule, current_user)
     try:
-        schedule = await schedule_service.toggle(schedule_id)
+        schedule = await schedule_service.toggle(schedule_id, user_name=current_user.name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Schedule not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return schedule.to_summary()
+
+
+@router.get("/{schedule_id}")
+async def get_schedule_detail(
+    schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+):
+    """예약 상세(요약 + 변경 이력 + 저장된 입력값 키 목록 — 값(PII)은 미노출)."""
+    schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
+    _assert_can_manage_schedule(schedule, current_user)
+    return await schedule_service.get_detail(schedule_id)
+
+
+@router.put("/{schedule_id}")
+async def update_schedule(
+    schedule_id: str,
+    payload: UpdateScheduleRequest,
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+):
+    """예약 in-place 수정(이름/cron/모듈 선택/인증값 병합, suite 는 시스템 선택/브라우저 모드)."""
+    schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
+    _assert_can_manage_schedule(schedule, current_user)
+    try:
+        schedule = await schedule_service.update_schedule(
+            schedule_id, payload, user_name=current_user.name
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Schedule not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return schedule.to_summary()
+
+
+@router.get("/{schedule_id}/history")
+async def schedule_history(
+    schedule_id: str,
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+):
+    """예약 단위 실행 이력(최근 N회 점 스트립 + 성공률/평균 소요/연속 성공 streak)."""
+    schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
+    _assert_can_manage_schedule(schedule, current_user)
+    return await schedule_service.history(schedule_id, limit=limit)
+
+
+@router.post("/{schedule_id}/pause-until")
+async def pause_schedule_until(
+    schedule_id: str,
+    payload: PauseScheduleRequest,
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+):
+    """일시 중지(~시각까지, 자동 재개). ``paused_until=null`` 은 즉시 재개."""
+    schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
+    _assert_can_manage_schedule(schedule, current_user)
+    try:
+        schedule = await schedule_service.pause_until(
+            schedule_id, payload.paused_until, user_name=current_user.name
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Schedule not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return schedule.to_summary()
+
+
+@router.post("/{schedule_id}/duplicate")
+async def duplicate_schedule(
+    schedule_id: str,
+    current_user: User = Depends(get_current_user),
+    schedule_service: SchedulerService = Depends(get_schedule_service),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+):
+    """예약 복제 — 같은 대상/주기/입력의 새 예약(비활성 상태)을 만든다."""
+    schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
+    _assert_can_manage_schedule(schedule, current_user)
+    copy = await schedule_service.duplicate_schedule(
+        schedule_id,
+        user_id=current_user.user_id,
+        user_name=current_user.name,
+    )
+    return copy.to_summary()
 
 
 @router.post("/{schedule_id}/run-now")

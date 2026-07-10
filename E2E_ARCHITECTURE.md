@@ -323,6 +323,7 @@ e2eTester/
 - `GET /runs/history` (당일 이전 Run 이력 HTML, 비관리자; admin 은 `/admin` 으로 리다이렉트)
 - `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
+- `GET /schedules` (예약 점검 관리 센터 HTML — 무인 점검 관제실: KPI/조치 필요/목록/시간표 캘린더/상세 드로어; admin 포함, 리다이렉트 없음. 수정 폼 렌더링을 위해 접근 가능 시스템의 manifest 를 함께 내려준다)
 - `GET /anomalies` (이상징후 인박스 HTML — 팀 전체 이상건 작업목록; admin 포함 모든 로그인 사용자, 리다이렉트 없음)
 - `GET /insights` (시스템 인사이트 HTML — 헬스/타임라인/모듈 딥다이브 3탭; admin 포함)
 - `GET /systems/{system_code}/insights` (특정 시스템 프리셀렉트 인사이트 HTML)
@@ -351,11 +352,18 @@ e2eTester/
 - `POST /api/suites/{suite_id}/cancel`
 - `POST /api/suites/{suite_id}/otp` (현재 대기 중인 시스템 Run에 OTP 전달)
 - `POST /api/otp/inbound` (SMS 중계기 → 현재 OTP 대기 Run 자동 탐색 후 OTP 주입·재개; 사용자 세션이 아닌 `X-OTP-Relay-Token` 기기 토큰 인증, `E2E_OTP_RELAY_TOKEN` 미설정 시 비활성)
-- `GET /api/schedules` (예약 목록 요약, input_data / suite_systems 제외)
+- `GET /api/schedules` (예약 목록 요약, input_data / suite_systems 제외; `cron_label`(한글 주기)·`paused` 파생 필드 포함)
+- `GET /api/schedules/board` (예약 관제 보드 — KPI(전체/활성/오늘 예정/조치 필요) + 예약별 문제 분류 `issues`(stuck=OTP 멈춤/failing=연속 실패/missed=실행 누락/stale=꺼진 지 오래) 파생 필드. 문제 예약만 `attention` 으로 승격)
+- `GET /api/schedules/calendar` (점검 시간표 — `from`/`to`(최대 14일) 구간의 cron 미래 전개(계획) + schedule-triggered Run/Suite 매칭(실적) 블록. 계획됐는데 실행이 없으면 `missed`, 계획 없는 수동 실행은 `unplanned`. 시스템별 최근 24h 커버리지 + 같은 시각 몰림 경고 포함)
 - `POST /api/schedules/systems/{system_code}` (개별 시스템 cron 예약 등록)
 - `POST /api/schedules/suites` (전체 점검 cron 예약 등록, `selected_system_codes` 포함)
+- `GET /api/schedules/{schedule_id}` (예약 상세 — 요약 + 변경 이력 `change_log` + 저장된 입력값 키 목록 `input_data_keys`; 값(PII)은 미노출, 소유자/admin 전용)
+- `PUT /api/schedules/{schedule_id}` (예약 in-place 수정 — 이름/cron/모듈 선택/인증값 병합(비어있지 않은 키만 교체), suite 는 시스템 선택/브라우저 모드. 생성과 동일한 검증을 통과해야 하며 변경 이력에 기록)
+- `GET /api/schedules/{schedule_id}/history` (예약 단위 실행 이력 — 최근 N회(기본 30) 점 스트립 + 성공률/평균 소요/연속 성공 streak)
 - `POST /api/schedules/{schedule_id}/toggle` (활성/비활성 전환)
 - `POST /api/schedules/{schedule_id}/run-now` (즉시 1회 실행)
+- `POST /api/schedules/{schedule_id}/pause-until` (일시 중지(~시각까지) — 기한이 지나면 스케줄러 tick 이 자동 재개, `paused_until=null` 은 즉시 재개)
+- `POST /api/schedules/{schedule_id}/duplicate` (예약 복제 — 같은 대상/주기/입력의 새 예약을 비활성 상태로 생성)
 - `DELETE /api/schedules/{schedule_id}` (예약 삭제 — 모바일 트리거 URL 도 함께 폐기)
 - `GET /m/{trigger_token}` (모바일 즉시 점검 HTML — 예약별 비밀 토큰 인증, JWT 불필요. **부수효과 없음**: 실제 실행은 페이지 스크립트가 아래 POST 를 호출한다 — 메신저 링크 미리보기·브라우저 프리페치가 실 사이트 점검을 오발사하지 않게 하는 설계)
 - `POST /api/trigger/{trigger_token}` (예약 "지금 실행"과 동일한 즉시 실행 — 직전 실행이 아직 진행 중이면 새로 만들지 않고 `already_running: true` 로 그 실행에 합류)
@@ -658,7 +666,9 @@ manifest 에 들어 있는 정보:
 현재 구현:
 
 - `app/scheduling/cron.py` — 5필드 cron(`분 시 일 월 요일`) 파서·다음 실행 시각 계산기. 파싱·매칭·다음 실행 계산·경계 처리를 **`croniter` 라이브러리**(`requirements.txt` 의 `croniter>=2.0,<7.0`)에 위임하는 얇은 래퍼이며, 공개 API(`parse_cron`/`CronSchedule.matches`/`next_run_after`)만 유지한다.
-- `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD 와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
+- `app/scheduling/scheduler.py` (`SchedulerService`) — 예약 CRUD(수정·복제·일시 중지 포함)와, cron 기준으로 Run/Suite 를 자동 생성하는 백그라운드 루프(`run_forever`), 그리고 예약 관리 센터의 읽기 모델(`board`/`calendar`/`history`/`get_detail`). `app/main.py` lifespan 에서 task 로 띄우고 종료 시 정리한다.
+- `app/scheduling/schedule_center.py` — **예약 점검 관리 센터 순수 빌더**(`insights_*` 빌더와 같은 패턴). 관제 보드의 문제 분류(`classify_issues`: stuck/failing/missed/stale), 캘린더의 cron 전개(`expand_occurrences`)·계획 vs 실적 매칭(`match_occurrences` — 매칭 실패는 `missed`, 계획 없는 실행은 `unplanned`)·몰림 경고(`cluster_warnings`)·커버리지(`build_coverage`), 예약 이력 통계(`build_history_stats`: 성공률/평균 소요/연속 성공), cron 한글 라벨(`cron_to_label`)을 순수 함수로 가진다. `SchedulerService` 는 데이터를 모아 넘기는 얇은 인터프리터이고, 규칙은 브라우저/DB 없이 단위 테스트한다(`tests/test_schedule_center.py`).
+- `app/web/templates/schedules.html` + `app/web/static/schedules.js` — **예약 점검 관리 센터 화면**(`/schedules`, 사이드바 "예약 관리"). ① KPI 스트립(전체/활성/오늘 예정/조치 필요) + 화면 상단 고정 **조치 필요** 섹션(문제 예약만 자동 승격 — 🔴 OTP 멈춤은 OTP 입력 딥링크, 🟠 연속 실패, 🟡 실행 누락(`last_skipped_at`), ⚪ 꺼진 지 오래는 원클릭 켜기), ② **목록 뷰**(다음 실행 카운트다운 `T-2h 14m`·cron 한글 라벨·마지막 결과 배지·행별 토글/지금 실행/수정/복제/삭제), ③ **시간표 캘린더 뷰**(주간 요일×시간 그리드에 계획 vs 실적 대비, 누락 빗금, 24h 커버리지 바, 몰림 경고), ④ **상세 드로어**(최근 30회 점 스트립 + 성공률/평균 소요/연속 성공, in-place 수정 폼(cron 빌더 재사용, 인증값은 비어있지 않은 키만 교체), 일시 중지(~시각까지) 퀵칩, 복제, 변경 이력, 모바일 트리거 URL 복사). 사이드바 배지는 `GET /api/schedules/board` 의 조치 필요 건수를 표시한다.
 - `app/storage/sqlite_schedule_repository.py` (`SqliteScheduleRepository`, 기본 사용) / `app/storage/schedule_repository.py` (`InMemoryScheduleRepository`) — 예약 저장소. SQLite 어댑터는 `ScheduleRepositoryPort` 를 구현해 재시작 후에도 예약이 남는다.
 - `app/api/routes_schedules.py` — 예약 REST API.
 - `app/api/routes_trigger.py` + `app/web/templates/mobile_trigger.html` — **모바일 즉시 점검 트리거**. 예약별 비밀 `trigger_token`(생성 시 발급, 레거시 예약은 목록 조회 시 지연 발급)으로 JWT 없이 접근하는 `/m/{trigger_token}` 페이지와 `POST /api/trigger/{trigger_token}` 실행 API. 홈 화면 예약 카드의 "모바일 URL" 버튼으로 URL 을 복사한다.
@@ -669,8 +679,8 @@ manifest 에 들어 있는 정보:
 - 홈 화면 시스템 폼에서 입력값·모듈 선택 그대로 cron 식을 붙여 **개별 시스템** 예약을 등록한다. 등록 시 `RunService.validate_run_request` 로 검증한다.
 - 홈 SUITE 카드에서 브라우저 모드·시스템 선택(`selected_system_codes`)·선택된 시스템별 인증 정보와 함께 **전체 점검** 예약을 등록한다 (`POST /api/schedules/suites`). 등록 시 `SuiteService.validate_suite_request` 로 검증한다.
 - 예약은 `schedule_kind` 가 `system`(개별 Run) 또는 `suite`(전체 점검) 이다.
-- 예약은 활성/비활성 전환, 즉시 실행(`run-now`), 삭제가 가능하다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, Suite 예약은 `triggered_by="suite"` Run 들을 순차 생성한다.
-- 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛴다.
+- 예약은 활성/비활성 전환, 즉시 실행(`run-now`), **in-place 수정(PUT — 삭제 후 재생성 불필요)**, **복제(비활성 상태로 생성)**, **일시 중지(~시각까지, 기한 경과 시 tick 이 자동 재개)**, 삭제가 가능하다. 등록/수정/켬끔/일시중지/복제는 예약의 `change_log`(최근 30건)에 누가·언제·무엇을 바꿨는지 기록되어 상세 드로어에 노출된다. 예약 트리거 Run 은 `triggered_by="schedule"`, `schedule_id` 로 태깅되고, **Suite 도 동일하게 `triggered_by="schedule"` + `schedule_id` 로 태깅**되어(예약 관리 센터가 이력/캘린더 실적을 `schedule_id` 로 조회) 그 하위 Run 들은 `triggered_by="suite"` 로 순차 생성된다.
+- 백그라운드 루프는 주기적으로(기본 20초) `next_run_at` 이 지난 활성 예약을 찾아 실행하고 다음 시각을 다시 계산한다. 직전 예약 Run/Suite 가 아직 진행 중이면 중복 실행을 건너뛰며, 이때 `Schedule.last_skipped_at` 을 기록해 관제 보드의 '실행 누락/건너뜀' 신호로 노출한다(과거에는 로그에만 남던 `skipped_overlap`). `paused_until` 이 설정된 예약은 발사하지 않고 다음 주기로 미루되(의도된 침묵 — 누락 신호를 남기지 않음), 기한이 지나면 자동 재개한다.
 - **모바일 즉시 점검(트리거 URL)**: 예약마다 발급되는 비밀 `trigger_token` 으로 `/m/{trigger_token}` 에 접속하면, 대시보드 로그인 없이 그 예약의 "지금 실행"과 동일한 점검이 실행된다. GET 페이지 자체는 부수효과가 없고(링크 미리보기·프리페치 오발사 방지) 페이지 스크립트가 `POST /api/trigger/{trigger_token}` 을 호출한다. 직전 실행이 진행 중이면 이중 발사 대신 그 실행에 합류하고(`SchedulerService.trigger_now` 의 멱등 가드), OTP 대기 시 같은 페이지에서 인증번호를 제출해 재개할 수 있다. 토큰 대조는 상수 시간 비교(`hmac.compare_digest`)이고 불일치는 일괄 404 이며, 예약 삭제가 곧 URL 폐기다.
 - 기준 타임존은 `E2E_SCHEDULE_TZ`(기본 `Asia/Seoul`).
 - **일일 보존 정리**: `RunRetentionScheduler` 가 매일 cron 시각(기본 `0 3 * * *`, 기준 타임존 `E2E_SCHEDULE_TZ`)에 당일 00:00 이전 `requested_at` 의 **점검실패(`ERROR`)·취소(`CANCELLED`)** Run 을 DB·로그·아티팩트째 삭제한다(`정상`·`이상징후`는 유지 — `RUN_DAILY_PURGE_STATUSES`). 기본 활성(`E2E_RUN_RETENTION_ENABLED=true`)이며 `E2E_RUN_RETENTION_ENABLED=false` 로 끄거나 `E2E_RUN_RETENTION_CRON` 으로 주기를 바꾼다. 60초마다 cron 일치 여부를 확인하고 하루 한 번만 정리한다.

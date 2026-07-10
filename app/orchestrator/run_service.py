@@ -195,6 +195,37 @@ class RunService:
                 break
         return summaries
 
+    async def list_runs_by_schedule(self, schedule_id: str, limit: int = 30) -> list[Run]:
+        """특정 예약이 트리거한 Run 을 최근순으로 돌려준다(예약 관리 센터 이력/캘린더용).
+
+        이상건 인박스와 같은 스캔-도출 패턴 — 별도 인덱스 없이 ``list_runs()`` 를 필터한다.
+        """
+        runs = [
+            run
+            for run in await self._repository.list_runs()
+            if run.schedule_id == schedule_id
+        ]
+        runs.sort(key=lambda run: run.requested_at, reverse=True)
+        return runs[:limit]
+
+    async def last_finished_at_by_system(self) -> dict[str, datetime]:
+        """시스템별 마지막 '점검 완료' 시각(취소 제외) — 커버리지 진단(점검 공백)용."""
+        finished = {
+            RunStatus.PASSED,
+            RunStatus.ANOMALY,
+            RunStatus.ERROR,
+            RunStatus.FAILED,
+        }
+        latest: dict[str, datetime] = {}
+        for run in await self._repository.list_runs():
+            if run.status not in finished:
+                continue
+            moment = _as_utc(run.ended_at or run.requested_at)
+            current = latest.get(run.system_code)
+            if current is None or moment > current:
+                latest[run.system_code] = moment
+        return latest
+
     async def get_daily_dashboard(
         self,
         *,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -18,9 +18,22 @@ from app.core.models import (
     Schedule,
     StartSuiteRequest,
     SuiteRun,
+    UpdateScheduleRequest,
 )
 from app.core.settings import get_settings
 from app.scheduling.cron import next_run_after, parse_cron
+from app.scheduling.schedule_center import (
+    MATCH_BEFORE,
+    ExecutionPoint,
+    build_coverage,
+    build_history_stats,
+    classify_issues,
+    cluster_warnings,
+    count_today_planned,
+    cron_to_label,
+    expand_occurrences,
+    match_occurrences,
+)
 from app.storage.ports import ScheduleRepositoryPort
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"
@@ -48,6 +61,13 @@ def _resolve_timezone() -> tuple[ZoneInfo, str]:
 def _new_trigger_token() -> str:
     """모바일 즉시 점검 URL 용 예약별 비밀 토큰(URL-safe, 추측 불가)."""
     return secrets.token_urlsafe(24)
+
+
+def _ensure_utc(moment: datetime | None) -> datetime | None:
+    """레거시(naive) 저장 값을 UTC aware 로 강제한다 — 비교/차이 계산 안전장치."""
+    if moment is None:
+        return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
 def schedule_today_start_utc() -> datetime:
@@ -117,6 +137,7 @@ class SchedulerService:
             created_by_user_name=user_name,
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
+        schedule.record_change("created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name)
         await self._repository.save(schedule)
         return schedule
 
@@ -154,6 +175,7 @@ class SchedulerService:
             created_by_user_name=user_name,
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
+        schedule.record_change("created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name)
         await self._repository.save(schedule)
         return schedule
 
@@ -169,8 +191,16 @@ class SchedulerService:
         for schedule in schedules:
             await self._ensure_trigger_token(schedule)
             await self._refresh_last_execution_status(schedule)
-            summaries.append(schedule.to_summary())
+            summaries.append(self._augment_summary(schedule.to_summary(), schedule))
         return summaries
+
+    def _augment_summary(self, summary: dict, schedule: Schedule) -> dict:
+        """요약에 표시용 파생 필드(cron 한글 라벨, 일시 중지 여부)를 얹는다."""
+        now = datetime.now(UTC)
+        paused_until = _ensure_utc(schedule.paused_until)
+        summary["cron_label"] = cron_to_label(schedule.cron)
+        summary["paused"] = paused_until is not None and paused_until > now
+        return summary
 
     async def _ensure_trigger_token(self, schedule: Schedule) -> None:
         """토큰 도입 이전에 만든 예약(레거시 행)에 트리거 토큰을 지연 발급한다."""
@@ -183,16 +213,386 @@ class SchedulerService:
         await self._repository.get(schedule_id)  # KeyError -> 404
         await self._repository.delete(schedule_id)
 
-    async def set_enabled(self, schedule_id: str, enabled: bool) -> Schedule:
+    async def set_enabled(
+        self, schedule_id: str, enabled: bool, user_name: str | None = None
+    ) -> Schedule:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         schedule.enabled = enabled
         schedule.next_run_at = self._next_run_from_now(schedule.cron) if enabled else None
+        schedule.disabled_at = None if enabled else datetime.now(UTC)
+        schedule.record_change(
+            "enabled" if enabled else "disabled",
+            "예약 켬" if enabled else "예약 끔",
+            user_name=user_name,
+        )
         await self._repository.save(schedule)
         return schedule
 
-    async def toggle(self, schedule_id: str) -> Schedule:
+    async def toggle(self, schedule_id: str, user_name: str | None = None) -> Schedule:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
-        return await self.set_enabled(schedule_id, not schedule.enabled)
+        return await self.set_enabled(schedule_id, not schedule.enabled, user_name=user_name)
+
+    async def get_detail(self, schedule_id: str) -> dict:
+        """상세 드로어용 — 요약 + 변경 이력(+ 저장된 입력값 키 목록, 값은 미노출)."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        await self._ensure_trigger_token(schedule)
+        await self._refresh_last_execution_status(schedule)
+        return self._augment_summary(schedule.to_detail(), schedule)
+
+    async def update_schedule(
+        self,
+        schedule_id: str,
+        request: UpdateScheduleRequest,
+        user_name: str | None = None,
+    ) -> Schedule:
+        """예약 in-place 수정 — 삭제 후 재생성 없이 이름/주기/모듈 선택/인증값을 바꾼다.
+
+        ``input_data`` 는 제공된 비어있지 않은 키만 기존 값 위에 병합한다(저장된 PII 를
+        화면에 되돌려주지 않고 교체 가능). 검증은 생성 경로와 동일한 규칙을 통과해야 한다.
+        """
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        changed: list[str] = []
+
+        if request.name is not None and request.name.strip() != schedule.name:
+            schedule.name = request.name.strip()
+            changed.append("이름")
+
+        if request.cron is not None and request.cron.strip() != schedule.cron:
+            parse_cron(request.cron)  # ValueError -> 400
+            schedule.cron = request.cron.strip()
+            changed.append(f"주기({cron_to_label(schedule.cron)})")
+
+        if schedule.schedule_kind == "suite":
+            if request.browser_mode is not None or request.selected_system_codes is not None:
+                browser_mode, normalized_systems, resolved_system_codes = (
+                    self._suite_service.validate_suite_request(
+                        request.browser_mode or schedule.browser_mode or "headed",
+                        dict(schedule.suite_systems or {}),
+                        request.selected_system_codes
+                        if request.selected_system_codes is not None
+                        else schedule.selected_system_codes,
+                    )
+                )
+                if request.browser_mode is not None and browser_mode != schedule.browser_mode:
+                    changed.append("브라우저 모드")
+                if (
+                    request.selected_system_codes is not None
+                    and resolved_system_codes != schedule.selected_system_codes
+                ):
+                    changed.append("시스템 선택")
+                schedule.browser_mode = browser_mode
+                schedule.suite_systems = normalized_systems
+                schedule.selected_system_codes = resolved_system_codes
+                schedule.step_total = len(resolved_system_codes)
+        else:
+            input_changed = bool(
+                request.input_data
+                and any(value.strip() for value in request.input_data.values())
+            )
+            modules_changed = (
+                request.selected_module_ids is not None
+                and request.selected_module_ids != (schedule.selected_module_ids or [])
+            )
+            if input_changed or modules_changed:
+                merged_input = dict(schedule.input_data)
+                if request.input_data:
+                    merged_input.update(
+                        {
+                            key: value.strip()
+                            for key, value in request.input_data.items()
+                            if value.strip()
+                        }
+                    )
+                sanitized_input, resolved_module_ids = self._run_service.validate_run_request(
+                    schedule.system_code,
+                    merged_input,
+                    request.selected_module_ids
+                    if request.selected_module_ids is not None
+                    else schedule.selected_module_ids,
+                )
+                schedule.input_data = sanitized_input
+                schedule.selected_module_ids = resolved_module_ids
+                if input_changed:
+                    changed.append("인증값")
+                if modules_changed:
+                    changed.append("모듈 선택")
+
+        if not changed:
+            return schedule
+
+        if schedule.enabled:
+            schedule.next_run_at = self._next_run_from_now(schedule.cron)
+        schedule.updated_at = datetime.now(UTC)
+        schedule.record_change("updated", " · ".join(changed), user_name=user_name)
+        await self._repository.save(schedule)
+        return schedule
+
+    async def pause_until(
+        self,
+        schedule_id: str,
+        until: datetime | None,
+        user_name: str | None = None,
+    ) -> Schedule:
+        """일시 중지(~시각까지) 설정/해제. 기한이 지나면 tick 이 자동 재개한다."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        if until is None:
+            schedule.paused_until = None
+            schedule.record_change("pause_cleared", "일시 중지 해제(수동 재개)", user_name=user_name)
+        else:
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=self._timezone)
+            until_utc = until.astimezone(UTC)
+            if until_utc <= datetime.now(UTC):
+                raise ValueError("일시 중지 종료 시각은 미래여야 합니다.")
+            schedule.paused_until = until_utc
+            local_label = until_utc.astimezone(self._timezone).strftime("%Y-%m-%d %H:%M")
+            schedule.record_change("paused", f"{local_label} 까지 일시 중지", user_name=user_name)
+        await self._repository.save(schedule)
+        return schedule
+
+    async def duplicate_schedule(
+        self,
+        schedule_id: str,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Schedule:
+        """예약 복제 — 같은 대상/주기/입력으로 새 예약을 만든다(검토 후 켜도록 비활성 상태)."""
+        source = await self._repository.get(schedule_id)  # KeyError -> 404
+        copy = source.model_copy(
+            update={
+                "schedule_id": f"sch_{uuid4().hex[:8]}",
+                "name": f"{source.name or source.system_name} (복사본)".strip(),
+                "enabled": False,
+                "trigger_token": _new_trigger_token(),
+                "input_data": dict(source.input_data),
+                "selected_module_ids": list(source.selected_module_ids)
+                if source.selected_module_ids is not None
+                else None,
+                "suite_systems": {
+                    code: dict(values) for code, values in source.suite_systems.items()
+                }
+                if source.suite_systems is not None
+                else None,
+                "selected_system_codes": list(source.selected_system_codes)
+                if source.selected_system_codes is not None
+                else None,
+                "scope_system_codes": list(source.scope_system_codes)
+                if source.scope_system_codes is not None
+                else None,
+                "created_at": datetime.now(UTC),
+                "created_by_user_id": user_id or source.created_by_user_id,
+                "created_by_user_name": user_name or source.created_by_user_name,
+                "next_run_at": None,
+                "last_run_at": None,
+                "last_run_id": None,
+                "last_run_status": None,
+                "last_suite_id": None,
+                "last_suite_status": None,
+                "last_skipped_at": None,
+                "paused_until": None,
+                "disabled_at": datetime.now(UTC),
+                "updated_at": None,
+                "change_log": [],
+            }
+        )
+        copy.record_change(
+            "duplicated",
+            f"'{source.name or source.system_name}' 예약을 복제해 생성(비활성 상태)",
+            user_name=user_name,
+        )
+        await self._repository.save(copy)
+        return copy
+
+    # --- 예약 점검 관리 센터 읽기 모델 (관제 보드 / 캘린더 / 이력) ------------
+
+    async def _recent_execution_points(
+        self, schedule: Schedule, limit: int
+    ) -> list[ExecutionPoint]:
+        """예약이 트리거한 실행(Run/Suite)을 ``ExecutionPoint`` 로 투영한다(최신순)."""
+        points: list[ExecutionPoint] = []
+        if schedule.schedule_kind == "suite":
+            for suite in await self._suite_service.list_suites_by_schedule(
+                schedule.schedule_id, limit=limit
+            ):
+                points.append(
+                    ExecutionPoint(
+                        execution_id=suite.suite_id,
+                        kind="suite",
+                        status=suite.status.value,
+                        requested_at=_ensure_utc(suite.requested_at),
+                        started_at=_ensure_utc(suite.started_at),
+                        ended_at=_ensure_utc(suite.ended_at),
+                    )
+                )
+            return points
+        for run in await self._run_service.list_runs_by_schedule(
+            schedule.schedule_id, limit=limit
+        ):
+            points.append(
+                ExecutionPoint(
+                    execution_id=run.run_id,
+                    kind="run",
+                    status=run.status.value,
+                    requested_at=_ensure_utc(run.requested_at),
+                    started_at=_ensure_utc(run.started_at),
+                    ended_at=_ensure_utc(run.ended_at),
+                )
+            )
+        return points
+
+    def _last_status_value(self, schedule: Schedule) -> str | None:
+        if schedule.schedule_kind == "suite":
+            return schedule.last_suite_status.value if schedule.last_suite_status else None
+        return schedule.last_run_status.value if schedule.last_run_status else None
+
+    async def board(self, user_id: str | None = None) -> dict:
+        """관제 보드 — 전체 예약 요약 + 문제 예약 자동 승격(management by exception)."""
+        now = datetime.now(UTC)
+        day_start_local = datetime.now(self._timezone).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        day_end_local = day_start_local + timedelta(days=1)
+
+        schedules = sorted(
+            await self._repository.list(), key=lambda item: item.created_at, reverse=True
+        )
+        if user_id is not None:
+            schedules = [s for s in schedules if s.created_by_user_id == user_id]
+
+        entries: list[dict] = []
+        attention: list[dict] = []
+        active_count = 0
+        today_planned = 0
+        for schedule in schedules:
+            await self._ensure_trigger_token(schedule)
+            await self._refresh_last_execution_status(schedule)
+            summary = self._augment_summary(schedule.to_summary(), schedule)
+            recent = await self._recent_execution_points(schedule, limit=5)
+            issues = classify_issues(
+                enabled=schedule.enabled,
+                paused_until=_ensure_utc(schedule.paused_until),
+                last_status=self._last_status_value(schedule),
+                last_skipped_at=_ensure_utc(schedule.last_skipped_at),
+                disabled_at=_ensure_utc(schedule.disabled_at),
+                created_at=_ensure_utc(schedule.created_at),
+                last_run_at=_ensure_utc(schedule.last_run_at),
+                recent_executions=recent,
+                now=now,
+            )
+            summary["issues"] = issues
+            if schedule.enabled and not summary["paused"]:
+                active_count += 1
+                today_planned += count_today_planned(
+                    schedule.cron, day_start_local, day_end_local
+                )
+            if issues:
+                attention.append(summary)
+            entries.append(summary)
+
+        return {
+            "generated_at": now.isoformat(),
+            "timezone": self._timezone_name,
+            "kpi": {
+                "total": len(entries),
+                "active": active_count,
+                "today_planned": today_planned,
+                "attention": len(attention),
+            },
+            "attention": attention,
+            "schedules": entries,
+        }
+
+    async def history(self, schedule_id: str, limit: int = 30) -> dict:
+        """예약 단위 실행 이력(점 스트립 + 성공률/평균 소요/연속 성공)."""
+        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        points = await self._recent_execution_points(schedule, limit=limit)
+        return {
+            "schedule_id": schedule.schedule_id,
+            "schedule_kind": schedule.schedule_kind,
+            "name": schedule.name,
+            "stats": build_history_stats(points),
+        }
+
+    async def calendar(
+        self,
+        start: datetime,
+        end: datetime,
+        user_id: str | None = None,
+        allowed_system_codes: list[str] | None = None,
+    ) -> dict:
+        """점검 시간표 — cron 미래 전개(계획) + schedule-triggered 실행 매칭(실적/누락).
+
+        기간은 최대 14일. 비활성 예약은 계획을 펼치지 않되 실적(unplanned 포함)은 남는다.
+        """
+        if end <= start:
+            raise ValueError("조회 종료 시각은 시작 시각 이후여야 합니다.")
+        if end - start > timedelta(days=14):
+            raise ValueError("캘린더 조회 기간은 최대 14일입니다.")
+
+        now = datetime.now(UTC)
+        start_local = start.astimezone(self._timezone)
+        end_local = end.astimezone(self._timezone)
+
+        schedules = await self._repository.list()
+        if user_id is not None:
+            schedules = [s for s in schedules if s.created_by_user_id == user_id]
+
+        blocks: list[dict] = []
+        planned_pairs: list[tuple[str, datetime]] = []
+        for schedule in schedules:
+            # 예약이 생기기 전 슬롯을 '누락'으로 오인하지 않도록 전개 시작을 생성 시각으로 클램프.
+            created_local = _ensure_utc(schedule.created_at).astimezone(self._timezone)
+            occurrence_start = max(start_local, created_local)
+            occurrences = (
+                expand_occurrences(schedule.cron, occurrence_start, end_local)
+                if schedule.enabled and occurrence_start < end_local
+                else []
+            )
+            points = [
+                point
+                for point in await self._recent_execution_points(schedule, limit=200)
+                if start - MATCH_BEFORE <= point.requested_at <= end
+            ]
+            for block in match_occurrences(occurrences, points, now):
+                if not block.get("unplanned"):
+                    planned_pairs.append((schedule.schedule_id, block["at"]))
+                blocks.append(
+                    {
+                        "schedule_id": schedule.schedule_id,
+                        "schedule_kind": schedule.schedule_kind,
+                        "name": schedule.name or schedule.system_name,
+                        "system_code": schedule.system_code,
+                        "system_name": schedule.system_name,
+                        "at": block["at"].isoformat(),
+                        "state": block["state"],
+                        "execution_id": block.get("execution_id"),
+                        "link": block.get("link"),
+                        "unplanned": bool(block.get("unplanned")),
+                    }
+                )
+        blocks.sort(key=lambda block: block["at"])
+
+        systems = sorted(
+            self._run_service.list_systems(), key=lambda s: (s.display_order, s.name)
+        )
+        if allowed_system_codes is not None:
+            allowed = set(allowed_system_codes)
+            systems = [s for s in systems if s.system_code in allowed]
+        coverage = build_coverage(
+            [(s.system_code, s.name) for s in systems],
+            await self._run_service.last_finished_at_by_system(),
+            now,
+        )
+
+        return {
+            "from": start.isoformat(),
+            "to": end.isoformat(),
+            "timezone": self._timezone_name,
+            "generated_at": now.isoformat(),
+            "blocks": blocks,
+            "coverage": coverage,
+            "cluster_warnings": cluster_warnings(planned_pairs),
+        }
 
     async def run_now(
         self,
@@ -368,9 +768,22 @@ class SchedulerService:
     async def _tick(self) -> None:
         now = datetime.now(UTC)
         for schedule in await self._repository.list():
+            paused_until = _ensure_utc(schedule.paused_until)
+            if paused_until is not None and paused_until <= now:
+                # 일시 중지 기한 경과 → 자동 재개(기획안 C: 사이트 정기점검 후 자동 복귀).
+                schedule.paused_until = None
+                schedule.record_change("auto_resumed", "일시 중지 기한 경과 — 자동 재개")
+                await self._repository.save(schedule)
+                paused_until = None
             if not schedule.enabled or schedule.next_run_at is None:
                 continue
             if schedule.next_run_at > now:
+                continue
+            if paused_until is not None:
+                # 일시 중지 중에는 발사하지 않고 다음 주기로 미룬다(누락 신호도 남기지 않는다
+                # — 의도된 침묵이므로 관제 보드의 '실행 누락'과 구분).
+                schedule.next_run_at = self._next_run_from_now(schedule.cron)
+                await self._repository.save(schedule)
                 continue
             await self._fire(schedule, now)
 
@@ -383,6 +796,8 @@ class SchedulerService:
                 schedule_kind=schedule.schedule_kind,
                 system_code=schedule.system_code,
             )
+            # 로그에만 있던 skipped_overlap 을 관제 보드('실행 누락/건너뜀')로 노출한다.
+            schedule.last_skipped_at = now
             schedule.next_run_at = self._next_run_from_now(schedule.cron)
             await self._repository.save(schedule)
             return
@@ -460,6 +875,8 @@ class SchedulerService:
             ),
             user_id=actor_id,
             user_name=actor_name,
+            triggered_by="schedule",
+            schedule_id=schedule.schedule_id,
         )
         schedule.last_suite_id = suite.suite_id
         schedule.last_run_at = datetime.now(UTC)

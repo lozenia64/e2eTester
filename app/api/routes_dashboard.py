@@ -174,6 +174,35 @@ def _accessible_systems(current_user: User, run_service: RunService) -> list[dic
     return [{"system_code": s.system_code, "name": s.name} for s in systems]
 
 
+@router.get("/schedules", response_class=HTMLResponse)
+async def schedules_center(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    run_service: RunService = Depends(get_run_service),
+):
+    """예약 점검 관리 센터(무인 점검 관제실) — 관제 보드/목록/캘린더/상세 드로어.
+
+    관리자도 리다이렉트 없이 접근한다(이상징후 인박스와 같은 규칙). 수정 폼 렌더링을
+    위해 접근 가능한 시스템의 manifest(run_form·모듈 목록)를 함께 내려준다.
+    """
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    systems = run_service.list_systems()
+    if current_user.role != "admin":
+        allowed = set(current_user.allowed_system_codes)
+        systems = [s for s in systems if s.system_code in allowed]
+    systems = sorted(systems, key=lambda s: (s.display_order, s.name))
+    systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        {
+            "current_user": current_user,
+            "systems_payload": systems_payload,
+        },
+    )
+
+
 @router.get("/anomalies", response_class=HTMLResponse)
 async def anomalies_inbox(
     request: Request,
