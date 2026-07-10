@@ -25,6 +25,11 @@ def test_parse_takes_last_locator_in_frame_chain():
     assert parse_broken_selector(error) == "#smsNum"
 
 
+def test_parse_takes_last_locator_by_position_with_mixed_quotes():
+    error = "Call log:\nlocator('#frame').locator(\"#target\")"
+    assert parse_broken_selector(error) == "#target"
+
+
 def test_parse_waiting_for_selector_style():
     assert parse_broken_selector('waiting for selector "#firstId" to be visible') == "#firstId"
 

@@ -30,6 +30,10 @@ _CLASS_RE = re.compile(r"\.([-\w]+)")
 CANDIDATE_FLOOR = 0.35
 
 
+def _unescape_selector(selector: str) -> str:
+    return selector.replace('\\"', '"').replace("\\'", "'")
+
+
 def parse_broken_selector(error_text: str) -> str | None:
     """Playwright 오류 문자열에서 실패한 셀렉터를 추출한다.
 
@@ -37,11 +41,15 @@ def parse_broken_selector(error_text: str) -> str | None:
     대상이다. locator 기반이 아닌 실패(get_by_role, URL 대기 등)는 대체 셀렉터를
     주입할 방법이 없으므로 None 을 돌려 치유를 건너뛴다.
     """
-    matches: list[str] = []
+    last: tuple[int, str] | None = None
     for pattern in (_LOCATOR_DQ_RE, _LOCATOR_SQ_RE):
-        matches.extend(pattern.findall(error_text))
-    if matches:
-        return matches[-1].replace('\\"', '"').replace("\\'", "'")
+        for match in pattern.finditer(error_text):
+            pos = match.start()
+            selector = _unescape_selector(match.group(1))
+            if last is None or pos >= last[0]:
+                last = (pos, selector)
+    if last:
+        return last[1]
     waiting = _WAITING_SELECTOR_RE.findall(error_text)
     if waiting:
         return waiting[-1].replace('\\"', '"')
