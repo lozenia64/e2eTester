@@ -88,6 +88,7 @@ def _find_row_by_receipt_number(page, receipt_number: str, timeout_ms: int):
 
 
 def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str):
+    """완료 탭에서 취소된 청구 행을 검증하고, 후속 클릭에 쓸 ``row`` locator 를 반환한다."""
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
     row = _find_row_by_receipt_number(page, receipt_number, timeout_ms)
     row_text = result_common.normalize_text(row.inner_text(timeout=1000))
@@ -103,7 +104,11 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
 
 
 def _dismiss_gnb_hover_by_clicking_receipt_number(page, row, timeout_ms: int) -> None:
-    """스크린샷 직전 GNB hover 메가메뉴가 열린 채 캡처되는 것을 방지한다."""
+    """완료 탭 접수번호를 클릭해 GNB hover 를 해제하고 ``result02`` 상세로 이동한다.
+
+    부수 효과로 모듈 종료 스크린샷은 완료 탭 목록이 아닌 상세 화면을 담는다.
+    상세 데이터 안정화는 공용 ``capture_screenshot`` 의 settle 대기가 담당한다.
+    """
     receipt_link = common.first_visible_locator(
         row.get_by_role("link"), "완료 탭 목록 접수번호 링크"
     )
