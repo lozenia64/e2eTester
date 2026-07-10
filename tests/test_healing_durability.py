@@ -13,7 +13,7 @@ from app.healing.durability import (
 )
 from app.healing.models import HealingAction, HealingEvent
 
-SAMPLE_SOURCE = '''
+SAMPLE_SOURCE = """
 USER_ID_SELECTOR = "#firstId"
 LOGIN_BUTTON_SELECTOR = "#btnRA"
 AUTH_POPUP_IFRAME = '[id^="__POP_ID_"] iframe'
@@ -24,7 +24,7 @@ def run(page):
     page.locator("#smsNum").fill("123456")
     frame.locator('button:has-text("다음에 할게요")').click()
     page.get_by_role("button", name="확인").click()
-'''
+"""
 
 
 def test_extract_refs_finds_constants_inline_and_roles():

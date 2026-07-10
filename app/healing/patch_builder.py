@@ -109,5 +109,7 @@ def _tech_debt_warnings(healed_selector: str) -> list[str]:
             "기존 공용 헬퍼(app/systems/access_common/browser.py)의 패턴 재사용을 우선 검토하세요."
         )
     if ">> nth=" in healed_selector:
-        warnings.append("인덱스 고정(>> nth=0)이 포함되어 있습니다 — 요소 순서 변경에 다시 깨질 수 있습니다.")
+        warnings.append(
+            "인덱스 고정(>> nth=0)이 포함되어 있습니다 — 요소 순서 변경에 다시 깨질 수 있습니다."
+        )
     return warnings

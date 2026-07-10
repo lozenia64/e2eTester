@@ -13,9 +13,7 @@ from app.healing.selector_healer import (
 
 
 def test_parse_selector_from_timeout_error():
-    error = (
-        'Page.click: Timeout 30000ms exceeded.\nCall log:\nwaiting for locator("#btnRA")\n'
-    )
+    error = 'Page.click: Timeout 30000ms exceeded.\nCall log:\nwaiting for locator("#btnRA")\n'
     assert parse_broken_selector(error) == "#btnRA"
 
 

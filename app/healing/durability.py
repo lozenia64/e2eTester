@@ -22,9 +22,7 @@ _INLINE_CALL_RE = re.compile(
 # 모듈 상단 셀렉터 상수(대문자 상수 = 문자열 리터럴).
 _CONSTANT_RE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*=\s*([\"'])(.+?)\2\s*$")
 # get_by_role/label 사용(접근성 기반 — 안정 등급으로 집계).
-_GET_BY_ROLE_RE = re.compile(
-    r"get_by_role\(\s*[\"']([a-z]+)[\"'](?:\s*,\s*name=([\"'])(.+?)\2)?"
-)
+_GET_BY_ROLE_RE = re.compile(r"get_by_role\(\s*[\"']([a-z]+)[\"'](?:\s*,\s*name=([\"'])(.+?)\2)?")
 # 셀렉터로 보이는 문자열인지(경로·메시지 등 오탐 제거).
 _SELECTOR_SHAPE_RE = re.compile(
     r"^[#.\[/]|^[a-z][a-z0-9]*[\[.#:]|:has-text|>>|^text=|^xpath=|iframe"
@@ -106,9 +104,7 @@ def extract_selector_refs(path: str, source: str) -> list[dict[str, Any]]:
             if key in seen:
                 continue
             seen.add(key)
-            refs.append(
-                {"file": path, "line": line_no, "selector": value, "kind": "inline"}
-            )
+            refs.append({"file": path, "line": line_no, "selector": value, "kind": "inline"})
         for match in _GET_BY_ROLE_RE.finditer(line):
             role, _q, name = match.group(1), match.group(2), match.group(3)
             value = f"role={role}" + (f'[name="{name}"]' if name else "")
@@ -175,9 +171,7 @@ def build_durability_map(
 
     by_system: dict[str, dict[str, int]] = {}
     for row in rows:
-        bucket = by_system.setdefault(
-            row["system"], {"green": 0, "amber": 0, "red": 0, "total": 0}
-        )
+        bucket = by_system.setdefault(row["system"], {"green": 0, "amber": 0, "red": 0, "total": 0})
         bucket[row["grade"]] += 1
         bucket["total"] += 1
 

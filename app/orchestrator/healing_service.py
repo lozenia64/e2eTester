@@ -351,9 +351,7 @@ class HealingService:
             source = path.read_text(encoding="utf-8")
         except OSError as exc:
             raise ValueError(f"소스 파일을 읽을 수 없습니다: {patch.file_path}") from exc
-        new_source, count = apply_replacement(
-            source, patch.broken_selector, patch.healed_selector
-        )
+        new_source, count = apply_replacement(source, patch.broken_selector, patch.healed_selector)
         if not count:
             raise ValueError(
                 "소스가 제안 시점 이후 변경되어 대상 셀렉터를 찾지 못했습니다. "

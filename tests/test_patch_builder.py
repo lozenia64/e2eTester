@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from app.healing.patch_builder import apply_replacement, build_patch_drafts
 
-SOURCE = '''LOGIN_BUTTON_SELECTOR = "#btnRA"
+SOURCE = """LOGIN_BUTTON_SELECTOR = "#btnRA"
 
 
 def submit(page):
     page.locator("#btnRA").click()
     page.locator('#btnRA').click()
-'''
+"""
 
 
 def test_apply_replacement_handles_both_quote_styles():
@@ -18,7 +18,7 @@ def test_apply_replacement_handles_both_quote_styles():
     assert count == 3
     assert '"#btnRA2"' in replaced
     assert "'#btnRA2'" in replaced
-    assert "#btnRA\"" not in replaced.replace("#btnRA2", "")
+    assert '#btnRA"' not in replaced.replace("#btnRA2", "")
 
 
 def test_apply_replacement_switches_quote_when_healed_contains_double_quote():
@@ -26,12 +26,12 @@ def test_apply_replacement_switches_quote_when_healed_contains_double_quote():
     replaced, count = apply_replacement(source, "#a", 'button:has-text("확인")')
     assert count == 1
     # 작은따옴표 리터럴이었지만 대체 셀렉터에 " 가 있어도 유효한 리터럴이 된다.
-    assert "button:has-text(\"확인\")" in replaced
+    assert 'button:has-text("확인")' in replaced
 
 
 def test_apply_replacement_escapes_when_healed_contains_both_quote_styles():
     source = 'S = "#old"\n'
-    healed = 'text="ok" and id=\'x\''
+    healed = "text=\"ok\" and id='x'"
     replaced, count = apply_replacement(source, "#old", healed)
     assert count == 1
     # 큰따옴표 리터럴 안의 " 와 \\ 가 escape 되어 문법적으로 유효하다.

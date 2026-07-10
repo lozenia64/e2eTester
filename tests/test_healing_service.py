@@ -140,7 +140,9 @@ async def test_reject_keeps_source_untouched(tmp_path):
     await service.record_step_healing(_run(), _module_run(), _definition(), [_attempt()])
     patch_id = (await service.list_patches())["items"][0]["patch_id"]
 
-    rejected = await service.reject_patch(patch_id, actor_name="관리자", note="role 기반으로 재작성 예정")
+    rejected = await service.reject_patch(
+        patch_id, actor_name="관리자", note="role 기반으로 재작성 예정"
+    )
 
     assert rejected.status is PatchStatus.REJECTED
     assert rejected.note == "role 기반으로 재작성 예정"
