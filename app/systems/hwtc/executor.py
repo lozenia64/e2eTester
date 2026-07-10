@@ -3,9 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.core.models import ModuleDefinition
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.screenshot import SELF_DEFENDER_HOST_FRAGMENTS
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.runner.workflow_engine import StepContext, StepHandler
 from app.systems.access_common import browser
@@ -51,21 +49,6 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: HwtcRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
-
-    def _should_capture_module_screenshot(
-        self,
-        runtime: HwtcRuntime,
-        module: ModuleDefinition,
-    ) -> bool:
-        if module.workflow_step != "main_access":
-            return True
-        if any(fragment in runtime.base_url for fragment in SELF_DEFENDER_HOST_FRAGMENTS):
-            print(
-                "[step] Skip main_access screenshot on SLS "
-                "(self-defender: evaluate/screenshot poisons login AJAX)"
-            )
-            return False
-        return True
 
     def build_step_registry(self) -> Mapping[str, StepHandler]:
         # main_access 는 부모(접속 점검)와 달리 phone_auth 모듈의 진입 화면이라 덮어쓴다.
