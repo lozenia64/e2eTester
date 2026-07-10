@@ -200,11 +200,7 @@ class RunService:
 
         이상건 인박스와 같은 스캔-도출 패턴 — 별도 인덱스 없이 ``list_runs()`` 를 필터한다.
         """
-        runs = [
-            run
-            for run in await self._repository.list_runs()
-            if run.schedule_id == schedule_id
-        ]
+        runs = [run for run in await self._repository.list_runs() if run.schedule_id == schedule_id]
         runs.sort(key=lambda run: run.requested_at, reverse=True)
         return runs[:limit]
 

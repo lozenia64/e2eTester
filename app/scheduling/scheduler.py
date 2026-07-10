@@ -137,7 +137,9 @@ class SchedulerService:
             created_by_user_name=user_name,
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
-        schedule.record_change("created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name)
+        schedule.record_change(
+            "created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name
+        )
         await self._repository.save(schedule)
         return schedule
 
@@ -175,7 +177,9 @@ class SchedulerService:
             created_by_user_name=user_name,
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
-        schedule.record_change("created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name)
+        schedule.record_change(
+            "created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name
+        )
         await self._repository.save(schedule)
         return schedule
 
@@ -286,8 +290,7 @@ class SchedulerService:
                 schedule.step_total = len(resolved_system_codes)
         else:
             input_changed = bool(
-                request.input_data
-                and any(value.strip() for value in request.input_data.values())
+                request.input_data and any(value.strip() for value in request.input_data.values())
             )
             modules_changed = (
                 request.selected_module_ids is not None
@@ -337,7 +340,9 @@ class SchedulerService:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         if until is None:
             schedule.paused_until = None
-            schedule.record_change("pause_cleared", "일시 중지 해제(수동 재개)", user_name=user_name)
+            schedule.record_change(
+                "pause_cleared", "일시 중지 해제(수동 재개)", user_name=user_name
+            )
         else:
             if until.tzinfo is None:
                 until = until.replace(tzinfo=self._timezone)
@@ -511,9 +516,7 @@ class SchedulerService:
             summary["issues"] = issues
             if schedule.enabled and not summary["paused"]:
                 active_count += 1
-                today_planned += count_today_planned(
-                    schedule.cron, day_start_local, day_end_local
-                )
+                today_planned += count_today_planned(schedule.cron, day_start_local, day_end_local)
             if issues:
                 attention.append(summary)
             entries.append(summary)
@@ -602,9 +605,7 @@ class SchedulerService:
                 )
         blocks.sort(key=lambda block: block["at"])
 
-        systems = sorted(
-            self._run_service.list_systems(), key=lambda s: (s.display_order, s.name)
-        )
+        systems = sorted(self._run_service.list_systems(), key=lambda s: (s.display_order, s.name))
         if allowed_system_codes is not None:
             allowed = set(allowed_system_codes)
             systems = [s for s in systems if s.system_code in allowed]

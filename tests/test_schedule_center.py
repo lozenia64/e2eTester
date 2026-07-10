@@ -135,17 +135,17 @@ def test_build_coverage_marks_gaps():
 # 관제 보드 분류
 # --------------------------------------------------------------------------- #
 def _classify(**overrides):
-    params = dict(
-        enabled=True,
-        paused_until=None,
-        last_status=None,
-        last_skipped_at=None,
-        disabled_at=None,
-        created_at=NOW - timedelta(days=30),
-        last_run_at=None,
-        recent_executions=[],
-        now=NOW,
-    )
+    params = {
+        "enabled": True,
+        "paused_until": None,
+        "last_status": None,
+        "last_skipped_at": None,
+        "disabled_at": None,
+        "created_at": NOW - timedelta(days=30),
+        "last_run_at": None,
+        "recent_executions": [],
+        "now": NOW,
+    }
     params.update(overrides)
     return classify_issues(**params)
 

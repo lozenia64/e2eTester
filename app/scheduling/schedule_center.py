@@ -48,7 +48,9 @@ class ExecutionPoint:
 
     @property
     def link(self) -> str:
-        return f"/suites/{self.execution_id}" if self.kind == "suite" else f"/runs/{self.execution_id}"
+        return (
+            f"/suites/{self.execution_id}" if self.kind == "suite" else f"/runs/{self.execution_id}"
+        )
 
     @property
     def duration_ms(self) -> int | None:
