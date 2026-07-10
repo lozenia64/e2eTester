@@ -38,6 +38,7 @@ from app.storage.ports import (
 
 if TYPE_CHECKING:
     from app.execution.run_queue import JobQueue
+    from app.healing.ports import HealingRecorderPort as HealingRecorder
     from app.orchestrator.run_actor import ActorContext
 
 logger = get_logger(__name__)
@@ -72,6 +73,7 @@ class RunService:
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
         artifact_manager: ArtifactManager | None = None,
+        healing_recorder: HealingRecorder | None = None,
     ) -> None:
         self._registry = registry
         self._repository = repository
@@ -92,6 +94,9 @@ class RunService:
         # 어떤 구체 어댑터도 import 하지 않는다).
         self._control_store = control_store
         self._input_store = input_store
+        # 자가 치유 이벤트 기록자(선택 협력자). 실행 어댑터는 치유 시도 '사실'만
+        # StepExecutionResult 에 실어 보고하고, 영속·패치 제안은 여기서 위임한다.
+        self._healing_recorder = healing_recorder
 
     # --- 조회 -------------------------------------------------------------
 
@@ -606,6 +611,21 @@ class RunService:
                 execution_result = await self._gateway.run_step(
                     handle, run.run_id, definition, on_log
                 )
+
+                # 자가 치유 시도가 보고되면 감사 이벤트로 영속하고 패치 제안을 만든다.
+                # 기록 실패가 점검 자체를 실패시키지 않도록 격리한다.
+                if execution_result.healing_events and self._healing_recorder is not None:
+                    try:
+                        await self._healing_recorder.record_step_healing(
+                            run, module, definition, execution_result.healing_events
+                        )
+                    except Exception:
+                        logger.exception(
+                            "자가 치유 이벤트 기록 실패",
+                            log_event="healing.record_failed",
+                            run_id=run.run_id,
+                            module_id=module.module_id,
+                        )
 
                 # 일시정지로 멈추려는 순간에만 취소를 재확인한다(정상 종료의 취소는 다음 진입에서).
                 cancel_requested = (

@@ -5,14 +5,19 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.core.enums import ModuleStatus
 from app.core.models import ModuleDefinition
+from app.healing.models import HealingAttempt
+from app.healing.page_proxy import HealedPage
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.screenshot import capture_screenshot
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
+
+if TYPE_CHECKING:
+    from app.healing.engine import SelfHealingEngine
 
 
 @runtime_checkable
@@ -105,6 +110,13 @@ class BaseWorkflowExecutor(ABC):
         # workflow_step → 핸들러 레지스트리. 핸들러는 인스턴스 상태가 아니라 호출 시점의
         # StepContext 만 참조하므로, 생성자에서 한 번 구성해 둔다.
         self._step_handlers: Mapping[str, StepHandler] = dict(self.build_step_registry())
+        # 자가 치유 엔진(선택 협력자). 컴포지션 루트가 로더를 통해 attach_healing 으로
+        # 주입한다 — 미주입이면 치유 없이 기존과 동일하게 동작한다.
+        self._healing: SelfHealingEngine | None = None
+
+    def attach_healing(self, engine: SelfHealingEngine | None) -> None:
+        """자가 치유 엔진을 부착한다(로더/게이트웨이가 생성 직후 호출)."""
+        self._healing = engine
 
     @staticmethod
     def _resolve_headless(input_data: dict[str, str]) -> bool:
@@ -135,46 +147,60 @@ class BaseWorkflowExecutor(ABC):
         message = ""
         last_error: str | None = None
 
+        # 자가 치유: 이 모듈 실행 동안만 유효한 셀렉터 오버라이드(깨진 → 대체)와 시도 기록.
+        # runtime.page 를 프록시로 잠시 교체해, 스텝이 ctx.page/runtime.page 어느 쪽을 쓰든
+        # 재시도 시 오버라이드가 적용되게 한다(오버라이드가 비면 사실상 pass-through).
+        selector_overrides: dict[str, str] = {}
+        healing_attempts: list[HealingAttempt] = []
+        real_page = runtime.page
+        if self._healing is not None:
+            runtime.page = HealedPage(real_page, selector_overrides)
+
         # 단계 실행 → 모듈 종료 시 스크린샷까지 모두 로그 리다이렉트 안에서 처리해
         # 캡처 과정의 로그도 execution.log / WebSocket 으로 함께 흘려보낸다.
-        with log_path.open("w", encoding="utf-8") as log_file:
-            # 명시적 로깅 능력(ctx.log)과 stdout print() 모두 같은 싱크(파일+WebSocket)로 모은다.
-            def sink(line: str) -> None:
-                write_log_line(line, emit_log, log_file)
+        try:
+            with log_path.open("w", encoding="utf-8") as log_file:
+                # 명시적 로깅 능력(ctx.log)과 stdout print() 모두 같은 싱크(파일+WebSocket)로 모은다.
+                def sink(line: str) -> None:
+                    write_log_line(line, emit_log, log_file)
 
-            tee = LineWriter(sink)
-            context = StepContext(
-                runtime=runtime, module=module, artifact_dir=artifact_dir, log=sink
-            )
-            with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
-                try:
-                    # 매직 문자열 파싱이 아니라 타입드 결과 매칭으로 제어 전이를 만든다.
-                    match self._dispatch_step(context):
-                        case StepNeedsInput(prompt=prompt):
-                            status = ModuleStatus.WAITING_INPUT
-                            message = prompt
-                        case StepCompleted(message=completed_message):
-                            status = ModuleStatus.PASSED
-                            message = completed_message
-                except RuntimeError as exc:
-                    status = ModuleStatus.ANOMALY
-                    message = str(exc)
-                    last_error = str(exc)
-                    print(f"[error] {exc}")
-                except Exception as exc:
-                    status = ModuleStatus.ERROR
-                    message = str(exc)
-                    last_error = str(exc)
-                    print(f"[error] {exc}")
+                tee = LineWriter(sink)
+                context = StepContext(
+                    runtime=runtime, module=module, artifact_dir=artifact_dir, log=sink
+                )
+                with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
+                    try:
+                        # 매직 문자열 파싱이 아니라 타입드 결과 매칭으로 제어 전이를 만든다.
+                        match self._dispatch_with_healing(
+                            context, selector_overrides, healing_attempts, sink
+                        ):
+                            case StepNeedsInput(prompt=prompt):
+                                status = ModuleStatus.WAITING_INPUT
+                                message = prompt
+                            case StepCompleted(message=completed_message):
+                                status = ModuleStatus.PASSED
+                                message = completed_message
+                    except RuntimeError as exc:
+                        status = ModuleStatus.ANOMALY
+                        message = str(exc)
+                        last_error = str(exc)
+                        print(f"[error] {exc}")
+                    except Exception as exc:
+                        status = ModuleStatus.ERROR
+                        message = str(exc)
+                        last_error = str(exc)
+                        print(f"[error] {exc}")
 
-                # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
-                # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
-                if (
-                    status is not ModuleStatus.WAITING_INPUT
-                    and self._should_capture_module_screenshot(runtime, module)
-                ):
-                    capture_screenshot(runtime.page, screenshot_path)
-                tee.flush()
+                    # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
+                    # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
+                    if (
+                        status is not ModuleStatus.WAITING_INPUT
+                        and self._should_capture_module_screenshot(runtime, module)
+                    ):
+                        capture_screenshot(real_page, screenshot_path)
+                    tee.flush()
+        finally:
+            runtime.page = real_page
 
         artifacts = [self._artifact_manager.relative_path(log_path)]
         if screenshot_path.exists():
@@ -188,6 +214,7 @@ class BaseWorkflowExecutor(ABC):
             dialog_messages=runtime.dialog_messages[dialog_index:],
             last_error=last_error,
             screenshot_path=screenshot_path if screenshot_path.exists() else None,
+            healing_events=healing_attempts,
         )
 
     def _dispatch_step(self, context: StepContext) -> StepOutcome:
@@ -198,6 +225,52 @@ class BaseWorkflowExecutor(ABC):
                 f"Unsupported {self.execution_mode} workflow step: {context.module.workflow_step}"
             )
         return handler(context)
+
+    def _dispatch_with_healing(
+        self,
+        context: StepContext,
+        overrides: dict[str, str],
+        attempts: list[HealingAttempt],
+        log: Callable[[str], None],
+    ) -> StepOutcome:
+        """스텝 실패 시 자가 치유(대체 셀렉터 탐색 → 1회 재시도)를 끼워 넣는 디스패치.
+
+        치유 엔진이 없거나(미주입) 치유 대상이 아니면 원래 예외를 그대로 던져 기존
+        상태 전이(ANOMALY/ERROR)와 완전히 동일하게 동작한다. 치유 자체의 오류는 절대
+        원래 실패를 가리지 않는다(엔진 예외는 삼키고 원 예외를 다시 던진다).
+        """
+        try:
+            return self._dispatch_step(context)
+        except Exception as exc:
+            engine = self._healing
+            if engine is None:
+                raise
+            attempt: HealingAttempt | None = None
+            try:
+                attempt = engine.try_heal(
+                    page=context.runtime.page,
+                    module=context.module,
+                    error=exc,
+                    overrides=overrides,
+                    log=log,
+                )
+            except Exception as heal_exc:  # 치유 실패가 점검 결과를 더 망치지 않게 격리.
+                log(f"[heal] 자가 치유 시도 중 오류(무시): {heal_exc}")
+            if attempt is None:
+                raise
+            attempts.append(attempt)
+            if not attempt.auto_applied:
+                raise
+            log("[heal] 대체 셀렉터로 단계를 1회 재시도합니다.")
+            try:
+                outcome = self._dispatch_step(context)
+            except Exception:
+                attempt.retry_succeeded = False
+                log("[heal] 재시도도 실패했습니다 — 원래 실패로 기록합니다.")
+                raise
+            attempt.retry_succeeded = True
+            log("[heal] 재시도 성공 — 점검을 계속합니다(런타임 한정 복구, 코드 반영은 승인 대기).")
+            return outcome
 
     def close_runtime(self, runtime: WorkflowRuntime) -> None:
         if runtime.closed:

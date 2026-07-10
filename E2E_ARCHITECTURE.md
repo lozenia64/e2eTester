@@ -325,6 +325,7 @@ e2eTester/
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
 - `GET /schedules` (예약 점검 관리 센터 HTML — 무인 점검 관제실: KPI/조치 필요/목록/시간표 캘린더/상세 드로어; admin 포함, 리다이렉트 없음. 수정 폼 렌더링을 위해 접근 가능 시스템의 manifest 를 함께 내려준다)
 - `GET /anomalies` (이상징후 인박스 HTML — 팀 전체 이상건 작업목록; admin 포함 모든 로그인 사용자, 리다이렉트 없음)
+- `GET /self-healing` (자가 치유 센터 HTML — 복구 콘솔(KPI/치유 이벤트 파이프라인/정책/만성 지점)·승인 대기 패치·셀렉터 내구성 맵 3탭; admin 포함, 리다이렉트 없음)
 - `GET /insights` (시스템 인사이트 HTML — 헬스/타임라인/모듈 딥다이브 3탭; admin 포함)
 - `GET /systems/{system_code}/insights` (특정 시스템 프리셀렉트 인사이트 HTML)
 - `GET /api/systems`
@@ -334,6 +335,15 @@ e2eTester/
 - `GET /api/anomalies` (이상징후 인박스 — ANOMALY/ERROR 모듈 + 처리상태·담당자·메모; 비관리자는 `allowed_system_codes` 스코프)
 - `GET /api/anomalies/assignees` (담당자 배정 드롭다운용 사용자 목록)
 - `PATCH /api/anomalies/{module_run_id}` (이상건 처리상태/담당자/메모 갱신 — `module_run_id` = `{run_id}::{module_id}`)
+- `GET /api/healing/events` (치유 이벤트 목록 — 무엇이 깨졌나/어떻게 복구했나/신뢰도/재실행 검증 결과, 최신순; `system` 쿼리 필터, 비관리자는 `allowed_system_codes` 스코프)
+- `GET /api/healing/metrics` (복구 콘솔 KPI — 이번 달 자동 복구 N건·사람 개입 없이 넘어간 비율·MTTR + 일별 추이 + 만성 지점 표)
+- `GET /api/healing/durability` (셀렉터 내구성 맵 — steps 소스 정적 스캔(안정/주의/취약 점수화) + 치유 이력 결합 만성 취약 Top N/정비 필요 묶음)
+- `GET /api/healing/policy` (자동 복구 정책 조회 — 전역 `*` 기본값 + 시스템별 auto-heal on/off·신뢰도 임계치)
+- `PUT /api/healing/policy` (정책 upsert — 전역 `*` 행은 admin 전용, 시스템 행은 접근 범위 내에서만)
+- `GET /api/healing/patches` (셀렉터 오토픽스 패치 목록 — 승인 대기 diff + 승인/거절 감사 이력; `status` 쿼리 필터)
+- `POST /api/healing/patches/{patch_id}/approve` (패치 승인 — 사람 승인 게이트 통과 시점에 steps 소스 파일에 셀렉터 교체 반영; 소스가 변경돼 적용 불가면 409)
+- `POST /api/healing/patches/{patch_id}/reject` (패치 거절 — 사유 `note` 와 함께 감사 이력에 기록)
+- `GET /api/healing/patches/{patch_id}/download` (패치 diff 다운로드(.patch) — 소스 반영 대신 코드리뷰 도구로 가져갈 때)
 - `GET /api/dashboard/daily` (로그인 사용자의 접근 가능 시스템별 **일간 점검 현황** — 시스템·모듈 단위 오늘(KST) 점검 상태 집계, PII 미포함)
 - `GET /api/runs` (Run 요약 목록; `scope=today|before_today`, `limit` 쿼리 지원 — 생략 시 기존과 동일 전체 목록, 기본 limit 50)
 - `POST /api/runs/systems/{system_code}`
@@ -719,6 +729,28 @@ manifest 에 들어 있는 정보:
 **관리자 Run 관리:**
 
 - `GET /api/admin/runs` — 전체 Run 목록(시스템·사용자 필터). `DELETE /api/admin/runs/{run_id}` — Run 영구 삭제(DB·로그·아티팩트). 일일 보존 정리 배치(§5.9)도 같은 삭제 경로(`RunService.purge_runs`)를 쓴다.
+
+### 5.11 자가 치유 센터 계층
+
+무인 실행이 사이트 UI 변경 한 번에 조용히 전부 실패하는 최대 약점을 막는 폐루프(2026 AIOps
+closed-loop + 에이전트 오토픽스 관행): **탐지 → AI 진단 → 대체 셀렉터 → 재실행 검증 → 기록/코드 반영 제안**.
+
+**런타임 치유(실행 스레드, `app/healing/engine.py` + `app/runner/workflow_engine.py`):**
+
+- 스텝이 예외로 실패하면 `BaseWorkflowExecutor._dispatch_with_healing` 이 `SelfHealingEngine.try_heal` 을 부른다. 엔진은 Playwright 오류 메시지에서 깨진 셀렉터를 추출하고(`parse_broken_selector` — 체인이면 마지막 `locator(...)`), 라이브 DOM 을 스캔해 요소 지문(id·name·text·role·class)을 수집한 뒤 순수 스코어러(`app/healing/selector_healer.py`)로 후보 신뢰도를 매기고, 상위 후보를 라이브 페이지에서 검증(존재/유일성, 다중 매치는 `>> nth=0` 고정 + 신뢰도 감가)한다.
+- **신뢰도 게이팅**: 정책(시스템별 → 전역 `*` → 코드 기본 0.75 순 해석) 임계치 이상이면 런타임 한정 오버라이드를 등록하고 스텝을 **1회 재시도**, 미만이면 자동 적용 없이 승인 대기 제안만 남긴다(무인 실행이 안 끊기는 것과 무단 병합 금지를 동시에 지킨다). 재치유 루프 방지: 이미 오버라이드된 셀렉터가 또 깨지면 치유하지 않는다.
+- 오버라이드 적용은 `HealedPage`/`HealedFrame`(`app/healing/page_proxy.py`)이 담당한다 — `execute_step` 동안 `runtime.page` 를 프록시로 교체해 스텝이 `ctx.page`/`runtime.page` 어느 쪽을 쓰든 같은 셀렉터 문자열이 대체 셀렉터로 번역된다(스텝 코드 무수정). 치유 실패/엔진 오류는 절대 원래 실패를 가리지 않는다.
+- 실행 스레드의 정책 조회는 비동기 스토어가 아니라 동기 리더 `SqliteHealingPolicyReader`(자기 커넥션 + 5초 TTL 캐시)로 한다.
+
+**보고-사실 / 집행-정책 분리(OTP 일시정지와 동일 규율):** 어댑터는 치유 시도 '사실'만 `StepExecutionResult.healing_events`(`HealingAttempt` 목록)로 보고하고, `RunService` 가 주입된 `HealingRecorderPort`(구현 `HealingService`)로 영속·패치 제안을 위임한다. 기록 실패는 격리되어 점검 결과에 영향을 주지 않는다.
+
+**애플리케이션 서비스(`HealingService`, `app/orchestrator/healing_service.py`):** `InsightsService` 와 같은 얇은 I/O 인터프리터. 집계 규칙은 순수 빌더가 담당한다 — 복구 콘솔 KPI(이번 달 자동 복구 N건·사람 개입 없이 넘어간 비율·MTTR)·만성 지점 승격(같은 셀렉터 3회+ 치유)은 `app/healing/metrics.py`, 셀렉터 내구성 맵(steps 소스 정적 스캔: #id/name/role 안정 🟢 · class 주의 🟡 · 텍스트 매칭/nth/xpath 취약 🔴 + 치유 이력 결합 위험 순위)은 `app/healing/durability.py`, 패치 diff 생성(양쪽 따옴표 리터럴 치환 + `difflib` unified diff + 취약 패턴 기술부채 경고)은 `app/healing/patch_builder.py`. 모두 브라우저/DB 없이 단위 테스트된다(`tests/test_selector_healer.py`/`test_healing_engine.py`/`test_healing_metrics.py`/`test_healing_durability.py`/`test_patch_builder.py`/`test_healing_service.py`).
+
+**셀렉터 오토픽스 패치(사람 승인 게이트):** 런타임 복구는 일회성이므로, 성공/제안된 치유마다 깨진 하드코딩 셀렉터를 대체 셀렉터로 바꾸는 before/after diff 를 `PROPOSED` 패치로 만든다(같은 시스템·깨진→대체 조합의 열린 제안은 중복 생성 안 함). **자동 병합은 없다** — `/self-healing` 의 diff 리뷰에서 승인하면 그 시점에 소스 파일에 치환 적용(소스가 그새 변경돼 대상 리터럴이 없으면 409), 거절하면 사유와 함께 감사 이력으로 남는다. `.patch` 다운로드로 코드리뷰 도구에 가져갈 수도 있다. 어떤 셀렉터가 언제·누구 승인으로 바뀌었는지가 패치 레코드(`decided_by`/`decided_at`)로 남는다.
+
+**영속(포트-어댑터, `app/storage/sqlite_healing_stores.py`):** `HealingEventStorePort`(append-only `healing_events`) / `HealingPolicyStorePort`(`healing_policy`) / `HealingPatchStorePort`(`healing_patches`) — 모두 컬럼형 SQLite 어댑터가 기본이고 배선은 컴포지션 루트(`app/main.py`)가 독점한다.
+
+**화면:** 사이드바 "자가 치유 센터" → `GET /self-healing`(3탭: 복구 콘솔 = KPI 스트립 + 치유 이벤트 5단계 파이프라인 카드 + 신뢰도 게이지 + 자동 복구 정책 패널(on/off + 임계치 슬라이더) + 만성 지점 표 / 승인 대기 패치 = diff 카드 + 승인·거절·다운로드 / 내구성 맵 = 등급 요약 + 정비 필요 묶음(알림 피로 저감: 개별 실패 대신 "N회+ 깨짐" 한 건) + 만성 취약 Top 10 + 히트맵 테이블). 프런트는 페이지 전용 `app/web/static/healing.js`(`app.js` 에 얹지 않음). 승인 대기 패치 수는 사이드바 배지로 노출된다.
 
 ## 6. 시스템 시나리오 문서
 

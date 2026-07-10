@@ -203,6 +203,21 @@ async def schedules_center(
     )
 
 
+@router.get("/self-healing", response_class=HTMLResponse)
+async def self_healing_center(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """자가 치유 센터(복구 콘솔/승인 대기 패치/셀렉터 내구성 맵 3탭). 관리자도 접근 가능."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "self_healing.html",
+        {"current_user": current_user},
+    )
+
+
 @router.get("/anomalies", response_class=HTMLResponse)
 async def anomalies_inbox(
     request: Request,

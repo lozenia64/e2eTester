@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
+
+if TYPE_CHECKING:
+    from app.healing.models import HealingAttempt
 
 
 @dataclass(frozen=True)
@@ -17,6 +21,8 @@ class StepExecutionResult:
     dialog_messages: list[str]
     last_error: str | None = None
     screenshot_path: Path | None = None
+    # 자가 치유 시도 '사실' 보고(어댑터는 보고만, 영속·패치 제안은 오케스트레이터가 수행).
+    healing_events: list[HealingAttempt] = field(default_factory=list)
 
     @classmethod
     def failure(
