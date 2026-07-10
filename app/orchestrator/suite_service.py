@@ -88,7 +88,7 @@ class SuiteService:
         return [self._summarize_suite(suite) for suite in suites[:limit]]
 
     async def list_suites_by_schedule(self, schedule_id: str, limit: int = 30) -> list[SuiteRun]:
-        """특정 예약이 트리거한 Suite 를 최근순으로 돌려준다(예약 관리 센터 이력/캘린더용)."""
+        """특정 예약이 트리거한 Suite 를 최근순으로 돌려준다(예약 상세 이력용)."""
         suites = [
             suite
             for suite in await self._repository.list_suites()
@@ -96,6 +96,10 @@ class SuiteService:
         ]
         suites.sort(key=lambda suite: suite.requested_at, reverse=True)
         return suites[:limit]
+
+    async def list_schedule_tagged_suites(self) -> list[SuiteRun]:
+        """schedule_id 태깅된 Suite 전체 — 관제 보드/캘린더의 1회 스캔·그룹핑용."""
+        return [suite for suite in await self._repository.list_suites() if suite.schedule_id]
 
     async def reconcile_interrupted_suites(self) -> int:
         """재기동 시 비종료 상태로 남은 Suite 를 CANCELLED 로 정리한다.

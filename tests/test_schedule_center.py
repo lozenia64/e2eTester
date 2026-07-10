@@ -66,6 +66,14 @@ def test_expand_occurrences_within_window():
     assert all(occ.hour == 9 for occ in occurrences)
 
 
+def test_expand_occurrences_half_open_window_boundaries():
+    """[start, end) — 시작 경계는 포함(자정 cron 누락 방지), 종료 경계는 제외."""
+    start = datetime(2026, 7, 6, 9, 0, tzinfo=UTC)
+    end = start + timedelta(days=1)
+    occurrences = expand_occurrences("0 9 * * *", start, end)
+    assert occurrences == [start]
+
+
 def test_expand_occurrences_respects_cap():
     start = datetime(2026, 7, 6, 0, 0, tzinfo=UTC)
     end = start + timedelta(days=7)

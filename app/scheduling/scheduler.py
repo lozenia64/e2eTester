@@ -405,40 +405,68 @@ class SchedulerService:
 
     # --- 예약 점검 관리 센터 읽기 모델 (관제 보드 / 캘린더 / 이력) ------------
 
+    @staticmethod
+    def _run_point(run: Run) -> ExecutionPoint:
+        return ExecutionPoint(
+            execution_id=run.run_id,
+            kind="run",
+            status=run.status.value,
+            requested_at=_ensure_utc(run.requested_at),
+            started_at=_ensure_utc(run.started_at),
+            ended_at=_ensure_utc(run.ended_at),
+        )
+
+    @staticmethod
+    def _suite_point(suite: SuiteRun) -> ExecutionPoint:
+        return ExecutionPoint(
+            execution_id=suite.suite_id,
+            kind="suite",
+            status=suite.status.value,
+            requested_at=_ensure_utc(suite.requested_at),
+            started_at=_ensure_utc(suite.started_at),
+            ended_at=_ensure_utc(suite.ended_at),
+        )
+
     async def _recent_execution_points(
         self, schedule: Schedule, limit: int
     ) -> list[ExecutionPoint]:
-        """예약이 트리거한 실행(Run/Suite)을 ``ExecutionPoint`` 로 투영한다(최신순)."""
-        points: list[ExecutionPoint] = []
+        """예약 **하나**의 실행(Run/Suite)을 ``ExecutionPoint`` 로 투영한다(최신순, 상세 이력용)."""
         if schedule.schedule_kind == "suite":
-            for suite in await self._suite_service.list_suites_by_schedule(
+            suites = await self._suite_service.list_suites_by_schedule(
                 schedule.schedule_id, limit=limit
-            ):
-                points.append(
-                    ExecutionPoint(
-                        execution_id=suite.suite_id,
-                        kind="suite",
-                        status=suite.status.value,
-                        requested_at=_ensure_utc(suite.requested_at),
-                        started_at=_ensure_utc(suite.started_at),
-                        ended_at=_ensure_utc(suite.ended_at),
-                    )
-                )
-            return points
-        for run in await self._run_service.list_runs_by_schedule(
-            schedule.schedule_id, limit=limit
-        ):
-            points.append(
-                ExecutionPoint(
-                    execution_id=run.run_id,
-                    kind="run",
-                    status=run.status.value,
-                    requested_at=_ensure_utc(run.requested_at),
-                    started_at=_ensure_utc(run.started_at),
-                    ended_at=_ensure_utc(run.ended_at),
-                )
             )
-        return points
+            return [self._suite_point(suite) for suite in suites]
+        runs = await self._run_service.list_runs_by_schedule(schedule.schedule_id, limit=limit)
+        return [self._run_point(run) for run in runs]
+
+    async def _grouped_execution_points(
+        self,
+    ) -> tuple[dict[str, list[ExecutionPoint]], dict[str, list[ExecutionPoint]]]:
+        """Run/Suite 저장소를 각각 1회만 스캔해 ``schedule_id`` 별 실행 포인트(최신순)로
+        그룹핑한다 — 보드/캘린더가 예약마다 전체 스캔을 반복(O(#예약 × #Run))하지 않도록
+        하는 공용 프리페치."""
+        runs_by: dict[str, list[ExecutionPoint]] = {}
+        for run in await self._run_service.list_schedule_tagged_runs():
+            runs_by.setdefault(run.schedule_id, []).append(self._run_point(run))
+        suites_by: dict[str, list[ExecutionPoint]] = {}
+        for suite in await self._suite_service.list_schedule_tagged_suites():
+            suites_by.setdefault(suite.schedule_id, []).append(self._suite_point(suite))
+        for points in runs_by.values():
+            points.sort(key=lambda point: point.requested_at, reverse=True)
+        for points in suites_by.values():
+            points.sort(key=lambda point: point.requested_at, reverse=True)
+        return runs_by, suites_by
+
+    @staticmethod
+    def _points_for(
+        schedule: Schedule,
+        runs_by: dict[str, list[ExecutionPoint]],
+        suites_by: dict[str, list[ExecutionPoint]],
+        limit: int | None = None,
+    ) -> list[ExecutionPoint]:
+        source = suites_by if schedule.schedule_kind == "suite" else runs_by
+        points = source.get(schedule.schedule_id, [])
+        return points[:limit] if limit is not None else points
 
     def _last_status_value(self, schedule: Schedule) -> str | None:
         if schedule.schedule_kind == "suite":
@@ -459,6 +487,7 @@ class SchedulerService:
         if user_id is not None:
             schedules = [s for s in schedules if s.created_by_user_id == user_id]
 
+        runs_by, suites_by = await self._grouped_execution_points()
         entries: list[dict] = []
         attention: list[dict] = []
         active_count = 0
@@ -467,7 +496,7 @@ class SchedulerService:
             await self._ensure_trigger_token(schedule)
             await self._refresh_last_execution_status(schedule)
             summary = self._augment_summary(schedule.to_summary(), schedule)
-            recent = await self._recent_execution_points(schedule, limit=5)
+            recent = self._points_for(schedule, runs_by, suites_by, limit=5)
             issues = classify_issues(
                 enabled=schedule.enabled,
                 paused_until=_ensure_utc(schedule.paused_until),
@@ -537,6 +566,7 @@ class SchedulerService:
         if user_id is not None:
             schedules = [s for s in schedules if s.created_by_user_id == user_id]
 
+        runs_by, suites_by = await self._grouped_execution_points()
         blocks: list[dict] = []
         planned_pairs: list[tuple[str, datetime]] = []
         for schedule in schedules:
@@ -550,7 +580,7 @@ class SchedulerService:
             )
             points = [
                 point
-                for point in await self._recent_execution_points(schedule, limit=200)
+                for point in self._points_for(schedule, runs_by, suites_by)
                 if start - MATCH_BEFORE <= point.requested_at <= end
             ]
             for block in match_occurrences(occurrences, points, now):

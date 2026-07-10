@@ -112,12 +112,17 @@ def expand_occurrences(
     end: datetime,
     cap: int = MAX_OCCURRENCES_PER_SCHEDULE,
 ) -> list[datetime]:
-    """`start` 초과 ~ `end` 이하의 cron 일치 시각을 시간순으로 펼친다(상한 cap)."""
+    """반개구간 ``[start, end)`` 의 cron 일치 시각을 시간순으로 펼친다(상한 cap).
+
+    ``next_run_after`` 는 엄격히 '이후'만 반환하므로 커서를 1초 물려 시작 경계를
+    포함시킨다 — 자정(00:00) cron 이 그 날 캘린더/오늘 예정 카운트에서 빠지고
+    다음 날 경계가 이중 계산되는 경계 버그를 막는다.
+    """
     occurrences: list[datetime] = []
-    cursor = start
+    cursor = start - timedelta(seconds=1)
     while len(occurrences) < cap:
         cursor = next_run_after(cron, cursor)
-        if cursor > end:
+        if cursor >= end:
             break
         occurrences.append(cursor)
     return occurrences
