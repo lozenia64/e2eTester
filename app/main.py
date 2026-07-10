@@ -279,12 +279,26 @@ app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
 app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
 
 _FAVICON_ICO = Path("app/web/static/favicon.ico")
+_APPLE_TOUCH_ICON = Path("app/web/static/apple-touch-icon.png")
+_APPLE_TOUCH_ICON_PRECOMPOSED = Path("app/web/static/apple-touch-icon-precomposed.png")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico() -> FileResponse:
     """브라우저가 루트로 자동 요청하는 /favicon.ico 를 인증 없이 제공한다."""
     return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+async def apple_touch_icon() -> FileResponse:
+    """iOS/Safari 가 루트로 자동 요청하는 홈 화면 아이콘(180x180)을 인증 없이 제공한다."""
+    return FileResponse(_APPLE_TOUCH_ICON, media_type="image/png")
+
+
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+async def apple_touch_icon_precomposed() -> FileResponse:
+    """구형 iOS 가 요청하는 precomposed 변형 — 동일한 180x180 아이콘을 제공한다."""
+    return FileResponse(_APPLE_TOUCH_ICON_PRECOMPOSED, media_type="image/png")
 
 
 app.include_router(auth_router)
