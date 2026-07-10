@@ -49,8 +49,21 @@ class LocalExecutionGateway(ExecutionGateway):
     격리할 수 있다.
     """
 
-    def __init__(self, artifact_manager: ArtifactManager, system_codes: Iterable[str]) -> None:
-        self._executors = load_workflow_executors(system_codes, artifact_manager)
+    def __init__(
+        self,
+        artifact_manager: ArtifactManager,
+        system_codes: Iterable[str],
+        healing_engine=None,
+    ) -> None:
+        # healing_engine(선택): 스텝 실패 시 대체 셀렉터를 탐색하는 자가 치유 엔진.
+        # 로더가 각 실행기에 부착하며, 미주입이면 실행기는 치유 없이 기존과 동일하게 동작한다.
+        # (미주입 시 kwargs 없이 호출해 로더 시그니처 하위호환을 유지한다.)
+        if healing_engine is None:
+            self._executors = load_workflow_executors(system_codes, artifact_manager)
+        else:
+            self._executors = load_workflow_executors(
+                system_codes, artifact_manager, healing_engine=healing_engine
+            )
         self._sessions: dict[str, _Session] = {}
 
     def supports(self, execution_mode: str) -> bool:

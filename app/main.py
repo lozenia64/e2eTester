@@ -14,6 +14,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_anomalies import router as anomalies_router
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_healing import router as healing_router
 from app.api.routes_insights import router as insights_router
 from app.api.routes_otp import router as otp_router
 from app.api.routes_presets import router as presets_router
@@ -35,7 +36,9 @@ from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
+from app.healing.engine import SelfHealingEngine
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.orchestrator.healing_service import HealingService
 from app.orchestrator.insights_service import InsightsService
 from app.orchestrator.ops_service import OpsService
 from app.orchestrator.preset_service import PresetService
@@ -48,6 +51,12 @@ from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionServ
 from app.scheduling.scheduler import SchedulerService
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
+from app.storage.sqlite_healing_stores import (
+    SqliteHealingEventStore,
+    SqliteHealingPatchStore,
+    SqliteHealingPolicyReader,
+    SqliteHealingPolicyStore,
+)
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
@@ -103,13 +112,25 @@ async def lifespan(app: FastAPI):
     # 소비한다(예외 격리·동시성 제한·정상 종료). 동시성은 E2E_RUN_CONCURRENCY 로 조정한다.
     run_queue = RunExecutionQueue(worker_count=settings.run_concurrency)
 
+    # 자가 치유 센터: 실행 스레드가 동기 조회하는 정책 리더 + 치유 엔진(브라우저 I/O)과
+    # 대시보드/기록용 스토어·서비스를 여기서만 배선한다. 엔진은 실행기(BaseWorkflowExecutor)에
+    # 부착되고, 치유 '사실'은 StepExecutionResult 로 보고되어 HealingService 가 영속한다.
+    healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(db_path))
+    healing_service = HealingService(
+        event_store=SqliteHealingEventStore(db_path),
+        policy_store=SqliteHealingPolicyStore(db_path),
+        patch_store=SqliteHealingPatchStore(db_path),
+        registry=registry,
+    )
+    app.state.healing_service = healing_service
+
     # 실행 경계: 오케스트레이터는 이 포트 뒤의 브라우저/스레드/런타임을 모른다.
     # 실제 실행(LocalExecutionGateway)과 시뮬레이션(SimulatedExecutionGateway)을 합성
     # 게이트웨이가 execution_mode 로 라우팅한다. 시뮬레이션은 더 이상 코어에 인라인되지 않고
     # 같은 포트 뒤의 어댑터로 존재한다. 어댑터 선택(배선)은 이 컴포지션 루트가 독점한다.
     execution_gateway = CompositeExecutionGateway(
         [
-            LocalExecutionGateway(artifact_manager, system_codes),
+            LocalExecutionGateway(artifact_manager, system_codes, healing_engine=healing_engine),
             SimulatedExecutionGateway(),
         ]
     )
@@ -137,6 +158,7 @@ async def lifespan(app: FastAPI):
         input_store=run_input_store,
         run_queue=run_queue,
         artifact_manager=artifact_manager,
+        healing_recorder=healing_service,
     )
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
     app.state.module_settings_repo = module_settings_repository
@@ -308,6 +330,7 @@ app.include_router(daily_router)
 app.include_router(systems_router)
 app.include_router(insights_router)
 app.include_router(anomalies_router)
+app.include_router(healing_router)
 app.include_router(runs_router)
 app.include_router(presets_router)
 app.include_router(otp_router)
