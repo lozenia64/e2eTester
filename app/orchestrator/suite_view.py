@@ -40,6 +40,8 @@ class SuiteView(BaseModel):
     selected_system_codes: list[str] = Field(default_factory=list)
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
+    triggered_by: str = "manual"
+    schedule_id: str | None = None
 
     @classmethod
     def from_suite(cls, suite: SuiteRun) -> SuiteView:
@@ -59,6 +61,8 @@ class SuiteView(BaseModel):
             selected_system_codes=suite.selected_system_codes,
             created_by_user_id=suite.created_by_user_id,
             created_by_user_name=suite.created_by_user_name,
+            triggered_by=suite.triggered_by,
+            schedule_id=suite.schedule_id,
         )
 
     @classmethod

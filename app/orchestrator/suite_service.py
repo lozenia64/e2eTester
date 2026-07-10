@@ -87,6 +87,20 @@ class SuiteService:
         suites.sort(key=lambda suite: suite.requested_at, reverse=True)
         return [self._summarize_suite(suite) for suite in suites[:limit]]
 
+    async def list_suites_by_schedule(self, schedule_id: str, limit: int = 30) -> list[SuiteRun]:
+        """특정 예약이 트리거한 Suite 를 최근순으로 돌려준다(예약 상세 이력용)."""
+        suites = [
+            suite
+            for suite in await self._repository.list_suites()
+            if suite.schedule_id == schedule_id
+        ]
+        suites.sort(key=lambda suite: suite.requested_at, reverse=True)
+        return suites[:limit]
+
+    async def list_schedule_tagged_suites(self) -> list[SuiteRun]:
+        """schedule_id 태깅된 Suite 전체 — 관제 보드/캘린더의 1회 스캔·그룹핑용."""
+        return [suite for suite in await self._repository.list_suites() if suite.schedule_id]
+
     async def reconcile_interrupted_suites(self) -> int:
         """재기동 시 비종료 상태로 남은 Suite 를 CANCELLED 로 정리한다.
 
@@ -233,6 +247,8 @@ class SuiteService:
         request: StartSuiteRequest,
         user_id: str | None = None,
         user_name: str | None = None,
+        triggered_by: str = "manual",
+        schedule_id: str | None = None,
     ) -> SuiteRun:
         systems = self._registry.list_systems()
         if not systems:
@@ -271,6 +287,8 @@ class SuiteService:
             selected_system_codes=resolved_system_codes,
             created_by_user_id=user_id,
             created_by_user_name=user_name,
+            triggered_by=triggered_by,
+            schedule_id=schedule_id,
         )
         await self._repository.create_suite(suite)
         # 시스템별 입력값(PII 가능)은 Suite blob 이 아니라 전용 스토어에 보관한다.
