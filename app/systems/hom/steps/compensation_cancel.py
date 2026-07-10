@@ -87,7 +87,7 @@ def _find_row_by_receipt_number(page, receipt_number: str, timeout_ms: int):
     raise RuntimeError(f"완료 탭에서 접수번호를 찾지 못했습니다: {receipt_number}")
 
 
-def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str) -> None:
+def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str):
     result_common.select_results_tab(page, result_common.FIN_TAB_SELECTOR, "완료", timeout_ms)
     row = _find_row_by_receipt_number(page, receipt_number, timeout_ms)
     row_text = result_common.normalize_text(row.inner_text(timeout=1000))
@@ -99,6 +99,17 @@ def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str
     button_names = result_common.row_button_names(row)
     if button_names != ["제출서류확인"]:
         raise RuntimeError(f"완료 탭 이용가능 서비스가 예상과 다릅니다: {button_names}")
+    return row
+
+
+def _dismiss_gnb_hover_by_clicking_receipt_number(page, row, timeout_ms: int) -> None:
+    """스크린샷 직전 GNB hover 메가메뉴가 열린 채 캡처되는 것을 방지한다."""
+    receipt_link = common.first_visible_locator(
+        row.get_by_role("link"), "완료 탭 목록 접수번호 링크"
+    )
+    with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout_ms):
+        common.click_with_log(receipt_link, "완료 탭 접수번호 클릭(GNB hover 해제)")
+    result_common.wait_url_contains(page, "result02.do", timeout_ms)
 
 
 def run(page, config: common.LoginConfig) -> str:
@@ -113,5 +124,6 @@ def run(page, config: common.LoginConfig) -> str:
     seen_dialogs = _attach_dialog_recorder(page)
     _cancel_claim_and_return_result01(page, config.timeout_ms, seen_dialogs)
     _assert_receipt_absent_in_processing(page, config.timeout_ms, receipt_number)
-    _assert_cancelled_in_finished_tab(page, config.timeout_ms, receipt_number)
+    finished_row = _assert_cancelled_in_finished_tab(page, config.timeout_ms, receipt_number)
+    _dismiss_gnb_hover_by_clicking_receipt_number(page, finished_row, config.timeout_ms)
     return f"보험금청구 취소 성공 ({receipt_number})"
