@@ -70,7 +70,7 @@ class SqliteHealingEventStore:
 
     def _append_sync(self, event: HealingEvent) -> None:
         self._conn.execute(
-            "INSERT OR REPLACE INTO healing_events (event_id, run_id, module_id, system_code, "
+            "INSERT INTO healing_events (event_id, run_id, module_id, system_code, "
             "module_name, workflow_step, broken_selector, healed_selector, strategy, confidence, "
             "action, retry_succeeded, candidates_considered, error_excerpt, page_url, duration_ms, "
             "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

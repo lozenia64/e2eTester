@@ -7,7 +7,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_healing_service
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User
 
 if TYPE_CHECKING:
@@ -113,7 +113,7 @@ async def list_healing_patches(
 async def approve_healing_patch(
     patch_id: str,
     payload: PatchDecision | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     healing: HealingService = Depends(get_healing_service),
 ):
     """패치 승인(사람 승인 게이트) — 승인 시점에 steps 소스 파일에 반영한다."""
@@ -136,7 +136,7 @@ async def approve_healing_patch(
 async def reject_healing_patch(
     patch_id: str,
     payload: PatchDecision | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     healing: HealingService = Depends(get_healing_service),
 ):
     """패치 거절 — 사유(note)와 함께 감사 이력에 남긴다."""

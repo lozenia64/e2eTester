@@ -29,6 +29,15 @@ def test_apply_replacement_switches_quote_when_healed_contains_double_quote():
     assert "button:has-text(\"확인\")" in replaced
 
 
+def test_apply_replacement_escapes_when_healed_contains_both_quote_styles():
+    source = 'S = "#old"\n'
+    healed = 'text="ok" and id=\'x\''
+    replaced, count = apply_replacement(source, "#old", healed)
+    assert count == 1
+    # 큰따옴표 리터럴 안의 " 와 \\ 가 escape 되어 문법적으로 유효하다.
+    assert replaced == 'S = "text=\\"ok\\" and id=\'x\'"\n'
+
+
 def test_no_occurrence_returns_zero():
     _, count = apply_replacement(SOURCE, "#missing", "#x")
     assert count == 0

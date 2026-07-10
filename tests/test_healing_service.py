@@ -123,6 +123,18 @@ async def test_approve_applies_replacement_to_source(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_approve_rejects_path_outside_repo_root(tmp_path):
+    service = _service(tmp_path)
+    await service.record_step_healing(_run(), _module_run(), _definition(), [_attempt()])
+    patch_id = (await service.list_patches())["items"][0]["patch_id"]
+    patch = await service._get_scoped_patch(patch_id, None)
+    patch.file_path = "../../../etc/passwd"
+
+    with pytest.raises(ValueError, match="허용되지 않는 파일 경로"):
+        service._apply_patch_sync(patch)
+
+
+@pytest.mark.asyncio
 async def test_reject_keeps_source_untouched(tmp_path):
     service = _service(tmp_path)
     await service.record_step_healing(_run(), _module_run(), _definition(), [_attempt()])

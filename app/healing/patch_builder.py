@@ -35,11 +35,16 @@ def _quoted_tokens(selector: str) -> list[str]:
 
 
 def _replacement_literal(healed: str, quote: str) -> str:
-    if quote == '"' and '"' in healed:
-        quote = "'"
-    if quote == "'" and "'" in healed:
-        quote = '"'
-    return f"{quote}{healed}{quote}"
+    if quote not in healed:
+        chosen = quote
+    elif '"' not in healed:
+        chosen = '"'
+    elif "'" not in healed:
+        chosen = "'"
+    else:
+        chosen = quote
+    escaped = healed.replace("\\", "\\\\").replace(chosen, f"\\{chosen}")
+    return f"{chosen}{escaped}{chosen}"
 
 
 def apply_replacement(source: str, broken: str, healed: str) -> tuple[str, int]:

@@ -66,16 +66,29 @@ class HealingService:
         self._policy_store = policy_store
         self._patch_store = patch_store
         self._registry = registry
-        self._repo_root = Path(repo_root)
+        self._repo_root = Path(repo_root).resolve()
 
     # ── 소스 읽기(I/O) ──────────────────────────────────────────────────────
+    def _relative_source_key(self, path: Path) -> str:
+        return path.resolve().relative_to(self._repo_root).as_posix()
+
+    def _resolve_source_path(self, file_path: str) -> Path:
+        if not file_path or Path(file_path).is_absolute():
+            raise ValueError(f"허용되지 않는 파일 경로입니다: {file_path}")
+        resolved = (self._repo_root / file_path).resolve()
+        try:
+            resolved.relative_to(self._repo_root)
+        except ValueError:
+            raise ValueError(f"허용되지 않는 파일 경로입니다: {file_path}") from None
+        return resolved
+
     def _read_sources_sync(self) -> dict[str, str]:
         sources: dict[str, str] = {}
         for pattern in _SOURCE_GLOBS:
             for path in sorted(self._repo_root.glob(pattern)):
                 try:
-                    sources[path.as_posix()] = path.read_text(encoding="utf-8")
-                except OSError:
+                    sources[self._relative_source_key(path)] = path.read_text(encoding="utf-8")
+                except (OSError, ValueError):
                     continue
         return sources
 
@@ -333,7 +346,7 @@ class HealingService:
         return patch
 
     def _apply_patch_sync(self, patch: HealingPatch) -> bool:
-        path = self._repo_root / patch.file_path
+        path = self._resolve_source_path(patch.file_path)
         try:
             source = path.read_text(encoding="utf-8")
         except OSError as exc:

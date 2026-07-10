@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,7 @@ DEFAULT_CONFIDENCE_THRESHOLD = 0.75
 CHRONIC_HEAL_THRESHOLD = 3
 
 
-class HealingAction(str, Enum):
+class HealingAction(StrEnum):
     """치유 시도 1건의 결과 분류.
 
     - AUTO_HEALED   : 신뢰도 ≥ 임계치 → 런타임 한정 대체 셀렉터 적용 + 스텝 재시도.
@@ -27,7 +27,7 @@ class HealingAction(str, Enum):
     NO_CANDIDATE = "NO_CANDIDATE"
 
 
-class PatchStatus(str, Enum):
+class PatchStatus(StrEnum):
     PROPOSED = "PROPOSED"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
