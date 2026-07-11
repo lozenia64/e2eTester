@@ -23,6 +23,9 @@ python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 python3 scripts/check_docs_consistency.py   # docs ↔ source consistency guard
 python3 -m ruff check . && python3 -m ruff format --check .   # lint + format (config in pyproject.toml)
 python3 -m pytest tests/ -q                 # unit tests (pure domain/builders — no browser/DB needed)
+
+# Project-local multi-agent orchestration (Cursor): invoke in chat with
+# "e2e-orchestrator 실행: <request>" — see .cursor/skills/e2e-orchestrator/SKILL.md
 ```
 
 There is no build step. Automated checks are threefold and CI-gated: (1) the docs consistency guard (`scripts/check_docs_consistency.py`), which asserts machine-checkable facts (manifest module ids, API routes, env var names, default model chain) match the docs; (2) ruff lint/format; (3) the pytest unit suite in `tests/` covering the pure layers (domain aggregates/state machines, planners, builders, stores) without a browser. Live-site behavioral verification remains manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
