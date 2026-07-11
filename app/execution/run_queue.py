@@ -2,47 +2,34 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Protocol
 
 from app.core.logging import get_logger
-
-# 큐에 적재되는 작업: 인자 없이 코루틴을 돌려주는 팩토리(보통 ``functools.partial``).
-Job = Callable[[], Awaitable[None]]
+from app.execution.in_memory_job_queue import DEFAULT_RUN_CONCURRENCY, InMemoryJobQueue
+from app.execution.job_queue_port import Job, JobQueuePort, RunJobDescriptor
 
 logger = get_logger(__name__)
 
-# E2E 도구는 헤디드 브라우저를 띄우므로 동시 실행을 무한정 허용하면 자원이 폭증한다.
-# 기본 동시성은 보수적으로 두고 컴포지션 루트에서 env(E2E_RUN_CONCURRENCY)로 조정한다.
-DEFAULT_RUN_CONCURRENCY = 4
-
-
-class JobQueue(Protocol):
-    """Run 실행 작업을 제출하는 포트. 오케스트레이터는 구체 큐 구현을 모른다."""
-
-    async def submit(self, job: Job, *, label: str) -> None: ...
+# 하위 호환: 기존 import 경로 유지.
+JobQueue = JobQueuePort
 
 
 class RunExecutionQueue:
     """Run 실행을 위한 **감독되는(in-process) 작업 큐**.
 
-    기존에는 ``RunService.start_run`` 이 ``asyncio.create_task`` 로 실행 코루틴을 발사 후
-    망각(fire-and-forget)해, 추적·동시성 제한·예외 가시화·정상 종료가 전혀 없었다. 이 큐는
-    그 자리를 대신한다:
-
-    - **감독**: 워커 태스크가 큐에서 작업을 꺼내 실행하고, 작업에서 난 예외를 격리·로깅한다
-      (고아 태스크/조용히 사라지는 예외 제거).
-    - **동시성 제한**: 워커 수만큼만 동시에 실행한다(자원 폭증 방지). OTP 대기로 일시정지한
-      Run 은 실행 코루틴이 반환되어 워커를 즉시 반납하고, 재개는 새 작업으로 다시 제출된다
-      (대기 중에 워커를 점유하지 않음).
-    - **수명 관리**: 컴포지션 루트(lifespan)가 ``start``/``stop`` 으로 워커를 띄우고 거둔다.
-
-    큐 자체는 프로세스-로컬(in-process)이다. 같은 포트(``JobQueue``)로 외부 브로커 기반
-    워커 구현을 끼워 out-of-process 실행으로 확장할 수 있다(워커 경계).
+    ``InMemoryJobQueue`` 백엔드를 워커 풀이 소비한다. 원격 모드에서는 API 가
+    ``RedisJobQueue`` 로 작업을 적재하고, 별도 워커 프로세스가 소비한다.
     """
 
-    def __init__(self, worker_count: int = DEFAULT_RUN_CONCURRENCY) -> None:
+    def __init__(
+        self,
+        worker_count: int = DEFAULT_RUN_CONCURRENCY,
+        *,
+        backend: InMemoryJobQueue | None = None,
+        run_job_handler: Callable[[RunJobDescriptor], Awaitable[None]] | None = None,
+    ) -> None:
         self._worker_count = max(1, worker_count)
-        self._queue: asyncio.Queue[tuple[Job, str]] = asyncio.Queue()
+        self._backend = backend or InMemoryJobQueue()
+        self._run_job_handler = run_job_handler
         self._workers: list[asyncio.Task] = []
         self._started = False
 
@@ -56,12 +43,13 @@ class RunExecutionQueue:
 
     @property
     def pending_jobs(self) -> int:
-        return self._queue.qsize()
+        return self._backend.pending_jobs
 
     def start(self) -> None:
         if self._started:
             return
         self._started = True
+        self._backend.mark_started()
         self._workers = [
             asyncio.create_task(self._worker(index), name=f"run-queue-worker-{index}")
             for index in range(self._worker_count)
@@ -70,7 +58,12 @@ class RunExecutionQueue:
     async def submit(self, job: Job, *, label: str) -> None:
         if not self._started:
             raise RuntimeError("RunExecutionQueue 가 시작되지 않았습니다.")
-        await self._queue.put((job, label))
+        await self._backend.submit(job, label=label)
+
+    async def enqueue_run_job(self, descriptor: RunJobDescriptor) -> None:
+        if not self._started:
+            raise RuntimeError("RunExecutionQueue 가 시작되지 않았습니다.")
+        await self._backend.enqueue_run_job(descriptor)
 
     async def stop(self) -> None:
         for worker in self._workers:
@@ -79,14 +72,28 @@ class RunExecutionQueue:
         self._workers = []
         self._started = False
 
+    async def join(self) -> None:
+        await self._backend.join()
+
+    def set_run_job_handler(self, handler: Callable[[RunJobDescriptor], Awaitable[None]]) -> None:
+        """RunJobDescriptor 소비 핸들러를 등록한다(컴포지션 루트에서 RunService 연결용)."""
+        self._run_job_handler = handler
+
     async def _worker(self, index: int) -> None:
         while True:
-            job, label = await self._queue.get()
+            item = await self._backend.get()
             try:
-                await job()
+                if isinstance(item, RunJobDescriptor):
+                    if self._run_job_handler is None:
+                        raise RuntimeError("RunJobDescriptor 핸들러가 설정되지 않았습니다.")
+                    await self._run_job_handler(item)
+                else:
+                    job, label = item
+                    await job()
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # 작업 예외는 다른 작업/워커로 전파되지 않게 격리
+            except Exception as exc:
+                label = item.label if isinstance(item, RunJobDescriptor) else item[1]
                 logger.exception(
                     "실행 큐 작업 오류",
                     log_event="queue.job_failed",
@@ -95,4 +102,4 @@ class RunExecutionQueue:
                     error=str(exc),
                 )
             finally:
-                self._queue.task_done()
+                self._backend.task_done()

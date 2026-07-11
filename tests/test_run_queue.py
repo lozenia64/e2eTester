@@ -34,7 +34,7 @@ async def test_jobs_run_to_completion():
 
     for i in range(5):
         await queue.submit(functools.partial(job, i), label=f"job-{i}")
-    await queue._queue.join()  # 모든 작업 처리 대기
+    await queue.join()
     await queue.stop()
     assert sorted(done) == [0, 1, 2, 3, 4]
 
@@ -52,7 +52,7 @@ async def test_job_exception_is_isolated():
 
     await queue.submit(boom, label="boom")
     await queue.submit(ok, label="ok")
-    await queue._queue.join()
+    await queue.join()
     await queue.stop()
     # 한 작업이 예외로 죽어도 워커는 살아 다음 작업을 처리해야 한다.
     assert ran == ["ok"]
@@ -69,7 +69,7 @@ async def test_single_worker_preserves_fifo_order():
 
     for i in range(6):
         await queue.submit(functools.partial(job, i), label=f"job-{i}")
-    await queue._queue.join()
+    await queue.join()
     await queue.stop()
     assert order == [0, 1, 2, 3, 4, 5]
 

@@ -32,8 +32,14 @@ from app.core.settings import get_settings
 from app.events.bus import EventBus
 from app.events.subscribers.email_notification import EmailNotificationSubscriber
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
+from app.eventsourcing.outbox import SqliteOutbox
+from app.eventsourcing.relay import OutboxRelay
+from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.local_gateway import LocalExecutionGateway
+from app.execution.redis_job_queue import RedisJobQueue
+from app.execution.redis_session_registry import RedisSessionRegistry
+from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.healing.engine import SelfHealingEngine
@@ -45,11 +51,15 @@ from app.orchestrator.preset_service import PresetService
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
+from app.projections.handlers import ProjectionHandlers
+from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
 from app.scheduling.scheduler import SchedulerService
-from app.storage.run_input_store import InMemoryRunInputStore
+from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
+from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
+from app.storage.run_history_backfill import backfill_run_history_index
 from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
@@ -60,14 +70,14 @@ from app.storage.sqlite_healing_stores import (
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
+from app.storage.sqlite_run_history_query import SqliteRunHistoryQuery
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
-from app.storage.sqlite_run_repository import SqliteRunRepository
+from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
 from app.storage.sqlite_support import DEFAULT_DB_PATH
 from app.storage.sqlite_user_repository import SqliteUserRepository
-from app.storage.suite_input_store import InMemorySuiteInputStore
 
 logger = get_logger(__name__)
 
@@ -96,26 +106,34 @@ async def lifespan(app: FastAPI):
     app.state.user_service = user_service
     await user_service.seed_admin(settings.admin_email, settings.admin_password.get_secret_value())
 
-    repository = SqliteRunRepository(db_path)
+    es_db = SqliteDatabase(db_path)
+    await ensure_schema(es_db)
+    run_write_repo = SqliteRunWriteRepository(es_db)
+    await backfill_run_history_index(es_db, run_write_repo)
+    run_history_query = SqliteRunHistoryQuery(es_db, run_write_repo)
+    realtime = RealtimeNotificationAdapter()
     # 모듈 로그는 Run 상태 집합체와 분리된 append-only 스트림 스토어가 소유한다(핫패스
     # full-blob 쓰기 제거). Run blob 에는 로그가 담기지 않고, 읽기 시 하이드레이션된다.
     run_log_store = SqliteRunLogStore(db_path)
     # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 영속(SQLite) — 재기동 후에도 권위 있게 남는다.
-    # PII 입력값은 Phase 1 에서 인메모리(오늘과 동일한 휘발성). 암호화 SQLite 어댑터로 바꾸면
-    # 재기동 후 rerun 까지 가능해진다(Phase 2).
     run_control_store = SqliteRunControlStore(db_path)
-    run_input_store = InMemoryRunInputStore()
+    encryption_secret = settings.jwt_secret.get_secret_value()
+    run_input_store = EncryptedSqliteRunInputStore(es_db, encryption_secret)
     artifact_manager = ArtifactManager()
     system_codes = [system.system_code for system in registry.list_systems()]
 
-    # 감독되는 실행 작업 큐: Run 실행을 fire-and-forget asyncio.create_task 가 아니라 워커 풀이
-    # 소비한다(예외 격리·동시성 제한·정상 종료). 동시성은 E2E_RUN_CONCURRENCY 로 조정한다.
-    run_queue = RunExecutionQueue(worker_count=settings.run_concurrency)
+    # 감독되는 실행 작업 큐: 로컬 모드는 in-process, 원격 모드는 Redis 브로커(API 생산자).
+    session_registry: RedisSessionRegistry | None = None
+    if settings.execution_mode == "remote":
+        session_registry = RedisSessionRegistry(settings.redis_url, settings.session_lease_ttl)
+        run_queue = RedisJobQueue(settings.redis_url)
+    else:
+        run_queue = RunExecutionQueue(worker_count=settings.run_concurrency)
 
-    # 자가 치유 센터: 실행 스레드가 동기 조회하는 정책 리더 + 치유 엔진(브라우저 I/O)과
-    # 대시보드/기록용 스토어·서비스를 여기서만 배선한다. 엔진은 실행기(BaseWorkflowExecutor)에
-    # 부착되고, 치유 '사실'은 StepExecutionResult 로 보고되어 HealingService 가 영속한다.
-    healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(db_path))
+    # 자가 치유 센터: 로컬 모드는 API 실행 스레드, 원격 모드는 워커에서만 동작한다.
+    healing_engine = None
+    if settings.execution_mode == "local":
+        healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(db_path))
     healing_service = HealingService(
         event_store=SqliteHealingEventStore(db_path),
         policy_store=SqliteHealingPolicyStore(db_path),
@@ -124,21 +142,25 @@ async def lifespan(app: FastAPI):
     )
     app.state.healing_service = healing_service
 
-    # 실행 경계: 오케스트레이터는 이 포트 뒤의 브라우저/스레드/런타임을 모른다.
-    # 실제 실행(LocalExecutionGateway)과 시뮬레이션(SimulatedExecutionGateway)을 합성
-    # 게이트웨이가 execution_mode 로 라우팅한다. 시뮬레이션은 더 이상 코어에 인라인되지 않고
-    # 같은 포트 뒤의 어댑터로 존재한다. 어댑터 선택(배선)은 이 컴포지션 루트가 독점한다.
-    execution_gateway = CompositeExecutionGateway(
-        [
+    # 실행 경계: 로컬=LocalExecutionGateway, 원격=RemoteExecutionGateway(워커 HTTP).
+    if settings.execution_mode == "remote":
+        gateways = [
+            RemoteExecutionGateway(settings.worker_base_url, session_registry),
+            SimulatedExecutionGateway(),
+        ]
+    else:
+        gateways = [
             LocalExecutionGateway(artifact_manager, system_codes, healing_engine=healing_engine),
             SimulatedExecutionGateway(),
         ]
-    )
+    execution_gateway = CompositeExecutionGateway(gateways)
 
     # 도메인 이벤트 버스 + 부수 관심사 구독자(AI 실패 분석·종료 메일).
     event_bus = EventBus()
     failure_analyzer = GeminiFailureAnalyzer.from_env()
-    FailureAnalysisSubscriber(failure_analyzer, repository, registry).register(event_bus)
+    FailureAnalysisSubscriber(failure_analyzer, run_write_repo, realtime, registry).register(
+        event_bus
+    )
     EmailNotificationSubscriber(system_codes).register(event_bus)
     email_status = RunCompletionEmailNotifier.inspect_env_status(system_codes)
     logger.info(
@@ -150,7 +172,9 @@ async def lifespan(app: FastAPI):
 
     run_service = RunService(
         registry=registry,
-        repository=repository,
+        write_repo=run_write_repo,
+        history_query=run_history_query,
+        realtime=realtime,
         log_store=run_log_store,
         execution_gateway=execution_gateway,
         event_bus=event_bus,
@@ -159,7 +183,10 @@ async def lifespan(app: FastAPI):
         run_queue=run_queue,
         artifact_manager=artifact_manager,
         healing_recorder=healing_service,
+        session_registry=session_registry,
     )
+    if isinstance(run_queue, RunExecutionQueue):
+        run_queue.set_run_job_handler(run_service.dispatch_run_job)
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
     app.state.module_settings_repo = module_settings_repository
 
@@ -175,7 +202,7 @@ async def lifespan(app: FastAPI):
     schedule_repository = SqliteScheduleRepository(db_path)
     # Suite 취소 의도는 영속(SQLite), 시스템별 입력값은 인메모리(Phase 1, RunInputStore 와 동일).
     suite_control_store = SqliteSuiteControlStore(db_path)
-    suite_input_store = InMemorySuiteInputStore()
+    suite_input_store = EncryptedSqliteSuiteInputStore(es_db, encryption_secret)
     suite_service = SuiteService(
         registry=registry,
         # 사가는 구체 RunService 가 아니라 명령 포트(RunCommandPort)에만 의존한다 — RunService 는
@@ -201,7 +228,7 @@ async def lifespan(app: FastAPI):
     app.state.otp_relay_token = settings.otp_relay_token_str()
     app.state.otp_relay_regex = settings.otp_relay_regex
     app.state.stats_service = StatsService(
-        run_repo=repository,
+        run_repo=run_history_query,
         suite_repo=suite_repository,
         registry=registry,
         module_settings_repo=module_settings_repository,
@@ -214,7 +241,7 @@ async def lifespan(app: FastAPI):
     anomaly_handling_store = SqliteAnomalyHandlingStore(db_path)
     app.state.anomaly_store = anomaly_handling_store
     app.state.insights_service = InsightsService(
-        run_repo=repository,
+        run_repo=run_history_query,
         registry=registry,
         anomaly_store=anomaly_handling_store,
         user_service=user_service,
@@ -238,24 +265,33 @@ async def lifespan(app: FastAPI):
     logger.info(
         "실행 작업 큐 시작",
         log_event="startup.run_queue_started",
-        worker_count=run_queue.worker_count,
+        worker_count=getattr(run_queue, "worker_count", 0),
+        execution_mode=settings.execution_mode,
     )
 
     scheduler = SchedulerService(
-        run_service=run_service,
+        run_commands=run_service,
         suite_service=suite_service,
         repository=schedule_repository,
     )
     app.state.schedule_service = scheduler
     app.state.ops_service = OpsService(
         settings=settings,
-        run_repo=repository,
+        run_repo=run_history_query,
         suite_repo=suite_repository,
         schedule_repo=schedule_repository,
         run_queue=run_queue,
         scheduler=scheduler,
     )
     scheduler_task = asyncio.create_task(scheduler.run_forever())
+    outbox_relay = OutboxRelay(
+        SqliteOutbox(es_db),
+        ProjectionHandlers(es_db, run_write_repo),
+        run_write_repo,
+        event_bus,
+        log_store=run_log_store,
+    )
+    outbox_relay.start()
     retention_scheduler = RunRetentionScheduler.from_env(RunRetentionService(run_service))
     retention_task: asyncio.Task | None = None
     if retention_scheduler is not None:
@@ -263,6 +299,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await outbox_relay.stop()
         scheduler.stop()
         scheduler_task.cancel()
         try:
@@ -278,6 +315,8 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
         await run_queue.stop()
+        if session_registry is not None:
+            await session_registry.close()
 
 
 app = FastAPI(title="E2E Tester Dashboard", lifespan=lifespan)

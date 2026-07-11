@@ -24,3 +24,6 @@ croniter>=2.0,<7.0
 python-dotenv>=1.0,<2.0
 # 비밀번호 해싱. Argon2id 기본 + 기존 bcrypt 해시 검증/업그레이드(passlib 의 유지보수 후속).
 pwdlib[argon2]>=0.2,<1.0
+redis>=5.0,<6.0
+# Run/Suite 입력값 at-rest 암호화(AES-GCM).
+cryptography>=42.0,<49.0

@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
+from app.automation.wiring import build_engine_for_execution_mode
 from app.runner.artifact_manager import ArtifactManager
 
 if TYPE_CHECKING:
@@ -36,5 +37,11 @@ def load_workflow_executors(
             attach = getattr(executor, "attach_healing", None)
             if attach is not None:
                 attach(healing_engine)
+        # Automation BC: execution_mode 에 맞는 ScenarioEngine 을 부착한다.
+        attach_auto = getattr(executor, "attach_automation", None)
+        if attach_auto is not None:
+            engine = build_engine_for_execution_mode(executor.execution_mode)
+            if engine is not None:
+                attach_auto(engine)
         executors[executor.execution_mode] = executor
     return executors

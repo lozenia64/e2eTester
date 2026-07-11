@@ -9,9 +9,9 @@ from playwright.sync_api import sync_playwright
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
+from app.automation.page_objects.hom import kakao_login, login_move, main_access, phone_login
+from app.automation.page_objects.hom import login_common as common
 from app.runner.screenshot import capture_screenshot
-from app.systems.hom.steps import kakao_login, login_move, main_access, phone_login
-from app.systems.hom.steps import login_common as common
 
 
 def create_argument_parser() -> argparse.ArgumentParser:

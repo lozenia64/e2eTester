@@ -28,9 +28,9 @@ class FakeRegistry:
 
 def _service(tmp_path) -> HealingService:
     db = tmp_path / "healing.db"
-    steps_dir = tmp_path / "app" / "systems" / "hrp" / "steps"
-    steps_dir.mkdir(parents=True)
-    (steps_dir / "login.py").write_text(
+    po_dir = tmp_path / "app" / "automation" / "page_objects" / "hrp"
+    po_dir.mkdir(parents=True)
+    (po_dir / "login.py").write_text(
         'LOGIN_BUTTON_SELECTOR = "#btnRA"\n\n\ndef run(page):\n    page.locator("#btnRA").click()\n',
         encoding="utf-8",
     )
@@ -95,7 +95,7 @@ async def test_record_creates_event_and_patch_proposal(tmp_path):
     patches = await service.list_patches()
     assert patches["counts"]["proposed"] == 1
     patch = patches["items"][0]
-    assert patch["file_path"].endswith("app/systems/hrp/steps/login.py")
+    assert patch["file_path"].endswith("app/automation/page_objects/hrp/login.py")
     assert "-LOGIN_BUTTON_SELECTOR" in patch["diff"]
 
     # 같은 (시스템, 깨진→대체) 제안이 이미 열려 있으면 중복 생성하지 않는다.
@@ -104,7 +104,7 @@ async def test_record_creates_event_and_patch_proposal(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_approve_applies_replacement_to_source(tmp_path):
+async def test_approve_writes_patch_artifact_not_source(tmp_path):
     service = _service(tmp_path)
     await service.record_step_healing(_run(), _module_run(), _definition(), [_attempt()])
     patch_id = (await service.list_patches())["items"][0]["patch_id"]
@@ -113,9 +113,12 @@ async def test_approve_applies_replacement_to_source(tmp_path):
 
     assert approved.status is PatchStatus.APPROVED
     assert approved.applied is True
-    source = (tmp_path / "app/systems/hrp/steps/login.py").read_text(encoding="utf-8")
-    assert '"#btnRA2"' in source
-    assert '"#btnRA"' not in source
+    patch_file = tmp_path / "artifacts" / "healing_patches" / f"{patch_id}.patch"
+    assert patch_file.exists()
+    assert "-LOGIN_BUTTON_SELECTOR" in patch_file.read_text(encoding="utf-8")
+    source = (tmp_path / "app/automation/page_objects/hrp/login.py").read_text(encoding="utf-8")
+    assert '"#btnRA"' in source
+    assert '"#btnRA2"' not in source
 
     # 이미 처리된 패치는 재승인 불가(감사 이력 보호).
     with pytest.raises(ValueError):
@@ -146,7 +149,7 @@ async def test_reject_keeps_source_untouched(tmp_path):
 
     assert rejected.status is PatchStatus.REJECTED
     assert rejected.note == "role 기반으로 재작성 예정"
-    source = (tmp_path / "app/systems/hrp/steps/login.py").read_text(encoding="utf-8")
+    source = (tmp_path / "app/automation/page_objects/hrp/login.py").read_text(encoding="utf-8")
     assert '"#btnRA"' in source
 
 

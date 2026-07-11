@@ -4,10 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
-from app.runner.workflow_engine import StepContext, StepHandler
+from app.runner.workflow_engine import StepHandler
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
-from app.systems.chbot.steps import contract_list, simple_auth
 
 DEFAULT_BASE_URL = "https://chbot.hwgeneralins.com/P29GCdKMTnbsy0PRr"
 
@@ -45,37 +43,7 @@ class ChbotWorkflowExecutor(AccessWorkflowExecutor):
         )
 
     def build_step_registry(self) -> Mapping[str, StepHandler]:
-        return {
-            **super().build_step_registry(),
-            "simple_auth": self._step_simple_auth,
-            "contract_list": self._step_contract_list,
-        }
-
-    def _step_simple_auth(self, ctx: StepContext) -> StepOutcome:
-        runtime: ChbotRuntime = ctx.runtime  # type: ignore[assignment]
-        if not runtime.name or not runtime.birthdate or not runtime.gender_code:
-            raise RuntimeError("성명, 생년월일, 성별코드를 입력해 주세요.")
-        if not runtime.carrier or not runtime.phone_number:
-            raise RuntimeError("통신사와 휴대폰 번호를 입력해 주세요.")
-        if not runtime.simple_auth_sms_requested:
-            message = simple_auth.request_otp(
-                runtime.page,
-                name=runtime.name,
-                birthdate=runtime.birthdate,
-                gender_code=runtime.gender_code,
-                carrier=runtime.carrier,
-                phone_number=runtime.phone_number,
-            )
-            runtime.simple_auth_sms_requested = True
-            if not runtime.otp_code:
-                return StepNeedsInput(message)
-        return StepCompleted(
-            simple_auth.submit_otp_and_verify(runtime.page, otp_code=runtime.otp_code)
-        )
-
-    def _step_contract_list(self, ctx: StepContext) -> StepOutcome:
-        runtime: ChbotRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(contract_list.run(runtime.page))
+        return {}
 
     def update_otp_code(self, runtime: ChbotRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

@@ -44,10 +44,12 @@ logger = get_logger(__name__)
 
 # 셀렉터가 실제로 사는 소스 위치(내구성 스캔 + 패치 제안의 탐색 범위).
 _SOURCE_GLOBS = (
-    "app/systems/*/steps/*.py",
+    "app/automation/page_objects/*/*.py",
     "app/systems/access_common/*.py",
     "app/scenarios/*/*.py",
 )
+
+_HEALING_PATCHES_DIR = Path("artifacts/healing_patches")
 
 _EVENT_LIST_LIMIT = 300
 
@@ -320,16 +322,14 @@ class HealingService:
         patch_id: str,
         *,
         actor_name: str | None = None,
-        apply_to_source: bool = True,
+        apply_to_source: bool = False,
         allowed_system_codes: list[str] | None = None,
     ) -> HealingPatch:
-        """패치 승인 — 사람 승인 게이트를 통과한 시점에만 소스 파일에 반영한다."""
+        """패치 승인 — 소스 직접 수정 대신 artifacts/healing_patches/ 에 .patch 파일을 남긴다."""
         patch = await self._get_scoped_patch(patch_id, allowed_system_codes)
         if patch.status is not PatchStatus.PROPOSED:
             raise ValueError("이미 처리된 패치입니다.")
-        applied = False
-        if apply_to_source:
-            applied = await asyncio.to_thread(self._apply_patch_sync, patch)
+        applied = await asyncio.to_thread(self._write_patch_artifact_sync, patch)
         patch.status = PatchStatus.APPROVED
         patch.applied = applied
         patch.decided_at = datetime.now(UTC)
@@ -345,7 +345,20 @@ class HealingService:
         )
         return patch
 
+    def _write_patch_artifact_sync(self, patch: HealingPatch) -> bool:
+        """승인된 패치 diff 를 artifacts/healing_patches/ 에 기록한다(소스 직접 수정 없음)."""
+        out_dir = (self._repo_root / _HEALING_PATCHES_DIR).resolve()
+        try:
+            out_dir.relative_to(self._repo_root)
+        except ValueError:
+            raise ValueError("허용되지 않는 패치 출력 경로입니다.") from None
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{patch.patch_id}.patch"
+        out_path.write_text(patch.diff, encoding="utf-8")
+        return True
+
     def _apply_patch_sync(self, patch: HealingPatch) -> bool:
+        """레거시 직접 적용(테스트·수동 복구용). approve_patch 는 더 이상 호출하지 않는다."""
         path = self._resolve_source_path(patch.file_path)
         try:
             source = path.read_text(encoding="utf-8")

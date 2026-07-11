@@ -28,11 +28,11 @@ class FailureAnalysisSubscriber:
     에 영속되므로, 이 구독자는 실행 컨텍스트 없이 종료된 Run 만으로 분석을 재구성한다.
     """
 
-    def __init__(self, analyzer, repository, registry) -> None:
+    def __init__(self, analyzer, write_repo, realtime, registry) -> None:
         self._analyzer = analyzer
-        self._repository = repository
+        self._write_repo = write_repo
         self._registry = registry
-        self._events = RunEventPublisher(repository)
+        self._events = RunEventPublisher(realtime)
 
     def register(self, event_bus: EventBus) -> None:
         event_bus.subscribe(RunFinished, self.on_run_finished)
@@ -65,7 +65,7 @@ class FailureAnalysisSubscriber:
                 continue
             # 직접 module.failure_analysis = ... 하지 않고 애그리거트 경로로만 변이한다.
             RunAggregate(run).attach_failure_analysis(module, analysis)
-            await self._repository.save_run(run)
+            await self._write_repo.save_run(run)
             # 분석 결과를 모듈 카드에 반영하도록 module_finished 를 다시 발행한다.
             await self._events.module_event("module_finished", run, module)
 

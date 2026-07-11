@@ -27,7 +27,10 @@ class _NoopEventBus:
 
 
 class _NoopQueue:
-    def submit(self, *_args, **_kwargs) -> None:
+    async def submit(self, *_args, **_kwargs) -> None:
+        pass
+
+    async def enqueue_run_job(self, *_args, **_kwargs) -> None:
         pass
 
 
@@ -57,9 +60,12 @@ def _run(
 
 
 def _service(tmp_path: Path) -> RunService:
+    repo = InMemoryRunRepository()
     return RunService(
         registry=ModuleRegistry(),
-        repository=InMemoryRunRepository(),
+        write_repo=repo,
+        history_query=repo,
+        realtime=repo,
         log_store=InMemoryRunLogStore(),
         execution_gateway=_NoopGateway(),
         event_bus=_NoopEventBus(),
@@ -89,7 +95,7 @@ async def _assert_scope_filters(tmp_path: Path) -> None:
         _run("run_yesterday_waiting", status=RunStatus.WAITING_INPUT, requested_at=yesterday),
     ]
     for run in runs:
-        await service._repository.save_run(run)
+        await service._write_repo.save_run(run)
 
     today_ids = {item["run_id"] for item in await service.list_run_summaries(scope="today")}
     assert today_ids == {"run_today_passed", "run_yesterday_waiting"}
@@ -125,7 +131,7 @@ async def _assert_active_runs_not_dropped_at_limit(tmp_path: Path) -> None:
             )
         )
     for run in runs:
-        await service._repository.save_run(run)
+        await service._write_repo.save_run(run)
 
     today_ids = {
         item["run_id"] for item in await service.list_run_summaries(scope="today", limit=3)
