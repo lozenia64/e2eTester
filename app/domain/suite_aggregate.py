@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.core.enums import SuiteStatus
@@ -8,6 +9,7 @@ from app.core.status_labels import SUITE_ANOMALY_STATUSES, SUITE_ERROR_STATUSES
 from app.domain import events as domain_events
 from app.domain.events import DomainEvent
 from app.domain.snapshots import SuiteSnapshot
+from app.domain.summary_fields import suite_summary_fields
 
 # 더 이상 전이시키지 않는(이미 끝난) 상태들.
 
@@ -98,7 +100,15 @@ class SuiteAggregate:
         return aggregate
 
     def _emit(self, event: DomainEvent) -> None:
+        """이벤트를 버퍼에 쌓는다 — 변이 **후** 호출되므로 요약은 사후 상태를 반영한다.
 
+        Suite 요약 인덱스 프로젝션이 blob 을 재수화하지 않도록 모든 이벤트에
+        ``suite_summary`` 섹션을 동봉한다(fat event; ``RunAggregate._emit`` 와 동형).
+        """
+        event = replace(
+            event,
+            payload={**event.payload, "suite_summary": suite_summary_fields(self._state)},
+        )
         self._pending_events.append(event)
 
     # --- 조회(규칙/판정) --------------------------------------------------

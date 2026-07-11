@@ -76,7 +76,15 @@ def module_finished(
     system_code: str,
     schedule_id: str | None,
     suite_id: str | None,
+    module_name: str | None = None,
+    message: str | None = None,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+    duration_ms: int | None = None,
+    created_by_user_id: str | None = None,
 ) -> DomainEvent:
+    # 프로젝션(이상건 인박스·일간 현황)이 blob 재수화 없이 행을 만들 수 있도록
+    # 모듈 종료 사실의 파생 값을 payload 에 함께 싣는다(fat event).
     return DomainEvent.create(
         "Run",
         run_id,
@@ -87,6 +95,12 @@ def module_finished(
             "system_code": system_code,
             "schedule_id": schedule_id,
             "suite_id": suite_id,
+            "module_name": module_name,
+            "message": message,
+            "started_at": started_at.isoformat() if started_at else None,
+            "ended_at": ended_at.isoformat() if ended_at else None,
+            "duration_ms": duration_ms,
+            "created_by_user_id": created_by_user_id,
         },
     )
 
@@ -143,12 +157,25 @@ def run_modules_cancelled(run_id: str, module_ids: list[str]) -> DomainEvent:
     return DomainEvent.create("Run", run_id, "RunModulesCancelled", {"module_ids": module_ids})
 
 
-def run_comparison_attached(run_id: str, baseline_run_id: str | None) -> DomainEvent:
+def run_comparison_attached(
+    run_id: str,
+    baseline_run_id: str | None,
+    *,
+    newly_failed: list[str] | None = None,
+    recovered: list[str] | None = None,
+    still_failing: list[str] | None = None,
+) -> DomainEvent:
+    # 비교 캐시 프로젝션이 blob 재수화 없이 행을 만들 수 있도록 결과를 동봉한다(fat event).
     return DomainEvent.create(
         "Run",
         run_id,
         "RunComparisonAttached",
-        {"baseline_run_id": baseline_run_id},
+        {
+            "baseline_run_id": baseline_run_id,
+            "newly_failed": list(newly_failed or []),
+            "recovered": list(recovered or []),
+            "still_failing": list(still_failing or []),
+        },
     )
 
 

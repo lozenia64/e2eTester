@@ -8,12 +8,14 @@ from datetime import UTC, datetime
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.events import DomainEvent
+from app.domain.summary_fields import run_summary_fields
 from app.eventsourcing.support import SqliteDatabase
 from app.scheduling.scheduler import schedule_day_label
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 PROJECTION_NAMES = (
     "run_history_index",
+    "suite_history_index",
     "anomaly_inbox_index",
     "daily_system_status",
     "stats_rollup",
@@ -41,6 +43,43 @@ ON CONFLICT(projection_name) DO UPDATE SET
     last_sequence_id = excluded.last_sequence_id,
     updated_at = excluded.updated_at
 """
+
+
+def _run_history_upsert(run_id: str, summary: dict) -> Mutation:
+    """이벤트에 동봉된 ``run_summary`` 로 요약 인덱스 한 행 전체를 upsert 한다."""
+    return (
+        """
+        INSERT OR REPLACE INTO run_history_index
+            (run_id, system_code, system_name, status, requested_at, started_at, ended_at,
+             schedule_id, suite_id, created_by_user_id, created_by_user_name, triggered_by,
+             awaiting_input_module_id, awaiting_input_prompt, module_total,
+             module_defined_total, module_skipped, module_passed, current_module_name,
+             failed_module_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            summary["system_code"],
+            summary.get("system_name"),
+            summary["status"],
+            summary["requested_at"],
+            summary.get("started_at"),
+            summary.get("ended_at"),
+            summary.get("schedule_id"),
+            summary.get("suite_id"),
+            summary.get("created_by_user_id"),
+            summary.get("created_by_user_name"),
+            summary.get("triggered_by", "manual"),
+            summary.get("awaiting_input_module_id"),
+            summary.get("awaiting_input_prompt"),
+            summary.get("module_total"),
+            summary.get("module_defined_total"),
+            summary.get("module_skipped"),
+            summary.get("module_passed"),
+            summary.get("current_module_name"),
+            summary.get("failed_module_name"),
+        ),
+    )
 
 
 class ProjectionHandlers:
@@ -100,32 +139,18 @@ class ProjectionHandlers:
     # --- run_history_index --------------------------------------------------
 
     async def _build_run_history_index(self, event: DomainEvent) -> list[Mutation]:
+        summary = event.payload.get("run_summary")
+        if summary is not None:
+            # fat event 경로: 애그리거트가 발행 시점에 계산한 요약으로 전체 행을 upsert 한다.
+            return [_run_history_upsert(event.aggregate_id, summary)]
         if event.event_type == "RunCreated":
+            # 구(thin) RunCreated — 요약이 없어 blob 폴백이 불가피하다(마이그레이션 전 재생 전용).
             run = await self._load_run(event.aggregate_id)
-            return [
-                (
-                    """
-                    INSERT OR REPLACE INTO run_history_index
-                        (run_id, system_code, status, requested_at, ended_at,
-                         schedule_id, suite_id, created_by_user_id, created_by_user_name,
-                         triggered_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        run.run_id,
-                        run.system_code,
-                        run.status.value,
-                        run.requested_at.isoformat(),
-                        run.ended_at.isoformat() if run.ended_at else None,
-                        run.schedule_id,
-                        run.suite_id,
-                        run.created_by_user_id,
-                        run.created_by_user_name,
-                        run.triggered_by,
-                    ),
-                )
-            ]
+            return [_run_history_upsert(run.run_id, run_summary_fields(run))]
+        return self._build_run_history_index_legacy(event)
 
+    def _build_run_history_index_legacy(self, event: DomainEvent) -> list[Mutation]:
+        """요약이 없는 구(thin) 이벤트용 부분 갱신 — 마이그레이션 전 이력 재생 전용."""
         if event.event_type == "RunStarted":
             return [
                 (
@@ -168,6 +193,45 @@ class ProjectionHandlers:
             ]
         return []
 
+    # --- suite_history_index --------------------------------------------------
+
+    async def _build_suite_history_index(self, event: DomainEvent) -> list[Mutation]:
+        summary = event.payload.get("suite_summary")
+        if summary is None or event.aggregate_type != "Suite":
+            return []
+        return [
+            (
+                """
+                INSERT OR REPLACE INTO suite_history_index
+                    (suite_id, status, requested_at, started_at, ended_at,
+                     current_step_index, active_run_id, awaiting_input_run_id,
+                     awaiting_input_prompt, browser_mode, selected_system_codes,
+                     triggered_by, schedule_id, created_by_user_id, created_by_user_name,
+                     step_total, steps)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.aggregate_id,
+                    summary["status"],
+                    summary["requested_at"],
+                    summary.get("started_at"),
+                    summary.get("ended_at"),
+                    summary.get("current_step_index", 0),
+                    summary.get("active_run_id"),
+                    summary.get("awaiting_input_run_id"),
+                    summary.get("awaiting_input_prompt"),
+                    summary.get("browser_mode"),
+                    json.dumps(summary.get("selected_system_codes", []), ensure_ascii=False),
+                    summary.get("triggered_by", "manual"),
+                    summary.get("schedule_id"),
+                    summary.get("created_by_user_id"),
+                    summary.get("created_by_user_name"),
+                    summary.get("step_total", 0),
+                    json.dumps(summary.get("steps", []), ensure_ascii=False),
+                ),
+            )
+        ]
+
     # --- anomaly_inbox_index ------------------------------------------------
 
     async def _build_anomaly_inbox_index(self, event: DomainEvent) -> list[Mutation]:
@@ -176,14 +240,17 @@ class ProjectionHandlers:
         status = ModuleStatus(event.payload["status"])
         if status not in MODULE_ANOMALY_STATUSES and status not in MODULE_ERROR_STATUSES:
             return []
-        run = await self._load_run(event.aggregate_id)
         module_id = event.payload["module_id"]
-        module_run_id = f"{run.run_id}::{module_id}"
-        ended_at = None
-        for module in run.modules:
-            if module.module_id == module_id:
-                ended_at = module.ended_at.isoformat() if module.ended_at else None
-                break
+        ended_at = event.payload.get("ended_at")
+        created_by_user_id = event.payload.get("created_by_user_id")
+        if "ended_at" not in event.payload:
+            # 구(thin) ModuleFinished — blob 폴백(마이그레이션 전 재생 전용).
+            run = await self._load_run(event.aggregate_id)
+            created_by_user_id = run.created_by_user_id
+            for module in run.modules:
+                if module.module_id == module_id:
+                    ended_at = module.ended_at.isoformat() if module.ended_at else None
+                    break
         return [
             (
                 """
@@ -193,13 +260,13 @@ class ProjectionHandlers:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    module_run_id,
-                    run.run_id,
+                    f"{event.aggregate_id}::{module_id}",
+                    event.aggregate_id,
                     module_id,
-                    run.system_code,
+                    event.payload["system_code"],
                     status.value,
                     ended_at,
-                    run.created_by_user_id,
+                    created_by_user_id,
                 ),
             )
         ]
@@ -218,11 +285,13 @@ class ProjectionHandlers:
             (
                 """
                 INSERT INTO daily_system_status
-                    (day_key, system_code, module_id, last_status, last_run_id, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (day_key, system_code, module_id, last_status, last_run_id,
+                     duration_ms, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(day_key, system_code, module_id) DO UPDATE SET
                     last_status = excluded.last_status,
                     last_run_id = excluded.last_run_id,
+                    duration_ms = excluded.duration_ms,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -231,6 +300,7 @@ class ProjectionHandlers:
                     event.payload["module_id"],
                     status.value,
                     event.aggregate_id,
+                    event.payload.get("duration_ms"),
                     event.occurred_at.isoformat(),
                 ),
             )
@@ -331,10 +401,21 @@ class ProjectionHandlers:
     async def _build_run_comparison_cache(self, event: DomainEvent) -> list[Mutation]:
         if event.event_type != "RunComparisonAttached":
             return []
-        run = await self._load_run(event.aggregate_id)
-        comparison = run.comparison
-        if comparison is None:
-            return []
+        if "newly_failed" in event.payload:
+            baseline_run_id = event.payload.get("baseline_run_id")
+            newly_failed = event.payload["newly_failed"]
+            recovered = event.payload.get("recovered", [])
+            still_failing = event.payload.get("still_failing", [])
+        else:
+            # 구(thin) RunComparisonAttached — blob 폴백(마이그레이션 전 재생 전용).
+            run = await self._load_run(event.aggregate_id)
+            comparison = run.comparison
+            if comparison is None:
+                return []
+            baseline_run_id = comparison.baseline_run_id
+            newly_failed = comparison.newly_failed
+            recovered = comparison.recovered
+            still_failing = comparison.still_failing
         return [
             (
                 """
@@ -344,11 +425,11 @@ class ProjectionHandlers:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    run.run_id,
-                    comparison.baseline_run_id,
-                    json.dumps(comparison.newly_failed, ensure_ascii=False),
-                    json.dumps(comparison.recovered, ensure_ascii=False),
-                    json.dumps(comparison.still_failing, ensure_ascii=False),
+                    event.aggregate_id,
+                    baseline_run_id,
+                    json.dumps(newly_failed, ensure_ascii=False),
+                    json.dumps(recovered, ensure_ascii=False),
+                    json.dumps(still_failing, ensure_ascii=False),
                     event.occurred_at.isoformat(),
                 ),
             )

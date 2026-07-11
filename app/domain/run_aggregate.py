@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
@@ -8,6 +9,11 @@ from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSE
 from app.domain import events as domain_events
 from app.domain.events import DomainEvent
 from app.domain.snapshots import RunSnapshot
+from app.domain.summary_fields import run_summary_fields
+
+# 요약 동봉을 생략하는 이벤트: 로그 스트리밍 핫패스(라인마다 요약 재계산은 낭비이고,
+# 로그는 요약 인덱스의 어떤 컬럼도 바꾸지 않는다).
+_NO_SUMMARY_EVENT_TYPES = {"ModuleLogAppended"}
 
 # 더 이상 전이시키지 않는(이미 끝난) 모듈 상태들.
 _MODULE_TERMINAL = {
@@ -76,6 +82,16 @@ class RunAggregate:
         return aggregate
 
     def _emit(self, event: DomainEvent) -> None:
+        """이벤트를 버퍼에 쌓는다 — 변이 **후** 호출되므로 요약은 사후 상태를 반영한다.
+
+        요약 인덱스 프로젝션이 blob 을 재수화하지 않도록, 상태를 바꾸는 모든 이벤트에
+        ``run_summary`` 섹션(파생 요약 필드)을 동봉한다(fat event).
+        """
+        if event.event_type not in _NO_SUMMARY_EVENT_TYPES:
+            event = replace(
+                event,
+                payload={**event.payload, "run_summary": run_summary_fields(self._state)},
+            )
         self._pending_events.append(event)
 
     # --- 조회(규칙/판정) --------------------------------------------------
@@ -209,7 +225,15 @@ class RunAggregate:
         """직전 Run 대비 비교 결과를 부착한다(finalize 시점의 도메인 변이 경로)."""
         self._state.comparison = comparison
         baseline_id = comparison.baseline_run_id if comparison.has_baseline else None
-        self._emit(domain_events.run_comparison_attached(self._state.run_id, baseline_id))
+        self._emit(
+            domain_events.run_comparison_attached(
+                self._state.run_id,
+                baseline_id,
+                newly_failed=comparison.newly_failed,
+                recovered=comparison.recovered,
+                still_failing=comparison.still_failing,
+            )
+        )
 
     def hydrate_logs(self, logs_by_module: dict[str, list[str]]) -> None:
         """로그 스토어의 로그를 각 모듈에 채워 읽기 모델을 조립한다.
@@ -369,6 +393,12 @@ class RunAggregate:
                 system_code=self._state.system_code,
                 schedule_id=self._state.schedule_id,
                 suite_id=self._state.suite_id,
+                module_name=module.name,
+                message=module.message,
+                started_at=module.started_at,
+                ended_at=module.ended_at,
+                duration_ms=module.duration_ms,
+                created_by_user_id=self._state.created_by_user_id,
             )
         )
 

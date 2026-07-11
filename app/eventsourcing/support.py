@@ -128,20 +128,54 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         CREATE TABLE IF NOT EXISTS run_history_index (
             run_id TEXT PRIMARY KEY,
             system_code TEXT NOT NULL,
+            system_name TEXT,
             status TEXT NOT NULL,
             requested_at TEXT NOT NULL,
+            started_at TEXT,
             ended_at TEXT,
             schedule_id TEXT,
             suite_id TEXT,
             created_by_user_id TEXT,
             created_by_user_name TEXT,
-            triggered_by TEXT NOT NULL DEFAULT 'manual'
+            triggered_by TEXT NOT NULL DEFAULT 'manual',
+            awaiting_input_module_id TEXT,
+            awaiting_input_prompt TEXT,
+            module_total INTEGER,
+            module_defined_total INTEGER,
+            module_skipped INTEGER,
+            module_passed INTEGER,
+            current_module_name TEXT,
+            failed_module_name TEXT
         )
         """,
         "CREATE INDEX IF NOT EXISTS idx_run_history_system ON run_history_index (system_code)",
         "CREATE INDEX IF NOT EXISTS idx_run_history_requested ON run_history_index (requested_at)",
         "CREATE INDEX IF NOT EXISTS idx_run_history_schedule ON run_history_index (schedule_id)",
         "CREATE INDEX IF NOT EXISTS idx_run_history_user ON run_history_index (created_by_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_run_history_status ON run_history_index (status)",
+        """
+        CREATE TABLE IF NOT EXISTS suite_history_index (
+            suite_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            started_at TEXT,
+            ended_at TEXT,
+            current_step_index INTEGER NOT NULL DEFAULT 0,
+            active_run_id TEXT,
+            awaiting_input_run_id TEXT,
+            awaiting_input_prompt TEXT,
+            browser_mode TEXT,
+            selected_system_codes TEXT NOT NULL DEFAULT '[]',
+            triggered_by TEXT NOT NULL DEFAULT 'manual',
+            schedule_id TEXT,
+            created_by_user_id TEXT,
+            created_by_user_name TEXT,
+            step_total INTEGER NOT NULL DEFAULT 0,
+            steps TEXT NOT NULL DEFAULT '[]'
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_suite_history_requested ON suite_history_index (requested_at)",
+        "CREATE INDEX IF NOT EXISTS idx_suite_history_user ON suite_history_index (created_by_user_id)",
         """
         CREATE TABLE IF NOT EXISTS run_comparison_cache (
             run_id TEXT PRIMARY KEY,
@@ -171,6 +205,7 @@ async def ensure_schema(db: SqliteDatabase) -> None:
             module_id TEXT NOT NULL,
             last_status TEXT NOT NULL,
             last_run_id TEXT,
+            duration_ms INTEGER,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (day_key, system_code, module_id)
         )
@@ -238,7 +273,36 @@ async def ensure_schema(db: SqliteDatabase) -> None:
     ]
     for sql in statements:
         await db.execute(sql)
+    # 기존 배포 DB 컬럼 증분(CREATE TABLE IF NOT EXISTS 는 기존 테이블을 바꾸지 않는다).
+    # 값 채움은 스키마 책임이 아니다 — scripts/rebuild_projections.py 재생이 채운다.
+    await _ensure_columns(
+        db,
+        "run_history_index",
+        {
+            "system_name": "TEXT",
+            "started_at": "TEXT",
+            "awaiting_input_module_id": "TEXT",
+            "awaiting_input_prompt": "TEXT",
+            "module_total": "INTEGER",
+            "module_defined_total": "INTEGER",
+            "module_skipped": "INTEGER",
+            "module_passed": "INTEGER",
+            "current_module_name": "TEXT",
+            "failed_module_name": "TEXT",
+        },
+    )
+    await _ensure_columns(db, "daily_system_status", {"duration_ms": "INTEGER"})
     await _migrate_projection_checkpoints_to_cursor(db)
+
+
+async def _ensure_columns(db: SqliteDatabase, table: str, columns: dict[str, str]) -> None:
+    """기존 테이블에 없는 컬럼만 ALTER TABLE ADD COLUMN 으로 추가한다(멱등)."""
+    rows = await db.fetchall(f"PRAGMA table_info({table})")
+    existing = {row["name"] for row in rows}
+    for name, declaration in columns.items():
+        if name in existing:
+            continue
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
 
 
 async def _migrate_projection_checkpoints_to_cursor(db: SqliteDatabase) -> None:

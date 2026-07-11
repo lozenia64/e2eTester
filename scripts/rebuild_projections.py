@@ -22,6 +22,7 @@ from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 _PROJECTION_TABLES = (
     "run_history_index",
+    "suite_history_index",
     "anomaly_inbox_index",
     "daily_system_status",
     "stats_rollup",

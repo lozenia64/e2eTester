@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 
+from app.domain.summary_fields import run_summary_fields
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.projections.handlers import _run_history_upsert
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 
@@ -23,26 +25,8 @@ async def backfill_run_history_index(
     count = 0
     for row in missing:
         run = await write_repo.get_run(row["run_id"])
-        await db.execute(
-            """
-            INSERT OR REPLACE INTO run_history_index
-                (run_id, system_code, status, requested_at, ended_at,
-                 schedule_id, suite_id, created_by_user_id, created_by_user_name, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run.run_id,
-                run.system_code,
-                run.status.value,
-                run.requested_at.isoformat(),
-                run.ended_at.isoformat() if run.ended_at else None,
-                run.schedule_id,
-                run.suite_id,
-                run.created_by_user_id,
-                run.created_by_user_name,
-                run.triggered_by,
-            ),
-        )
+        sql, params = _run_history_upsert(run.run_id, run_summary_fields(run))
+        await db.execute(sql, params)
         count += 1
     return count
 
