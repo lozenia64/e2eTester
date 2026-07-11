@@ -61,7 +61,7 @@ python3 -m playwright install chromium
 
 일반 브라우저나 Cursor의 Playwright MCP와 동일하게 보안프로그램(키보드보안/백신류 로컬 에이전트·확장)을 인식시키기 위해, 브라우저를 다음과 같이 띄웁니다.
 
-- **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. **HOM·FP·HRP**는 설치형 보안프로그램 호환을 위해 시스템별 `~/.e2etester/{chrome-profile|fp-chrome-profile|hrp-chrome-profile}` 프로파일과 기존 launch 옵션을 씁니다(`E2E_USER_DATA_DIR`로 경로 변경 가능). **MHM·HWTC·CHBOT** 등 나머지는 Cursor Playwright MCP와 동일한 프로파일(`%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`, `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`로 재정의)을 씁니다. 같은 프로파일을 쓰는 Chrome/MCP 창이 떠 있으면 Run이 실패할 수 있으며, 동시 실행도 같은 프로파일을 공유할 수 없습니다.
+- **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. **HOM·FP·HRP**는 설치형 보안프로그램 호환을 위해 시스템별 `~/.e2etester/{chrome-profile|fp-chrome-profile|hrp-chrome-profile}` 프로파일과 기존 launch 옵션을 씁니다(`E2E_USER_DATA_DIR`로 경로 변경 가능). **MHM·HWTC·CHBOT** 등 나머지는 Cursor Playwright MCP와 동일한 프로파일(`%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`, `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`로 재정의)을 씁니다. 이때 `{workspace_hash}` 는 프로젝트 폴더 경로로 계산하며, MCP 를 다른 폴더 기준으로 쓰고 있다면 `E2E_WORKSPACE_DIR` 로 그 폴더 경로를 지정해 같은 해시(=같은 프로파일)를 쓰게 할 수 있습니다. 같은 프로파일을 쓰는 Chrome/MCP 창이 떠 있으면 Run이 실패할 수 있으며, 동시 실행도 같은 프로파일을 공유할 수 없습니다.
 - **확장 활성화**: Playwright 기본값인 `--disable-extensions`(및 component-extensions) 를 제거해, 보안프로그램의 브라우저 확장이 로드되도록 합니다.
 - **로컬 네트워크 허용**: 보안프로그램은 로컬 에이전트(loopback/사설망)와 통신합니다. Chrome의 Local/Private Network Access 차단 기능을 꺼서(일반 브라우저에서 "로컬 네트워크 허용"을 켠 것과 동일) 페이지가 로컬 에이전트에 접근할 수 있게 합니다.
 
@@ -216,7 +216,7 @@ API 요청 시 `selected_system_codes`를 생략하면 기존과 같이 전체 �
 - Run/Suite 실행 이력·상태와 cron 예약은 **SQLite 파일에 영속**되어 서버를 재시작해도 남습니다. 저장 경로는 환경변수 `E2E_DB_PATH`(미설정 시 `data/e2etester.db`)로 지정합니다.
 - Run 실행은 **감독되는 작업 큐**의 워커 풀이 소비합니다. 동시에 실행할 Run 수는 환경변수 `E2E_RUN_CONCURRENCY`(미설정 시 4)로 조정합니다. 헤디드 브라우저 자원을 고려해 보수적으로 두며, `1`이면 한 번에 한 Run만 실행합니다.
 - 운영 로그는 **structlog** 로 출력합니다. `E2E_LOG_LEVEL`(기본 `INFO`)과 `E2E_LOG_FORMAT`(`console` 또는 `json`)으로 조정합니다. Run/Suite/스케줄 생명주기 이벤트는 관리자 **운영 관측** 페이지(`/admin/ops`)에서도 확인할 수 있습니다.
-- 다만 서버를 내릴 때 **진행 중이던 Run/Suite**(RUNNING·OTP 대기)는 브라우저 세션이 함께 사라지므로 이어받을 수 없습니다. 재기동 시 자동으로 `CANCELLED` 로 정리되며, 필요하면 해당 Run을 **재실행(rerun)** 하면 됩니다. (OTP 대기는 **휴대폰인증** Run에서 본인인증 단계에 한합니다.)
+- 다만 서버를 내릴 때 **진행 중이던 Run/Suite**(RUNNING·OTP 대기)는 브라우저 세션이 함께 사라지므로 이어받을 수 없습니다. 재기동 시 자동으로 `CANCELLED` 로 정리되며, 필요하면 해당 Run을 **재실행(rerun)** 하면 됩니다. (OTP 대기는 **휴대폰인증** Run에서, manifest 에 `requires_user_input` 으로 선언된 모듈에서만 발생합니다 — 대부분 본인인증/로그인 단계이며, FP 는 본인인증과 서류작성 두 단계가 해당합니다.)
 - 실시간 로그 라인 버퍼와 WebSocket 연결은 프로세스 메모리에만 있으므로 재시작 시 끊깁니다. 완료된 모듈의 로그는 Run 이력에 함께 저장되어 남습니다.
 - 이미 생성된 아티팩트 파일은 로컬 `artifacts/` 폴더에 남아 있습니다.
 - 종료 결과는 **정상(`PASSED`) / 이상징후(`ANOMALY`, 사이트에서 의미 있는 이상 발견) / 점검실패(`ERROR`, 점검 도구 자체 오류)** 로 구분됩니다. **점검실패·취소 Run 은 매일 정해진 시각에 자동 삭제**되고(정상·이상징후는 유지), 정상·이상징후만 관리자 사용량 통계에 집계됩니다. 보존 정리는 환경변수 `E2E_RUN_RETENTION_ENABLED`(기본 `true`)로 끄거나 `E2E_RUN_RETENTION_CRON`(기본 `0 3 * * *`, 기준 타임존 `E2E_SCHEDULE_TZ`)로 주기를 바꿉니다.
@@ -360,7 +360,9 @@ http://127.0.0.1:2222
 테스트가 최종 종료되면 담당자에게 Gmail로 메일을 보낼 수 있습니다.
 
 - `E2E_EMAIL_ENABLED=false`로 설정하면 메일 발송을 비활성화합니다(기본값은 `.env.example` 참고).
-- 최종 종료 결과(`PASSED` 정상 · `ANOMALY` 이상징후 · `ERROR` 점검실패) 모두 메일을 보냅니다.
+- 최종 종료 결과(`PASSED` 정상 · `ANOMALY` 이상징후 · `ERROR` 점검실패) 모두 메일을 보내되, **수신자는 결과 분류에 따라 다릅니다**.
+  - 정상·이상징후: 시스템별 수신자(`E2E_EMAIL_RECIPIENTS_{시스템코드}`)에게 보냅니다.
+  - **점검실패(`ERROR`)**: 대상 사이트 문제가 아니라 점검 도구 자체의 오류이므로, 시스템 담당자 대신 **도구 운영자(`E2E_EMAIL_OPERATOR_RECIPIENTS`, `|` 구분)에게만** 제목 접두사 `[E2E][OPERATOR]` 로 보냅니다. 운영자 수신자를 설정하지 않으면 점검실패 메일은 생략됩니다. (전체 점검 SUITE 의 점검실패도 동일 규칙)
 - `WAITING_INPUT` 처럼 중간 대기 상태에서는 메일을 보내지 않습니다.
 - 메일 본문 HTML은 항상 고정 디자인 템플릿(`report_renderer`)으로 결정적으로 렌더링하며, Gemini는 HTML이 아니라 분석 콘텐츠(핵심 요약·화면/로그 관찰·실패 분석)만 구조화 JSON으로 생성해 템플릿에 채웁니다. Gemini가 비활성이거나 호출에 실패하면 같은 템플릿이 AI 서술 없이(기본 문구로) 렌더링됩니다.
 - 수신자 메일은 시스템(채널)별 환경 변수 `E2E_EMAIL_RECIPIENTS_{시스템코드}` 로 구분합니다. 기본 포함 시스템은 `HOM`·`MHM`·`FP`·`HRP`·`HWTC`·`CHBOT` 이며, 각각 `E2E_EMAIL_RECIPIENTS_HOM` 등으로 설정합니다.
@@ -381,7 +383,13 @@ E2E_EMAIL_RECIPIENTS_FP="user1@company.com"
 E2E_EMAIL_RECIPIENTS_HRP="user1@company.com"
 E2E_EMAIL_RECIPIENTS_HWTC="user1@company.com"
 E2E_EMAIL_RECIPIENTS_CHBOT="user1@company.com"
+E2E_EMAIL_OPERATOR_RECIPIENTS="operator1@company.com|operator2@company.com"
 ```
+
+옵션 설명:
+
+- `E2E_EMAIL_RECIPIENTS_{시스템코드}`: 시스템별 정상·이상징후 결과 메일 수신자(`|` 구분).
+- `E2E_EMAIL_OPERATOR_RECIPIENTS`: 점검실패(`ERROR`) 메일을 받을 도구 운영자(`|` 구분). 미설정 시 점검실패 메일은 생략됩니다.
 
 이 기능도 아래 우선순위로 값을 읽습니다.
 
@@ -423,7 +431,7 @@ E2E_EMAIL_RECIPIENTS_CHBOT="user1@company.com"
 
 - 기본값은 비활성이며, `E2E_OTP_RELAY_TOKEN` 을 설정해야만 켜집니다(미설정 시 엔드포인트가 `503`).
 - 인입 엔드포인트는 `POST /api/otp/inbound` 이며, **사용자 로그인 세션이 아니라 기기 토큰**(`X-OTP-Relay-Token` 헤더)으로 인증합니다.
-- 서버는 `run_id` 없이도 **현재 OTP 를 기다리는 Run 을 자동으로 찾아** 코드를 주입·재개합니다(개별 Run·Suite 공통). 무인 점검은 순차 실행이라 보통 대기 Run 은 1건이며, 여러 건이면 가장 최근에 요청된 Run 에 제출합니다. 안전을 위해 휴대폰인증 점검은 `E2E_RUN_CONCURRENCY=1` 로 순차 실행하길 권장합니다.
+- 서버는 `run_id` 없이도 **현재 OTP 를 기다리는 Run 을 자동으로 찾아** 코드를 주입·재개합니다(개별 Run·Suite 공통). 무인 점검은 순차 실행이라 보통 대기 Run 은 1건이며, 여러 건이면 가장 최근에 OTP 입력 대기에 들어간 Run(방금 도착한 SMS 에 대응)에 제출합니다. 안전을 위해 휴대폰인증 점검은 `E2E_RUN_CONCURRENCY=1` 로 순차 실행하길 권장합니다.
 - OTP 코드 자체는 서버에 저장하지 않고, 살아 있는 브라우저 세션에 즉시 주입한 뒤 버립니다(기존 OTP 재개와 동일).
 - 무인 100% 자동화는 **휴대폰인증** 에서만 가능합니다. 카카오인증은 휴대폰 카카오톡에서 사용자가 직접 승인해야 하므로 이 중계로는 자동화되지 않습니다.
 

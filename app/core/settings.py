@@ -1,12 +1,18 @@
 """애플리케이션 전역 설정 — pydantic-settings 기반 SSOT.
 
 OS 환경 변수 > `.env` > 필드 기본값 순으로 로드한다(FastAPI 12-Factor).
+
+종료 메일 서브시스템의 설정(`E2E_EMAIL_ENABLED`/`E2E_EMAIL_GMAIL_*`/
+`E2E_EMAIL_RECIPIENTS_{SYSTEM_CODE}`/`E2E_EMAIL_OPERATOR_RECIPIENTS`)은 여기 필드로 두지
+않는다 — 수신자 env 이름이 registry 에 등록된 시스템 코드로 동적으로 정해지므로,
+`app/notifications/run_completion_email.py` 의 ``EmailNotificationConfig.from_env`` 가
+``env_utils``(터미널 > .env 우선순위)로 직접 해석하는 것이 단일 경로다. 과거 이 파일에
+시스템 코드 6종을 하드코딩한 수신자 필드가 있었으나, 실제로 읽히지 않는 중복 경로였고
+새 시스템 추가 시 manifest 밖 수정을 강요해 제거했다.
 """
 
 from __future__ import annotations
 
-import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -17,8 +23,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.env_utils import DEFAULT_ENV_FILE_PATH, resolve_env_with_source
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PIPE_SPLIT = re.compile(r"[|,]+")
-_KNOWN_EMAIL_RECIPIENT_SYSTEMS = ("hom", "mhm", "fp", "hrp", "hwtc", "chbot")
 
 
 def _parse_bool_flag(value: Any, *, default: bool = False) -> bool:
@@ -27,12 +31,6 @@ def _parse_bool_flag(value: Any, *, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _split_pipe_list(raw: str | None) -> list[str]:
-    if not raw:
-        return []
-    return [part.strip() for part in _PIPE_SPLIT.split(raw) if part.strip()]
 
 
 class E2ESettings(BaseSettings):
@@ -66,38 +64,6 @@ class E2ESettings(BaseSettings):
     gemini_models: str | None = Field(default=None, validation_alias="GEMINI_MODELS")
     gemini_ssl_verify: bool = Field(default=True, validation_alias="E2E_GEMINI_SSL_VERIFY")
 
-    # 종료 메일
-    email_enabled: bool = Field(default=False, validation_alias="E2E_EMAIL_ENABLED")
-    email_gmail_account: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_GMAIL_ACCOUNT"
-    )
-    email_gmail_app_password: SecretStr | None = Field(
-        default=None,
-        validation_alias="E2E_EMAIL_GMAIL_APP_PASSWORD",
-    )
-    email_operator_recipients: str | None = Field(
-        default=None,
-        validation_alias="E2E_EMAIL_OPERATOR_RECIPIENTS",
-    )
-    email_recipients_hom: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HOM"
-    )
-    email_recipients_mhm: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_MHM"
-    )
-    email_recipients_fp: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_FP"
-    )
-    email_recipients_hrp: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HRP"
-    )
-    email_recipients_hwtc: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_HWTC"
-    )
-    email_recipients_chbot: str | None = Field(
-        default=None, validation_alias="E2E_EMAIL_RECIPIENTS_CHBOT"
-    )
-
     # 예약·보존
     schedule_tz: str = Field(default="Asia/Seoul", validation_alias="E2E_SCHEDULE_TZ")
     run_retention_enabled: bool = Field(default=True, validation_alias="E2E_RUN_RETENTION_ENABLED")
@@ -121,7 +87,6 @@ class E2ESettings(BaseSettings):
 
     @field_validator(
         "failure_analyzer_enabled",
-        "email_enabled",
         "gemini_ssl_verify",
         "run_retention_enabled",
         mode="before",
@@ -135,30 +100,11 @@ class E2ESettings(BaseSettings):
             return ""
         return self.gemini_api_key.get_secret_value().strip()
 
-    def email_gmail_app_password_str(self) -> str:
-        if self.email_gmail_app_password is None:
-            return ""
-        return self.email_gmail_app_password.get_secret_value().strip()
-
     def otp_relay_token_str(self) -> str | None:
         if self.otp_relay_token is None:
             return None
         value = self.otp_relay_token.get_secret_value().strip()
         return value or None
-
-    def operator_recipient_list(self) -> list[str]:
-        return _split_pipe_list(self.email_operator_recipients)
-
-    def email_recipients_for(self, system_code: str) -> list[str]:
-        code = system_code.lower()
-        attr = f"email_recipients_{code}"
-        raw: str | None = None
-        if code in _KNOWN_EMAIL_RECIPIENT_SYSTEMS and hasattr(self, attr):
-            raw = getattr(self, attr)
-        if not raw:
-            env_name = f"E2E_EMAIL_RECIPIENTS_{system_code.upper()}"
-            raw = os.getenv(env_name)
-        return _split_pipe_list(raw)
 
     def env_source(self, env_name: str) -> str | None:
         """설정값 출처(terminal / .env) — 관리자 상태 패널용."""

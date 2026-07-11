@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 from app.core.models import PendingExecution
 
@@ -39,6 +40,8 @@ class InMemoryRunControlStore:
                 execution_mode=execution_mode,
                 resume_index=resume_index,
                 module_id=module_id,
+                # 기록 시점 = OTP 대기 진입 시각(SQLite 어댑터와 동일 규약).
+                paused_at=datetime.now(UTC),
             )
 
     async def get_pending(self, run_id: str) -> PendingExecution | None:

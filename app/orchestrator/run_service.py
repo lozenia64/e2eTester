@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
-from app.core.models import Run, RunModule
+from app.core.models import PendingExecution, Run, RunModule
 from app.domain.run_aggregate import RunAggregate
 from app.domain.run_state_machine import (
     BlockModule,
@@ -121,8 +121,7 @@ class RunService:
     async def _attach_logs(self, run: Run) -> None:
         """로그 스토어의 로그를 Run 의 각 모듈에 하이드레이션한다(읽기 모델 조립)."""
         logs_by_module = await self._log_store.get_all(run.run_id)
-        for module in run.modules:
-            module.logs = logs_by_module.get(module.module_id, [])
+        RunAggregate(run).hydrate_logs(logs_by_module)
 
     async def list_run_summaries(
         self,
@@ -443,19 +442,29 @@ class RunService:
         을 찾아 기존 ``submit_otp`` 로 위임한다. 제어 스토어의 pending(=OTP 대기)이 권위 있는
         단일 출처이므로, ``WAITING_INPUT`` Run 중 pending 이 살아 있는 것만 후보로 본다(상태와
         제어 스토어가 어긋난 경합 상황을 배제). 무인 자동화는 본래 순차 실행이라 보통 1건이며,
-        여러 건이면 가장 최근에 요청된 Run(방금 도착한 SMS 에 대응)을 고른다.
+        여러 건이면 **가장 최근에 OTP 대기에 들어간 Run**(방금 도착한 SMS 에 대응 —
+        ``PendingExecution.paused_at``)을 고른다. Run 생성 시각(``requested_at``)은 잘못된
+        프록시라 정렬 키로 쓰지 않는다(먼저 생성됐지만 나중에 멈춘 Run 이 오주입되는 문제);
+        ``paused_at`` 이 없는 레거시 pending 행만 생성 시각으로 폴백한다.
         """
-        candidates: list[Run] = []
+        candidates: list[tuple[Run, PendingExecution]] = []
         for run in await self._repository.list_runs():
             if run.status != RunStatus.WAITING_INPUT:
                 continue
-            if await self._control_store.get_pending(run.run_id) is None:
+            pending = await self._control_store.get_pending(run.run_id)
+            if pending is None:
                 continue
-            candidates.append(run)
+            candidates.append((run, pending))
         if not candidates:
             raise KeyError("OTP 입력을 기다리는 Run이 없습니다.")
-        candidates.sort(key=lambda run: run.requested_at, reverse=True)
-        target = candidates[0]
+
+        def _paused_at(item: tuple[Run, PendingExecution]) -> datetime:
+            run, pending = item
+            moment = pending.paused_at or run.requested_at
+            return _as_utc(moment)
+
+        candidates.sort(key=_paused_at, reverse=True)
+        target = candidates[0][0]
         if len(candidates) > 1:
             logger.warning(
                 "OTP 대기 Run 다건 — 최근 요청 Run 에 제출",
@@ -803,9 +812,10 @@ class RunService:
         await self._events.module_event("module_finished", run, target_module)
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
-        final_status = RunAggregate(run).finalize(forced_status)
+        aggregate = RunAggregate(run)
+        final_status = aggregate.finalize(forced_status)
         if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
-            run.comparison = await self._comparator.compute(run)
+            aggregate.attach_comparison(await self._comparator.compute(run))
         await self._repository.save_run(run)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.

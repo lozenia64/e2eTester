@@ -20,13 +20,15 @@
 
 | 사실 영역 | 단일 진실원천(SSOT) | 다른 문서에서의 처리 |
 | --- | --- | --- |
-| 플랫폼 아키텍처·계층 역할·상태머신·이벤트 모델·아티팩트 전략·폴더 구조 | `E2E_ARCHITECTURE.md` | 링크 참조 |
+| 플랫폼 아키텍처·계층 역할·상태머신·이벤트 모델·아티팩트 전략·폴더 구조·**목표(로드맵) 아키텍처** | `E2E_ARCHITECTURE.md` | 링크 참조 |
 | API 엔드포인트 목록(메서드+경로) | `E2E_ARCHITECTURE.md` §5.2 | 링크 참조 |
 | 시스템별 시나리오·모듈 동작·selector·화면 검증·입력 모델 | `docs/scenarios/{system_code}.md` | 링크 참조 |
 | 설치·실행 방법, 선택 기능(AI/메일/예약) 사용법, 환경변수 카탈로그 | `README.md` | 링크 참조 |
 | 환경변수 예시값 | `.env.example` | `README.md` 가 의미·기본값 서술 |
+| OTP SMS 중계기 구성(안드로이드 측)·인입 엔드포인트 계약 상세 | `docs/otp_relay.md` | `README.md` 는 서버 설정(환경변수)만 서술 + 링크 참조 |
 | 코드베이스 작업 지침(에이전트/기여자용 요약) | `CLAUDE.md` | 상세 사실은 위 소유 문서로 링크 |
 | 런타임 기본값(모델 체인, 스케줄러 주기/TZ, 타임아웃 등) | **소스코드**(`app/...`) | 문서는 값이 아니라 출처(파일/상수)를 가리키거나 가드로 동기화 |
+| (역사 기록) 아키텍처 냉정 평가 스냅샷 | `docs/ARCHITECTURE_REVIEW_IDEAL.md` | **현재 상태의 근거로 인용 금지** — 시점 고정 평가 + 적용 현황 부록. 현재/목표 구조는 `E2E_ARCHITECTURE.md` 가 소유 |
 
 원칙:
 
@@ -41,9 +43,19 @@
 
 1. 시스템 `manifest.yaml` ↔ `docs/scenarios/{code}.md` 1:1 대응
 2. `manifest` 의 모든 `module_id` 가 짝이 되는 시나리오 문서에 등장
-3. FastAPI 라우트(메서드+경로)가 `E2E_ARCHITECTURE.md` 에 문서화
+3. FastAPI 라우트(메서드+경로)가 `E2E_ARCHITECTURE.md` 에 문서화 — 스캔 범위는 `app/` 전체
+   (`app/api` 외 `app/auth/router.py`·`app/main.py` 포함), `include_in_schema=False` 라우트
+   (파비콘 등 인프라 자산)는 §5.2 인프라 라우트 규칙에 따라 문서화·검사 대상에서 제외
 4. 코드가 읽는 환경변수가 `README.md` 또는 `.env.example` 에 문서화
 5. 기본 Gemini 모델 체인(`app/ai/gemini_models.py` 상수)이 `README.md`/`.env.example` 와 일치
+6. **(역방향)** `E2E_ARCHITECTURE.md` 가 문서화한 라우트가 실제 코드에 존재 — 삭제된 엔드포인트가
+   문서에 남는 "유령 라우트" 차단
+7. **(역방향)** `README.md`/`.env.example` 의 환경변수를 코드가 실제로 읽음 — 개명·제거된 변수가
+   문서에 남는 "죽은 변수" 차단
+8. `E2E_ARCHITECTURE.md` §4 폴더 트리에 나열된 경로가 실제로 존재 — 이동·삭제된 파일이 트리에
+   남는 "유령 파일" 차단 (런타임 생성 디렉터리 `artifacts/` 는 예외)
+
+3~8번이 **양방향**을 이루므로, 코드→문서 누락뿐 아니라 문서→코드 유령 서술도 CI 가 잡는다.
 
 실행:
 
@@ -52,7 +64,7 @@ python3 scripts/check_docs_consistency.py            # 전체 검사 (CI 게이�
 python3 scripts/check_docs_consistency.py --verbose  # 통과 항목 상세까지 출력
 ```
 
-종료 코드는 모두 통과 시 `0`, 하나라도 실패 시 `1` 이다. GitHub Actions(`.github/workflows/docs-consistency.yml`)가 PR마다 이 스크립트를 실행해 표류를 차단한다.
+종료 코드는 모두 통과 시 `0`, 하나라도 실패 시 `1` 이다. GitHub Actions(`.github/workflows/docs-consistency.yml`)가 PR마다 이 스크립트를 실행해 표류를 차단하며, 같은 워크플로에서 **ruff(린트·포맷)와 pytest(단위 테스트) 잡도 함께** 실행한다 — 문서 정합성 가드는 CI 3개 게이트 중 하나다.
 
 가드는 의도적으로 **검증 가능한 것만** 본다. 설계 의도·시나리오 서술처럼 자연어 판단이 필요한 영역은 아래 PR 체크리스트(사람 검토)로 보완한다.
 

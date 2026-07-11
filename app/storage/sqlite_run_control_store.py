@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.models import PendingExecution
@@ -32,8 +33,14 @@ class SqliteRunControlStore:
             "session_id TEXT, "
             "execution_mode TEXT, "
             "resume_index INTEGER, "
-            "pending_module_id TEXT)"
+            "pending_module_id TEXT, "
+            "paused_at TEXT)"
         )
+        # 레거시 테이블(paused_at 컬럼 이전 생성) 마이그레이션 — 이미 있으면 무시.
+        try:
+            self._conn.execute("ALTER TABLE run_control ADD COLUMN paused_at TEXT")
+        except sqlite3.OperationalError:
+            pass
         self._conn.commit()
         self._lock = asyncio.Lock()
 
@@ -64,16 +71,26 @@ class SqliteRunControlStore:
         resume_index: int,
         module_id: str,
     ) -> None:
-        # 재개 컨텍스트 컬럼만 건드린다(cancel_requested 는 보존).
+        # 재개 컨텍스트 컬럼만 건드린다(cancel_requested 는 보존). paused_at 은 이 기록 시점
+        # = OTP 대기 진입 시각을 스토어가 스탬프한다(인메모리 어댑터와 동일 규약).
         await self._run(
-            "INSERT INTO run_control (run_id, session_id, execution_mode, resume_index, pending_module_id) "
-            "VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO run_control "
+            "(run_id, session_id, execution_mode, resume_index, pending_module_id, paused_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(run_id) DO UPDATE SET "
             "session_id = excluded.session_id, "
             "execution_mode = excluded.execution_mode, "
             "resume_index = excluded.resume_index, "
-            "pending_module_id = excluded.pending_module_id",
-            (run_id, session_id, execution_mode, resume_index, module_id),
+            "pending_module_id = excluded.pending_module_id, "
+            "paused_at = excluded.paused_at",
+            (
+                run_id,
+                session_id,
+                execution_mode,
+                resume_index,
+                module_id,
+                datetime.now(UTC).isoformat(),
+            ),
         )
 
     async def get_pending(self, run_id: str) -> PendingExecution | None:
@@ -82,7 +99,7 @@ class SqliteRunControlStore:
 
     def _get_pending_sync(self, run_id: str) -> PendingExecution | None:
         cursor = self._conn.execute(
-            "SELECT session_id, execution_mode, resume_index, pending_module_id "
+            "SELECT session_id, execution_mode, resume_index, pending_module_id, paused_at "
             "FROM run_control WHERE run_id = ?",
             (run_id,),
         )
@@ -94,12 +111,13 @@ class SqliteRunControlStore:
             execution_mode=row[1],
             resume_index=row[2],
             module_id=row[3],
+            paused_at=datetime.fromisoformat(row[4]) if row[4] else None,
         )
 
     async def clear_pending(self, run_id: str) -> None:
         await self._run(
             "UPDATE run_control SET session_id = NULL, execution_mode = NULL, "
-            "resume_index = NULL, pending_module_id = NULL WHERE run_id = ?",
+            "resume_index = NULL, pending_module_id = NULL, paused_at = NULL WHERE run_id = ?",
             (run_id,),
         )
 

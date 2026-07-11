@@ -153,6 +153,10 @@ class PendingExecution(BaseModel):
     execution_mode: str
     resume_index: int
     module_id: str
+    # OTP 대기(WAITING_INPUT) 진입 시각. SMS 중계의 대기 Run 자동 탐색이 "방금 도착한 SMS 에
+    # 대응하는 Run" = 가장 최근에 대기에 들어간 Run 을 고르는 정렬 키다(Run 생성 시각은 잘못된
+    # 프록시 — 먼저 생성됐지만 나중에 멈춘 Run 이 있으면 오주입된다). 레거시 행은 None.
+    paused_at: datetime | None = None
 
 
 class Run(BaseModel):

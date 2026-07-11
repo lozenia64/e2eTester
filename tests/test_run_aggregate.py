@@ -206,3 +206,27 @@ def test_attach_failure_analysis_via_aggregate():
     )
     RunAggregate(_run([module])).attach_failure_analysis(module, analysis)
     assert module.failure_analysis is analysis
+
+
+def test_attach_comparison_via_aggregate():
+    from app.core.models import RunComparison
+
+    run = _run([_module("a", 0, status=ModuleStatus.PASSED)])
+    comparison = RunComparison(
+        has_baseline=True,
+        baseline_run_id="run_prev",
+        newly_failed=[],
+        recovered=["a"],
+        still_failing=[],
+    )
+    RunAggregate(run).attach_comparison(comparison)
+    assert run.comparison is comparison
+
+
+def test_hydrate_logs_fills_each_module_and_defaults_missing_to_empty():
+    first = _module("a", 0, status=ModuleStatus.PASSED)
+    second = _module("b", 1, status=ModuleStatus.PASSED)
+    run = _run([first, second])
+    RunAggregate(run).hydrate_logs({"a": ["line-1", "line-2"]})
+    assert first.logs == ["line-1", "line-2"]
+    assert second.logs == []
