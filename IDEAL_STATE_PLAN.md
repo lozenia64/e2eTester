@@ -12,12 +12,15 @@
 >
 > **실행 규칙**: 아래 순서는 논리적 의존관계(코드 변경 → 문서 갱신 → 가드 강화) 순이다.
 > 각 항목은 이 파일만 보고 이어서 작업할 수 있도록 대상 파일·현재→목표·근거를 포함한다.
+>
+> **실행 완료**: 17개 항목 전부 반영됨(체크 표시). 완료 시점 검증 — 정합성 가드 8개 검사 통과
+> (양방향 라우트·죽은 환경변수·§4 트리 실재 검증 포함), pytest 241 passed, ruff clean, `import app.main` 스모크 OK.
 
 ---
 
 ## 1단계 — 코드 변경 (문서의 주장을 참으로 만드는 방향이 이상적인 것)
 
-- [ ] **1. `RunAggregate.attach_comparison` 신설 — 서비스의 직접 도메인 변이 제거**
+- [x] **1. `RunAggregate.attach_comparison` 신설 — 서비스의 직접 도메인 변이 제거**
   - 대상: `app/orchestrator/run_service.py:808` (`run.comparison = await self._comparator.compute(run)`),
     `app/domain/run_aggregate.py`, `tests/test_run_aggregate.py`
   - 현재→목표: `_finalize_run` 이 도메인 필드를 직접 대입 → `RunAggregate.attach_comparison(comparison)`
@@ -26,7 +29,7 @@
     **"`app/domain` 밖 직접 도메인 필드 대입 0건 (grep 으로 증명 가능)"** 을 주장하나 이 지점이 반례.
     "애그리거트 = 유일 변이자" 원칙을 코드로 참이 되게 만드는 쪽이(문서 주장을 약화시키는 쪽보다) 이상적.
 
-- [ ] **2. 로그 하이드레이션(`module.logs` 대입)을 도메인 메서드로 이동**
+- [x] **2. 로그 하이드레이션(`module.logs` 대입)을 도메인 메서드로 이동**
   - 대상: `app/orchestrator/run_service.py:121-125` (`_attach_logs` 안의 `module.logs = ...`),
     `app/domain/run_aggregate.py`, `tests/test_run_aggregate.py`
   - 현재→목표: 읽기 모델 조립 시 서비스가 `RunModule.logs` 를 직접 대입 →
@@ -34,7 +37,7 @@
   - 근거: 항목 1과 동일한 "직접 변이 0건" 불변식의 두 번째(마지막) 반례. 이 둘을 없애면
     grep(`\b(run|module|suite|step)\.[a-z_]+ = ` 류)이 실제로 0건이 되어 문서 주장이 기계 검증 가능해진다.
 
-- [ ] **3. OTP 중계 다건 대기 시 선택 기준을 'OTP 대기 시작 시각'으로 교정**
+- [x] **3. OTP 중계 다건 대기 시 선택 기준을 'OTP 대기 시작 시각'으로 교정**
   - 대상: `app/orchestrator/run_service.py:439-466` (`submit_otp_to_waiting`),
     `app/storage/ports.py` + `sqlite_run_control_store.py` + `run_control_store.py`
     (pending 컨텍스트에 대기 진입 timestamp 추가), `docs/otp_relay.md` §1, `README.md` OTP 중계 절
@@ -47,7 +50,7 @@
 
 ## 2단계 — 문서 갱신 (코드가 옳고 문서가 낡은 것)
 
-- [ ] **4. CLAUDE.md 'unit-test suite/린터 없음' 서술 폐기 — pytest·ruff·CI 3잡 명시**
+- [x] **4. CLAUDE.md 'unit-test suite/린터 없음' 서술 폐기 — pytest·ruff·CI 3잡 명시**
   - 대상: `CLAUDE.md` Commands 절
   - 현재→목표: "There is no unit-test suite, linter, or build step. The one automated check is the docs
     consistency guard" → 실제 상태 반영: `tests/` 40파일·237개 테스트(`python3 -m pytest tests/`),
@@ -56,7 +59,7 @@
   - 근거: 코드가 옳고 문서가 거짓. 같은 CLAUDE.md 가 뒤에서 `python3 -m pytest tests/` 실행을 언급해
     **내부 모순**까지 있음. 에이전트 지침 문서의 명령 절이 틀리면 자동 검증을 건너뛰게 만든다(안전성).
 
-- [ ] **5. E2E_ARCHITECTURE §4 폴더 트리 전면 재생성**
+- [x] **5. E2E_ARCHITECTURE §4 폴더 트리 전면 재생성**
   - 대상: `E2E_ARCHITECTURE.md` §4
   - 현재→목표: 존재하지 않는 `app/web/templates/index.html` 삭제(유령 항목). 누락 반영 —
     `app/healing/`(8파일 전체), orchestrator: `insights_*.py` 7종·`healing_service.py`·`preset_service.py`·
@@ -71,7 +74,7 @@
   - 근거: §4 는 폴더 구조의 SSOT(DOCS_GOVERNANCE 매트릭스)인데 실제 트리와 광범위하게 불일치.
     DOCS_GOVERNANCE §1 이 "폴더 트리 표류"를 과거 사고 사례로 명시했는데 재발한 상태.
 
-- [ ] **6. E2E_ARCHITECTURE §3 구조 다이어그램 현대화**
+- [x] **6. E2E_ARCHITECTURE §3 구조 다이어그램 현대화**
   - 대상: `E2E_ARCHITECTURE.md` §3 다이어그램
   - 현재→목표: `RunService → WorkflowExecutor` 직결, `SuiteService → RunService (순차 생성·대기)` 표현 →
     `RunExecutionQueue`, `RunAggregate`/`RunStateMachine`, `ExecutionGateway`(Composite → Local/Simulated),
@@ -79,7 +82,7 @@
   - 근거: 같은 문서 §5.3.1 이 "RunCommandPort 로 역전, 폴링·대기 제거"를 명시하는데 §3 그림이
     옛 구조를 보여줘 **문서 내부 모순**.
 
-- [ ] **7. ERROR 메일의 운영자 라우팅 규칙 문서화 (README + E2E §5.8)**
+- [x] **7. ERROR 메일의 운영자 라우팅 규칙 문서화 (README + E2E §5.8)**
   - 대상: `README.md` "선택 기능: 종료 메일 알림" 절, `E2E_ARCHITECTURE.md` §5.8
   - 현재→목표: 문서는 "PASSED/ANOMALY/ERROR 모두 (시스템별 수신자에게) 발송"이라고만 서술 →
     실제 코드(`app/notifications/run_completion_email.py:698-742`)의 규칙 반영:
@@ -90,7 +93,7 @@
     운영자 소관(3분류 철학과 일관). 문서를 코드에 맞춘다. 현재는 `.env.example` 주석에만 존재해
     "README = 환경변수 카탈로그 SSOT" 원칙 위반.
 
-- [ ] **8. README 'OTP 대기는 본인인증 단계에 한함' 정정**
+- [x] **8. README 'OTP 대기는 본인인증 단계에 한함' 정정**
   - 대상: `README.md` "결과 확인" 절 마지막 괄호 문장
   - 현재→목표: "OTP 대기는 휴대폰인증 Run에서 본인인증 단계에 한합니다" → OTP 일시정지 지점은
     manifest 의 `requires_user_input: true` 선언 모듈이 결정하며, **FP 는 본인인증 + 서류작성 두 모듈이
@@ -99,7 +102,7 @@
     `requires_user_input: true`, `docs/scenarios/fp.md` §3.3 도 서류작성 중 WAITING_INPUT 을 서술 —
     README 만 사실과 불일치. 일시정지 정책의 SSOT(manifest 선언)를 가리키는 서술이 이상적.
 
-- [ ] **9. E2E_ARCHITECTURE 소소 정정 묶음 (§5.4 / §7 / §8 / §10 / §12)**
+- [x] **9. E2E_ARCHITECTURE 소소 정정 묶음 (§5.4 / §7 / §8 / §10 / §12)**
   - 대상: `E2E_ARCHITECTURE.md` §5.4, §7, §8, §10.1, §12
   - 현재→목표:
     1. §5.4 "현재 구현"이 hom/mhm manifest 2개만 나열 → 6개 시스템 전부.
@@ -112,7 +115,7 @@
        상당 부분 실현 → 현황 반영. §12 Phase 체크 표기 재점검.
   - 근거: 전부 코드가 앞서고 문서가 낡은 사례("사소한 차이도 작업 항목화" 원칙).
 
-- [ ] **10. CLAUDE.md 누락 서브시스템 보강**
+- [x] **10. CLAUDE.md 누락 서브시스템 보강**
   - 대상: `CLAUDE.md`
   - 현재→목표:
     1. 로그인 후 첫 화면 = **일간 점검 현황 대시보드**(`GET /` + `GET /api/dashboard/daily`,
@@ -126,14 +129,14 @@
   - 근거: CLAUDE.md 는 에이전트용 코드베이스 요약 SSOT 인데 사용자 대면 주요 서브시스템 2개(첫 화면·
     프리셋)가 통째로 빠져 있고 DI 목록이 코드와 불일치.
 
-- [ ] **11. 시나리오 문서 미세 정정 (hom/mhm 파일명 표기, chbot 생년월일)**
+- [x] **11. 시나리오 문서 미세 정정 (hom/mhm 파일명 표기, chbot 생년월일)**
   - 대상: `docs/scenarios/hom.md` §2, `docs/scenarios/mhm.md` §2, `docs/scenarios/chbot.md` §3.2
   - 현재→목표: (1) "`hom.yaml`/`mhm.yaml` `order` 기준" → 실제 파일명 `manifest.yaml`.
     (2) chbot "생년월일(6자리)" → manifest help_text·코드(`simple_auth.py` 의 `_normalize_birthdate`:
     8자리는 앞 2자리 제거)와 일치하게 "6자리(YYMMDD) 또는 8자리(YYYYMMDD, 자동 정규화)".
   - 근거: 시나리오 문서는 해당 영역 SSOT — 파일명·입력 계약의 오기도 방치하지 않는다.
 
-- [ ] **12. README 환경변수 카탈로그 완결 (`E2E_WORKSPACE_DIR` 등)**
+- [x] **12. README 환경변수 카탈로그 완결 (`E2E_WORKSPACE_DIR` 등)**
   - 대상: `README.md`, (`.env.example` 은 예시값 유지)
   - 현재→목표: 코드가 읽지만(`app/core/settings.py:116`, `access_common/browser.py`) README 본문
     서술이 없는 `E2E_WORKSPACE_DIR`(MCP 프로파일 workspace 해시 기준 경로)를 의미·기본값과 함께 서술.
@@ -141,7 +144,7 @@
   - 근거: 가드 4번은 "README **또는** .env.example" OR 조건이라 통과하지만, DOCS_GOVERNANCE 매트릭스는
     "README 가 의미·기본값 서술"을 요구 — 카탈로그 이원화는 표류 위험.
 
-- [ ] **13. DOCS_GOVERNANCE 갱신 + 리뷰 문서 스냅샷 헤더**
+- [x] **13. DOCS_GOVERNANCE 갱신 + 리뷰 문서 스냅샷 헤더**
   - 대상: `docs/DOCS_GOVERNANCE.md` §2·§3, `docs/ARCHITECTURE_REVIEW_IDEAL.md` 헤더
   - 현재→목표:
     1. SSOT 매트릭스에 `docs/otp_relay.md`(OTP 중계기 구성·서버 계약 상세)와
@@ -155,7 +158,7 @@
 
 ## 3단계 — 가드 강화 (2단계 문서 정정이 선행돼야 통과)
 
-- [ ] **14. 정합성 가드 확장 — 양방향·스캔 범위·유령 변수·트리 실재 검증**
+- [x] **14. 정합성 가드 확장 — 양방향·스캔 범위·유령 변수·트리 실재 검증**
   - 대상: `scripts/check_docs_consistency.py`, `docs/DOCS_GOVERNANCE.md` §3(검사 항목 목록 동기화)
   - 현재→목표(4개 확장):
     1. **라우트 양방향 검사** — 현재는 코드→문서만 검사해 문서에만 있는 유령 라우트를 통과시킴.
@@ -171,21 +174,21 @@
 
 ## 4단계 — 확인 필요 (근거 불충분 → 방향 결정 후 실행)
 
-- [ ] **15. [확인 필요] 아이콘/정적 라우트의 문서화 정책 결정**
+- [x] **15. [확인 필요] 아이콘/정적 라우트의 문서화 정책 결정**
   - 대상: `app/main.py:308-323`(`GET /favicon.ico`, `/apple-touch-icon*.png`), `/static`·`/artifacts` 마운트,
     `E2E_ARCHITECTURE.md` §5.2, 가드
   - 쟁점: §5.2(API 목록 SSOT)에 미기재된 코드 전용 라우트. 선택지 —
     (a) §5.2 에 '인프라 라우트' 소절로 기재, (b) `include_in_schema=False` 라우트는 문서화 대상 제외
     규칙을 DOCS_GOVERNANCE 에 명문화하고 가드도 동일 규칙 적용. **항목 14 이전에 결정 필요.**
 
-- [ ] **16. [확인 필요] settings 의 시스템별 메일 수신자 하드코딩 제거 여부**
+- [x] **16. [확인 필요] settings 의 시스템별 메일 수신자 하드코딩 제거 여부**
   - 대상: `app/core/settings.py:21,82-99,152-161` (`_KNOWN_EMAIL_RECIPIENT_SYSTEMS` + 시스템별 필드 6종)
   - 쟁점: 새 시스템 추가 시 manifest 외에 settings 도 수정해야 함(단일 정보원 위반). 미등록 코드는
     `os.getenv` 폴백이 있으나 pydantic-settings 의 `.env` 로딩을 타지 않아 비대칭. 이상형은
     registry(manifest) 기반 동적 해석 + dotenv 맵 조회 통일 — 구현 방식 결정 필요.
   - 근거: "새 시스템 추가 = manifest + 시나리오 문서" 확장 계약(DOCS_GOVERNANCE §5)을 코드가 온전히 지키게.
 
-- [ ] **17. [확인 필요] 목표 아키텍처 서사의 SSOT 단일화 (E2E §13 vs 리뷰 문서 #3)**
+- [x] **17. [확인 필요] 목표 아키텍처 서사의 SSOT 단일화 (E2E §13 vs 리뷰 문서 #3)**
   - 대상: `E2E_ARCHITECTURE.md` §10~§13, `docs/ARCHITECTURE_REVIEW_IDEAL.md` 개선안 #3
   - 쟁점: §13 은 out-of-process 워커·Playwright MCP 를 목표로 유지, 리뷰 문서 #3 은 "(A) in-process 로
     정직하게 축소 vs (B) 진짜 워커 분리" 택일을 요구(부록에서 (B)는 검증 불가로 의도적 보류).

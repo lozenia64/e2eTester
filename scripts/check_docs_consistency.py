@@ -9,8 +9,13 @@
   1. 시스템 manifest ↔ 시나리오 문서 1:1 대응 (docs/scenarios/{code}.md)
   2. manifest 의 모든 module_id 가 짝이 되는 시나리오 문서에 등장하는지
   3. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
+     — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
+       `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
   4. 코드가 읽는 환경변수가 README.md 또는 .env.example 에 문서화되어 있는지
   5. 기본 Gemini 모델 체인(코드 상수)이 README.md / .env.example 와 일치하는지
+  6. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
+  7. (역방향) README.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
+  8. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
 
 사용법:
   python3 scripts/check_docs_consistency.py            # 전체 검사
@@ -80,9 +85,21 @@ OS_ENV_RE = re.compile(
     r"""os\.(?:getenv|environ\.get)\(\s*["']([A-Z][A-Z0-9_]+)["']|os\.environ\[\s*["']([A-Z][A-Z0-9_]+)["']"""
 )
 ROUTER_PREFIX_RE = re.compile(r"""APIRouter\([^)]*prefix\s*=\s*["']([^"']*)["']""")
+# @router.* 와 @app.* 데코레이터 공용. 셋째 그룹(데코레이터 나머지)으로 include_in_schema=False
+# (§5.2 인프라 라우트 제외 규칙 — 문서화·검사 대상 아님)를 식별한다.
 ROUTE_DECORATOR_RE = re.compile(
-    r"""@router\.(get|post|put|patch|delete|websocket)\(\s*["']([^"']*)["']"""
+    r"""@(?:router|app)\.(get|post|put|patch|delete|websocket)\(\s*["']([^"']*)["']([^\n]*)"""
 )
+# 문서(E2E_ARCHITECTURE.md)에 백틱으로 표기된 라우트: `METHOD /path`
+DOC_ROUTE_RE = re.compile(r"""`(GET|POST|PUT|PATCH|DELETE|WS)\s+(/[^\s`]*)`""")
+# 경로 파라미터({run_id}, {module_id:path} 등)는 이름이 달라도 같은 라우트로 취급한다.
+ROUTE_PARAM_RE = re.compile(r"\{[^}]*\}")
+# 문서에 등장하는 환경변수 후보. 프로젝트 관례상 E2E_*/GEMINI_* 만 환경변수다.
+DOC_ENV_RE = re.compile(r"\b((?:E2E|GEMINI)_[A-Z0-9_]+)\b")
+# 환경변수처럼 보이지만 아닌 토큰(파일명 등) — 역방향 검사(7)에서 제외.
+DOC_ENV_EXEMPT = {"E2E_ARCHITECTURE"}
+# §4 트리 실재 검사(8)에서 존재하지 않아도 되는 런타임 생성 디렉터리.
+TREE_RUNTIME_DIRS = {"artifacts"}
 MODEL_CHAIN_RE = re.compile(r"""DEFAULT_GEMINI_MODEL_CHAIN[^=]*=\s*\((.*?)\)""", re.DOTALL)
 
 
@@ -165,16 +182,29 @@ def check_scenario_lists_modules(manifests: dict[str, dict]) -> CheckResult:
 # 3. API 라우트 문서화
 # --------------------------------------------------------------------------- #
 def _extract_routes() -> list[tuple[str, str]]:
+    """app/ 전체에서 실제 등록 라우트(메서드, 경로)를 추출한다.
+
+    app/api 뿐 아니라 app/auth/router.py 와 app/main.py(@app.*)도 스캔한다 — 문서화된
+    /login·/auth/* 라우트가 검사 사각에 있던 문제를 막는다. `include_in_schema=False` 가
+    붙은 라우트(파비콘 등 인프라 자산)는 §5.2 규칙에 따라 문서화 대상이 아니므로 제외한다.
+    """
     routes: list[tuple[str, str]] = []
-    for path in sorted(API_DIR.glob("*.py")):
-        text = _read(path)
+    for _path, text in _iter_py_sources(REPO_ROOT / "app"):
         prefix_match = ROUTER_PREFIX_RE.search(text)
         prefix = prefix_match.group(1) if prefix_match else ""
-        for method, route_path in ROUTE_DECORATOR_RE.findall(text):
+        for method, route_path, rest in ROUTE_DECORATOR_RE.findall(text):
+            if "include_in_schema=False" in rest.replace(" ", ""):
+                continue
             full = (prefix + route_path) or "/"
             token = "WS" if method == "websocket" else method.upper()
             routes.append((token, full))
     return routes
+
+
+def _normalize_route(path: str) -> str:
+    # 쿼리스트링은 라우트 정체성이 아니다(`GET /api/runs?scope=today` == `GET /api/runs`).
+    # 경로 파라미터는 이름 차이를 무시한다(`{run_id}` == `{id}`).
+    return ROUTE_PARAM_RE.sub("{}", path.split("?", 1)[0])
 
 
 def check_api_routes_documented() -> CheckResult:
@@ -189,6 +219,26 @@ def check_api_routes_documented() -> CheckResult:
                 f"(엔드포인트 추가/변경 시 §5.2 동시 갱신 필요)."
             )
     result.details.append(f"라우트 {len(routes)}개를 E2E_ARCHITECTURE.md 와 대조했습니다.")
+    return result
+
+
+def check_documented_routes_exist() -> CheckResult:
+    """역방향: 문서가 주장하는 라우트가 코드에 실제로 존재하는지(유령 라우트 차단).
+
+    코드→문서 단방향 검사만으로는 삭제된 엔드포인트가 문서에 남아도 통과한다. 경로
+    파라미터 이름 차이는 무시하고(`{run_id}` == `{id}`) 메서드+경로 골격으로 대조한다.
+    """
+    result = CheckResult("E2E_ARCHITECTURE.md 의 라우트가 코드에 존재 (유령 라우트 없음)")
+    doc_text = _read(ARCHITECTURE_DOC)
+    code_routes = {(method, _normalize_route(path)) for method, path in _extract_routes()}
+    documented = sorted({(m, p) for m, p in DOC_ROUTE_RE.findall(doc_text)})
+    for method, path in documented:
+        if (method, _normalize_route(path)) not in code_routes:
+            result.problems.append(
+                f"문서화된 라우트 `{method} {path}` 가 코드에 없음 "
+                f"(엔드포인트 삭제/변경 시 E2E_ARCHITECTURE.md 에서도 제거/갱신 필요)."
+            )
+    result.details.append(f"문서 라우트 {len(documented)}개를 코드 라우트와 대조했습니다.")
     return result
 
 
@@ -227,6 +277,89 @@ def check_env_vars_documented() -> CheckResult:
     return result
 
 
+def check_documented_env_vars_used() -> CheckResult:
+    """역방향: 문서가 안내하는 환경변수를 코드가 실제로 읽는지(죽은 변수 차단).
+
+    문서에만 남은 변수는 사용자를 헛돌게 한다. 코드의 리터럴 이름과 동적 prefix
+    (`E2E_EMAIL_RECIPIENTS_{...}` 류) 양쪽과 대조하고, 환경변수처럼 보이지만 아닌
+    토큰(DOC_ENV_EXEMPT — 예: 파일명 E2E_ARCHITECTURE)은 제외한다.
+    """
+    result = CheckResult("README.md/.env.example 의 환경변수를 코드가 읽음 (죽은 변수 없음)")
+    doc_text = _read(README_DOC) + "\n" + _read(ENV_EXAMPLE)
+    literals, prefixes = _collect_env_names()
+    documented = sorted(set(DOC_ENV_RE.findall(doc_text)) - DOC_ENV_EXEMPT)
+    for name in documented:
+        if name in literals:
+            continue
+        if any(name.startswith(prefix) for prefix in prefixes):
+            continue
+        result.problems.append(
+            f"문서화된 환경변수 `{name}` 를 읽는 코드가 없음 "
+            f"(변수 제거/개명 시 README.md/.env.example 에서도 제거/갱신 필요)."
+        )
+    result.details.append(f"문서 환경변수 {len(documented)}개를 코드와 대조했습니다.")
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# 8. 폴더 트리 실재 검증
+# --------------------------------------------------------------------------- #
+def _extract_folder_tree_entries() -> list[tuple[str, bool]]:
+    """E2E_ARCHITECTURE.md §4 트리 블록을 (상대경로, is_dir) 목록으로 파싱한다.
+
+    들여쓰기 2칸 = 1단계. `# 주석` 은 무시하고, `a / b / c*.png` 처럼 한 줄에 여러
+    항목이 오면 각각을 파일 항목으로 본다(글롭 패턴 허용).
+    """
+    doc_text = _read(ARCHITECTURE_DOC)
+    section = doc_text.split("## 4. 현재 폴더 구조", 1)[1]
+    block = section.split("```text", 1)[1].split("```", 1)[0]
+
+    entries: list[tuple[str, bool]] = []
+    stack: list[str] = []
+    for line in block.splitlines():
+        if not line.strip():
+            continue
+        depth = (len(line) - len(line.lstrip(" "))) // 2
+        name_part = line.split("#", 1)[0].strip()
+        if not name_part:
+            continue
+        if depth == 0:  # 루트(e2eTester/) 자체
+            stack = []
+            continue
+        stack = stack[: depth - 1]
+        parent = "/".join(stack)
+        tokens = [token.strip() for token in name_part.split(" / ") if token.strip()]
+        for token in tokens:
+            is_dir = token.endswith("/")
+            rel = f"{parent}/{token.rstrip('/')}" if parent else token.rstrip("/")
+            entries.append((rel, is_dir))
+        if len(tokens) == 1 and tokens[0].endswith("/"):
+            stack.append(tokens[0].rstrip("/"))
+    return entries
+
+
+def check_folder_tree_paths_exist() -> CheckResult:
+    """E2E_ARCHITECTURE.md §4 트리의 경로가 실제로 존재하는지(유령 파일 차단)."""
+    result = CheckResult("E2E_ARCHITECTURE.md §4 폴더 트리 경로가 실재 (유령 파일 없음)")
+    entries = _extract_folder_tree_entries()
+    for rel, is_dir in entries:
+        if is_dir and rel.split("/")[-1] in TREE_RUNTIME_DIRS:
+            continue  # 런타임에 생성되는 디렉터리(신선한 클론엔 없음)
+        target = REPO_ROOT / rel
+        if "*" in rel:
+            parent = target.parent
+            if not (parent.exists() and any(parent.glob(target.name))):
+                result.problems.append(f"§4 트리의 글롭 `{rel}` 에 매칭되는 파일이 없음.")
+            continue
+        if not target.exists():
+            result.problems.append(
+                f"§4 트리에 있으나 실제로 없는 경로: `{rel}` "
+                f"(파일 이동/삭제 시 폴더 트리 동시 갱신 필요)."
+            )
+    result.details.append(f"트리 경로 {len(entries)}개의 실재를 확인했습니다.")
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # 5. 기본 Gemini 모델 체인
 # --------------------------------------------------------------------------- #
@@ -262,6 +395,9 @@ def run_all() -> list[CheckResult]:
         check_api_routes_documented(),
         check_env_vars_documented(),
         check_model_chain_matches(),
+        check_documented_routes_exist(),
+        check_documented_env_vars_used(),
+        check_folder_tree_paths_exist(),
     ]
 
 
