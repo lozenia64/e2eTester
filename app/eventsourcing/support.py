@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -202,11 +203,10 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         )
         """,
         """
-        CREATE TABLE IF NOT EXISTS projection_checkpoints (
-            projection_name TEXT NOT NULL,
-            event_id TEXT NOT NULL,
-            applied_at TEXT NOT NULL,
-            PRIMARY KEY (projection_name, event_id)
+        CREATE TABLE IF NOT EXISTS projection_cursor (
+            projection_name TEXT PRIMARY KEY,
+            last_sequence_id INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
         )
         """,
         """
@@ -238,3 +238,40 @@ async def ensure_schema(db: SqliteDatabase) -> None:
     ]
     for sql in statements:
         await db.execute(sql)
+    await _migrate_projection_checkpoints_to_cursor(db)
+
+
+async def _migrate_projection_checkpoints_to_cursor(db: SqliteDatabase) -> None:
+    """per-event ``projection_checkpoints`` → 단조 커서 ``projection_cursor`` 1회성 이관.
+
+    프로젝션 멱등성 판정이 "이벤트별 적용 여부 행"에서 "프로젝션별 마지막 적용 시퀀스"로
+    바뀌었다. 기존 배포 DB 는 체크포인트 행에서 프로젝션별 최대 정본 시퀀스
+    (``domain_events.sequence_id``)를 계산해 커서로 승계하고, 구 테이블은 폐기한다.
+    """
+    row = await db.fetchone(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_checkpoints'"
+    )
+    if row is None:
+        return
+    now = datetime.now(UTC).isoformat()
+    rows = await db.fetchall(
+        """
+        SELECT pc.projection_name AS projection_name, MAX(de.sequence_id) AS last_sequence_id
+        FROM projection_checkpoints pc
+        JOIN domain_events de ON de.event_id = pc.event_id
+        GROUP BY pc.projection_name
+        """
+    )
+    for entry in rows:
+        await db.execute(
+            """
+            INSERT INTO projection_cursor (projection_name, last_sequence_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(projection_name) DO UPDATE SET
+                last_sequence_id = MAX(projection_cursor.last_sequence_id,
+                                       excluded.last_sequence_id),
+                updated_at = excluded.updated_at
+            """,
+            (entry["projection_name"], entry["last_sequence_id"] or 0, now),
+        )
+    await db.execute("DROP TABLE projection_checkpoints")

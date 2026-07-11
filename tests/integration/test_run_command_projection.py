@@ -130,7 +130,7 @@ async def test_outbox_dead_letter_on_projection_failure(tmp_path: Path) -> None:
     suite_write_repo = SqliteSuiteWriteRepository(db)
 
     class BrokenProjections(ProjectionHandlers):
-        async def apply(self, event) -> None:
+        async def apply(self, event, sequence_id) -> None:
             raise RuntimeError("projection boom")
 
     outbox = SqliteOutbox(db)

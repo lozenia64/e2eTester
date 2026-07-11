@@ -51,8 +51,10 @@ async def test_module_completed_updates_anomaly_and_daily_projections(tmp_path: 
     aggregate = RunAggregate.for_new_run(run)
     created_events = aggregate.pull_events()
     await write_repo.create_run(run, events=created_events)
+    sequence = 0
     for event in created_events:
-        await projections.apply(event)
+        sequence += 1
+        await projections.apply(event, sequence)
 
     aggregate = RunAggregate(await write_repo.get_run("run_proj"))
     aggregate.begin()
@@ -71,7 +73,8 @@ async def test_module_completed_updates_anomaly_and_daily_projections(tmp_path: 
     mutation_events = aggregate.pull_events()
     await write_repo.save_run(aggregate.persistable_state(), events=mutation_events)
     for event in mutation_events:
-        await projections.apply(event)
+        sequence += 1
+        await projections.apply(event, sequence)
 
     inbox = SqliteAnomalyInboxQuery(db)
     rows = await inbox.list_page(None)

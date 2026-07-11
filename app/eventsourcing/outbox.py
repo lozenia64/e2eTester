@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from app.domain.events import DomainEvent
+from app.eventsourcing.event_store import StoredEvent
 from app.eventsourcing.support import SqliteDatabase
 
 
@@ -35,29 +37,37 @@ class SqliteOutbox:
             rows,
         )
 
-    async def claim_pending(self, limit: int = 100) -> list[DomainEvent]:
-        """Claim pending outbox rows (SQLite lacks SKIP LOCKED; single-process relay)."""
-        import json
+    async def claim_pending(self, limit: int = 100) -> list[StoredEvent]:
+        """Claim pending outbox rows (SQLite lacks SKIP LOCKED; single-process relay).
 
+        아웃박스 행과 이벤트 스토어 행은 같은 트랜잭션으로 기록되므로 ``event_id`` JOIN 은
+        항상 성립하며, 여기서 동봉하는 ``domain_events.sequence_id`` 가 프로젝션 커서의
+        정본 좌표가 된다(아웃박스 자체 시퀀스는 배달 순서일 뿐 커서 기준이 아니다).
+        """
         rows = await self._db.fetchall(
             """
-            SELECT sequence_id, event_id, aggregate_type, aggregate_id, event_type,
-                   payload, occurred_at
-            FROM outbox
-            WHERE published_at IS NULL
-            ORDER BY sequence_id ASC
+            SELECT de.sequence_id AS domain_sequence_id,
+                   o.event_id, o.aggregate_type, o.aggregate_id, o.event_type,
+                   o.payload, o.occurred_at
+            FROM outbox o
+            JOIN domain_events de ON de.event_id = o.event_id
+            WHERE o.published_at IS NULL
+            ORDER BY o.sequence_id ASC
             LIMIT ?
             """,
             (limit,),
         )
         return [
-            DomainEvent(
-                event_id=row["event_id"],
-                aggregate_type=row["aggregate_type"],
-                aggregate_id=row["aggregate_id"],
-                event_type=row["event_type"],
-                payload=json.loads(row["payload"]),
-                occurred_at=datetime.fromisoformat(row["occurred_at"]),
+            StoredEvent(
+                sequence_id=row["domain_sequence_id"],
+                event=DomainEvent(
+                    event_id=row["event_id"],
+                    aggregate_type=row["aggregate_type"],
+                    aggregate_id=row["aggregate_id"],
+                    event_type=row["event_type"],
+                    payload=json.loads(row["payload"]),
+                    occurred_at=datetime.fromisoformat(row["occurred_at"]),
+                ),
             )
             for row in rows
         ]

@@ -69,13 +69,14 @@ class OutboxRelay:
 
     async def process_once(self) -> int:
         """한 번 폴링·처리(테스트/마이그레이션용). 처리한 이벤트 수 반환."""
-        events = await self._outbox.claim_pending(self._batch_size)
-        if not events:
+        entries = await self._outbox.claim_pending(self._batch_size)
+        if not entries:
             return 0
         processed = 0
-        for event in events:
+        for entry in entries:
+            event = entry.event
             try:
-                await self._projections.apply(event)
+                await self._projections.apply(event, entry.sequence_id)
                 await self._maybe_dispatch_event_bus(event)
                 await self._realtime.apply(event)
             except Exception as exc:

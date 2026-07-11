@@ -2,8 +2,38 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
+from datetime import datetime
+
 from app.domain.events import DomainEvent
 from app.eventsourcing.support import SqliteDatabase
+
+
+@dataclass(frozen=True)
+class StoredEvent:
+    """영속된 도메인 이벤트 + 정본 시퀀스.
+
+    ``sequence_id`` 는 ``domain_events`` 테이블의 전역 단조 시퀀스로, 프로젝션 커서
+    (``projection_cursor.last_sequence_id``)의 기준 좌표다. 아웃박스 배달 순서(outbox 자체
+    autoincrement)와 이벤트 재생 순서(리빌드)가 모두 이 하나의 시퀀스로 정렬된다.
+    시퀀스는 인프라 관심사이므로 도메인 이벤트 dataclass 에 싣지 않고 여기서만 동봉한다.
+    """
+
+    sequence_id: int
+    event: DomainEvent
+
+
+def _row_to_event(row) -> DomainEvent:
+    return DomainEvent(
+        event_id=row["event_id"],
+        aggregate_type=row["aggregate_type"],
+        aggregate_id=row["aggregate_id"],
+        event_type=row["event_type"],
+        payload=json.loads(row["payload"]),
+        occurred_at=datetime.fromisoformat(row["occurred_at"]),
+        version=row["version"],
+    )
 
 
 class SqliteEventStore:
@@ -45,42 +75,18 @@ class SqliteEventStore:
             """,
             (aggregate_type, aggregate_id),
         )
-        import json
+        return [_row_to_event(row) for row in rows]
 
-        return [
-            DomainEvent(
-                event_id=row["event_id"],
-                aggregate_type=row["aggregate_type"],
-                aggregate_id=row["aggregate_id"],
-                event_type=row["event_type"],
-                payload=json.loads(row["payload"]),
-                occurred_at=__import__("datetime").datetime.fromisoformat(row["occurred_at"]),
-                version=row["version"],
-            )
-            for row in rows
-        ]
-
-    async def list_all(self) -> list[DomainEvent]:
+    async def list_all(self) -> list[StoredEvent]:
+        """전 이벤트를 정본 시퀀스 순으로 돌려준다(프로젝션 리빌드용)."""
         rows = await self._db.fetchall(
             """
-            SELECT event_id, aggregate_type, aggregate_id, event_type, payload,
+            SELECT sequence_id, event_id, aggregate_type, aggregate_id, event_type, payload,
                    occurred_at, version
             FROM domain_events
             ORDER BY sequence_id ASC
             """
         )
-        import json
-        from datetime import datetime
-
         return [
-            DomainEvent(
-                event_id=row["event_id"],
-                aggregate_type=row["aggregate_type"],
-                aggregate_id=row["aggregate_id"],
-                event_type=row["event_type"],
-                payload=json.loads(row["payload"]),
-                occurred_at=datetime.fromisoformat(row["occurred_at"]),
-                version=row["version"],
-            )
-            for row in rows
+            StoredEvent(sequence_id=row["sequence_id"], event=_row_to_event(row)) for row in rows
         ]

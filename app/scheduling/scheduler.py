@@ -85,6 +85,17 @@ def schedule_today_label() -> str:
     return datetime.now(tz).strftime("%Y-%m-%d")
 
 
+def schedule_day_label(moment: datetime) -> str:
+    """스케줄 타임존 기준 **해당 시각**의 날짜 라벨(YYYY-MM-DD).
+
+    프로젝션은 벽시계(오늘)가 아니라 이벤트 발생 시각으로 날짜를 귀속시켜야 리빌드
+    (과거 이벤트 재생) 시에도 같은 행이 재현된다 — 결정적 프로젝션의 전제.
+    """
+    tz, _ = _resolve_timezone()
+    aware = moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+    return aware.astimezone(tz).strftime("%Y-%m-%d")
+
+
 class SchedulerService:
     """예약(Schedule) CRUD 와, cron 기준으로 Run/Suite 를 자동 트리거하는 백그라운드 루프.
 
