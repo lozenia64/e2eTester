@@ -33,6 +33,9 @@ class CompositeRunRepository:
     async def delete_run(self, run_id: str) -> None:
         await self._write_repo.delete_run(run_id)
 
+    async def append_events(self, events: list[DomainEvent]) -> None:
+        await self._write_repo.append_events(events)
+
     async def list_all_runs(self) -> list[Run]:
         return await self._history_query.list_all_runs()
 

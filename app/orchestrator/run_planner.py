@@ -42,6 +42,7 @@ class RunPlanner:
         run_modules: list[RunModule] = []
         for module in self.ordered_modules(system):
             is_selected = module.module_id in selected_set
+            max_attempts = 1 + module.max_retries
             run_modules.append(
                 RunModule(
                     module_id=module.module_id,
@@ -51,6 +52,8 @@ class RunPlanner:
                     depends_on=module.depends_on,
                     status=ModuleStatus.PENDING if is_selected else ModuleStatus.SKIPPED,
                     message="대기 중" if is_selected else "사용자 선택에서 제외됨",
+                    attempt=1,
+                    max_attempts=max_attempts,
                 )
             )
         return run_modules

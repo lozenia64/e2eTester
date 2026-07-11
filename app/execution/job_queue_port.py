@@ -20,6 +20,7 @@ class RunJobDescriptor:
     kind: Literal["execute", "resume"]
     start_index: int = 0
     label: str = ""
+    execution_profile: str = "heavy"
 
 
 class JobQueuePort(Protocol):

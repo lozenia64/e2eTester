@@ -74,3 +74,12 @@ class ExecutionGateway(ABC):
     @abstractmethod
     async def close_session(self, handle: ExecutionHandle) -> None:
         """세션을 정리한다. 이미 닫혔거나 비어 있으면 조용히 무시한다."""
+
+    @abstractmethod
+    async def resume_from_step(
+        self,
+        handle: ExecutionHandle,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        """부분 재실행 시 세션의 재개 지점을 기록한다(브라우저 상태는 세션에 유지)."""

@@ -7,6 +7,7 @@ from app.core.models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain import events as domain_events
 from app.domain.events import DomainEvent
+from app.domain.snapshots import RunSnapshot
 
 # 더 이상 전이시키지 않는(이미 끝난) 모듈 상태들.
 _MODULE_TERMINAL = {
@@ -47,9 +48,12 @@ class RunAggregate:
         self._modules_by_id = {module.module_id: module for module in run.modules}
         self._pending_events: list[DomainEvent] = []
 
-    @property
-    def snapshot(self) -> Run:
-        """현재 Run 상태의 읽기 스냅샷(동일 객체 참조 — 호출자가 변이하지 않도록 주의)."""
+    def to_snapshot(self) -> RunSnapshot:
+        """현재 Run 상태의 불변 읽기 스냅샷."""
+        return RunSnapshot.from_run(self._state)
+
+    def persistable_state(self) -> Run:
+        """영속·이벤트 발행용 쓰기 모델(저장소 계층 전용)."""
         return self._state
 
     def pull_events(self) -> list[DomainEvent]:
@@ -144,14 +148,14 @@ class RunAggregate:
         module.status = ModuleStatus.QUEUED
         module.message = "실행 대기열에 등록됨"
         module.failure_analysis = None
-        self._emit(domain_events.run_module_queued(self._state.run_id, module.module_id))
+        self._emit(domain_events.module_queued(self._state.run_id, module.module_id))
 
     def mark_running(self, module: RunModule) -> None:
         module.status = ModuleStatus.RUNNING
         module.started_at = datetime.now(UTC)
         module.message = "실행 준비 중"
         module.failure_analysis = None
-        self._emit(domain_events.run_module_running(self._state.run_id, module.module_id))
+        self._emit(domain_events.module_started(self._state.run_id, module.module_id))
 
     def record_result(
         self,
@@ -180,9 +184,26 @@ class RunAggregate:
         """
         module.message = message
 
+    def append_module_log(self, module: RunModule, message: str) -> None:
+        """로그 한 줄을 기록하고 ``ModuleLogAppended`` 이벤트를 산출한다."""
+        module.message = message
+        self._emit(
+            domain_events.module_log_appended(
+                self._state.run_id,
+                module.module_id,
+                message,
+            )
+        )
+
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis
+        self._emit(
+            domain_events.module_failure_analysis_attached(
+                self._state.run_id,
+                module.module_id,
+            )
+        )
 
     def attach_comparison(self, comparison) -> None:
         """직전 Run 대비 비교 결과를 부착한다(finalize 시점의 도메인 변이 경로)."""
@@ -204,6 +225,50 @@ class RunAggregate:
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)
         self._emit_module_completed(module)
+
+    def record_retry(self, module: RunModule) -> None:
+        """정책상 재시도 — attempt 를 올리고 모듈을 다시 큐잉한다."""
+        module.attempt += 1
+        module.retry_count += 1
+        module.status = ModuleStatus.QUEUED
+        module.message = f"재시도 {module.attempt}/{module.max_attempts}"
+        module.started_at = None
+        module.ended_at = None
+        module.duration_ms = None
+        module.failure_analysis = None
+        self._emit(
+            domain_events.run_module_retried(
+                self._state.run_id,
+                module.module_id,
+                module.attempt,
+            )
+        )
+
+    def prepare_partial_rerun(self, from_index: int, ordered_modules: list[RunModule]) -> None:
+        """지정 인덱스부터 모듈 상태를 초기화하고 Run 을 재개한다."""
+        self._state.status = RunStatus.RUNNING
+        self._state.ended_at = None
+        self._state.awaiting_input_module_id = None
+        self._state.awaiting_input_prompt = None
+        from_module_id = ordered_modules[from_index].module_id
+        for module in ordered_modules[from_index:]:
+            if module.status is ModuleStatus.SKIPPED:
+                continue
+            module.status = ModuleStatus.PENDING
+            module.attempt = 1
+            module.message = "부분 재실행 대기"
+            module.started_at = None
+            module.ended_at = None
+            module.duration_ms = None
+            module.artifacts = []
+            module.artifact_count = 0
+            module.failure_analysis = None
+        self._emit(
+            domain_events.run_partial_rerun_started(
+                self._state.run_id,
+                from_module_id,
+            )
+        )
 
     def fail_module(self, module: RunModule, message: str) -> None:
         """단계 진입 전/도중 e2eTester(플랫폼) 오류로 모듈을 종료한다."""
@@ -233,7 +298,7 @@ class RunAggregate:
         self._state.status = RunStatus.WAITING_INPUT
         self._state.awaiting_input_module_id = module.module_id
         self._state.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
-        self._emit(domain_events.run_paused_for_otp(self._state.run_id, module.module_id))
+        self._emit(domain_events.run_waiting_input(self._state.run_id, module.module_id))
 
     def resume_after_input(self, module: RunModule) -> None:
         """입력(OTP)이 접수되어 재개 대기 상태로 되돌린다."""
@@ -297,7 +362,7 @@ class RunAggregate:
 
     def _emit_module_completed(self, module: RunModule) -> None:
         self._emit(
-            domain_events.run_module_completed(
+            domain_events.module_finished(
                 self._state.run_id,
                 module.module_id,
                 module.status,

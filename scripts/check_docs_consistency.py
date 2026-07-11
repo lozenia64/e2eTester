@@ -178,6 +178,23 @@ def check_scenario_lists_modules(manifests: dict[str, dict]) -> CheckResult:
     return result
 
 
+VALID_EXECUTION_PROFILES = frozenset({"heavy", "light", "interactive"})
+
+
+def check_manifest_execution_profile(manifests: dict[str, dict]) -> CheckResult:
+    """manifest execution_profile 이 허용 값인지 검사."""
+    result = CheckResult("manifest execution_profile 값 (heavy|light|interactive)")
+    for code, data in sorted(manifests.items()):
+        profile = data.get("execution_profile", "light")
+        if profile not in VALID_EXECUTION_PROFILES:
+            result.problems.append(
+                f"[{code}] execution_profile={profile!r} — "
+                f"heavy|light|interactive 중 하나여야 합니다."
+            )
+    result.details.append(f"manifest {len(manifests)}개의 execution_profile 확인")
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # 3. API 라우트 문서화
 # --------------------------------------------------------------------------- #
@@ -392,6 +409,7 @@ def run_all() -> list[CheckResult]:
     return [
         check_systems_have_scenarios(manifests),
         check_scenario_lists_modules(manifests),
+        check_manifest_execution_profile(manifests),
         check_api_routes_documented(),
         check_env_vars_documented(),
         check_model_chain_matches(),

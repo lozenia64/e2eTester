@@ -29,6 +29,10 @@ class ModuleDefinition(BaseModel):
     # 어댑터는 입력이 필요하다는 '사실'(StepNeedsInput)만 보고할 뿐, 일시정지를 '허가'하는
     # 권한은 도메인이 이 플래그로 가진다 — 선언하지 않은 모듈의 입력 요구는 정책 위반(ERROR).
     requires_user_input: bool = False
+    max_retries: int = 0
+    retry_backoff_ms: int = 500
+    retryable_on: list[str] = Field(default_factory=lambda: [ModuleStatus.ERROR.value])
+    partial_rerun_allowed: bool = True
 
 
 class RunFormOption(BaseModel):
@@ -57,6 +61,7 @@ class SystemDefinition(BaseModel):
     supported_auth_methods: list[str] = Field(default_factory=list)
     # 홈 화면 시스템 카드 노출 순서(작을수록 먼저). 미지정 시 뒤로 밀린다.
     display_order: int = 1000
+    execution_profile: str = "light"
 
 
 class FailureAnalysis(BaseModel):
@@ -81,6 +86,8 @@ class RunModule(BaseModel):
     ended_at: datetime | None = None
     duration_ms: int | None = None
     retry_count: int = 0
+    attempt: int = 1
+    max_attempts: int = 1
     message: str = "대기 중"
     artifact_count: int = 0
     artifacts: list[str] = Field(default_factory=list)

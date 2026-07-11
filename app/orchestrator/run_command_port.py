@@ -42,3 +42,12 @@ class RunCommandPort(Protocol):
     async def submit_otp(self, run_id: str, otp_code: str) -> Run: ...
 
     async def get_run(self, run_id: str) -> Run: ...
+
+    async def rerun_from_module(
+        self,
+        run_id: str,
+        from_module_id: str,
+        *,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Run: ...

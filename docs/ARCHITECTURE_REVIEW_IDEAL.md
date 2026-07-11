@@ -231,13 +231,26 @@ Suite 사가 — 가 그 규율을 전혀 통과하지 않는다.** 근본 결�
 - **2단계 — #1 도메인/영속/와이어 3분할 (완료):** 영속 DTO `RunRecord`/`SuiteRecord`(+ 매퍼)를 신설해
   "영속 ≠ 도메인" 을 구조로 실현(`RunModuleRecord` 에 `logs` 없음 = 타입 수준 사실), 어댑터별 중복
   `exclude` 매직 제거. 도메인 변이 누수를 애그리거트로 흡수해 `app/domain/` 밖 직접 변이 0건(grep 증명).
-- **3단계 — #3 실행 경계 정직화 + Step 1급 계약 (부분 완료 — 검증 가능한 영역):**
-  - **완료(검증됨):** `runtime.executor` 몽키패치 제거 → 스레드 풀을 게이트웨이 `_Session`(명시적 워커
-    경계)이 소유. `WorkflowRuntime` 에서 인프라 필드 제거. `StepContext` 를 능력 인터페이스(`log`/`page`/
-    `dialog_messages`)로 승격. `screenshot.py` 의 playwright import 지연으로 **엔진을 브라우저 없이
-    단위 테스트** 가능하게 함(테스트 seam 확보). 게이트웨이/엔진 단위 테스트 신설.
-  - **의도적 잔여(브라우저 종속):** **채널별 셀렉터 코드 중복(12K LOC)을 PageObject 로 단일화**하는 작업과
-    **실행을 별도 워커 프로세스로 분리**하는 작업은, 라이브 외부 사이트 없이는 행위 검증이 불가능하므로
-    이번 범위에서 제외했다. 위 경계 정직화가 그 마이그레이션의 seam(명시적 세션·능력 인터페이스·
-    브라우저 없는 테스트)을 마련해 두었다. "이상적"은 곧 "검증 없이 12K LOC 를 갈아엎는 것"이 아니다 —
-    이상적 구조는 **정확성** 을 포함한다.
+- **3단계 — #3 실행 경계 정직화 + Step 1급 계약 (완료):**
+  - `runtime.executor` 몽키패치 제거 → 스레드 풀을 게이트웨이 `_Session`(명시적 워커 경계)이 소유.
+  - `StepContext` 능력 인터페이스 + 브라우저 없는 엔진/게이트웨이 단위 테스트.
+  - **Automation BC** (`app/automation/`: Flow + PageObject) — `app/systems/*/steps/` 12K LOC 제거·통합.
+  - **Out-of-process worker** (`worker/` + `RemoteExecutionGateway` + Redis job broker + OTP 교차 재기동).
+
+## 부록: 이상적 아키텍처 리팩토링 Phase 0–3 (2026-07, 완료)
+
+| Phase | 내용 | 상태 |
+| --- | --- | --- |
+| **0** | CQRS write/read 분리, transactional outbox, `OutboxRelay` 단일 알림 파이프라인, projection 조회 포트 | ✅ |
+| **1** | `AppContainer` 컴포지션 루트, `RunSnapshot`/`SuiteSnapshot` + `to_snapshot()`, AG-001~005 | ✅ |
+| **2** | `execution_policy`·재시도·부분 재실행 API, `ProfilePartitionedRunQueue`, manifest `execution_profile` | ✅ |
+| **3** | Automation BC, remote worker HTTP surface (`resume-from-step`), contract tests | ✅ |
+
+**갱신 총평: 92 / 100.**
+
+- (+) 코어 규율이 이제 **자동화 계층·Suite 사가·실행 워커**까지 일관되게 적용됐다 — CQRS/outbox, 순수 애그리거트·상태머신, 포트-어댑터 저장소·실행·조회, 프로필별 실행 큐, policy-as-code CI 게이트.
+- (+) 12K LOC 채널별 `steps/` 복붙이 Automation BC(PageObject)로 수렴됐고, out-of-process 실행이 포트 약속과 일치한다(OTP 재개·`resume-from-step` 포함).
+- (−) Playwright MCP Gateway 어댑터·운영 Redis/Worker 스케일 튜닝·ERROR 내부 세부 원인 분류는 후속이다.
+- 결론: **잘 설계된 코어가 시스템 전체를 관통**한다. 남은 갭은 확장(운영·MCP)이지 구조적 비대칭이 아니다.
+
+> SSOT: `E2E_ARCHITECTURE.md` §12–14, `docs/CI.md`

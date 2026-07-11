@@ -45,16 +45,16 @@ def test_no_occurrence_returns_zero():
 
 def test_build_patch_drafts_produces_unified_diff_per_file():
     sources = {
-        "app/systems/hrp/steps/login.py": SOURCE,
-        "app/systems/fp/steps/other.py": "X = '#unrelated'\n",
+        "app/automation/page_objects/hrp/login.py": SOURCE,
+        "app/automation/page_objects/fp/document_writing.py": "X = '#unrelated'\n",
     }
     drafts = build_patch_drafts(sources, broken_selector="#btnRA", healed_selector="#btnRA2")
 
     assert len(drafts) == 1
     draft = drafts[0]
-    assert draft.file_path == "app/systems/hrp/steps/login.py"
+    assert draft.file_path == "app/automation/page_objects/hrp/login.py"
     assert draft.occurrences == 3
-    assert "--- a/app/systems/hrp/steps/login.py" in draft.diff
+    assert "--- a/app/automation/page_objects/hrp/login.py" in draft.diff
     assert '-LOGIN_BUTTON_SELECTOR = "#btnRA"' in draft.diff
     assert '+LOGIN_BUTTON_SELECTOR = "#btnRA2"' in draft.diff
 

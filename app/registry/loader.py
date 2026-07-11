@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from app.core.models import ModuleDefinition, RunFormField, SystemDefinition
+from app.domain.execution_policy import system_policy_from_definition
 
 
 class ModuleRegistry:
@@ -21,6 +22,9 @@ class ModuleRegistry:
         except KeyError as exc:
             raise KeyError(f"Unknown system code: {system_code}") from exc
 
+    def get_execution_profile(self, system_code: str) -> str:
+        return self.get_system(system_code).execution_profile
+
     def _load_systems(self) -> dict[str, SystemDefinition]:
         loaded: list[SystemDefinition] = []
         for manifest_path in sorted(self._manifest_dir.glob("*/manifest.yaml")):
@@ -34,6 +38,7 @@ class ModuleRegistry:
                 run_form=[RunFormField(**field_data) for field_data in raw.get("run_form", [])],
                 supported_auth_methods=raw.get("supported_auth_methods", []),
                 display_order=raw.get("display_order", 1000),
+                execution_profile=raw.get("execution_profile", "light"),
             )
             self._validate_system_definition(system, manifest_path)
             loaded.append(system)
@@ -55,6 +60,12 @@ class ModuleRegistry:
                     f"Module system_code mismatch in {manifest_path}: "
                     f"{module.module_id} belongs to {module.system_code}, expected {system.system_code}"
                 )
+            if module.max_retries < 0:
+                raise ValueError(f"max_retries must be >= 0 in {manifest_path}: {module.module_id}")
+            if module.retry_backoff_ms < 0:
+                raise ValueError(
+                    f"retry_backoff_ms must be >= 0 in {manifest_path}: {module.module_id}"
+                )
             for dependency in module.depends_on:
                 dependency_module = module_index.get(dependency)
                 if dependency_module is None:
@@ -66,6 +77,11 @@ class ModuleRegistry:
                         f"Dependency order must precede dependent in {manifest_path}: "
                         f"{module.module_id} depends on {dependency}"
                     )
+
+        try:
+            system_policy_from_definition(system)
+        except ValueError as exc:
+            raise ValueError(f"Invalid execution policy in {manifest_path}: {exc}") from exc
 
         visiting: set[str] = set()
         visited: set[str] = set()

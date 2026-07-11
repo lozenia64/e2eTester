@@ -22,6 +22,15 @@ I/O 와 뒤섞여, 상태머신이 코드 형태로만 존재했다). 이 모듈
         cancel_requested                  → CancelRemaining
         그 외                              → PauseForInput
     그 외(정상/실패 종료)                   → CompleteStep
+
+  단계 실패 후(decide_post_step_failure):
+    cancel_requested                      → CancelRemaining
+    retryable 이고 attempt < max_attempts → RetryModule
+    그 외                                  → CompleteStep
+
+  부분 재실행(decide_partial_rerun):
+    invalid module / not allowed          → RejectInvalidResumePoint
+    그 외                                  → ResumeFromModule
 """
 
 from __future__ import annotations
@@ -76,6 +85,37 @@ class RejectUnexpectedInput:
 PostStepDecision = CancelRemaining | PauseForInput | CompleteStep | RejectUnexpectedInput
 
 
+# --- 단계 실패 후 결정(재시도 정책) ------------------------------------------
+
+
+@dataclass(frozen=True)
+class RetryModule:
+    """정책상 재시도 가능 → 백오프 후 같은 모듈을 다시 실행한다."""
+
+    backoff_ms: int
+
+
+PostStepFailureDecision = CancelRemaining | PauseForInput | CompleteStep | RetryModule
+
+
+# --- 부분 재실행 결정 --------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ResumeFromModule:
+    """지정 모듈부터 Run 을 재개한다."""
+
+    from_index: int
+
+
+@dataclass(frozen=True)
+class RejectInvalidResumePoint:
+    """부분 재실행이 허용되지 않거나 모듈이 유효하지 않다."""
+
+
+PartialRerunDecision = ResumeFromModule | RejectInvalidResumePoint
+
+
 class RunStateMachine:
     """Run 실행의 결정 규칙(전이표). 상태(불리언/상태값)만 받아 명령을 돌려주는 순수 함수 모음.
 
@@ -107,3 +147,36 @@ class RunStateMachine:
                 return CancelRemaining()
             return PauseForInput()
         return CompleteStep()
+
+    @staticmethod
+    def decide_post_step_failure(
+        *,
+        step_status: ModuleStatus,
+        cancel_requested: bool,
+        current_attempt: int,
+        max_attempts: int,
+        retryable_on: frozenset[ModuleStatus],
+        backoff_ms: int,
+    ) -> PostStepFailureDecision:
+        if cancel_requested:
+            return CancelRemaining()
+        if step_status is ModuleStatus.WAITING_INPUT:
+            return CompleteStep()
+        if step_status is ModuleStatus.PASSED:
+            return CompleteStep()
+        if step_status in retryable_on and current_attempt < max_attempts:
+            return RetryModule(backoff_ms=backoff_ms)
+        return CompleteStep()
+
+    @staticmethod
+    def decide_partial_rerun(
+        *,
+        from_module_id: str,
+        module_ids_in_order: list[str],
+        partial_rerun_allowed: bool,
+    ) -> PartialRerunDecision:
+        if from_module_id not in module_ids_in_order:
+            return RejectInvalidResumePoint()
+        if not partial_rerun_allowed:
+            return RejectInvalidResumePoint()
+        return ResumeFromModule(from_index=module_ids_in_order.index(from_module_id))

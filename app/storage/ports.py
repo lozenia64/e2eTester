@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Protocol
 
@@ -19,12 +18,17 @@ from app.core.models import (
     PendingExecution,
     Run,
     Schedule,
-    SuiteEvent,
     SuiteRun,
 )
 from app.domain.events import DomainEvent
 from app.healing.models import HealingEvent, HealingPatch, HealingPolicy
 from app.realtime.ports import RealtimeNotificationPort
+from app.storage.query_rows import (
+    AnomalyInboxRow,
+    DailyRunSummaryRow,
+    DailyStatusRow,
+    StatsRollupRow,
+)
 
 
 class RunWriteRepositoryPort(Protocol):
@@ -37,6 +41,7 @@ class RunWriteRepositoryPort(Protocol):
     async def create_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run: ...
     async def save_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run: ...
     async def get_run(self, run_id: str) -> Run: ...
+    async def append_events(self, events: list[DomainEvent]) -> None: ...
     async def delete_run(self, run_id: str) -> None: ...
 
 
@@ -62,11 +67,15 @@ class RunHistoryQueryPort(Protocol):
 class RunRepositoryPort(
     RunWriteRepositoryPort, RunHistoryQueryPort, RealtimeNotificationPort, Protocol
 ):
-    """Run 저장소 **복합 포트**(하위 호환).
+    """Run 저장소 **복합 포트**(하위 호환 · **deprecated**).
 
     쓰기(``RunWriteRepositoryPort``)·이력 조회(``RunHistoryQueryPort``)·실시간 알림
-    (``RealtimeNotificationPort``)를 한 타입으로 묶는다. 신규 코드는 가능하면 개별 포트에
-    의존한다.
+    (``RealtimeNotificationPort``)를 한 타입으로 묶는다.
+
+    .. deprecated::
+        프로덕션 코드는 ``RunWriteRepositoryPort`` + ``RunHistoryQueryPort`` +
+        ``RealtimeNotificationPort`` 를 각각 주입받는다. 이 복합 포트는 기존 테스트·
+        ``CompositeRunRepository`` 하위 호환용으로만 유지한다.
     """
 
 
@@ -156,15 +165,29 @@ class SuiteInputStorePort(Protocol):
     async def delete(self, suite_id: str) -> None: ...
 
 
-class SuiteRepositoryPort(Protocol):
-    async def create_suite(self, suite: SuiteRun) -> SuiteRun: ...
-    async def save_suite(self, suite: SuiteRun) -> SuiteRun: ...
+class SuiteWriteRepositoryPort(Protocol):
+    """Suite 상태 집합체의 **쓰기** 영속 경계."""
+
+    async def create_suite(
+        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+    ) -> SuiteRun: ...
+    async def save_suite(
+        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+    ) -> SuiteRun: ...
+    async def get_suite(self, suite_id: str) -> SuiteRun: ...
+    async def append_events(self, events: list[DomainEvent]) -> None: ...
+
+
+class SuiteReadRepositoryPort(Protocol):
+    """Suite **읽기** 경계(list/get)."""
+
     async def get_suite(self, suite_id: str) -> SuiteRun: ...
     async def list_suites(self) -> list[SuiteRun]: ...
     async def list_suites_by_user(self, user_id: str) -> list[SuiteRun]: ...
-    async def publish(self, event: SuiteEvent) -> None: ...
-    async def subscribe(self, suite_id: str) -> asyncio.Queue[SuiteEvent]: ...
-    async def unsubscribe(self, suite_id: str, queue: asyncio.Queue[SuiteEvent]) -> None: ...
+
+
+class SuiteRepositoryPort(SuiteReadRepositoryPort, Protocol):
+    """Suite 저장소 **복합 포트**(하위 호환 · read-only)."""
 
 
 class ScheduleRepositoryPort(Protocol):
@@ -185,6 +208,53 @@ class AnomalyHandlingStorePort(Protocol):
     async def get(self, module_run_id: str) -> AnomalyHandling | None: ...
     async def list(self) -> list[AnomalyHandling]: ...
     async def upsert(self, handling: AnomalyHandling) -> AnomalyHandling: ...
+
+
+class AnomalyInboxQueryPort(Protocol):
+    """이상징후 인박스 **읽기** 쿼리 — ``anomaly_inbox_index`` 프로젝션."""
+
+    async def list_page(
+        self,
+        allowed_system_codes: list[str] | None,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[AnomalyInboxRow]: ...
+
+
+class DailyStatusQueryPort(Protocol):
+    """일간 점검 현황 **읽기** 쿼리 — ``daily_system_status`` + 당일 Run 요약."""
+
+    async def list_for_date(
+        self,
+        date_label: str,
+        allowed_system_codes: list[str] | None,
+    ) -> list[DailyStatusRow]: ...
+
+    async def list_run_summaries_for_date(
+        self,
+        date_label: str,
+        since_utc: datetime,
+        allowed_system_codes: list[str] | None,
+    ) -> list[DailyRunSummaryRow]: ...
+
+
+class StatsQueryPort(Protocol):
+    """사용량 통계 **읽기** 쿼리 — ``stats_rollup`` + 이력 인덱스 기반 Run 조립."""
+
+    async def rollup_between(
+        self,
+        from_day: str | None,
+        to_day: str | None,
+        *,
+        system_codes: list[str] | None = None,
+    ) -> list[StatsRollupRow]: ...
+
+    async def list_usage_runs(
+        self,
+        from_dt: datetime | None,
+        to_dt: datetime | None,
+    ) -> list[Run]: ...
 
 
 class HealingEventStorePort(Protocol):

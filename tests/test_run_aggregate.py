@@ -42,8 +42,8 @@ def test_begin_sets_running_and_started_at():
     run = _run([_module("a", 0)])
     aggregate = RunAggregate(run)
     aggregate.begin()
-    assert aggregate.snapshot.status == RunStatus.RUNNING
-    assert aggregate.snapshot.started_at is not None
+    assert aggregate.to_snapshot().status == RunStatus.RUNNING
+    assert aggregate.to_snapshot().started_at is not None
     events = aggregate.pull_events()
     assert any(event.event_type == "RunStarted" for event in events)
 
@@ -233,3 +233,34 @@ def test_hydrate_logs_fills_each_module_and_defaults_missing_to_empty():
     RunAggregate(run).hydrate_logs({"a": ["line-1", "line-2"]})
     assert first.logs == ["line-1", "line-2"]
     assert second.logs == []
+
+
+def test_record_retry_increments_attempt_and_requeues():
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    module.max_attempts = 3
+    aggregate = RunAggregate(_run([module]))
+    aggregate.record_retry(module)
+    assert module.attempt == 2
+    assert module.retry_count == 1
+    assert module.status == ModuleStatus.QUEUED
+    events = aggregate.pull_events()
+    assert any(event.event_type == "RunModuleRetried" for event in events)
+
+
+def test_prepare_partial_rerun_resets_modules_from_index():
+    modules = [
+        _module("a", 0, status=ModuleStatus.PASSED),
+        _module("b", 1, status=ModuleStatus.ERROR),
+        _module("c", 2, status=ModuleStatus.PENDING),
+    ]
+    run = _run(modules, status=RunStatus.ERROR)
+    run.ended_at = datetime.now(UTC)
+    aggregate = RunAggregate(run)
+    aggregate.prepare_partial_rerun(1, modules)
+    assert run.status == RunStatus.RUNNING
+    assert run.ended_at is None
+    assert modules[0].status == ModuleStatus.PASSED
+    assert modules[1].status == ModuleStatus.PENDING
+    assert modules[2].status == ModuleStatus.PENDING
+    events = aggregate.pull_events()
+    assert any(event.event_type == "RunPartialRerunStarted" for event in events)

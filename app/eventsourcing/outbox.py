@@ -62,11 +62,32 @@ class SqliteOutbox:
             for row in rows
         ]
 
-    async def mark_published(self, event_ids: list[str]) -> None:
-        if not event_ids:
-            return
+    async def mark_published(self, event_id: str) -> None:
         now = datetime.now(UTC).isoformat()
-        await self._db.executemany(
+        await self._db.execute(
             "UPDATE outbox SET published_at = ? WHERE event_id = ?",
-            [(now, eid) for eid in event_ids],
+            (now, event_id),
         )
+
+    async def move_to_dead_letter(self, event: DomainEvent, error_message: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        async with await self._db.transaction() as tx:
+            tx.execute(
+                """
+                INSERT OR REPLACE INTO outbox_dead_letter
+                    (event_id, aggregate_type, aggregate_id, event_type, payload,
+                     occurred_at, failed_at, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.aggregate_type,
+                    event.aggregate_id,
+                    event.event_type,
+                    self._db.json_dumps(event.payload),
+                    event.occurred_at.isoformat(),
+                    now,
+                    error_message[:2000],
+                ),
+            )
+            tx.execute("DELETE FROM outbox WHERE event_id = ?", (event.event_id,))

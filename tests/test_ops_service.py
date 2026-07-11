@@ -11,7 +11,10 @@ from app.orchestrator.ops_service import OpsService
 
 class _FakeRunRepo:
     async def list_all_runs(self) -> list[Run]:
-        return [
+        return await self.list_runs_with_statuses(frozenset(RunStatus))
+
+    async def list_runs_with_statuses(self, statuses: frozenset) -> list[Run]:
+        runs = [
             Run(
                 run_id="run_active",
                 system_code="hom",
@@ -30,6 +33,7 @@ class _FakeRunRepo:
                 modules=[],
             ),
         ]
+        return [run for run in runs if run.status in statuses]
 
 
 class _FakeSuiteRepo:

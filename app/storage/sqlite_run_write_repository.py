@@ -42,6 +42,13 @@ class SqliteRunWriteRepository:
             data = json.loads(data)
         return RunRecord.deserialize(data)
 
+    async def append_events(self, events: list[DomainEvent]) -> None:
+        """상태 blob 없이 이벤트·아웃박스만 적재(로그 핫패스 등)."""
+        if not events:
+            return
+        async with await self._db.transaction() as tx:
+            self._append_events_sync(tx, events)
+
     async def delete_run(self, run_id: str) -> None:
         async with await self._db.transaction() as tx:
             tx.execute("DELETE FROM runs WHERE id = ?", (run_id,))

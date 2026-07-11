@@ -8,6 +8,7 @@ from app.auth.models import User
 from app.core.enums import SuiteStatus
 from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep
 from app.core.status_labels import suite_status_label
+from app.domain.snapshots import SuiteSnapshot
 
 
 class SuiteView(BaseModel):
@@ -42,6 +43,10 @@ class SuiteView(BaseModel):
     created_by_user_name: str | None = None
     triggered_by: str = "manual"
     schedule_id: str | None = None
+
+    @classmethod
+    def from_snapshot(cls, snapshot: SuiteSnapshot) -> SuiteView:
+        return cls.from_suite(snapshot.to_suite())
 
     @classmethod
     def from_suite(cls, suite: SuiteRun) -> SuiteView:

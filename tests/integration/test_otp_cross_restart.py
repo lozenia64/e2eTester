@@ -36,6 +36,9 @@ class _FakeHistoryQuery:
     async def list_all_runs(self) -> list[Run]:
         return list(self._runs)
 
+    async def list_runs_with_statuses(self, statuses: frozenset) -> list[Run]:
+        return [run for run in self._runs if run.status in statuses]
+
 
 class _NoopQueue:
     async def submit(self, *_args, **_kwargs) -> None:

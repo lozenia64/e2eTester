@@ -76,6 +76,21 @@ class CancelSuite:
 AdvanceDecision = StartStep | FinalizeSuite | CancelSuite
 
 
+@dataclass(frozen=True)
+class ResumeFromModule:
+    """Suite 가 하위 Run 의 부분 재실행을 위임한다."""
+
+    from_module_id: str
+
+
+@dataclass(frozen=True)
+class RejectInvalidResumePoint:
+    """Suite 부분 재실행 거부."""
+
+
+SuitePartialRerunDecision = ResumeFromModule | RejectInvalidResumePoint
+
+
 class SuiteStateMachine:
     """Suite 사가의 결정 규칙(전이표). 상태값/불리언만 받아 명령을 돌려주는 순수 함수 모음.
 
@@ -113,3 +128,17 @@ class SuiteStateMachine:
         if next_pending_index is None:
             return FinalizeSuite()
         return StartStep(index=next_pending_index)
+
+    @staticmethod
+    def decide_partial_rerun(
+        *,
+        from_module_id: str,
+        active_run_id: str | None,
+        partial_rerun_allowed: bool,
+    ) -> SuitePartialRerunDecision:
+        """하위 Run 부분 재실행 위임 결정(RunStateMachine.decide_partial_rerun 과 동형)."""
+        if active_run_id is None:
+            return RejectInvalidResumePoint()
+        if not partial_rerun_allowed:
+            return RejectInvalidResumePoint()
+        return ResumeFromModule(from_module_id=from_module_id)

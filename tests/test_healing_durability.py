@@ -28,7 +28,7 @@ def run(page):
 
 
 def test_extract_refs_finds_constants_inline_and_roles():
-    refs = extract_selector_refs("app/systems/hrp/steps/login.py", SAMPLE_SOURCE)
+    refs = extract_selector_refs("app/automation/page_objects/hrp/login.py", SAMPLE_SOURCE)
     selectors = {r["selector"] for r in refs}
     assert "#firstId" in selectors
     assert "#btnRA" in selectors
@@ -76,7 +76,7 @@ def _event(broken: str) -> HealingEvent:
 
 
 def test_durability_map_combines_scan_with_heal_history():
-    sources = {"app/systems/hrp/steps/login.py": SAMPLE_SOURCE}
+    sources = {"app/automation/page_objects/hrp/login.py": SAMPLE_SOURCE}
     events = [_event("#btnRA")] * 3
     result = build_durability_map(sources, events)
 

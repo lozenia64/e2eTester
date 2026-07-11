@@ -12,6 +12,13 @@ from typing import Any
 GATE_COMMANDS: dict[str, list[str]] = {
     "docs_consistency": ["python3", "scripts/check_docs_consistency.py"],
     "architecture_gates": ["python3", "scripts/check_architecture_gates.py"],
+    "projection_validate": [
+        "python3",
+        "scripts/rebuild_projections.py",
+        "--validate",
+        "--db",
+        "data/.ci_projection_validate.db",
+    ],
     "ruff": ["python3", "-m", "ruff", "check", "."],
     "ruff_format": ["python3", "-m", "ruff", "format", "--check", "."],
     "pytest": ["python3", "-m", "pytest", "tests/", "-q"],
@@ -41,6 +48,7 @@ GATE_TIERS: dict[str, int] = {
     "ruff": 0,
     "ruff_format": 0,
     "architecture_gates": 1,
+    "projection_validate": 1,
     "pytest": 2,
     "pip_audit": 3,
     "bandit_security": 3,
@@ -49,6 +57,7 @@ GATE_TIERS: dict[str, int] = {
 STANDARD_GATES: list[str] = [
     "docs_consistency",
     "architecture_gates",
+    "projection_validate",
     "ruff",
     "ruff_format",
     "pytest",

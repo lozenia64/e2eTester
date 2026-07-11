@@ -12,7 +12,10 @@ from app.domain.run_state_machine import (
     CompleteStep,
     ExecuteModule,
     PauseForInput,
+    RejectInvalidResumePoint,
     RejectUnexpectedInput,
+    ResumeFromModule,
+    RetryModule,
     RunStateMachine,
 )
 
@@ -87,3 +90,86 @@ def test_post_step_rejection_takes_priority_over_cancel():
         module_requires_user_input=False,
     )
     assert isinstance(decision, RejectUnexpectedInput)
+
+
+# --- 단계 실패 후 결정(재시도) ------------------------------------------------
+
+
+def test_post_step_failure_retries_when_policy_allows():
+    decision = RunStateMachine.decide_post_step_failure(
+        step_status=ModuleStatus.ERROR,
+        cancel_requested=False,
+        current_attempt=1,
+        max_attempts=3,
+        retryable_on=frozenset({ModuleStatus.ERROR}),
+        backoff_ms=500,
+    )
+    assert isinstance(decision, RetryModule)
+    assert decision.backoff_ms == 500
+
+
+def test_post_step_failure_completes_when_attempts_exhausted():
+    decision = RunStateMachine.decide_post_step_failure(
+        step_status=ModuleStatus.ERROR,
+        cancel_requested=False,
+        current_attempt=3,
+        max_attempts=3,
+        retryable_on=frozenset({ModuleStatus.ERROR}),
+        backoff_ms=500,
+    )
+    assert isinstance(decision, CompleteStep)
+
+
+def test_post_step_failure_cancel_takes_priority():
+    decision = RunStateMachine.decide_post_step_failure(
+        step_status=ModuleStatus.ERROR,
+        cancel_requested=True,
+        current_attempt=1,
+        max_attempts=3,
+        retryable_on=frozenset({ModuleStatus.ERROR}),
+        backoff_ms=500,
+    )
+    assert isinstance(decision, CancelRemaining)
+
+
+def test_post_step_failure_skips_non_retryable_status():
+    decision = RunStateMachine.decide_post_step_failure(
+        step_status=ModuleStatus.ANOMALY,
+        cancel_requested=False,
+        current_attempt=1,
+        max_attempts=3,
+        retryable_on=frozenset({ModuleStatus.ERROR}),
+        backoff_ms=500,
+    )
+    assert isinstance(decision, CompleteStep)
+
+
+# --- 부분 재실행 결정 --------------------------------------------------------
+
+
+def test_partial_rerun_resumes_from_valid_module():
+    decision = RunStateMachine.decide_partial_rerun(
+        from_module_id="b",
+        module_ids_in_order=["a", "b", "c"],
+        partial_rerun_allowed=True,
+    )
+    assert isinstance(decision, ResumeFromModule)
+    assert decision.from_index == 1
+
+
+def test_partial_rerun_rejects_unknown_module():
+    decision = RunStateMachine.decide_partial_rerun(
+        from_module_id="z",
+        module_ids_in_order=["a", "b"],
+        partial_rerun_allowed=True,
+    )
+    assert isinstance(decision, RejectInvalidResumePoint)
+
+
+def test_partial_rerun_rejects_when_not_allowed():
+    decision = RunStateMachine.decide_partial_rerun(
+        from_module_id="a",
+        module_ids_in_order=["a", "b"],
+        partial_rerun_allowed=False,
+    )
+    assert isinstance(decision, RejectInvalidResumePoint)

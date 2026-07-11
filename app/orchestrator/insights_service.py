@@ -11,7 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.enums import AnomalyState
 from app.core.models import AnomalyHandling
-from app.orchestrator.insights_anomalies import build_anomaly_items
+from app.orchestrator.insights_anomalies import (
+    AnomalyModuleEnrichment,
+    build_anomaly_items_from_index,
+)
 from app.orchestrator.insights_breakdown import build_module_breakdown
 from app.orchestrator.insights_charts import (
     calendar_heatmap_chart,
@@ -22,6 +25,8 @@ from app.orchestrator.insights_charts import (
 )
 from app.orchestrator.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
+    module_occurred_at,
+    screenshot_url,
     split_module_run_id,
 )
 from app.orchestrator.insights_health import build_system_health
@@ -33,6 +38,7 @@ if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import (
         AnomalyHandlingStorePort,
+        AnomalyInboxQueryPort,
         RunHistoryQueryPort,
         ScheduleRepositoryPort,
         SuiteRepositoryPort,
@@ -45,6 +51,7 @@ class InsightsService:
         run_repo: RunHistoryQueryPort,
         registry: ModuleRegistry,
         anomaly_store: AnomalyHandlingStorePort,
+        anomaly_query: AnomalyInboxQueryPort,
         *,
         user_service: UserService | None = None,
         suite_repo: SuiteRepositoryPort | None = None,
@@ -53,6 +60,7 @@ class InsightsService:
         self._run_repo = run_repo
         self._registry = registry
         self._anomaly_store = anomaly_store
+        self._anomaly_query = anomaly_query
         self._user_service = user_service
         self._suite_repo = suite_repo
         self._schedule_repo = schedule_repo
@@ -73,12 +81,42 @@ class InsightsService:
 
     # ── 이상징후 인박스 ─────────────────────────────────────────────────────
     async def list_anomalies(self, allowed_system_codes: list[str] | None = None) -> dict[str, Any]:
-        runs = await self._run_repo.list_all_runs()
+        index_rows = await self._anomaly_query.list_page(allowed_system_codes)
         handlings = {h.module_run_id: h for h in await self._anomaly_store.list()}
+        enrichments = await self._load_anomaly_enrichments(index_rows)
         systems = self._registry.list_systems()
-        return build_anomaly_items(
-            systems, runs, handlings, allowed_system_codes=allowed_system_codes
+        return build_anomaly_items_from_index(
+            systems,
+            index_rows,
+            enrichments,
+            handlings,
+            allowed_system_codes=allowed_system_codes,
         )
+
+    async def _load_anomaly_enrichments(self, index_rows) -> dict[str, AnomalyModuleEnrichment]:
+        enrichments: dict[str, AnomalyModuleEnrichment] = {}
+        for row in index_rows:
+            try:
+                run = await self._run_repo.get_run(row.run_id)
+            except KeyError:
+                continue
+            module = next((m for m in run.modules if m.module_id == row.module_id), None)
+            if module is None:
+                continue
+            analysis = module.failure_analysis
+            occurred_at = row.ended_at or module_occurred_at(run, module)
+            enrichments[row.module_run_id] = AnomalyModuleEnrichment(
+                module_name=module.name,
+                system_name=run.system_name,
+                triggered_by=run.triggered_by,
+                current_url=module.current_url,
+                message=module.message,
+                screenshot=screenshot_url(module),
+                ai_summary=analysis.user_summary if analysis else None,
+                ai_category=analysis.category if analysis else None,
+                occurred_at=occurred_at,
+            )
+        return enrichments
 
     async def list_assignees(self, allowed_system_codes: list[str] | None = None) -> list[dict]:
         if self._user_service is None:
