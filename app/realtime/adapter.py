@@ -30,6 +30,15 @@ class RealtimeNotificationAdapter:
     async def stop(self) -> None:
         pass
 
+    def disable_fanout(self) -> None:
+        """Redis 연결 실패 시 로컬-only 로 강등한다(어댑터 재할당이 아니라 내부 상태 변경).
+
+        이 어댑터 인스턴스는 이미 run_service/suite_service/RealtimeProjector 에
+        참조로 주입돼 있으므로, 컨테이너 필드를 새 인스턴스로 바꿔치기해도 그
+        의존자들은 여전히 옛 인스턴스를 본다. fanout 을 여기서 끊어야 실제로 반영된다.
+        """
+        self._fanout = None
+
     async def publish(self, event: DashboardEvent) -> None:
         await self._listeners.publish(event.run_id, event)
         if self._fanout is not None:
@@ -63,6 +72,10 @@ class SuiteRealtimeNotificationAdapter:
 
     async def stop(self) -> None:
         pass
+
+    def disable_fanout(self) -> None:
+        """Redis 연결 실패 시 로컬-only 로 강등한다(어댑터 재할당이 아니라 내부 상태 변경)."""
+        self._fanout = None
 
     async def publish(self, event: SuiteEvent) -> None:
         await self._listeners.publish(event.suite_id, event)
