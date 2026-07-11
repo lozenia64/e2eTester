@@ -378,8 +378,8 @@ class AppContainer:
                     exc_info=True,
                 )
                 self.redis_fanout = None
-                self.realtime = RealtimeNotificationAdapter()
-                self.suite_realtime = SuiteRealtimeNotificationAdapter()
+                self.realtime.disable_fanout()
+                self.suite_realtime.disable_fanout()
         await self.realtime.start()
         await self.suite_realtime.start()
         await self.user_service.seed_admin(

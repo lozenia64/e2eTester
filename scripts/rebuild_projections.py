@@ -7,6 +7,9 @@ import argparse
 import asyncio
 import hashlib
 import json
+import sqlite3
+import tempfile
+from pathlib import Path
 
 from _bootstrap import ensure_repo_root_on_path
 
@@ -30,7 +33,9 @@ _PROJECTION_TABLES = (
 
 async def _fingerprint_table(db: SqliteDatabase, table: str) -> str:
     rows = await db.fetchall(f"SELECT * FROM {table} ORDER BY rowid")
-    payload = json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str)
+    payload = json.dumps(
+        [dict(row) for row in rows], ensure_ascii=False, sort_keys=True, default=str
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -57,13 +62,33 @@ async def rebuild(db_path: str) -> int:
     return len(events)
 
 
+def _backup_db_file(src_path: str, dst_path: str) -> None:
+    """WAL 체크포인트를 포함해 라이브 DB를 안전하게 복사한다(원본 미변경)."""
+    src_conn = sqlite3.connect(src_path)
+    dst_conn = sqlite3.connect(dst_path)
+    try:
+        src_conn.backup(dst_conn)
+    finally:
+        dst_conn.close()
+        src_conn.close()
+
+
 async def validate_rebuild(db_path: str) -> list[str]:
-    """라이브 프로젝션과 이벤트 재생 결과를 비교한다."""
+    """라이브 프로젝션과 이벤트 재생 결과를 비교한다.
+
+    검증은 원본 DB를 건드리지 않는다: 복사본에서 rebuild 를 수행하고, 그 결과만
+    원본의 라이브 프로젝션과 비교한다.
+    """
     db = SqliteDatabase(db_path)
     await ensure_schema(db)
     before = await snapshot_projection_fingerprints(db)
-    event_count = await rebuild(db_path)
-    after = await snapshot_projection_fingerprints(db)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        copy_path = str(Path(tmp_dir) / "validate_copy.db")
+        await asyncio.to_thread(_backup_db_file, db_path, copy_path)
+        event_count = await rebuild(copy_path)
+        copy_db = SqliteDatabase(copy_path)
+        after = await snapshot_projection_fingerprints(copy_db)
 
     mismatches: list[str] = []
     for table in _PROJECTION_TABLES:

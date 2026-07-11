@@ -21,6 +21,8 @@ class ModuleSnapshot:
     ended_at: datetime | None
     duration_ms: int | None
     retry_count: int
+    attempt: int
+    max_attempts: int
     message: str
     artifact_count: int
     artifacts: tuple[str, ...]
@@ -43,6 +45,8 @@ class ModuleSnapshot:
             ended_at=copied.ended_at,
             duration_ms=copied.duration_ms,
             retry_count=copied.retry_count,
+            attempt=copied.attempt,
+            max_attempts=copied.max_attempts,
             message=copied.message,
             artifact_count=copied.artifact_count,
             artifacts=tuple(copied.artifacts),
@@ -214,6 +218,8 @@ def _module_snapshot_to_run_module(module: ModuleSnapshot) -> RunModule:
         ended_at=module.ended_at,
         duration_ms=module.duration_ms,
         retry_count=module.retry_count,
+        attempt=module.attempt,
+        max_attempts=module.max_attempts,
         message=module.message,
         artifact_count=module.artifact_count,
         artifacts=list(module.artifacts),
