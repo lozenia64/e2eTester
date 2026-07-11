@@ -35,6 +35,9 @@ class InMemoryRunRepository:
             self._runs[run.run_id] = RunRecord.from_domain(run)
         return run
 
+    async def append_events(self, events: list[DomainEvent]) -> None:
+        del events  # 인메모리 어댑터는 이벤트 스토어/아웃박스를 갖지 않는다(테스트 전용).
+
     async def get_run(self, run_id: str) -> Run:
         async with self._lock:
             return self._runs[run_id].to_domain()

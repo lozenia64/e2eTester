@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.models import PendingExecution, Run, RunModule
+from app.domain.events import run_deleted as domain_run_deleted
 from app.domain.execution_policy import module_policy_from_definition
 from app.domain.run_aggregate import RunAggregate
 from app.domain.run_state_machine import (
@@ -290,6 +291,9 @@ class RunService:
 
         await self._log_store.delete_by_run_id(run_id)
         await self._write_repo.delete_run(run_id)
+        # 프로젝션의 파생 행(이력 인덱스·이상건 인박스 등)도 함께 정리되도록 삭제 사실을
+        # 이벤트로 발행한다(아웃박스 경유 — 리빌드 재생 시에도 같은 순서로 재적용된다).
+        await self._write_repo.append_events([domain_run_deleted(run_id)])
         self._artifact_manager.delete_run_artifacts(run_id)
         await self._input_store.delete(run_id)
         await self._control_store.delete(run_id)
@@ -329,6 +333,7 @@ class RunService:
                 continue
             await self._log_store.delete_by_run_id(run.run_id)
             await self._write_repo.delete_run(run.run_id)
+            await self._write_repo.append_events([domain_run_deleted(run.run_id)])
             self._artifact_manager.delete_run_artifacts(run.run_id)
             await self._input_store.delete(run.run_id)
             await self._control_store.delete(run.run_id)

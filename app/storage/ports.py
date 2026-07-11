@@ -27,7 +27,12 @@ from app.storage.query_rows import (
     AnomalyInboxRow,
     DailyRunSummaryRow,
     DailyStatusRow,
+    ModuleHistoryRow,
+    Page,
+    RunSummaryFilter,
+    RunSummaryRow,
     StatsRollupRow,
+    SuiteSummaryRow,
 )
 
 
@@ -46,9 +51,10 @@ class RunWriteRepositoryPort(Protocol):
 
 
 class RunHistoryQueryPort(Protocol):
-    """Run 이력·집계용 **읽기** 쿼리 경계(인덱스/프로젝션 기반).
+    """Run 이력 조회 포트 (**deprecated** — WP-A4 에서 소비처 전환 후 삭제).
 
-    전체 ``runs`` 테이블 스캔 대신 ``run_history_index`` 등 프로젝션을 조회한다.
+    ``list[Run]`` 을 반환하는 blob 재수화 경로다. 신규 코드는 ``RunSummaryQueryPort``/
+    ``ModuleHistoryQueryPort`` 를 사용한다.
     """
 
     async def list_all_runs(self) -> list[Run]: ...
@@ -62,6 +68,47 @@ class RunHistoryQueryPort(Protocol):
     async def list_waiting_input_runs(self) -> list[Run]: ...
     async def last_finished_at_by_system(self) -> dict[str, datetime]: ...
     async def find_previous_finished_run(self, run: Run) -> Run | None: ...
+
+
+class RunSummaryQueryPort(Protocol):
+    """Run 요약 목록 **읽기** 쿼리 경계 — ``run_history_index`` 프로젝션 전용.
+
+    화면 모양(screen-shaped) 행만 반환한다. 도메인 엔티티(``Run``)는 반환하지 않는다 —
+    필터·정렬·페이지는 전부 SQL 로 수행되고(단일 SELECT), blob 재수화는 타입 수준에서
+    불가능하다. 단건 애그리거트 로드가 필요한 상세/쓰기 경로는 ``RunWriteRepositoryPort``
+    를 쓴다.
+    """
+
+    async def list_summaries(self, query: RunSummaryFilter, page: Page) -> list[RunSummaryRow]: ...
+    async def count(self, query: RunSummaryFilter) -> int: ...
+    async def counts_by_status(self) -> dict[str, int]: ...
+    async def list_run_ids(self, query: RunSummaryFilter) -> list[str]: ...
+    async def last_finished_at_by_system(self) -> dict[str, datetime]: ...
+    async def find_previous_finished_run_id(
+        self, system_code: str, before: datetime, exclude_run_id: str
+    ) -> str | None: ...
+
+
+class ModuleHistoryQueryPort(Protocol):
+    """모듈 실행 이력 **읽기** 쿼리 경계 — ``module_history_index`` 프로젝션 전용.
+
+    인사이트(헬스/타임라인/딥다이브)·사용량 통계·일간 소요시간이 소비한다.
+    """
+
+    async def list_for_system(
+        self, system_code: str, *, limit: int | None = None
+    ) -> list[ModuleHistoryRow]: ...
+    async def list_for_runs(self, run_ids: list[str]) -> list[ModuleHistoryRow]: ...
+    async def list_between(
+        self, since: datetime | None, until: datetime | None
+    ) -> list[ModuleHistoryRow]: ...
+
+
+class SuiteSummaryQueryPort(Protocol):
+    """Suite 요약 목록 **읽기** 쿼리 경계 — ``suite_history_index`` 프로젝션 전용."""
+
+    async def list_summaries(self, *, limit: int | None = None) -> list[SuiteSummaryRow]: ...
+    async def counts_by_status(self) -> dict[str, int]: ...
 
 
 class RunRepositoryPort(

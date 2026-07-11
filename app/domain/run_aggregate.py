@@ -218,6 +218,8 @@ class RunAggregate:
             domain_events.module_failure_analysis_attached(
                 self._state.run_id,
                 module.module_id,
+                category=analysis.category if analysis else None,
+                user_summary=analysis.user_summary if analysis else None,
             )
         )
 
@@ -399,6 +401,8 @@ class RunAggregate:
                 ended_at=module.ended_at,
                 duration_ms=module.duration_ms,
                 created_by_user_id=self._state.created_by_user_id,
+                current_url=module.current_url,
+                artifacts=module.artifacts,
             )
         )
 

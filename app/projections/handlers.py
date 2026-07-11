@@ -16,6 +16,7 @@ from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 PROJECTION_NAMES = (
     "run_history_index",
     "suite_history_index",
+    "module_history_index",
     "anomaly_inbox_index",
     "daily_system_status",
     "stats_rollup",
@@ -23,6 +24,8 @@ PROJECTION_NAMES = (
     "system_last_finished",
     "run_comparison_cache",
 )
+# RunDeleted 는 Run 단위 파생 행(run/module 이력·이상건 인박스·비교 캐시)을 정리한다.
+# 일간 현황·통계 롤업은 "그날 점검이 있었다"는 사실의 기록이므로 Run 삭제에도 보존한다.
 
 _TERMINAL_RUN_STATUSES = {
     RunStatus.PASSED,
@@ -139,6 +142,8 @@ class ProjectionHandlers:
     # --- run_history_index --------------------------------------------------
 
     async def _build_run_history_index(self, event: DomainEvent) -> list[Mutation]:
+        if event.event_type == "RunDeleted":
+            return [("DELETE FROM run_history_index WHERE run_id = ?", (event.aggregate_id,))]
         summary = event.payload.get("run_summary")
         if summary is not None:
             # fat event 경로: 애그리거트가 발행 시점에 계산한 요약으로 전체 행을 upsert 한다.
@@ -232,9 +237,70 @@ class ProjectionHandlers:
             )
         ]
 
+    # --- module_history_index -------------------------------------------------
+
+    async def _build_module_history_index(self, event: DomainEvent) -> list[Mutation]:
+        if event.event_type == "RunDeleted":
+            return [("DELETE FROM module_history_index WHERE run_id = ?", (event.aggregate_id,))]
+        if event.event_type == "ModuleFailureAnalysisAttached":
+            return [
+                (
+                    """
+                    UPDATE module_history_index
+                    SET ai_category = ?, ai_summary = ?
+                    WHERE run_id = ? AND module_id = ?
+                    """,
+                    (
+                        event.payload.get("category"),
+                        event.payload.get("user_summary"),
+                        event.aggregate_id,
+                        event.payload["module_id"],
+                    ),
+                )
+            ]
+        if event.event_type != "ModuleFinished":
+            return []
+        payload = event.payload
+        if "module_name" not in payload:
+            return []  # 구(thin) 이벤트 — 마이그레이션 재합성 전까지 모듈 이력은 채우지 않는다.
+        run_summary = payload.get("run_summary") or {}
+        return [
+            (
+                """
+                INSERT OR REPLACE INTO module_history_index
+                    (run_id, module_id, system_code, module_name, status, message,
+                     started_at, ended_at, duration_ms, current_url, artifacts,
+                     ai_category, ai_summary, suite_id, schedule_id, triggered_by,
+                     requested_at, created_by_user_id, created_by_user_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.aggregate_id,
+                    payload["module_id"],
+                    payload["system_code"],
+                    payload.get("module_name"),
+                    payload["status"],
+                    payload.get("message"),
+                    payload.get("started_at"),
+                    payload.get("ended_at"),
+                    payload.get("duration_ms"),
+                    payload.get("current_url"),
+                    json.dumps(payload.get("artifacts", []), ensure_ascii=False),
+                    payload.get("suite_id"),
+                    payload.get("schedule_id"),
+                    run_summary.get("triggered_by"),
+                    run_summary.get("requested_at"),
+                    payload.get("created_by_user_id"),
+                    run_summary.get("created_by_user_name"),
+                ),
+            )
+        ]
+
     # --- anomaly_inbox_index ------------------------------------------------
 
     async def _build_anomaly_inbox_index(self, event: DomainEvent) -> list[Mutation]:
+        if event.event_type == "RunDeleted":
+            return [("DELETE FROM anomaly_inbox_index WHERE run_id = ?", (event.aggregate_id,))]
         if event.event_type != "ModuleFinished":
             return []
         status = ModuleStatus(event.payload["status"])
@@ -399,6 +465,8 @@ class ProjectionHandlers:
     # --- run_comparison_cache -----------------------------------------------
 
     async def _build_run_comparison_cache(self, event: DomainEvent) -> list[Mutation]:
+        if event.event_type == "RunDeleted":
+            return [("DELETE FROM run_comparison_cache WHERE run_id = ?", (event.aggregate_id,))]
         if event.event_type != "RunComparisonAttached":
             return []
         if "newly_failed" in event.payload:

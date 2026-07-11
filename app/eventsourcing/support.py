@@ -177,6 +177,34 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         "CREATE INDEX IF NOT EXISTS idx_suite_history_requested ON suite_history_index (requested_at)",
         "CREATE INDEX IF NOT EXISTS idx_suite_history_user ON suite_history_index (created_by_user_id)",
         """
+        CREATE TABLE IF NOT EXISTS module_history_index (
+            run_id TEXT NOT NULL,
+            module_id TEXT NOT NULL,
+            system_code TEXT NOT NULL,
+            module_name TEXT,
+            status TEXT NOT NULL,
+            message TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            duration_ms INTEGER,
+            current_url TEXT,
+            artifacts TEXT NOT NULL DEFAULT '[]',
+            ai_category TEXT,
+            ai_summary TEXT,
+            suite_id TEXT,
+            schedule_id TEXT,
+            triggered_by TEXT,
+            requested_at TEXT,
+            created_by_user_id TEXT,
+            created_by_user_name TEXT,
+            PRIMARY KEY (run_id, module_id)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_module_history_system
+        ON module_history_index (system_code, requested_at)
+        """,
+        """
         CREATE TABLE IF NOT EXISTS run_comparison_cache (
             run_id TEXT PRIMARY KEY,
             baseline_run_id TEXT,

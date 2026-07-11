@@ -82,8 +82,10 @@ def module_finished(
     ended_at: datetime | None = None,
     duration_ms: int | None = None,
     created_by_user_id: str | None = None,
+    current_url: str | None = None,
+    artifacts: list[str] | None = None,
 ) -> DomainEvent:
-    # 프로젝션(이상건 인박스·일간 현황)이 blob 재수화 없이 행을 만들 수 있도록
+    # 프로젝션(이상건 인박스·일간 현황·모듈 이력)이 blob 재수화 없이 행을 만들 수 있도록
     # 모듈 종료 사실의 파생 값을 payload 에 함께 싣는다(fat event).
     return DomainEvent.create(
         "Run",
@@ -101,6 +103,8 @@ def module_finished(
             "ended_at": ended_at.isoformat() if ended_at else None,
             "duration_ms": duration_ms,
             "created_by_user_id": created_by_user_id,
+            "current_url": current_url,
+            "artifacts": list(artifacts or []),
         },
     )
 
@@ -201,13 +205,29 @@ def run_partial_rerun_started(run_id: str, from_module_id: str) -> DomainEvent:
     )
 
 
-def module_failure_analysis_attached(run_id: str, module_id: str) -> DomainEvent:
+def module_failure_analysis_attached(
+    run_id: str,
+    module_id: str,
+    *,
+    category: str | None = None,
+    user_summary: str | None = None,
+) -> DomainEvent:
+    # 모듈 이력 프로젝션이 실패 유형 분포·요약을 blob 재수화 없이 채우도록 동봉한다(fat event).
     return DomainEvent.create(
         "Run",
         run_id,
         "ModuleFailureAnalysisAttached",
-        {"module_id": module_id},
+        {"module_id": module_id, "category": category, "user_summary": user_summary},
     )
+
+
+def run_deleted(run_id: str) -> DomainEvent:
+    """Run 삭제(보존 정리·수동 삭제) — 프로젝션이 파생 행을 함께 정리하도록 발행한다.
+
+    삭제는 종료된 Run 에 대한 저장소 수준 작업이라 애그리거트가 아니라 서비스가 발행한다.
+    리빌드 재생 시에도 같은 순서로 재적용되어 삭제된 Run 의 행이 되살아나지 않는다(결정성).
+    """
+    return DomainEvent.create("Run", run_id, "RunDeleted", {})
 
 
 # --- Suite events ---------------------------------------------------------
