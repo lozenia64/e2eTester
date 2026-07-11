@@ -59,7 +59,8 @@ def main() -> int:
         gates_mod = _load_gates_module(workspace)
         gate_names = gates_mod.resolve_gates(profile, risk_flags or None)
     except (FileNotFoundError, KeyError) as exc:
-        print(json.dumps({"error": str(exc)}))
+        msg = exc.args[0] if isinstance(exc, KeyError) and exc.args else str(exc)
+        print(json.dumps({"error": msg}))
         return 1
 
     results: dict[str, dict] = {}

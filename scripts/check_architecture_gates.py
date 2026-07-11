@@ -31,7 +31,7 @@ LIST_RUNS_ALLOWED_SUFFIXES = (
 )
 LIST_RUNS_PATTERN = re.compile(r"\.list_runs\s*\(")
 
-# AG-003: domain 레이어에서 금지하는 import 모듈 (순수성 — clock/dataclasses/enums 만 허용)
+# AG-003: domain 레이어 금지 import 목록 (denylist — I/O·async 런타임 모듈 차단)
 DOMAIN_FORBIDDEN_IMPORTS = (
     "asyncio",
     "sqlite3",

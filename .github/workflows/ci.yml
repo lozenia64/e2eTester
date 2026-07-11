@@ -123,9 +123,9 @@ jobs:
     name: ci / security
     needs: changes
     if: >-
-      needs.changes.outputs.code == 'true' && (
-        needs.changes.outputs.security == 'true' ||
-        github.event_name == 'schedule'
+      github.event_name == 'schedule' || (
+        needs.changes.outputs.code == 'true' &&
+        needs.changes.outputs.security == 'true'
       )
     runs-on: ubuntu-latest
     steps:

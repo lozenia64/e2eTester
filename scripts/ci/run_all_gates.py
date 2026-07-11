@@ -54,7 +54,7 @@ def main() -> int:
     try:
         gate_names = resolve_gates(args.profile, risk_flags or None)
     except KeyError as exc:
-        print(json.dumps({"error": str(exc)}))
+        print(json.dumps({"error": exc.args[0] if exc.args else str(exc)}))
         return 1
 
     if not gate_names:
