@@ -72,8 +72,14 @@ def main() -> int:
 
     run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
     workspace = Path(run_data["workspace"])
-    profile = args.profile or run_data.get("pipeline_profile") or "step_fix"
-    gate_names = PROFILE_GATES.get(profile, PROFILE_GATES["step_fix"])
+    profile = args.profile or run_data.get("pipeline_profile")
+    if not profile:
+        print(json.dumps({"error": "pipeline_profile missing; run intake first or pass --profile"}))
+        return 1
+    if profile not in PROFILE_GATES:
+        print(json.dumps({"error": f"unknown pipeline_profile: {profile}"}))
+        return 1
+    gate_names = PROFILE_GATES[profile]
 
     results: dict[str, dict] = {}
     for name in gate_names:

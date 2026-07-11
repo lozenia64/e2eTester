@@ -18,7 +18,7 @@ PIPELINE_PROFILES = [
     "spike",
 ]
 
-SYSTEM_CODES = ["hom", "mhm", "fp", "hrp", "hwtc", "chbot", None]
+SYSTEM_CODES = {"hom", "mhm", "fp", "hrp", "hwtc", "chbot"}
 
 AGENT_ARTIFACTS: dict[str, dict] = {
     "e2e-intake": {
@@ -104,6 +104,8 @@ def validate_json(path: Path, required: list[str], if_false: list[str] | None = 
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         return [f"invalid JSON: {e}"]
+    if not isinstance(data, dict):
+        return [f"JSON root must be an object, got {type(data).__name__}"]
     for key in required:
         if key not in data:
             errors.append(f"missing field: {key}")
@@ -114,14 +116,26 @@ def validate_json(path: Path, required: list[str], if_false: list[str] | None = 
     return errors
 
 
+def normalize_system_code(value: object) -> str | None:
+    """Accept JSON null or LLM-emitted string aliases for platform-wide scope."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value in SYSTEM_CODES:
+            return value
+        if value.lower() == "null":
+            return None
+    return "__invalid__"
+
+
 def validate_intake(data: dict) -> list[str]:
     errors: list[str] = []
     profile = data.get("pipeline_profile")
     if profile not in PIPELINE_PROFILES:
         errors.append(f"invalid pipeline_profile: {profile}")
-    system_code = data.get("system_code")
-    if system_code not in SYSTEM_CODES:
-        errors.append(f"invalid system_code: {system_code}")
+    system_code = normalize_system_code(data.get("system_code"))
+    if system_code == "__invalid__":
+        errors.append(f"invalid system_code: {data.get('system_code')}")
     graph = data.get("agent_graph")
     if not isinstance(graph, list) or len(graph) == 0:
         errors.append("agent_graph must be a non-empty list")
@@ -150,7 +164,8 @@ def main() -> int:
         if agent == "e2e-intake" and path.exists():
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                errors.extend(validate_intake(data))
+                if isinstance(data, dict):
+                    errors.extend(validate_intake(data))
             except json.JSONDecodeError:
                 pass
     elif filename.endswith(".md"):

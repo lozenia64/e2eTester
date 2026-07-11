@@ -29,6 +29,7 @@ All artifacts live in `<run_dir>`. Paths are relative to run directory.
 ```
 
 Note: `agent_graph` excludes E01 and QC agents; manager expands QC after E08.
+For `system_code`, prefer JSON `null` for platform-wide scope; the validator also accepts the string `"null"` if a subagent emits it literally.
 
 ### e2e-domain-scout → `context-map.md`
 
