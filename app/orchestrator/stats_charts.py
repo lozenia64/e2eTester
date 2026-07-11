@@ -79,6 +79,10 @@ def _axis_style(*, showgrid: bool = True) -> dict[str, Any]:
     )
 
 
+def _axis_title(text: str) -> dict[str, Any]:
+    return dict(text=text, font=dict(size=11, color=AXIS, family=FONT_FAMILY))
+
+
 def _system_runs_chart(by_system: list[SystemUsageStat]) -> dict[str, Any]:
     rows = [s for s in by_system if s.runs > 0]
     if not rows:
@@ -186,7 +190,7 @@ def _system_savings_chart(by_system: list[SystemUsageStat]) -> dict[str, Any]:
     fig.update_layout(
         **_base_layout(),
         bargap=0.28,
-        xaxis=dict(title="분", titlefont=dict(size=11, color=AXIS), **_axis_style()),
+        xaxis=dict(title=_axis_title("분"), **_axis_style()),
         yaxis=dict(autorange="reversed", **_axis_style(showgrid=False)),
         showlegend=False,
     )
