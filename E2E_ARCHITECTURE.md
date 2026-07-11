@@ -30,34 +30,30 @@
 
 ```text
 Browser
-  -> FastAPI app
+  -> FastAPI app (app/main.py — lifespan만; 배선은 AppContainer)
+      -> AppContainer (app/composition/container.py — 컴포지션 루트: 저장소·게이트웨이·OutboxRelay·서비스 조립)
       -> RunService (실행 순서 + 부작용 조율만)
-          -> RunExecutionQueue        (감독되는 실행 작업 큐: 워커 풀·예외 격리·동시성 제한)
+          -> ProfilePartitionedRunQueue / JobQueuePort (execution_profile 별 동시성: heavy/light/interactive)
           -> RunStateMachine / RunAggregate (app/domain/ — 결정 전이표 + 상태 변이·불변식, 순수)
-          -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml)
-          -> RunRepositoryPort + RunLogStorePort + RunControlStorePort + RunInputStorePort
-                                      (기본 Sqlite* 어댑터: SQLite 영속 / InMemory 대체 가능)
+          -> RunSnapshot / SuiteSnapshot (app/domain/snapshots.py — aggregate.to_snapshot() 읽기 전용 스냅샷)
+          -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml, execution_profile 포함)
+          -> RunWriteRepositoryPort + RunHistoryQueryPort + RunLogStorePort + RunControlStorePort + RunInputStorePort
+          -> CQRS 조회 포트: AnomalyInboxQueryPort / DailyStatusQueryPort / StatsQueryPort (projection 테이블)
           -> ExecutionGateway PORT    (app/execution/gateway.py — 오케스트레이션 ↔ 실행 경계)
               -> CompositeExecutionGateway (execution_mode 로 어댑터 라우팅)
-                  -> LocalExecutionGateway (in-process: 세션별 스레드 풀·런타임 수명·로그 브리지)
-                      -> WorkflowExecutor (RepHomepageExecutor(+ChannelProfile) / access_common executor)
-                          -> Shared Playwright browser session
-                              -> Channel step adapters (app/systems/{code}/steps/*.py)
-                                  -> Site
-                  -> SimulatedExecutionGateway (execution_mode="simulated" 테스트 더블)
-          -> EventBus                 (RunFinished/RunWaitingInput/RunResumed/SuiteFinished 발행)
+                  -> LocalExecutionGateway / RemoteExecutionGateway / SimulatedExecutionGateway
+                      -> WorkflowExecutor + app/automation/ (Flow + PageObject — systems/*/steps/ 삭제됨)
+                          -> Shared Playwright browser session → Site
+          -> SqliteRunWriteRepository + transactional outbox
+              -> OutboxRelay → ProjectionHandlers + EventBus + RealtimeProjector (단일 알림 파이프라인)
 
-EventBus 구독자
-  -> SuiteService (이벤트 기반 Saga — 폴링·대기 없음)
-      -> SuiteStateMachine / SuiteAggregate (app/domain/ — Run 쪽과 동형, 순수)
-      -> RunCommandPort (사가 → 하위 Run 명령 포트; RunService 가 구조적으로 만족)
-      -> SuiteRepositoryPort + SuiteControlStorePort + SuiteInputStorePort
-  -> FailureAnalysisSubscriber (AI 실패 분석) / EmailNotificationSubscriber (종료 메일)
+OutboxRelay → EventBus 구독자
+  -> SuiteService (이벤트 기반 Saga)
+      -> SuiteStateMachine / SuiteAggregate / RunCommandPort
+  -> FailureAnalysisSubscriber / EmailNotificationSubscriber
 
 FastAPI app
-  -> HTML routes (/, /runs/execute, /runs/{id}, /suites/{id}, /schedules, /anomalies, /insights, /self-healing, ...)
-  -> JSON APIs
-  -> WebSocket stream (/ws/runs, /ws/suites)
+  -> HTML routes / JSON APIs / WebSocket stream (WS payload는 OutboxRelay→RealtimeProjector 경유)
   -> Static artifacts mount
 ```
 
@@ -69,7 +65,7 @@ FastAPI app
 - AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
-- 모듈 로그와 상태 이벤트는 repository를 통해 WebSocket에 전파된다.
+- 모듈 로그와 상태 이벤트는 **OutboxRelay → RealtimeProjector** 단일 파이프라인을 통해 WebSocket에 전파된다(오케스트레이터가 저장소 리스너에 직접 publish 하지 않음).
 
 ## 4. 현재 폴더 구조
 
@@ -118,6 +114,22 @@ e2eTester/
       run_state_machine.py         # RunStateMachine: Run 실행 결정 전이표(순수)
       suite_aggregate.py           # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
       suite_state_machine.py       # SuiteStateMachine: Suite 사가 결정 전이표(순수, RunStateMachine 과 동형)
+      execution_policy.py          # ModuleExecutionPolicy / SystemExecutionPolicy (재시도·부분재실행·execution_profile)
+      snapshots.py                 # RunSnapshot / SuiteSnapshot (frozen, aggregate.to_snapshot())
+    composition/
+      container.py                 # AppContainer — 컴포지션 루트(저장소·게이트웨이·OutboxRelay·서비스 배선)
+    eventsourcing/
+      event_store.py               # SqliteEventStore (domain events append-only)
+      outbox.py                    # SqliteOutbox (transactional outbox)
+      relay.py                     # OutboxRelay → projection · EventBus · RealtimeProjector
+      support.py                   # SqliteDatabase + projection 스키마
+    projections/
+      handlers.py                  # ProjectionHandlers (CQRS read-model 테이블 갱신)
+    realtime/
+      adapter.py                   # RealtimeNotificationPort 구현
+      projector.py                 # RealtimeProjector (OutboxRelay가 WS fan-out 담당)
+      ports.py                     # RealtimeNotificationPort
+      redis_fanout.py              # Redis pub/sub fan-out (다중 API 프로세스)
     events/
       bus.py                       # EventBus + RunFinished/RunWaitingInput/RunResumed/SuiteFinished 도메인 이벤트
       subscribers/
@@ -127,7 +139,11 @@ e2eTester/
       gateway.py                   # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
       composite_gateway.py         # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       local_gateway.py             # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
+      remote_gateway.py            # RemoteExecutionGateway: worker/ HTTP API 클라이언트
       simulated_gateway.py         # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
+      profile_queue.py             # ProfilePartitionedRunQueue: execution_profile 별 JobQueue 라우팅
+      job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)
+      protocol.py                  # 워커 HTTP 프로토콜 DTO (OpenSession/RunStep/resume-from-step 등)
       run_queue.py                 # RunExecutionQueue(+JobQueue 포트): 감독되는 실행 작업 큐(워커 풀)
     healing/
       engine.py                    # SelfHealingEngine: 셀렉터 파싱→DOM 스캔→후보 검증→오버라이드(실행 스레드)
@@ -245,7 +261,11 @@ e2eTester/
       records.py                   # 영속 DTO + 매퍼(RunRecord/SuiteRecord 등): 도메인 ↔ 온디스크 스키마 분리, 로그 제외는 타입 수준
       sqlite_support.py            # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py         # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
-      sqlite_run_repository.py     # SQLite Run 상태 어댑터(기본 사용, blob 에 로그 제외)
+      sqlite_run_write_repository.py # RunWriteRepositoryPort + outbox 동시 기록
+      sqlite_run_history_query.py  # RunHistoryQueryPort (projection 인덱스)
+      sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
+      sqlite_daily_status_query.py # DailyStatusQueryPort
+      sqlite_stats_query.py        # StatsQueryPort
       sqlite_run_log_store.py      # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
       sqlite_run_control_store.py  # SQLite Run 제어 상태 어댑터(취소·OTP 재개, run_control 테이블)
       sqlite_suite_repository.py   # SQLite Suite 어댑터(기본 사용)
@@ -300,7 +320,11 @@ e2eTester/
         admin-ops.js
         admin-stats.js
         favicon.ico / favicon.svg / apple-touch-icon*.png
-    main.py                        # 컴포지션 루트 (lifespan 배선 + 아이콘 라우트 + 정적 마운트)
+    main.py                        # FastAPI 앱 팩토리 + lifespan (AppContainer.start/stop 위임)
+  worker/
+    main.py                        # out-of-process 브라우저 워커 진입점
+    http_server.py                 # ExecutionGateway HTTP surface (resume-from-step 포함)
+    session_server.py              # Playwright 세션 수명 (LocalExecutionGateway 동형)
   docs/
     DOCS_GOVERNANCE.md             # 문서 SSOT 매트릭스·PR 체크리스트
     CI.md                          # GitHub Actions·게이트 계층·branch protection 운영
@@ -485,6 +509,7 @@ e2eTester/
 - Run 취소 (`POST /api/runs/{run_id}/cancel`) — 진행 중/대기 중 Run을 `CANCELLED` 로 중단
 - Suite 취소 (`POST /api/suites/{suite_id}/cancel`) — 진행 중 Suite와 현재 시스템 Run을 함께 중단
 - 동일 입력 재실행 (`POST /api/runs/{run_id}/rerun`) — 같은 시스템·입력·모듈 선택으로 새 Run 생성
+- **부분 재실행** (`POST /api/runs/{run_id}/rerun?from_module={module_id}`) — 매니페스트 `partial_rerun_allowed` 및 `RunStateMachine.decide_partial_rerun` 정책을 통과하면 실패 모듈부터 재개(기존 브라우저 세션 `ExecutionGateway.resume_from_step` 재사용)
 - 실시간 상태 이벤트 스트리밍
 
 **참고:** OTP API는 Run이 `WAITING_INPUT` 상태로 멈춰 있을 때만 의미가 있다. 어떤 인증 수단이 이 상태를 만드는지는 각 시스템 시나리오 문서를 참고한다.
@@ -501,7 +526,8 @@ e2eTester/
 - `ExecutionGateway` 포트: 브라우저 세션 열기/단계 실행/입력 제출/종료. 스레드·런타임은 어댑터가 소유.
 - `RunComparator`(`run_comparator.py`): 직전 Run 대비 비교(저장소 의존). 종료 메일이 참조하므로 구독자가 아니라 finalize 시점에 결정적으로 계산.
 - `RunEventPublisher`(`run_event_publisher.py`): 도메인 상태를 `DashboardEvent` 로 변환·발행(WS 표현 관심사). Run 본문은 `RunView` 프로젝션을 거친다.
-- `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다(와이어 필드를 명시 선언 → 엔티티에 내부 전용 필드가 생겨도 자동으로 새지 않음). 현재 노출 형태는 기존 `run.model_dump` 와 1:1 동일. Suite 도 동일한 규율을 따른다 — `SuiteView`(`app/orchestrator/suite_view.py`)가 Suite 읽기 모델 프로젝션이며, REST 응답·`suite_*` WS payload·스냅샷이 모두 `SuiteView.dump` 를 거친다(과거에는 Suite 쪽만 `suite.model_dump` 를 직접 호출해 이 규율을 우회하고 있었다).
+- `RunView`(`run_view.py`): Run 의 **읽기 모델 프로젝션**. REST 응답·WebSocket payload·스냅샷은 엔티티를 직접 `model_dump` 하지 않고 이 프로젝션을 거쳐 나간다. 내부 경로는 `RunAggregate.to_snapshot()` → `RunSnapshot` → `RunView.from_snapshot` (애그리거트 `.run` 직접 노출 금지, AG-005). Suite 도 동일 — `SuiteAggregate.to_snapshot()` → `SuiteView.from_snapshot`.
+- `OutboxRelay`(`app/eventsourcing/relay.py`): 도메인 이벤트를 transactional outbox 에서 소비해 **단일 알림 파이프라인**을 구동한다 — (1) `ProjectionHandlers` 로 CQRS read-model 갱신, (2) `EventBus` 로 부수 관심사(Suite 사가·AI 분석·메일), (3) `RealtimeProjector` 로 WebSocket fan-out. 오케스트레이터·저장소가 WS 리스너에 직접 publish 하지 않는다.
 - `EventBus` 구독자: AI 실패 분석·종료 메일(부수 관심사).
 - `summarize_run`(`run_summary.py`): 최근 Run 요약 뷰.
 
@@ -510,8 +536,10 @@ e2eTester/
 - 모듈 상태 전이 관리, 의존성 실패 시 `BLOCKED` 처리
 - OTP 대기 상태 저장: 재개 컨텍스트(직렬화 세션 토큰 + resume index + module id)를 `RunControlStorePort`(기본 `SqliteRunControlStore`)에 영속한다. 더 이상 서비스-인스턴스 메모리 dict 가 아니다 — OTP 제출 시 토큰으로 핸들을 복원해 중단된 단계부터 재개한다. OTP 값 자체는 저장하지 않고 게이트웨이가 런타임에 직접 주입한다.
 - Run 취소(`cancel_run`): 취소 의도를 `RunControlStorePort` 에 영속(취소 컬럼과 pending 컬럼이 분리돼 동시 갱신 충돌 없음)하고, 실행 루프가 모듈 사이에서 이를 **스토어에서 최신값으로 읽어** 협력적으로 중단한다. 진행 중인 단계는 끝나거나 timeout 된 뒤 멈추며, 남은 모듈은 `CANCELLED` 로 표시한다. OTP 입력 대기 중에는 루프가 돌지 않으므로 즉시 세션을 정리하고 종료한다.
-- 동일 입력 재실행(`rerun_run`): Run 생성 시 `RunInputStorePort` 에 보관한 입력값(otp_code 미포함)으로 같은 시스템·모듈 선택의 새 Run을 만든다. 입력값은 PII 라 Run blob/이벤트 payload 로 직렬화하지 않고 전용 스토어에만 둔다(Phase 1 기본 인메모리; 암호화 SQLite 어댑터를 끼우면 재기동 후 rerun 까지 가능).
-- Run 종료(finalize) 시 `RunFinished` 도메인 이벤트 발행
+- 동일 입력 재실행(`rerun_run`): Run 생성 시 `RunInputStorePort` 에 보관한 입력값(otp_code 미포함)으로 같은 시스템·모듈 선택의 새 Run을 만든다. `from_module_id` 가 주어지면 `execution_policy`·`decide_partial_rerun` 을 거쳐 **부분 재실행**으로 기존 세션을 재개한다(`resume_from_step`).
+- Run 종료(finalize) 시 domain event + outbox 기록 → `OutboxRelay` 가 projection·EventBus·WS 를 갱신
+
+**실행 정책(재시도·부분 재실행):** `app/domain/execution_policy.py` 가 매니페스트 `execution_profile`·`max_retries`·`retryable_on`·`partial_rerun_allowed` 를 `ModuleExecutionPolicy`/`SystemExecutionPolicy` 로 해석한다. 모듈 실패 시 `RunStateMachine.decide_post_step_failure` 가 즉시 재시도(`RunAggregate.record_retry`)·부분 재실행 대상 선정·종료를 결정한다. 실행 큐는 `ProfilePartitionedRunQueue` 가 `execution_profile`(heavy/light/interactive) 별로 `E2E_RUN_CONCURRENCY_{HEAVY,LIGHT,INTERACTIVE}` 동시성을 적용한다.
 
 현재 상태 전이:
 
@@ -550,11 +578,6 @@ Module:
 - `BLOCKED`
 - `SKIPPED`
 - `CANCELLED` (Run 취소로 실행되지 않거나 중단된 모듈)
-
-아직 없는 것:
-
-- 재시도 정책
-- 실패 모듈만 부분 재실행 (현재는 `rerun_run` 으로 동일 입력 전체 재실행만 지원)
 
 ### 5.3.1 Suite Orchestrator 계층
 
@@ -616,6 +639,8 @@ SuiteStep (시스템 단위):
 manifest 에 들어 있는 정보:
 
 - 시스템 코드, 이름, 설명
+- `execution_profile` — `heavy` | `light` | `interactive` (실행 큐 프로필·동시성 파티션)
+- `max_retries` / `retryable_on` / `partial_rerun_allowed` (모듈·시스템 실행 정책, `execution_policy.py` 가 해석)
 - 폼 필드 정의
 - `show_when` 기반 조건부 노출 규칙
 - 모듈 순서와 의존성
@@ -639,21 +664,18 @@ manifest 에 들어 있는 정보:
 
 현재 구현:
 
-- `app/execution/gateway.py` (`ExecutionGateway` 포트 + `ExecutionHandle`: 오케스트레이션 ↔ 실행 경계)
-- `app/execution/composite_gateway.py` (`CompositeExecutionGateway` — 여러 어댑터를 `execution_mode` 로 라우팅하는 합성 게이트웨이. `supports`/`open_session` 은 모드 인자로, 세션 수명 메서드는 핸들의 `execution_mode` 로 어댑터 선택. 어댑터 목록 배선은 컴포지션 루트 `app/main.py` 가 소유)
-- `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터: `app/systems/loader.py` 로 executor 로딩, 세션별 단일 스레드 풀·런타임 수명·이벤트 루프↔실행 스레드 로그 브리지 소유)
-- `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — `execution_mode == "simulated"` 모듈을 브라우저 없이 매니페스트의 `simulated_duration_ms`/`simulated_outcome` 대로 처리하는 테스트 더블 어댑터. 시뮬레이션 로직이 더 이상 오케스트레이터에 인라인되지 않고 같은 포트 뒤의 어댑터로 분리됨)
-- `app/systems/loader.py` (`execution_mode` → 시스템별 executor 로딩)
-- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 시스템 무관 실행 골격: 로그 캡처·아티팩트 수집·예외→`StepExecutionResult` 변환·레지스트리 디스패치(`build_step_registry`)·OTP 일시정지를 **타입드 결과**(`StepOutcome`)로 해석(매직 문자열 `WAITING_INPUT::` 폐기, `app/runner/step_outcome.py`)·브라우저 종료 보호. `WorkflowRuntime` 최소 계약 Protocol(인프라 `executor` 필드 없음) + 단계 핸들러에 넘기는 `StepContext` **능력 인터페이스**: `log`(명시적 로깅 능력 — `print()` stdout 가로채기의 암묵적 계약을 대체, 기존 `print` 도 호환 유지)·`page`·`dialog_messages`·`artifact_dir`. `screenshot.py` 의 playwright import 를 지연시켜 엔진을 **브라우저 없이 import·단위 테스트** 가능하게 함 — `tests/test_step_context.py`/`tests/test_local_gateway_session.py`)
-- `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor(BaseWorkflowExecutor)`) — **대표홈페이지 PC·모바일 공용 시나리오 실행기**. 워크플로(메인접속→로그인→계약목록→계약상세→보험금청구→결과확인→취소→증명서)의 `build_step_registry` 디스패치 테이블이 채널 무관하게 단 한 번만 존재한다. PC/모바일 차이는 생성자에 주입되는 `ChannelProfile` 로만 표현한다.
-- `app/scenarios/rep_homepage/channel.py` (`ChannelProfile` / `ChannelSteps`) — 채널(드라이버) 기술서와 셀렉터 어댑터 계약. `app/scenarios/rep_homepage/constants.py` 는 청구 본문 문구 등 charge↔result↔cancel 도메인 결합 규칙의 SSOT.
-- `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/hom/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "hom_workflow_step"`) — PC 채널 어댑터(`hom.steps`) 주입.
-- `app/systems/mhm/channel.py` (`MOBILE_CHANNEL`, `mobile=True`) / `app/systems/mhm/executor.py` (`create_executor` 얇은 팩토리, `execution_mode = "mhm_workflow_step"`) — 모바일 채널 어댑터(`mhm.steps`) 주입.
-- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor(BaseWorkflowExecutor)`, FP/HRP/HWTC/CHBOT 공통 베이스 — `main_access` 단계 등록 + 시스템별 `build_step_registry` 가 `super().build_step_registry()` 와 병합해 단계 확장)
-- `app/systems/fp/executor.py` (`FpWorkflowExecutor`) / `app/systems/hrp/executor.py` (`HrpWorkflowExecutor`) / `app/systems/hwtc/executor.py` (`HwtcWorkflowExecutor`) / `app/systems/chbot/executor.py` (`ChbotWorkflowExecutor`)
-- `app/runner/workflow_common.py` (`StepExecutionResult`, 로그 라인 기록 `LineWriter` / `write_log_line`)
-- `app/runner/artifact_manager.py`
-- `app/systems/{system_code}/steps/` 아래 분할 모듈 파일들 — 각 채널이 공용 시나리오에 주입하는 셀렉터 어댑터
+- `app/execution/composite_gateway.py` (`CompositeExecutionGateway` — 여러 어댑터를 `execution_mode` 로 라우팅하는 합성 게이트웨이. 어댑터 목록 배선은 컴포지션 루트 `app/composition/container.py`(`AppContainer`)가 소유)
+- `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터)
+- `app/execution/remote_gateway.py` (`RemoteExecutionGateway` — `worker/` HTTP API, `resume-from-step` 포함)
+- `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — simulated 테스트 더블)
+- `app/execution/profile_queue.py` (`ProfilePartitionedRunQueue` — manifest `execution_profile` 별 큐 라우팅)
+- `app/automation/` — Automation BC (Scenario → Flow → PageObject). **site automation은 `app/systems/*/steps/` 가 아니라 여기**에 있다(6시스템 전부 이전 완료).
+- `app/systems/loader.py` (`execution_mode` → executor + ScenarioEngine 로딩)
+- `app/runner/workflow_engine.py` (`BaseWorkflowExecutor` — 로그·아티팩트·`StepOutcome`·레지스트리 디스패치)
+- `app/scenarios/rep_homepage/executor.py` (`RepHomepageExecutor`) — 대표홈페이지 PC·모바일 공용; 채널은 `ChannelProfile` + `app/automation/page_objects/{hom,mhm}/`
+- `app/systems/hom/channel.py` (`PC_CHANNEL`) / `app/systems/mhm/channel.py` (`MOBILE_CHANNEL`) — PageObject 주입만 담당(얇은 executor 팩토리)
+- `app/systems/access_common/executor.py` (`AccessWorkflowExecutor` 베이스) + fp/hrp/hwtc/chbot executor
+- `app/runner/workflow_common.py` / `app/runner/artifact_manager.py`
 
 실행 모델:
 
@@ -672,7 +694,14 @@ manifest 에 들어 있는 정보:
 
 ### 5.6 Storage 계층
 
-저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. 오케스트레이터/스케줄러는 구체 구현이 아니라 `app/storage/ports.py` 의 포트(`RunRepositoryPort`/`RunLogStorePort`/`RunControlStorePort`/`RunInputStorePort`/`SuiteRepositoryPort`/`SuiteControlStorePort`/`SuiteInputStorePort`/`ScheduleRepositoryPort`)에만 의존하므로, 인메모리 ↔ 영속(SQLite) 어댑터를 무수정으로 교체할 수 있다. 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다 — Run 은 `RunControlStorePort`/`RunInputStorePort`, Suite 는 `SuiteControlStorePort`/`SuiteInputStorePort`.
+저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. **쓰기(CQRS command)** 는 `RunWriteRepositoryPort` + domain event store + transactional outbox, **읽기(CQRS query)** 는 projection 테이블 + 전용 조회 포트다:
+
+- `RunHistoryQueryPort` — Run 이력·요약 (`list_run_summaries`, AG-001: `list_runs()` 전수 스캔 금지)
+- `AnomalyInboxQueryPort` — 이상징후 인박스 (`anomaly_inbox_index` projection)
+- `DailyStatusQueryPort` — 일간 점검 현황 (`daily_system_status` projection)
+- `StatsQueryPort` — 관리자 통계 롤업 (`stats_rollup` projection)
+
+오케스트레이터/인사이트 서비스는 구체 SQLite 어댑터가 아니라 위 포트에만 의존한다(`app/storage/ports.py`). 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다.
 
 **영속 DTO ↔ 도메인 엔티티 분리(persistence model):** 저장소 포트는 도메인(`Run`/`SuiteRun`)으로 말하지만, 어댑터는 도메인 엔티티를 직접 직렬화하지 않고 **영속 DTO**(`app/storage/records.py` 의 `RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord` + `from_domain`/`to_domain` 매퍼)로 매핑한다. SQLite·인메모리 **두 어댑터가 같은 매퍼**를 쓰므로, 과거 어댑터마다 중복되던 "로그 strip" 매직(`_PERSIST_EXCLUDE` exclude / `_persist_copy` deep-copy 후 비우기)이 사라졌다. 온디스크 JSON 형태는 종전과 동일해 기존 SQLite 데이터와 호환된다.
 
@@ -684,7 +713,7 @@ manifest 에 들어 있는 정보:
 - `app/storage/records.py` — 영속 DTO(`RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord`) + `from_domain`/`to_domain` 매퍼. 모든 어댑터가 도메인 엔티티를 직접 직렬화하지 않고 이 레코드를 거친다(영속 스키마 ↔ 도메인 분리; `RunModuleRecord` 에 `logs` 없음). `tests/test_storage_records.py` 로 라운드트립·로그 제외·DB 호환 검증.
 - `app/storage/sqlite_support.py` — `JsonTableStore`(stdlib `sqlite3` + `asyncio.to_thread`, JSON blob 테이블) · `DEFAULT_DB_PATH`
 - `app/storage/listener_registry.py` — `ListenerRegistry`(run_id/suite_id 별 WebSocket 리스너 큐, 프로세스-로컬 휘발성)
-- `app/storage/sqlite_run_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 사용되는 SQLite 어댑터**(`app/main.py` 에서 주입)
+- `app/storage/sqlite_run_write_repository.py` / `sqlite_suite_repository.py` / `sqlite_schedule_repository.py` — **기본 SQLite write 어댑터**(`AppContainer` 에서 주입)
 - `app/storage/sqlite_run_log_store.py` — **기본 사용되는** 모듈 로그 append-only SQLite 어댑터(`run_logs` 테이블, 한 줄당 한 행, `ORDER BY id` 로 입력 순서 복원)
 - `app/storage/run_repository.py` / `suite_repository.py` / `schedule_repository.py` — 인메모리 어댑터(단위 테스트·영속 불요 실행용)
 - `app/storage/run_log_store.py` — `InMemoryRunLogStore`(로그 스트림 인메모리 어댑터)
@@ -949,12 +978,12 @@ Suite (`/ws/suites/{suite_id}`):
 - Postgres 등 다중 프로세스/원격 영구 저장소 (SQLite 단일 파일 영속은 **구현됨** — 포트로 분리돼 있어 어댑터만 추가하면 됨)
 - 별도 worker process (단, `ExecutionGateway` 포트로 **교체 지점은 이미 마련됨** — `LocalExecutionGateway` 를 out-of-process 구현체로 바꾸면 됨)
 - Playwright MCP 게이트웨이 구현체 (포트는 `ExecutionGateway` 로 이미 존재)
-- 병렬 실행 스케줄러 (실행 큐의 워커 수(`E2E_RUN_CONCURRENCY`)로 동시 Run 수는 제한되지만, 영속 프로파일 단일 잠금 때문에 같은 프로파일을 쓰는 시스템은 순차 전제)
-- 재시도 정책
-- 실패 모듈만 부분 재실행 (취소·동일 입력 전체 재실행은 구현됨)
+- 병렬 실행 스케줄러 (실행 큐의 프로필별 워커 수로 동시 Run 수는 제한되지만, 동일 `execution_profile` 내 순차 전제는 유지)
 
 과거 이 목록에 있었으나 이후 **구현이 완료된 것**:
 
+- ~~재시도 정책~~ → `execution_policy.py` + `decide_post_step_failure` + `record_retry`
+- ~~실패 모듈만 부분 재실행~~ → `POST /api/runs/{run_id}/rerun?from_module=` + `resume_from_step`
 - ~~`ModuleContext`, `ModuleResult` 표준화~~ → `StepContext`(능력 인터페이스: `log`/`page`/`dialog_messages`/`artifact_dir`)와 타입드 `StepOutcome`(`StepCompleted`/`StepNeedsInput`, `app/runner/step_outcome.py`)으로 실현됨.
 - ~~오류 분류 체계~~ → 종료 결과 3분류(`PASSED` 정상 / `ANOMALY` 이상징후 / `ERROR` 점검실패, §5.3)로 실현됨. 남은 확장은 ERROR 내부의 세부 원인 분류(셀렉터/네트워크/타임아웃 등) 정도다.
 
@@ -998,7 +1027,7 @@ Suite (`/ws/suites/{suite_id}`):
 - ✅ **Transactional Outbox** + `OutboxRelay` (`app/eventsourcing/`) — domain event → projection · EventBus · WS fan-out
 - ✅ **RealtimeNotificationPort** (`app/realtime/`) — WebSocket pub/sub을 저장소에서 분리
 - ✅ PII 영속: `EncryptedSqliteRunInputStore` / `EncryptedSqliteSuiteInputStore` (AES-GCM)
-- ✅ `list_runs()` 전수 스캔 제거 — `scripts/check_architecture_gates.py` CI 게이트
+- ✅ `list_runs()` 전수 스캔 제거 — `scripts/check_architecture_gates.py` (AG-001~AG-005)
 
 ### Phase 3. 런타임 추상화 — ✅ 완료
 
@@ -1012,6 +1041,14 @@ Suite (`/ws/suites/{suite_id}`):
 - ✅ Redis session registry + heartbeat — OTP `WAITING_INPUT` 시 worker 생존이면 API 재기동 후 재개 가능
 - ✅ `RunExecutionQueue` → `JobQueuePort` (`RedisJobQueue` / `InMemoryJobQueue`)
 - 남은 작업: Playwright MCP Gateway 어댑터 (`worker/` HTTP surface 확장), 시스템/계정 단위 동시 실행 제어
+
+### Phase 3 (ideal). Operational Policy — ✅ 완료
+
+- ✅ `ModuleExecutionPolicy` / `SystemExecutionPolicy` (`app/domain/execution_policy.py`) — 매니페스트 `execution_profile`·`max_retries`·`retryable_on`·`partial_rerun_allowed`
+- ✅ `RunStateMachine.decide_post_step_failure` / `decide_partial_rerun` + `RunAggregate.record_retry` / `prepare_partial_rerun`
+- ✅ `ExecutionGateway.resume_from_step` — 부분 재실행 세션 재개
+- ✅ `ProfilePartitionedRunQueue` — `E2E_RUN_CONCURRENCY_{HEAVY,LIGHT,INTERACTIVE}` 프로필별 큐
+- ✅ `POST /api/runs/{run_id}/rerun?from_module={module_id}` + `RunCommandPort.rerun_from_module`
 
 ### Phase 5. Automation Bounded Context — ✅ 완료
 

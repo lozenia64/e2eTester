@@ -53,6 +53,8 @@ class RunModuleRecord(BaseModel):
     ended_at: datetime | None = None
     duration_ms: int | None = None
     retry_count: int = 0
+    attempt: int = 1
+    max_attempts: int = 1
     message: str = "대기 중"
     artifact_count: int = 0
     artifacts: list[str] = Field(default_factory=list)

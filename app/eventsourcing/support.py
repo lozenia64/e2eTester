@@ -221,6 +221,19 @@ async def ensure_schema(db: SqliteDatabase) -> None:
             ciphertext TEXT NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS outbox_dead_letter (
+            event_id TEXT PRIMARY KEY,
+            aggregate_type TEXT NOT NULL,
+            aggregate_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            failed_at TEXT NOT NULL,
+            error_message TEXT NOT NULL
+        )
+        """,
+        "CREATE TABLE IF NOT EXISTS suites (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
     ]
     for sql in statements:

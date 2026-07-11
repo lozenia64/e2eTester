@@ -88,6 +88,7 @@ async def cancel_run(
 @router.post("/{run_id}/rerun")
 async def rerun_run(
     run_id: str,
+    from_module: str | None = Query(default=None, alias="from_module"),
     current_user: User = Depends(get_current_user),
     run_service: RunService = Depends(get_run_service),
 ):
@@ -96,6 +97,7 @@ async def rerun_run(
             run_id,
             user_id=current_user.user_id,
             user_name=current_user.name,
+            from_module_id=from_module,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc

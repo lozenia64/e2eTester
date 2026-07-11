@@ -24,6 +24,7 @@ from app.core.status_labels import (
 
 if TYPE_CHECKING:
     from app.core.models import Run, RunModule, SystemDefinition
+    from app.storage.query_rows import DailyRunSummaryRow, DailyStatusRow
 
 # 모듈의 '오늘 점검 결과'로 채택하지 않는 상태(아직 도달 못 했거나 대상에서 제외).
 # 이 상태는 더 오래된 Run 쪽으로 계속 탐색한다.
@@ -142,6 +143,153 @@ def build_daily_dashboard(
 
     system_views = [
         _system_view(system, runs_by_system.get(system.system_code, []))
+        for system in sorted(systems, key=lambda s: s.display_order)
+    ]
+
+    totals = {
+        "systems": len(system_views),
+        "modules": sum(v["module_total"] for v in system_views),
+        "inspected": sum(v["inspected"] for v in system_views),
+        "passed": sum(v["counts"]["passed"] for v in system_views),
+        "anomaly": sum(v["counts"]["anomaly"] for v in system_views),
+        "error": sum(v["counts"]["error"] for v in system_views),
+        "running": sum(v["counts"]["running"] for v in system_views),
+        "other": sum(v["counts"]["other"] for v in system_views),
+        "not_inspected": sum(v["counts"]["not_inspected"] for v in system_views),
+    }
+    totals["pass_rate"] = (
+        round(totals["passed"] / totals["modules"] * 100) if totals["modules"] else 0
+    )
+    totals["systems_all_passed"] = sum(
+        1
+        for v in system_views
+        if v["module_total"] > 0 and v["counts"]["passed"] == v["module_total"]
+    )
+
+    return {
+        "generated_at": generated_at.isoformat(),
+        "date_label": date_label,
+        "totals": totals,
+        "systems": system_views,
+    }
+
+
+def _module_view_from_row(
+    module: RunModule | Any,
+    *,
+    status_row: DailyStatusRow | None,
+    duration_ms: int | None,
+) -> dict[str, Any]:
+    status = status_row.last_status if status_row is not None else None
+    run_id = status_row.last_run_id if status_row is not None else None
+    if status in _NON_RESULT_STATUSES:
+        status = None
+        run_id = None
+        duration_ms = None
+    tone = module_status_badge_tone(status) if status is not None else "not_inspected"
+    label = module_status_label(status) if status is not None else "미점검"
+    return {
+        "module_id": module.module_id,
+        "name": module.name,
+        "group": module.group,
+        "order": module.order,
+        "status": str(status) if status is not None else None,
+        "status_label": label,
+        "tone": tone,
+        "bucket": _module_bucket(status),
+        "run_id": run_id,
+        "duration_ms": duration_ms,
+    }
+
+
+def _system_view_from_projection(
+    system: SystemDefinition,
+    status_rows: dict[str, DailyStatusRow],
+    run_summaries: list[DailyRunSummaryRow],
+    *,
+    duration_by_module_run: dict[tuple[str, str], int | None],
+) -> dict[str, Any]:
+    modules = sorted(system.modules, key=lambda m: m.order)
+    module_views = [
+        _module_view_from_row(
+            module,
+            status_row=status_rows.get(module.module_id),
+            duration_ms=(
+                duration_by_module_run.get(
+                    (
+                        status_rows[module.module_id].last_run_id or "",
+                        module.module_id,
+                    )
+                )
+                if module.module_id in status_rows and status_rows[module.module_id].last_run_id
+                else None
+            ),
+        )
+        for module in modules
+    ]
+
+    counts = {
+        "passed": 0,
+        "anomaly": 0,
+        "error": 0,
+        "running": 0,
+        "other": 0,
+        "not_inspected": 0,
+    }
+    for view in module_views:
+        counts[view["bucket"]] += 1
+
+    module_total = len(module_views)
+    inspected = module_total - counts["not_inspected"]
+    pass_rate = round(counts["passed"] / module_total * 100) if module_total else 0
+
+    latest = run_summaries[0] if run_summaries else None
+
+    return {
+        "system_code": system.system_code,
+        "system_name": system.name,
+        "module_total": module_total,
+        "inspected": inspected,
+        "pass_rate": pass_rate,
+        "counts": counts,
+        "latest_run_id": latest.run_id if latest else None,
+        "latest_run_at": latest.requested_at.isoformat() if latest else None,
+        "latest_run_status": str(latest.status) if latest else None,
+        "latest_run_status_label": (run_status_label(latest.status) if latest else "미점검"),
+        "latest_run_tone": (run_status_badge_tone(latest.status) if latest else "not_inspected"),
+        "triggered_by": latest.triggered_by if latest else None,
+        "modules": module_views,
+    }
+
+
+def build_daily_dashboard_from_projection(
+    systems: list[SystemDefinition],
+    status_rows: list[DailyStatusRow],
+    run_summaries: list[DailyRunSummaryRow],
+    *,
+    duration_by_module_run: dict[tuple[str, str], int | None] | None = None,
+    generated_at: datetime,
+    date_label: str,
+) -> dict[str, Any]:
+    """``daily_system_status`` 프로젝션 + 당일 Run 요약으로 일간 현황을 집계한다."""
+    durations = duration_by_module_run or {}
+    status_by_system: dict[str, dict[str, DailyStatusRow]] = {}
+    for row in status_rows:
+        status_by_system.setdefault(row.system_code, {})[row.module_id] = row
+
+    summaries_by_system: dict[str, list[DailyRunSummaryRow]] = {}
+    for summary in run_summaries:
+        summaries_by_system.setdefault(summary.system_code, []).append(summary)
+    for summary_list in summaries_by_system.values():
+        summary_list.sort(key=lambda item: item.requested_at, reverse=True)
+
+    system_views = [
+        _system_view_from_projection(
+            system,
+            status_by_system.get(system.system_code, {}),
+            summaries_by_system.get(system.system_code, []),
+            duration_by_module_run=durations,
+        )
         for system in sorted(systems, key=lambda s: s.display_order)
     ]
 

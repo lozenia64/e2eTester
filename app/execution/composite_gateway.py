@@ -56,3 +56,13 @@ class CompositeExecutionGateway(ExecutionGateway):
 
     async def close_session(self, handle: ExecutionHandle) -> None:
         await self._for_mode(handle.execution_mode).close_session(handle)
+
+    async def resume_from_step(
+        self,
+        handle: ExecutionHandle,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        await self._for_mode(handle.execution_mode).resume_from_step(
+            handle, module_index, workflow_step
+        )

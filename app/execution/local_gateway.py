@@ -27,6 +27,8 @@ class _Session:
     execution_mode: str
     runtime: Any
     executor: ThreadPoolExecutor
+    resume_module_index: int | None = None
+    resume_workflow_step: str | None = None
 
 
 class LocalExecutionGateway(ExecutionGateway):
@@ -150,6 +152,16 @@ class LocalExecutionGateway(ExecutionGateway):
         await self._run_on_session_thread(
             session.executor, executor.update_otp_code, session.runtime, value
         )
+
+    async def resume_from_step(
+        self,
+        handle: ExecutionHandle,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        session = self._require_session(handle)
+        session.resume_module_index = module_index
+        session.resume_workflow_step = workflow_step
 
     async def close_session(self, handle: ExecutionHandle) -> None:
         session = self._sessions.pop(handle.session_id, None)

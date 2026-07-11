@@ -105,7 +105,7 @@ def test_record_step_result_clears_active_pointers():
     suite.active_run_id = "run_1"
     suite.awaiting_input_run_id = "run_1"
     suite.awaiting_input_prompt = "OTP"
-    SuiteAggregate(suite).record_step_result(step, SuiteStatus.PASSED)
+    SuiteAggregate(suite).record_step_result(step, SuiteStatus.PASSED, step_index=0)
     assert step.status == SuiteStatus.PASSED
     assert suite.active_run_id is None
     assert suite.awaiting_input_run_id is None

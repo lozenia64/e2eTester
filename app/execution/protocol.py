@@ -66,6 +66,11 @@ class CloseSessionRequest(BaseModel):
     session_id: str
 
 
+class ResumeFromStepRequest(BaseModel):
+    module_index: int
+    workflow_step: str
+
+
 class ErrorResponse(BaseModel):
     detail: str
 

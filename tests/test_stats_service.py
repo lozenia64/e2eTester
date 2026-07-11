@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import ModuleDefinition, Run, RunModule, SystemDefinition
 from app.orchestrator.stats_service import StatsService
+from app.storage.in_memory_stats_query import InMemoryStatsQuery
 from app.storage.run_repository import InMemoryRunRepository
 
 
@@ -76,7 +77,7 @@ async def test_saved_seconds_sums_without_per_run_truncation():
         await run_repo.create_run(_passed_run(f"run_{i}", module_id))
 
     service = StatsService(
-        run_repo=run_repo,
+        stats_query=InMemoryStatsQuery(run_repo),
         suite_repo=_FakeSuiteRepo(),
         registry=registry,
     )
@@ -128,7 +129,7 @@ async def test_usage_stats_includes_anomaly_excludes_error():
     await run_repo.create_run(_run("run_error", RunStatus.ERROR))
 
     service = StatsService(
-        run_repo=run_repo,
+        stats_query=InMemoryStatsQuery(run_repo),
         suite_repo=_FakeSuiteRepo(),
         registry=registry,
     )

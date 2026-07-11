@@ -21,6 +21,8 @@ class _Session:
     runtime: Any
     executor: ThreadPoolExecutor
     run_id: str
+    resume_module_index: int | None = None
+    resume_workflow_step: str | None = None
 
 
 class SessionServer:
@@ -121,6 +123,16 @@ class SessionServer:
         await self._run_on_session_thread(
             session.executor, executor.update_otp_code, session.runtime, value
         )
+
+    async def resume_from_step(
+        self,
+        session_id: str,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        session = self._require_session(session_id)
+        session.resume_module_index = module_index
+        session.resume_workflow_step = workflow_step
 
     async def close_session(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)

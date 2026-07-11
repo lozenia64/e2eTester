@@ -21,6 +21,7 @@ class DomainEvent:
     payload: dict[str, Any]
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     version: int = 1
+    schema_version: int = 1
 
     @staticmethod
     def create(
@@ -30,6 +31,7 @@ class DomainEvent:
         payload: dict[str, Any],
         *,
         version: int = 1,
+        schema_version: int = 1,
     ) -> DomainEvent:
         return DomainEvent(
             event_id=uuid4().hex,
@@ -38,6 +40,7 @@ class DomainEvent:
             event_type=event_type,
             payload=payload,
             version=version,
+            schema_version=schema_version,
         )
 
 
@@ -57,15 +60,15 @@ def run_started(run_id: str) -> DomainEvent:
     return DomainEvent.create("Run", run_id, "RunStarted", {})
 
 
-def run_module_queued(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunModuleQueued", {"module_id": module_id})
+def module_queued(run_id: str, module_id: str) -> DomainEvent:
+    return DomainEvent.create("Run", run_id, "ModuleQueued", {"module_id": module_id})
 
 
-def run_module_running(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunModuleRunning", {"module_id": module_id})
+def module_started(run_id: str, module_id: str) -> DomainEvent:
+    return DomainEvent.create("Run", run_id, "ModuleStarted", {"module_id": module_id})
 
 
-def run_module_completed(
+def module_finished(
     run_id: str,
     module_id: str,
     status: ModuleStatus,
@@ -77,7 +80,7 @@ def run_module_completed(
     return DomainEvent.create(
         "Run",
         run_id,
-        "RunModuleCompleted",
+        "ModuleFinished",
         {
             "module_id": module_id,
             "status": status.value,
@@ -88,8 +91,17 @@ def run_module_completed(
     )
 
 
-def run_paused_for_otp(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunPausedForOtp", {"module_id": module_id})
+def module_log_appended(run_id: str, module_id: str, message: str) -> DomainEvent:
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "ModuleLogAppended",
+        {"module_id": module_id, "message": message},
+    )
+
+
+def run_waiting_input(run_id: str, module_id: str) -> DomainEvent:
+    return DomainEvent.create("Run", run_id, "RunWaitingInput", {"module_id": module_id})
 
 
 def run_resumed(run_id: str, module_id: str) -> DomainEvent:
@@ -144,7 +156,80 @@ def run_sealed_interrupted(run_id: str) -> DomainEvent:
     return DomainEvent.create("Run", run_id, "RunSealedInterrupted", {})
 
 
+def run_module_retried(run_id: str, module_id: str, attempt: int) -> DomainEvent:
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "RunModuleRetried",
+        {"module_id": module_id, "attempt": attempt},
+    )
+
+
+def run_partial_rerun_started(run_id: str, from_module_id: str) -> DomainEvent:
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "RunPartialRerunStarted",
+        {"from_module_id": from_module_id},
+    )
+
+
+def module_failure_analysis_attached(run_id: str, module_id: str) -> DomainEvent:
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "ModuleFailureAnalysisAttached",
+        {"module_id": module_id},
+    )
+
+
 # --- Suite events ---------------------------------------------------------
+
+
+def suite_created(suite_id: str, triggered_by: str) -> DomainEvent:
+    return DomainEvent.create(
+        "Suite",
+        suite_id,
+        "SuiteCreated",
+        {"triggered_by": triggered_by},
+    )
+
+
+def suite_started(suite_id: str) -> DomainEvent:
+    return DomainEvent.create("Suite", suite_id, "SuiteStarted", {})
+
+
+def suite_step_started(suite_id: str, step_index: int) -> DomainEvent:
+    return DomainEvent.create(
+        "Suite",
+        suite_id,
+        "SuiteStepStarted",
+        {"step_index": step_index},
+    )
+
+
+def suite_step_run_linked(suite_id: str, step_index: int, run_id: str) -> DomainEvent:
+    return DomainEvent.create(
+        "Suite",
+        suite_id,
+        "SuiteStepRunLinked",
+        {"step_index": step_index, "run_id": run_id},
+    )
+
+
+def suite_step_finished(suite_id: str, step_index: int, *, error: str | None = None) -> DomainEvent:
+    payload: dict[str, Any] = {"step_index": step_index}
+    if error is not None:
+        payload["error"] = error
+    return DomainEvent.create("Suite", suite_id, "SuiteStepFinished", payload)
+
+
+def suite_waiting_input(suite_id: str, run_id: str) -> DomainEvent:
+    return DomainEvent.create("Suite", suite_id, "SuiteWaitingInput", {"run_id": run_id})
+
+
+def suite_resumed(suite_id: str) -> DomainEvent:
+    return DomainEvent.create("Suite", suite_id, "SuiteResumed", {})
 
 
 def suite_finished(suite_id: str, status: SuiteStatus) -> DomainEvent:

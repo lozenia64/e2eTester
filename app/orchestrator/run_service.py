@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.models import PendingExecution, Run, RunModule
+from app.domain.execution_policy import module_policy_from_definition
 from app.domain.run_aggregate import RunAggregate
 from app.domain.run_state_machine import (
     BlockModule,
@@ -15,14 +16,16 @@ from app.domain.run_state_machine import (
     CompleteStep,
     ExecuteModule,
     PauseForInput,
+    RejectInvalidResumePoint,
     RejectUnexpectedInput,
+    ResumeFromModule,
+    RetryModule,
     RunStateMachine,
 )
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
-from app.orchestrator.daily_dashboard import build_daily_dashboard
+from app.orchestrator.daily_dashboard import build_daily_dashboard_from_projection
 from app.orchestrator.run_comparator import RunComparator
-from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
 from app.realtime.ports import RealtimeNotificationPort
@@ -30,6 +33,7 @@ from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 from app.storage.ports import (
+    DailyStatusQueryPort,
     RunControlStorePort,
     RunHistoryQueryPort,
     RunInputStorePort,
@@ -81,6 +85,7 @@ class RunService:
         artifact_manager: ArtifactManager | None = None,
         healing_recorder: HealingRecorder | None = None,
         session_registry: RedisSessionRegistry | None = None,
+        daily_status_query: DailyStatusQueryPort | None = None,
     ) -> None:
         self._registry = registry
         self._write_repo = write_repo
@@ -94,7 +99,6 @@ class RunService:
         self._run_queue = run_queue
         self._comparator = comparator or RunComparator(history_query)
         self._planner = planner or RunPlanner()
-        self._events = RunEventPublisher(realtime)
         self._artifact_manager = artifact_manager or ArtifactManager()
         # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 더 이상 서비스-인스턴스 메모리 dict 가 아니라
         # 영속 스토어(권위 있는 단일 출처)가 소유한다. PII 입력값도 전용 스토어로 분리한다.
@@ -108,6 +112,7 @@ class RunService:
         self._healing_recorder = healing_recorder
         # 원격 모드 OTP 교차 재기동: 워커 세션 리스가 살아 있으면 WAITING_INPUT 을 봉인하지 않는다.
         self._session_registry = session_registry
+        self._daily_status_query = daily_status_query
 
     # --- 조회 -------------------------------------------------------------
 
@@ -148,7 +153,7 @@ class RunService:
         if user_id is not None:
             runs = await self._history_query.list_runs_by_user(user_id)
         else:
-            runs = await self._history_query.list_all_runs()
+            runs = await self._history_query.list_runs_with_statuses(frozenset(RunStatus))
         runs.sort(key=lambda run: run.requested_at, reverse=True)
 
         active_statuses = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
@@ -243,14 +248,38 @@ class RunService:
             systems = [s for s in systems if s.system_code in allowed]
 
         today_start_utc = schedule_today_start_utc()
-        today_runs = await self._history_query.list_runs_since(today_start_utc)
-
-        return build_daily_dashboard(
-            systems,
-            today_runs,
-            generated_at=datetime.now(UTC),
-            date_label=schedule_today_label(),
+        date_label = schedule_today_label()
+        if self._daily_status_query is None:
+            raise RuntimeError("DailyStatusQueryPort is not configured")
+        status_rows = await self._daily_status_query.list_for_date(date_label, allowed_system_codes)
+        run_summaries = await self._daily_status_query.list_run_summaries_for_date(
+            date_label, today_start_utc, allowed_system_codes
         )
+        duration_by_module_run = await self._load_daily_module_durations(status_rows)
+
+        return build_daily_dashboard_from_projection(
+            systems,
+            status_rows,
+            run_summaries,
+            duration_by_module_run=duration_by_module_run,
+            generated_at=datetime.now(UTC),
+            date_label=date_label,
+        )
+
+    async def _load_daily_module_durations(self, status_rows) -> dict[tuple[str, str], int | None]:
+        durations: dict[tuple[str, str], int | None] = {}
+        seen_runs: set[str] = set()
+        for row in status_rows:
+            if not row.last_run_id or row.last_run_id in seen_runs:
+                continue
+            seen_runs.add(row.last_run_id)
+            try:
+                run = await self._write_repo.get_run(row.last_run_id)
+            except KeyError:
+                continue
+            for module in run.modules:
+                durations[(row.last_run_id, module.module_id)] = module.duration_ms
+        return durations
 
     async def delete_run(self, run_id: str) -> None:
         run = await self._write_repo.get_run(run_id)
@@ -285,8 +314,8 @@ class RunService:
                 if requested_before.tzinfo is not None
                 else requested_before.replace(tzinfo=UTC)
             )
-        for run in await self._history_query.list_all_runs():
-            if run.status not in statuses or run.status in active:
+        for run in await self._history_query.list_runs_with_statuses(statuses):
+            if run.status in active:
                 continue
             if cutoff_utc is not None:
                 run_at = (
@@ -315,7 +344,8 @@ class RunService:
         OTP 교차 재기동을 위해 봉인하지 않는다.
         """
         count = 0
-        for run in await self._history_query.list_all_runs():
+        active_statuses = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})
+        for run in await self._history_query.list_runs_with_statuses(active_statuses):
             if run.status == RunStatus.WAITING_INPUT and self._session_registry is not None:
                 pending = await self._control_store.get_pending(run.run_id)
                 if pending is not None and await self._session_registry.is_alive(
@@ -414,7 +444,6 @@ class RunService:
         await self._input_store.put(run_id, dict(sanitized_input))
         aggregate = RunAggregate.for_new_run(run)
         await self._write_repo.create_run(run, events=aggregate.pull_events())
-        await self._events.run_event("run_created", run)
         logger.info(
             "Run 생성",
             log_event="run.created",
@@ -430,6 +459,7 @@ class RunService:
                 run_id=run.run_id,
                 kind="execute",
                 label=f"run:{run.run_id}",
+                execution_profile=system.execution_profile,
             )
         )
         return run
@@ -453,8 +483,6 @@ class RunService:
         waiting_module = aggregate.module(pending.module_id)
         aggregate.resume_after_input(waiting_module)
         await self._persist(run, aggregate)
-        await self._events.module_event("module_queued", run, waiting_module)
-        await self._events.run_event("run_resumed", run)
         logger.info(
             "Run OTP 재개", log_event="run.resumed", run_id=run_id, module_id=pending.module_id
         )
@@ -464,6 +492,7 @@ class RunService:
                 kind="resume",
                 start_index=pending.resume_index,
                 label=f"run:{run_id}:resume",
+                execution_profile=self._registry.get_execution_profile(run.system_code),
             )
         )
         return run
@@ -539,7 +568,16 @@ class RunService:
         run_id: str,
         user_id: str | None = None,
         user_name: str | None = None,
+        *,
+        from_module_id: str | None = None,
     ) -> Run:
+        if from_module_id is not None:
+            return await self.rerun_from_module(
+                run_id,
+                from_module_id,
+                user_id=user_id,
+                user_name=user_name,
+            )
         original = await self._write_repo.get_run(run_id)
         stored_input = await self._input_store.get(run_id)
         if stored_input is None:
@@ -554,6 +592,55 @@ class RunService:
             user_id=user_id or original.created_by_user_id,
             user_name=user_name or original.created_by_user_name,
         )
+
+    async def rerun_from_module(
+        self,
+        run_id: str,
+        from_module_id: str,
+        *,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> Run:
+        run = await self._write_repo.get_run(run_id)
+        if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
+            raise ValueError("진행 중인 Run 은 부분 재실행할 수 없습니다.")
+        if await self._control_store.get_pending(run_id) is not None:
+            raise ValueError("진행 중인 Run 은 부분 재실행할 수 없습니다.")
+
+        system = self._registry.get_system(run.system_code)
+        definitions = {module.module_id: module for module in system.modules}
+        if from_module_id not in definitions:
+            raise ValueError(f"알 수 없는 모듈입니다: {from_module_id}")
+
+        ordered_modules = self._planner.ordered_selected_run_modules(run)
+        module_ids = [module.module_id for module in ordered_modules]
+        definition = definitions[from_module_id]
+        decision = RunStateMachine.decide_partial_rerun(
+            from_module_id=from_module_id,
+            module_ids_in_order=module_ids,
+            partial_rerun_allowed=definition.partial_rerun_allowed,
+        )
+        if isinstance(decision, RejectInvalidResumePoint):
+            raise ValueError("이 모듈부터 부분 재실행할 수 없습니다.")
+
+        assert isinstance(decision, ResumeFromModule)
+        aggregate = RunAggregate(run)
+        aggregate.prepare_partial_rerun(decision.from_index, ordered_modules)
+        if user_id is not None:
+            run.created_by_user_id = user_id
+        if user_name is not None:
+            run.created_by_user_name = user_name
+        await self._persist(run, aggregate)
+        await self._run_queue.enqueue_run_job(
+            RunJobDescriptor(
+                run_id=run_id,
+                kind="execute",
+                start_index=decision.from_index,
+                label=f"run:{run_id}:partial-rerun",
+                execution_profile=system.execution_profile,
+            )
+        )
+        return run
 
     # --- 실행 루프(상태머신) ----------------------------------------------
 
@@ -596,7 +683,6 @@ class RunService:
         if start_index == 0:
             aggregate.begin()
             await self._persist(run, aggregate)
-            await self._events.run_event("run_started", run)
             logger.info(
                 "Run 시작", log_event="run.started", run_id=run.run_id, system_code=run.system_code
             )
@@ -621,7 +707,6 @@ class RunService:
                 if isinstance(entry, BlockModule):
                     aggregate.block_for_dependencies(module)
                     await self._persist(run, aggregate)
-                    await self._events.module_event("module_finished", run, module)
                     continue
                 assert isinstance(entry, ExecuteModule)
 
@@ -630,6 +715,7 @@ class RunService:
                 await self._transition_to_running(run, module)
 
                 definition = definitions[module.module_id]
+                module_policy = module_policy_from_definition(definition)
                 # 실행은 전적으로 ExecutionGateway 포트 뒤에서 일어난다. 실제 브라우저
                 # 실행과 시뮬레이션의 구분은 더 이상 코어에 없다(합성 게이트웨이가 모드로 라우팅).
                 # 지원하지 않는 execution_mode 면 open_session 이 예외를 던져 모듈이 명확히 실패한다.
@@ -641,6 +727,12 @@ class RunService:
                             run.run_id,
                             module.module_id,
                         )
+                        if start_index > 0 and index == start_index and definition.workflow_step:
+                            await self._gateway.resume_from_step(
+                                handle,
+                                index,
+                                definition.workflow_step,
+                            )
                     except Exception as exc:
                         await self._fail_module(run, module, exc)
                         continue
@@ -648,64 +740,84 @@ class RunService:
                 async def on_log(line: str, current_module=module, current_run=run) -> None:
                     await self._handle_module_log(current_run, current_module, line)
 
-                execution_result = await self._gateway.run_step(
-                    handle, run.run_id, definition, on_log
-                )
+                while True:
+                    execution_result = await self._gateway.run_step(
+                        handle, run.run_id, definition, on_log
+                    )
 
-                # 자가 치유 시도가 보고되면 감사 이벤트로 영속하고 패치 제안을 만든다.
-                # 기록 실패가 점검 자체를 실패시키지 않도록 격리한다.
-                if execution_result.healing_events and self._healing_recorder is not None:
-                    try:
-                        await self._healing_recorder.record_step_healing(
-                            run, module, definition, execution_result.healing_events
+                    # 자가 치유 시도가 보고되면 감사 이벤트로 영속하고 패치 제안을 만든다.
+                    # 기록 실패가 점검 자체를 실패시키지 않도록 격리한다.
+                    if execution_result.healing_events and self._healing_recorder is not None:
+                        try:
+                            await self._healing_recorder.record_step_healing(
+                                run, module, definition, execution_result.healing_events
+                            )
+                        except Exception:
+                            logger.exception(
+                                "자가 치유 이벤트 기록 실패",
+                                log_event="healing.record_failed",
+                                run_id=run.run_id,
+                                module_id=module.module_id,
+                            )
+
+                    if execution_result.status == ModuleStatus.WAITING_INPUT:
+                        cancel_requested = await self._control_store.is_cancel_requested(run.run_id)
+                        post = RunStateMachine.decide_post_step(
+                            step_status=execution_result.status,
+                            cancel_requested=cancel_requested,
+                            module_requires_user_input=definition.requires_user_input,
                         )
-                    except Exception:
-                        logger.exception(
-                            "자가 치유 이벤트 기록 실패",
-                            log_event="healing.record_failed",
-                            run_id=run.run_id,
-                            module_id=module.module_id,
+                    elif execution_result.status == ModuleStatus.PASSED:
+                        post = CompleteStep()
+                    else:
+                        cancel_requested = await self._control_store.is_cancel_requested(run.run_id)
+                        post = RunStateMachine.decide_post_step_failure(
+                            step_status=execution_result.status,
+                            cancel_requested=cancel_requested,
+                            current_attempt=module.attempt,
+                            max_attempts=module.max_attempts,
+                            retryable_on=module_policy.retryable_on,
+                            backoff_ms=module_policy.retry_backoff_ms,
                         )
 
-                # 일시정지로 멈추려는 순간에만 취소를 재확인한다(정상 종료의 취소는 다음 진입에서).
-                cancel_requested = (
-                    await self._control_store.is_cancel_requested(run.run_id)
-                    if execution_result.status == ModuleStatus.WAITING_INPUT
-                    else False
-                )
-                post = RunStateMachine.decide_post_step(
-                    step_status=execution_result.status,
-                    cancel_requested=cancel_requested,
-                    module_requires_user_input=definition.requires_user_input,
-                )
-                if isinstance(post, CancelRemaining):
-                    forced_status = RunStatus.CANCELLED
-                    await self._mark_modules_cancelled(run, ordered_modules[index:])
+                    if isinstance(post, CancelRemaining):
+                        forced_status = RunStatus.CANCELLED
+                        await self._mark_modules_cancelled(run, ordered_modules[index:])
+                        break
+                    if isinstance(post, PauseForInput):
+                        await self._pause_for_input(
+                            run, module, index, definition, handle, execution_result
+                        )
+                        should_finalize = False
+                        paused = True
+                        return
+                    if isinstance(post, RejectUnexpectedInput):
+                        await self._fail_module(
+                            run,
+                            module,
+                            RuntimeError(
+                                "모듈이 사용자 입력을 요구했으나 매니페스트에 "
+                                "requires_user_input 이 선언되지 않았습니다."
+                            ),
+                        )
+                        break
+                    if isinstance(post, RetryModule):
+                        aggregate.record_retry(module)
+                        await self._persist(run, aggregate)
+                        await asyncio.sleep(post.backoff_ms / 1000)
+                        await self._transition_to_running(run, module)
+                        continue
+                    assert isinstance(post, CompleteStep)
+
+                    self._record_module_result(aggregate, module, execution_result)
+                    aggregate.finish_timing(module)
+                    await self._persist(run, aggregate)
                     break
-                if isinstance(post, PauseForInput):
-                    await self._pause_for_input(
-                        run, module, index, definition, handle, execution_result
-                    )
-                    should_finalize = False
-                    paused = True
-                    return
-                if isinstance(post, RejectUnexpectedInput):
-                    # 매니페스트가 일시정지를 허가하지 않은 모듈이 입력을 요구함 → 정책 위반.
-                    await self._fail_module(
-                        run,
-                        module,
-                        RuntimeError(
-                            "모듈이 사용자 입력을 요구했으나 매니페스트에 "
-                            "requires_user_input 이 선언되지 않았습니다."
-                        ),
-                    )
-                    continue
-                assert isinstance(post, CompleteStep)
 
-                self._record_module_result(aggregate, module, execution_result)
-                aggregate.finish_timing(module)
-                await self._persist(run, aggregate)
-                await self._events.module_event("module_finished", run, module)
+                if forced_status == RunStatus.CANCELLED:
+                    break
+                if isinstance(post, RejectUnexpectedInput):
+                    continue
         except Exception as exc:
             forced_status = RunStatus.ERROR
             await self._mark_unexpected_run_failure(run, current_module, ordered_modules, exc)
@@ -737,13 +849,11 @@ class RunService:
         aggregate = RunAggregate(run)
         aggregate.mark_queued(module)
         await self._persist(run, aggregate)
-        await self._events.module_event("module_queued", run, module)
 
     async def _transition_to_running(self, run: Run, module: RunModule) -> None:
         aggregate = RunAggregate(run)
         aggregate.mark_running(module)
         await self._persist(run, aggregate)
-        await self._events.module_event("module_started", run, module)
 
     def _record_module_result(
         self, aggregate: RunAggregate, module: RunModule, execution_result
@@ -764,7 +874,6 @@ class RunService:
         aggregate = RunAggregate(run)
         aggregate.fail_module(module, str(exc))
         await self._persist(run, aggregate)
-        await self._events.module_event("module_finished", run, module)
 
     async def _pause_for_input(
         self,
@@ -778,8 +887,6 @@ class RunService:
         aggregate = RunAggregate(run)
         aggregate.mark_waiting_input(module, execution_result.message, execution_result.artifacts)
         await self._persist(run, aggregate)
-        await self._events.module_event("module_waiting_input", run, module)
-        await self._events.run_event("run_waiting_input", run)
         # 재개 컨텍스트(직렬화 토큰 + resume index)는 메모리 dict 가 아니라 제어 스토어가 소유한다.
         # 입력값(PII)은 start_run 에서 이미 input_store 에 보관됐다.
         await self._control_store.set_pending(
@@ -817,8 +924,6 @@ class RunService:
         changed = aggregate.cancel_modules(modules)
         if changed:
             await self._persist(run, aggregate)
-        for module in changed:
-            await self._events.module_event("module_finished", run, module)
 
     async def _mark_unexpected_run_failure(
         self,
@@ -841,7 +946,6 @@ class RunService:
         await self._handle_module_log(run, target_module, f"[fatal] {exc}")
         aggregate.mark_fatal(target_module, f"예상하지 못한 실행 오류: {exc}")
         await self._persist(run, aggregate)
-        await self._events.module_event("module_finished", run, target_module)
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
         aggregate = RunAggregate(run)
@@ -852,7 +956,6 @@ class RunService:
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.
         await self._control_store.delete(run.run_id)
-        await self._events.run_event("run_finished", run)
         # 부수 관심사(AI 실패 분석·종료 메일)는 OutboxRelay → EventBus 가 처리한다.
         logger.info(
             "Run 종료",
@@ -870,9 +973,9 @@ class RunService:
         trimmed = line.strip()
         if not trimmed:
             return
-        RunAggregate(run).note_module_message(module, trimmed)
-        # 로그는 별도 append-only 스토어로 한 줄씩 INSERT(O(1)). Run blob 은 여기서 저장하지
-        # 않는다 — 상태 전이 시점에만 save_run 한다(핫패스 full-blob 쓰기 제거). 라이브 전파는
-        # WebSocket ``module_log`` 이벤트가 담당하고, 누적 로그는 읽기 시 하이드레이션한다.
+        aggregate = RunAggregate(run)
+        aggregate.append_module_log(module, trimmed)
         await self._log_store.append(run.run_id, module.module_id, trimmed)
-        await self._events.module_log(run, module, trimmed)
+        events = aggregate.pull_events()
+        if events:
+            await self._write_repo.append_events(events)

@@ -1,15 +1,15 @@
 """이상징후 인박스 집계기(순수 함수).
 
-전 Run 을 스캔해 ANOMALY/ERROR 로 끝난 모듈(이상건)만 모으고, 각 이상건에 처리 레코드
-(``AnomalyHandling``: 미확인/확인함/처리완료·담당자·메모)를 조인한다. Run 이력은 시간순 실행
-기록일 뿐이라 "누가 봤고 조치했는지"를 담지 못하므로, 이 인박스가 미해결 이상만 모은 팀 단위
-워크리스트가 된다.
+``anomaly_inbox_index`` 프로젝션 행 + 처리 레코드를 조인해 이상건 워크리스트를 만든다.
+레거시 ``build_anomaly_items`` 는 단위 테스트용 Run 스캔 경로로 유지한다.
 
 I/O 없는 순수 함수라 브라우저·DB 없이 단위 테스트할 수 있다.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from app.core.enums import AnomalyState
@@ -29,6 +29,22 @@ from app.orchestrator.insights_common import (
 
 if TYPE_CHECKING:
     from app.core.models import Run, SystemDefinition
+    from app.storage.query_rows import AnomalyInboxRow
+
+
+@dataclass(frozen=True)
+class AnomalyModuleEnrichment:
+    """인박스 인덱스 행에 조인할 Run 모듈 상세(표시용)."""
+
+    module_name: str
+    system_name: str
+    triggered_by: str
+    current_url: str | None
+    message: str
+    screenshot: str | None
+    ai_summary: str | None
+    ai_category: str | None
+    occurred_at: datetime
 
 
 def _handling_view(handling: AnomalyHandling | None) -> dict[str, Any]:
@@ -43,6 +59,77 @@ def _handling_view(handling: AnomalyHandling | None) -> dict[str, Any]:
     }
 
 
+def _anomaly_items_payload(
+    systems: list[SystemDefinition],
+    items: list[dict[str, Any]],
+    allowed: set[str] | None,
+) -> dict[str, Any]:
+    counts = {
+        "total": len(items),
+        "unresolved": sum(1 for it in items if it["handling"]["state"] == AnomalyState.UNRESOLVED),
+        "acknowledged": sum(
+            1 for it in items if it["handling"]["state"] == AnomalyState.ACKNOWLEDGED
+        ),
+        "resolved": sum(1 for it in items if it["handling"]["state"] == AnomalyState.RESOLVED),
+        "anomaly": sum(1 for it in items if it["kind"] == "anomaly"),
+        "error": sum(1 for it in items if it["kind"] == "error"),
+    }
+    system_options = [
+        {"system_code": s.system_code, "system_name": s.name}
+        for s in systems
+        if allowed is None or s.system_code in allowed
+    ]
+    return {"items": items, "counts": counts, "systems": system_options}
+
+
+def build_anomaly_items_from_index(
+    systems: list[SystemDefinition],
+    index_rows: list[AnomalyInboxRow],
+    enrichments: dict[str, AnomalyModuleEnrichment],
+    handlings: dict[str, AnomalyHandling],
+    *,
+    allowed_system_codes: list[str] | None = None,
+) -> dict[str, Any]:
+    """``anomaly_inbox_index`` 행 + 처리 레코드로 이상건 목록을 만든다."""
+    system_names = {s.system_code: s.name for s in systems}
+    allowed = set(allowed_system_codes) if allowed_system_codes is not None else None
+
+    items: list[dict[str, Any]] = []
+    for row in index_rows:
+        if allowed is not None and row.system_code not in allowed:
+            continue
+        enrichment = enrichments.get(row.module_run_id)
+        if enrichment is None:
+            continue
+        handling = handlings.get(row.module_run_id)
+        items.append(
+            {
+                "module_run_id": row.module_run_id,
+                "run_id": row.run_id,
+                "system_code": row.system_code,
+                "system_name": enrichment.system_name
+                or system_names.get(row.system_code, row.system_code),
+                "module_id": row.module_id,
+                "module_name": enrichment.module_name,
+                "status": str(row.status),
+                "status_label": module_status_label(row.status),
+                "tone": module_status_badge_tone(row.status),
+                "kind": module_kind(row.status),
+                "occurred_at": enrichment.occurred_at.isoformat(),
+                "triggered_by": enrichment.triggered_by,
+                "current_url": enrichment.current_url,
+                "message": enrichment.message,
+                "screenshot": enrichment.screenshot,
+                "ai_summary": enrichment.ai_summary,
+                "ai_category": enrichment.ai_category,
+                "handling": _handling_view(handling),
+            }
+        )
+
+    items.sort(key=lambda it: it["occurred_at"], reverse=True)
+    return _anomaly_items_payload(systems, items, allowed)
+
+
 def build_anomaly_items(
     systems: list[SystemDefinition],
     runs: list[Run],
@@ -50,11 +137,7 @@ def build_anomaly_items(
     *,
     allowed_system_codes: list[str] | None = None,
 ) -> dict[str, Any]:
-    """이상건 목록 + 상태별 카운트를 만든다.
-
-    ``systems`` 는 시스템명 조회·권한 필터용, ``runs`` 는 전체 Run, ``handlings`` 는
-    ``module_run_id → AnomalyHandling`` 맵. ``allowed_system_codes`` 지정 시 그 시스템만.
-    """
+    """이상건 목록 + 상태별 카운트를 만든다(레거시 Run 스캔 — 단위 테스트용)."""
     system_names = {s.system_code: s.name for s in systems}
     allowed = set(allowed_system_codes) if allowed_system_codes is not None else None
 
@@ -92,22 +175,4 @@ def build_anomaly_items(
             )
 
     items.sort(key=lambda it: it["occurred_at"], reverse=True)
-
-    counts = {
-        "total": len(items),
-        "unresolved": sum(1 for it in items if it["handling"]["state"] == AnomalyState.UNRESOLVED),
-        "acknowledged": sum(
-            1 for it in items if it["handling"]["state"] == AnomalyState.ACKNOWLEDGED
-        ),
-        "resolved": sum(1 for it in items if it["handling"]["state"] == AnomalyState.RESOLVED),
-        "anomaly": sum(1 for it in items if it["kind"] == "anomaly"),
-        "error": sum(1 for it in items if it["kind"] == "error"),
-    }
-    # 시스템 필터 드롭다운용(권한 내 시스템만, 이상건 유무와 무관하게 노출).
-    system_options = [
-        {"system_code": s.system_code, "system_name": s.name}
-        for s in systems
-        if allowed is None or s.system_code in allowed
-    ]
-
-    return {"items": items, "counts": counts, "systems": system_options}
+    return _anomaly_items_payload(systems, items, allowed)

@@ -13,6 +13,7 @@ from app.execution.protocol import (
     HeartbeatRequest,
     OpenSessionRequest,
     OpenSessionResponse,
+    ResumeFromStepRequest,
     RunStepRequest,
     RunStepResponse,
     SubmitInputRequest,
@@ -122,6 +123,19 @@ class RemoteExecutionGateway(ExecutionGateway):
         finally:
             if self._session_registry is not None:
                 await self._session_registry.unregister(handle.session_id)
+
+    async def resume_from_step(
+        self,
+        handle: ExecutionHandle,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        request = ResumeFromStepRequest(module_index=module_index, workflow_step=workflow_step)
+        await self._post_json(
+            f"/sessions/{handle.session_id}/resume-from-step",
+            request.model_dump(),
+            dict,
+        )
 
     async def heartbeat_session(self, session_id: str, worker_id: str) -> bool:
         """세션 하트비트를 워커에 전달한다(리스 갱신)."""

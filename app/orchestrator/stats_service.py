@@ -5,11 +5,15 @@ from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
 from app.core.models import SystemUsageStat, UsageStats, UserUsageStat
-from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES, MODULE_ANOMALY_STATUSES
+from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.orchestrator.run_actor import load_actor_context
 from app.orchestrator.stats_charts import build_usage_charts
 from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
-from app.storage.ports import RunHistoryQueryPort, ScheduleRepositoryPort, SuiteRepositoryPort
+from app.storage.ports import (
+    ScheduleRepositoryPort,
+    StatsQueryPort,
+    SuiteRepositoryPort,
+)
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
@@ -19,14 +23,14 @@ if TYPE_CHECKING:
 class StatsService:
     def __init__(
         self,
-        run_repo: RunHistoryQueryPort,
+        stats_query: StatsQueryPort,
         suite_repo: SuiteRepositoryPort,
         registry: ModuleRegistry,
         module_settings_repo: ModuleSettingsRepositoryPort | None = None,
         user_service: UserService | None = None,
         schedule_repo: ScheduleRepositoryPort | None = None,
     ) -> None:
-        self._run_repo = run_repo
+        self._stats_query = stats_query
         self._suite_repo = suite_repo
         self._registry = registry
         self._module_settings_repo = module_settings_repo
@@ -38,16 +42,7 @@ class StatsService:
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> UsageStats:
-        all_runs = [
-            run
-            for run in await self._run_repo.list_all_runs()
-            if run.status in ADMIN_VISIBLE_RUN_STATUSES
-        ]
-
-        if from_dt is not None:
-            all_runs = [r for r in all_runs if r.requested_at >= from_dt]
-        if to_dt is not None:
-            all_runs = [r for r in all_runs if r.requested_at <= to_dt]
+        all_runs = await self._stats_query.list_usage_runs(from_dt, to_dt)
 
         system_map: dict[str, SystemUsageStat] = {}
         user_map: dict[str | None, UserUsageStat] = {}

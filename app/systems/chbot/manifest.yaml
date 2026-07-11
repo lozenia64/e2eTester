@@ -3,113 +3,129 @@ name: 챗봇(모바일)
 description: 접속 · 간편본인인증 · 계약조회 점검
 display_order: 60
 supported_auth_methods:
-  - phone
+- phone
 run_form:
-  - key: browser_mode
-    label: 브라우저 실행 모드
-    type: select
-    required: true
-    default: headed
-    help_text: headed를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열립니다.
-    options:
-      - label: 실제 브라우저 창 열기
-        value: headed
-      - label: 백그라운드 실행
-        value: headless
-  - key: name
-    label: 고객명
-    type: text
-    required: true
-    placeholder: 홍길동
-  - key: birthdate
-    label: 생년월일
-    type: text
-    required: true
-    placeholder: YYMMDD
-    help_text: 6자리(YYMMDD) 또는 8자리(YYYYMMDD) 숫자
-  - key: gender_code
-    label: 성별코드
-    type: select
-    required: true
-    default: "1"
-    help_text: 본인 정보 확인 화면의 성별코드(1~8)
-    options:
-      - label: 1 - 남성(19XX년생 내국인)
-        value: "1"
-      - label: 2 - 여성(19XX년생 내국인)
-        value: "2"
-      - label: 3 - 남성(20XX년생 내국인)
-        value: "3"
-      - label: 4 - 여성(20XX년생 내국인)
-        value: "4"
-      - label: 5 - 남성(19XX년생 외국인)
-        value: "5"
-      - label: 6 - 여성(19XX년생 외국인)
-        value: "6"
-      - label: 7 - 남성(20XX년생 외국인)
-        value: "7"
-      - label: 8 - 여성(20XX년생 외국인)
-        value: "8"
-  - key: carrier
-    label: 통신사
-    type: select
-    required: true
-    default: skt
-    options:
-      - label: SKT
-        value: skt
-      - label: KT
-        value: kt
-      - label: LG U+
-        value: lgu+
-      - label: SKT 알뜰폰
-        value: skt_mvno
-      - label: KT 알뜰폰
-        value: kt_mvno
-      - label: LG U+ 알뜰폰
-        value: lgu_mvno
-  - key: phone_number
-    label: 휴대폰 번호
-    type: text
-    required: true
-    placeholder: "01012345678"
+- key: browser_mode
+  label: 브라우저 실행 모드
+  type: select
+  required: true
+  default: headed
+  help_text: headed를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열립니다.
+  options:
+  - label: 실제 브라우저 창 열기
+    value: headed
+  - label: 백그라운드 실행
+    value: headless
+- key: name
+  label: 고객명
+  type: text
+  required: true
+  placeholder: 홍길동
+- key: birthdate
+  label: 생년월일
+  type: text
+  required: true
+  placeholder: YYMMDD
+  help_text: 6자리(YYMMDD) 또는 8자리(YYYYMMDD) 숫자
+- key: gender_code
+  label: 성별코드
+  type: select
+  required: true
+  default: '1'
+  help_text: 본인 정보 확인 화면의 성별코드(1~8)
+  options:
+  - label: 1 - 남성(19XX년생 내국인)
+    value: '1'
+  - label: 2 - 여성(19XX년생 내국인)
+    value: '2'
+  - label: 3 - 남성(20XX년생 내국인)
+    value: '3'
+  - label: 4 - 여성(20XX년생 내국인)
+    value: '4'
+  - label: 5 - 남성(19XX년생 외국인)
+    value: '5'
+  - label: 6 - 여성(19XX년생 외국인)
+    value: '6'
+  - label: 7 - 남성(20XX년생 외국인)
+    value: '7'
+  - label: 8 - 여성(20XX년생 외국인)
+    value: '8'
+- key: carrier
+  label: 통신사
+  type: select
+  required: true
+  default: skt
+  options:
+  - label: SKT
+    value: skt
+  - label: KT
+    value: kt
+  - label: LG U+
+    value: lgu+
+  - label: SKT 알뜰폰
+    value: skt_mvno
+  - label: KT 알뜰폰
+    value: kt_mvno
+  - label: LG U+ 알뜰폰
+    value: lgu_mvno
+- key: phone_number
+  label: 휴대폰 번호
+  type: text
+  required: true
+  placeholder: 01012345678
 modules:
-  - module_id: chbot.main.access
-    system_code: chbot
-    name: 메인화면 접속
-    description: 챗봇(모바일) 메인화면에 모바일 모드로 접속하고 초기 팝업을 정리합니다.
-    group: access
-    order: 10
-    depends_on: []
-    timeout_seconds: 120
-    execution_mode: chbot_workflow_step
-    workflow_name: chbot_access
-    workflow_step: main_access
-    estimated_manual_seconds: 120
-  - module_id: chbot.simple.auth
-    system_code: chbot
-    name: 간편본인인증
-    description: 계약조회 진입 후 본인 정보 확인·휴대폰 간편인증을 완료합니다.
-    group: auth
-    order: 20
-    depends_on:
-      - chbot.main.access
-    timeout_seconds: 180
-    execution_mode: chbot_workflow_step
-    workflow_name: chbot_access
-    workflow_step: simple_auth
-    requires_user_input: true
-    estimated_manual_seconds: 180
-  - module_id: chbot.contract.list
-    system_code: chbot
-    name: 계약조회
-    description: 계약 조회 기준·상태를 선택하고 정상 계약 목록과 총 건수를 확인합니다.
-    group: contract
-    order: 30
-    depends_on:
-      - chbot.simple.auth
-    timeout_seconds: 120
-    execution_mode: chbot_workflow_step
-    workflow_name: chbot_access
-    workflow_step: contract_list
-    estimated_manual_seconds: 90
+- module_id: chbot.main.access
+  system_code: chbot
+  name: 메인화면 접속
+  description: 챗봇(모바일) 메인화면에 모바일 모드로 접속하고 초기 팝업을 정리합니다.
+  group: access
+  order: 10
+  depends_on: []
+  timeout_seconds: 120
+  execution_mode: chbot_workflow_step
+  workflow_name: chbot_access
+  workflow_step: main_access
+  estimated_manual_seconds: 120
+  max_retries: 1
+  retry_backoff_ms: 300
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+- module_id: chbot.simple.auth
+  system_code: chbot
+  name: 간편본인인증
+  description: 계약조회 진입 후 본인 정보 확인·휴대폰 간편인증을 완료합니다.
+  group: auth
+  order: 20
+  depends_on:
+  - chbot.main.access
+  timeout_seconds: 180
+  execution_mode: chbot_workflow_step
+  workflow_name: chbot_access
+  workflow_step: simple_auth
+  requires_user_input: true
+  estimated_manual_seconds: 180
+  max_retries: 1
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: false
+- module_id: chbot.contract.list
+  system_code: chbot
+  name: 계약조회
+  description: 계약 조회 기준·상태를 선택하고 정상 계약 목록과 총 건수를 확인합니다.
+  group: contract
+  order: 30
+  depends_on:
+  - chbot.simple.auth
+  timeout_seconds: 120
+  execution_mode: chbot_workflow_step
+  workflow_name: chbot_access
+  workflow_step: contract_list
+  estimated_manual_seconds: 90
+  max_retries: 2
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+execution_profile: interactive

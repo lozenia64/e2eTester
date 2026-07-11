@@ -3,80 +3,101 @@ name: 현장출동 홈페이지(PC)
 description: 접속 · 로그인 · 잔존물 입찰 조회 점검
 display_order: 30
 supported_auth_methods:
-  - phone
+- phone
 run_form:
-  - key: browser_mode
-    label: 브라우저 실행 모드
-    type: select
-    required: true
-    default: headed
-    help_text: headed를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열립니다.
-    options:
-      - label: 실제 브라우저 창 열기
-        value: headed
-      - label: 백그라운드 실행
-        value: headless
-  - key: user_id
-    label: 아이디
-    type: text
-    required: true
-    placeholder: 현장출동 ID
-    help_text: 현장출동 홈페이지 로그인 아이디(7자 이상)입니다.
-  - key: password
-    label: 비밀번호
-    type: password
-    required: true
-    placeholder: 비밀번호
+- key: browser_mode
+  label: 브라우저 실행 모드
+  type: select
+  required: true
+  default: headed
+  help_text: headed를 선택하면 웹에서 실행할 때 로컬 PC에 실제 브라우저 창이 추가로 열립니다.
+  options:
+  - label: 실제 브라우저 창 열기
+    value: headed
+  - label: 백그라운드 실행
+    value: headless
+- key: user_id
+  label: 아이디
+  type: text
+  required: true
+  placeholder: 현장출동 ID
+  help_text: 현장출동 홈페이지 로그인 아이디(7자 이상)입니다.
+- key: password
+  label: 비밀번호
+  type: password
+  required: true
+  placeholder: 비밀번호
 modules:
-  - module_id: hrp.main.access
-    system_code: hrp
-    name: 메인화면 접속
-    description: 현장출동 홈페이지(PC) 메인화면에 접속하고 초기 팝업을 정리합니다.
-    group: access
-    order: 10
-    depends_on: []
-    timeout_seconds: 120
-    execution_mode: hrp_workflow_step
-    workflow_name: hrp_access
-    workflow_step: main_access
-    estimated_manual_seconds: 120
-  - module_id: hrp.login
-    system_code: hrp
-    name: 로그인
-    description: 아이디·비밀번호 로그인 후 SMS 인증번호를 발급하고 OTP 입력으로 로그인을 완료합니다.
-    group: login
-    order: 20
-    depends_on:
-      - hrp.main.access
-    timeout_seconds: 180
-    execution_mode: hrp_workflow_step
-    workflow_name: hrp_access
-    workflow_step: login
-    requires_user_input: true
-    estimated_manual_seconds: 120
-  - module_id: hrp.salvage.bid.inquiry.list
-    system_code: hrp
-    name: 잔존물 입찰 조회(목록)
-    description: 잔존물 입찰조회 메뉴 진입 후 목록(총 N건·순번 1)을 확인합니다.
-    group: content
-    order: 30
-    depends_on:
-      - hrp.login
-    timeout_seconds: 180
-    execution_mode: hrp_workflow_step
-    workflow_name: hrp_access
-    workflow_step: salvage_bid_inquiry_list
-    estimated_manual_seconds: 60
-  - module_id: hrp.salvage.bid.inquiry.detail
-    system_code: hrp
-    name: 잔존물 입찰 조회(상세)
-    description: 목록 순번 1 접수번호를 클릭해 잔존물입찰 상세 정보를 확인합니다.
-    group: content
-    order: 40
-    depends_on:
-      - hrp.salvage.bid.inquiry.list
-    timeout_seconds: 180
-    execution_mode: hrp_workflow_step
-    workflow_name: hrp_access
-    workflow_step: salvage_bid_inquiry_detail
-    estimated_manual_seconds: 60
+- module_id: hrp.main.access
+  system_code: hrp
+  name: 메인화면 접속
+  description: 현장출동 홈페이지(PC) 메인화면에 접속하고 초기 팝업을 정리합니다.
+  group: access
+  order: 10
+  depends_on: []
+  timeout_seconds: 120
+  execution_mode: hrp_workflow_step
+  workflow_name: hrp_access
+  workflow_step: main_access
+  estimated_manual_seconds: 120
+  max_retries: 1
+  retry_backoff_ms: 300
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+- module_id: hrp.login
+  system_code: hrp
+  name: 로그인
+  description: 아이디·비밀번호 로그인 후 SMS 인증번호를 발급하고 OTP 입력으로 로그인을 완료합니다.
+  group: login
+  order: 20
+  depends_on:
+  - hrp.main.access
+  timeout_seconds: 180
+  execution_mode: hrp_workflow_step
+  workflow_name: hrp_access
+  workflow_step: login
+  requires_user_input: true
+  estimated_manual_seconds: 120
+  max_retries: 1
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: false
+- module_id: hrp.salvage.bid.inquiry.list
+  system_code: hrp
+  name: 잔존물 입찰 조회(목록)
+  description: 잔존물 입찰조회 메뉴 진입 후 목록(총 N건·순번 1)을 확인합니다.
+  group: content
+  order: 30
+  depends_on:
+  - hrp.login
+  timeout_seconds: 180
+  execution_mode: hrp_workflow_step
+  workflow_name: hrp_access
+  workflow_step: salvage_bid_inquiry_list
+  estimated_manual_seconds: 60
+  max_retries: 2
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+- module_id: hrp.salvage.bid.inquiry.detail
+  system_code: hrp
+  name: 잔존물 입찰 조회(상세)
+  description: 목록 순번 1 접수번호를 클릭해 잔존물입찰 상세 정보를 확인합니다.
+  group: content
+  order: 40
+  depends_on:
+  - hrp.salvage.bid.inquiry.list
+  timeout_seconds: 180
+  execution_mode: hrp_workflow_step
+  workflow_name: hrp_access
+  workflow_step: salvage_bid_inquiry_detail
+  estimated_manual_seconds: 60
+  max_retries: 2
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+execution_profile: interactive

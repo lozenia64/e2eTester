@@ -41,7 +41,7 @@ def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> HealingPatch:
         system_code="hrp",
         broken_selector="#btnRA",
         healed_selector="#btnRA2",
-        file_path="app/systems/hrp/steps/login.py",
+        file_path="app/automation/page_objects/hrp/login.py",
         status=status,
         created_at=NOW,
     )

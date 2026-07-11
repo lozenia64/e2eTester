@@ -5,6 +5,8 @@
   AG-001  app/ 내 list_runs() 직접 호출 금지 (RunHistoryQueryPort 사용)
   AG-002  app/orchestrator/ 에서 playwright import 금지
   AG-003  app/domain/ 에 I/O·async 런타임 import 금지 (순수 도메인 유지)
+  AG-004  app/orchestrator/ 에서 list_all_runs( / list_runs_since( 금지
+  AG-005  app/ 에서 aggregate .snapshot / .suite 접근 금지 (domain/storage/tests 제외)
 """
 
 from __future__ import annotations
@@ -18,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = ROOT / "app"
 ORCHESTRATOR_DIR = APP_DIR / "orchestrator"
 DOMAIN_DIR = APP_DIR / "domain"
+AGGREGATE_ALLOWED_PREFIXES = (
+    "app/domain/",
+    "app/storage/",
+    "tests/",
+)
 
 # AG-001: 포트 정의·이력 조회 어댑터·하위 호환 인메모리 구현은 허용
 LIST_RUNS_ALLOWED_SUFFIXES = (
@@ -94,10 +101,56 @@ def check_ag003_domain_purity() -> list[str]:
     return violations
 
 
+LIST_ALL_RUNS_PATTERN = re.compile(r"\.list_all_runs\s*\(")
+LIST_RUNS_SINCE_PATTERN = re.compile(r"\.list_runs_since\s*\(")
+AGGREGATE_SNAPSHOT_PATTERN = re.compile(r"\.snapshot\b")
+AGGREGATE_SUITE_PATTERN = re.compile(r"aggregate\.suite\b")
+
+
+def check_ag004_orchestrator_history_scan() -> list[str]:
+    violations: list[str] = []
+    if not ORCHESTRATOR_DIR.is_dir():
+        return violations
+    for path in ORCHESTRATOR_DIR.rglob("*.py"):
+        rel = _rel(path)
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if LIST_ALL_RUNS_PATTERN.search(line) or LIST_RUNS_SINCE_PATTERN.search(line):
+                violations.append(f"{rel}:{line_no}: {stripped}")
+    return violations
+
+
+def check_ag005_aggregate_encapsulation() -> list[str]:
+    violations: list[str] = []
+    for path in APP_DIR.rglob("*.py"):
+        rel = _rel(path)
+        if any(rel.startswith(prefix) for prefix in AGGREGATE_ALLOWED_PREFIXES):
+            continue
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if AGGREGATE_SNAPSHOT_PATTERN.search(line) or AGGREGATE_SUITE_PATTERN.search(line):
+                violations.append(f"{rel}:{line_no}: {stripped}")
+    return violations
+
+
 RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
     ("AG-001", "list_runs() direct usage in app/ (use RunHistoryQueryPort)", check_ag001_list_runs),
     ("AG-002", "playwright import in app/orchestrator/", check_ag002_orchestrator_no_playwright),
     ("AG-003", "I/O or async runtime import in app/domain/", check_ag003_domain_purity),
+    (
+        "AG-004",
+        "list_all_runs() / list_runs_since() in app/orchestrator/",
+        check_ag004_orchestrator_history_scan,
+    ),
+    (
+        "AG-005",
+        "aggregate .snapshot / .suite outside app/domain/",
+        check_ag005_aggregate_encapsulation,
+    ),
 ]
 
 

@@ -125,7 +125,7 @@ class ProjectionHandlers:
             )
             return
 
-        if event.event_type == "RunPausedForOtp":
+        if event.event_type == "RunWaitingInput":
             await self._db.execute(
                 "UPDATE run_history_index SET status = ? WHERE run_id = ?",
                 (RunStatus.WAITING_INPUT.value, event.aggregate_id),
@@ -141,7 +141,7 @@ class ProjectionHandlers:
     # --- anomaly_inbox_index ------------------------------------------------
 
     async def _apply_anomaly_inbox_index(self, event: DomainEvent) -> None:
-        if event.event_type != "RunModuleCompleted":
+        if event.event_type != "ModuleFinished":
             return
         status = ModuleStatus(event.payload["status"])
         if status not in MODULE_ANOMALY_STATUSES and status not in MODULE_ERROR_STATUSES:
@@ -174,7 +174,7 @@ class ProjectionHandlers:
     # --- daily_system_status ------------------------------------------------
 
     async def _apply_daily_system_status(self, event: DomainEvent) -> None:
-        if event.event_type != "RunModuleCompleted":
+        if event.event_type != "ModuleFinished":
             return
         status = ModuleStatus(event.payload["status"])
         if status in {ModuleStatus.PENDING, ModuleStatus.QUEUED, ModuleStatus.SKIPPED}:

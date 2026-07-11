@@ -36,7 +36,7 @@ class OpsService:
 
     async def build_snapshot(self) -> dict[str, Any]:
         now = datetime.now(UTC)
-        runs = await self._run_repo.list_all_runs()
+        runs = await self._run_repo.list_runs_with_statuses(frozenset(RunStatus))
         suites = await self._suite_repo.list_suites()
         schedules = await self._schedule_repo.list()
 

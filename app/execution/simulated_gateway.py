@@ -24,6 +24,10 @@ class SimulatedExecutionGateway(ExecutionGateway):
 
     SIMULATED_MODE = "simulated"
 
+    def __init__(self) -> None:
+        self._resume_points: dict[str, tuple[int, str]] = {}
+        self._attempt_counts: dict[tuple[str, str], int] = {}
+
     def supports(self, execution_mode: str) -> bool:
         return execution_mode == self.SIMULATED_MODE
 
@@ -44,6 +48,9 @@ class SimulatedExecutionGateway(ExecutionGateway):
         module: ModuleDefinition,
         on_log: LogSink,
     ) -> StepExecutionResult:
+        attempt_key = (run_id, module.module_id)
+        attempt = self._attempt_counts.get(attempt_key, 0) + 1
+        self._attempt_counts[attempt_key] = attempt
         await asyncio.sleep(module.simulated_duration_ms / 1000)
         if module.simulated_outcome.upper() in {
             ModuleStatus.FAILED.value,
@@ -52,6 +59,22 @@ class SimulatedExecutionGateway(ExecutionGateway):
             return StepExecutionResult(
                 status=ModuleStatus.ANOMALY,
                 message="시뮬레이션 이상징후",
+                artifacts=[],
+                current_url=None,
+                dialog_messages=[],
+            )
+        if module.simulated_outcome.upper() == ModuleStatus.ERROR.value:
+            if attempt <= module.max_retries:
+                return StepExecutionResult(
+                    status=ModuleStatus.ERROR,
+                    message="시뮬레이션 일시 오류(재시도 가능)",
+                    artifacts=[],
+                    current_url=None,
+                    dialog_messages=[],
+                )
+            return StepExecutionResult(
+                status=ModuleStatus.PASSED,
+                message="시뮬레이션 재시도 후 성공",
                 artifacts=[],
                 current_url=None,
                 dialog_messages=[],
@@ -70,4 +93,13 @@ class SimulatedExecutionGateway(ExecutionGateway):
 
     async def close_session(self, handle: ExecutionHandle) -> None:
         # 정리할 라이브 세션이 없다(idempotent no-op).
+        self._resume_points.pop(handle.session_id, None)
         return None
+
+    async def resume_from_step(
+        self,
+        handle: ExecutionHandle,
+        module_index: int,
+        workflow_step: str,
+    ) -> None:
+        self._resume_points[handle.session_id] = (module_index, workflow_step)

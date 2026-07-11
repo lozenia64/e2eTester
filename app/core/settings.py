@@ -55,9 +55,20 @@ class E2ESettings(BaseSettings):
     # 영속 저장소·실행
     db_path: str = Field(default="data/e2etester.db", validation_alias="E2E_DB_PATH")
     run_concurrency: int = Field(default=4, ge=1, validation_alias="E2E_RUN_CONCURRENCY")
+    run_concurrency_heavy: int = Field(
+        default=2, ge=1, validation_alias="E2E_RUN_CONCURRENCY_HEAVY"
+    )
+    run_concurrency_light: int = Field(
+        default=4, ge=1, validation_alias="E2E_RUN_CONCURRENCY_LIGHT"
+    )
+    run_concurrency_interactive: int = Field(
+        default=2, ge=1, validation_alias="E2E_RUN_CONCURRENCY_INTERACTIVE"
+    )
     # 원격 실행(Phase 2): local=API 프로세스 in-process, remote=워커+Redis
     execution_mode: str = Field(default="local", validation_alias="E2E_EXECUTION_MODE")
     redis_url: str = Field(default="redis://127.0.0.1:6379/0", validation_alias="E2E_REDIS_URL")
+    # 다중 API 인스턴스 WS fan-out. remote 모드에서는 자동 활성; local 에서는 명시 opt-in.
+    realtime_fanout_enabled: bool = Field(default=False, validation_alias="E2E_REALTIME_FANOUT")
     worker_concurrency: int = Field(default=2, ge=1, validation_alias="E2E_WORKER_CONCURRENCY")
     session_lease_ttl: int = Field(default=60, ge=5, validation_alias="E2E_SESSION_LEASE_TTL")
     worker_base_url: str = Field(

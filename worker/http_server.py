@@ -15,6 +15,7 @@ from app.execution.protocol import (
     HeartbeatResponse,
     OpenSessionRequest,
     OpenSessionResponse,
+    ResumeFromStepRequest,
     RunStepRequest,
     RunStepResponse,
     SubmitInputRequest,
@@ -87,6 +88,17 @@ def create_http_app(
         except Exception as exc:
             return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
 
+    async def resume_from_step(request: Request) -> JSONResponse:
+        session_id = request.path_params["session_id"]
+        body = ResumeFromStepRequest.model_validate(await request.json())
+        try:
+            await session_server.resume_from_step(session_id, body.module_index, body.workflow_step)
+            return JSONResponse({"ok": True})
+        except KeyError as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=404)
+        except Exception as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
+
     async def close_session(request: Request) -> JSONResponse:
         body = CloseSessionRequest.model_validate(await request.json())
         try:
@@ -113,6 +125,11 @@ def create_http_app(
             Route("/sessions/open", open_session, methods=["POST"]),
             Route("/sessions/{session_id}/run-step", run_step, methods=["POST"]),
             Route("/sessions/{session_id}/submit-input", submit_input, methods=["POST"]),
+            Route(
+                "/sessions/{session_id}/resume-from-step",
+                resume_from_step,
+                methods=["POST"],
+            ),
             Route("/sessions/close", close_session, methods=["POST"]),
             Route("/sessions/heartbeat", heartbeat, methods=["POST"]),
         ],
