@@ -98,7 +98,12 @@ async def _async_main() -> None:
     session_registry = RedisSessionRegistry(settings.redis_url, settings.session_lease_ttl)
     heartbeat_manager = SessionHeartbeatManager(session_registry)
     consumer_name = f"{socket.gethostname()}-{os.getpid()}"
-    job_consumer = RunJobConsumer(redis_queue, run_service, consumer_name=consumer_name)
+    job_consumer = RunJobConsumer(
+        redis_queue,
+        run_service,
+        consumer_name=consumer_name,
+        worker_count=settings.worker_concurrency,
+    )
     job_consumer.start()
 
     host = os.environ.get("E2E_WORKER_HTTP_HOST", "0.0.0.0")

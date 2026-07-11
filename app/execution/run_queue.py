@@ -75,6 +75,10 @@ class RunExecutionQueue:
     async def join(self) -> None:
         await self._backend.join()
 
+    def set_run_job_handler(self, handler: Callable[[RunJobDescriptor], Awaitable[None]]) -> None:
+        """RunJobDescriptor 소비 핸들러를 등록한다(컴포지션 루트에서 RunService 연결용)."""
+        self._run_job_handler = handler
+
     async def _worker(self, index: int) -> None:
         while True:
             item = await self._backend.get()

@@ -186,7 +186,7 @@ async def lifespan(app: FastAPI):
         session_registry=session_registry,
     )
     if isinstance(run_queue, RunExecutionQueue):
-        run_queue._run_job_handler = run_service.dispatch_run_job  # noqa: SLF001
+        run_queue.set_run_job_handler(run_service.dispatch_run_job)
     module_settings_repository = SqliteModuleSettingsRepository(db_path)
     app.state.module_settings_repo = module_settings_repository
 

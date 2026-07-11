@@ -3,41 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
 import json
 
 from app.eventsourcing.support import SqliteDatabase
+from app.storage.input_crypto import decrypt_bytes, derive_key, encrypt_bytes
 
-
-def _derive_key(secret: str) -> bytes:
-    return hashlib.pbkdf2_hmac(
-        "sha256",
-        secret.encode("utf-8"),
-        b"e2e-run-input-v1",
-        100_000,
-        dklen=32,
-    )
-
-
-def _xor_crypt(data: bytes, key: bytes) -> bytes:
-    stream = bytearray()
-    counter = 0
-    while len(stream) < len(data):
-        stream.extend(hashlib.sha256(key + counter.to_bytes(4, "big")).digest())
-        counter += 1
-    return bytes(a ^ b for a, b in zip(data, stream[: len(data)], strict=True))
+_RUN_INPUT_SALT = b"e2e-run-input-v1"
 
 
 def _encrypt_json(payload: dict[str, str], key: bytes) -> str:
     raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    return base64.urlsafe_b64encode(_xor_crypt(raw, key)).decode("ascii")
+    return encrypt_bytes(raw, key)
 
 
 def _decrypt_json(ciphertext: str, key: bytes) -> dict[str, str]:
-    raw = _xor_crypt(base64.urlsafe_b64decode(ciphertext.encode("ascii")), key)
+    raw = decrypt_bytes(ciphertext, key)
     data = json.loads(raw.decode("utf-8"))
-    return {str(key): str(value) for key, value in data.items()}
+    return {str(field_key): str(value) for field_key, value in data.items()}
 
 
 class EncryptedSqliteRunInputStore:
@@ -45,7 +27,7 @@ class EncryptedSqliteRunInputStore:
 
     def __init__(self, db: SqliteDatabase, encryption_secret: str) -> None:
         self._db = db
-        self._key = _derive_key(encryption_secret)
+        self._key = derive_key(encryption_secret, salt=_RUN_INPUT_SALT)
         self._lock = asyncio.Lock()
 
     async def put(self, run_id: str, input_data: dict[str, str]) -> None:

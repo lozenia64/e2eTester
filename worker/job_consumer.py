@@ -19,11 +19,13 @@ class RunJobConsumer:
         run_service: RunService,
         *,
         consumer_name: str,
+        worker_count: int = 1,
     ) -> None:
         self._redis_queue = redis_queue
         self._run_service = run_service
         self._consumer_name = consumer_name
-        self._task: asyncio.Task | None = None
+        self._worker_count = max(1, worker_count)
+        self._tasks: list[asyncio.Task] = []
 
     async def _handle_descriptor(self, descriptor: RunJobDescriptor) -> None:
         try:
@@ -37,22 +39,26 @@ class RunJobConsumer:
             )
 
     def start(self) -> None:
-        if self._task is not None:
+        if self._tasks:
             return
-        self._task = asyncio.create_task(self._consume_loop(), name="run-job-consumer")
+        self._tasks = [
+            asyncio.create_task(
+                self._consume_loop(consumer_name=f"{self._consumer_name}-{index}"),
+                name=f"run-job-consumer-{index}",
+            )
+            for index in range(self._worker_count)
+        ]
 
     async def stop(self) -> None:
-        if self._task is None:
+        if not self._tasks:
             return
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        self._task = None
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks = []
 
-    async def _consume_loop(self) -> None:
+    async def _consume_loop(self, *, consumer_name: str) -> None:
         await self._redis_queue.consume(
             self._handle_descriptor,
-            consumer_name=self._consumer_name,
+            consumer_name=consumer_name,
         )
