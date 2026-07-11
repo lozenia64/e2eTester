@@ -303,6 +303,7 @@ e2eTester/
     main.py                        # 컴포지션 루트 (lifespan 배선 + 아이콘 라우트 + 정적 마운트)
   docs/
     DOCS_GOVERNANCE.md             # 문서 SSOT 매트릭스·PR 체크리스트
+    CI.md                          # GitHub Actions·게이트 계층·branch protection 운영
     otp_relay.md                   # OTP SMS 중계기 구성 가이드
     ARCHITECTURE_REVIEW_IDEAL.md   # 아키텍처 냉정 평가 (시점 고정 스냅샷 + 적용 현황 부록)
     scenarios/
@@ -314,10 +315,15 @@ e2eTester/
       chbot.md
   scripts/
     check_docs_consistency.py      # 문서-코드 정합성 가드
+    check_architecture_gates.py    # 아키텍처 정책 게이트 (AG-001~003)
+    ci/
+      gates.py                     # CI 게이트 SSOT
+      run_all_gates.py             # 로컬 pre-PR 전체 게이트 실행
   tests/                           # 순수 계층 단위 테스트 (브라우저/외부 사이트 불필요, CI 실행)
   .github/
     workflows/
-      docs-consistency.yml         # CI: 정합성 가드 + ruff + pytest
+      ci.yml                       # CI: docs·architecture·ruff·pytest·(조건부) security
+    dependabot.yml
     pull_request_template.md       # PR DoD 체크리스트
   research/                        # 1회성 probe 스크립트 (앱 구성 요소 아님)
   artifacts/

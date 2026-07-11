@@ -41,10 +41,13 @@ HOM and MHM share `app/scenarios/rep_homepage/` — single scenario, two `Channe
 7. **PII**: input_data in RunInputStorePort — never on Run blob or WebSocket.
 8. **Docs**: manifest module_ids must appear in `docs/scenarios/{code}.md`; CI enforces via `check_docs_consistency.py`.
 
-## CI gates (same as PR)
+## CI gates (same as PR — SSOT: `scripts/ci/gates.py`)
 
 ```bash
+python3 scripts/ci/run_all_gates.py --profile full
+# Or individually:
 python3 scripts/check_docs_consistency.py
+python3 scripts/check_architecture_gates.py
 python3 -m ruff check . && python3 -m ruff format --check .
 python3 -m pytest tests/ -q
 ```

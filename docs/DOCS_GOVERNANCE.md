@@ -64,7 +64,7 @@ python3 scripts/check_docs_consistency.py            # 전체 검사 (CI 게이�
 python3 scripts/check_docs_consistency.py --verbose  # 통과 항목 상세까지 출력
 ```
 
-종료 코드는 모두 통과 시 `0`, 하나라도 실패 시 `1` 이다. GitHub Actions(`.github/workflows/docs-consistency.yml`)가 PR마다 이 스크립트를 실행해 표류를 차단하며, 같은 워크플로에서 **ruff(린트·포맷)와 pytest(단위 테스트) 잡도 함께** 실행한다 — 문서 정합성 가드는 CI 3개 게이트 중 하나다.
+종료 코드는 모두 통과 시 `0`, 하나라도 실패 시 `1` 이다. GitHub Actions([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))가 PR마다 이 스크립트를 실행해 표류를 차단하며, 같은 워크플로에서 **아키텍처 게이트·ruff(린트·포맷)·pytest(단위 테스트)** 도 함께 실행한다. 전체 CI 계층·로컬 실행 방법은 [`docs/CI.md`](CI.md) 를 참고한다.
 
 가드는 의도적으로 **검증 가능한 것만** 본다. 설계 의도·시나리오 서술처럼 자연어 판단이 필요한 영역은 아래 PR 체크리스트(사람 검토)로 보완한다.
 
@@ -72,7 +72,9 @@ python3 scripts/check_docs_consistency.py --verbose  # 통과 항목 상세까�
 
 코드를 바꾼 PR은 머지 전에 아래를 만족해야 한다. (`.github/pull_request_template.md` 에 동일 체크리스트가 들어 있다.)
 
+- [ ] `python3 scripts/ci/run_all_gates.py` 또는 개별 게이트가 통과한다(로컬/CI). 규칙: [`docs/CI.md`](CI.md).
 - [ ] `python3 scripts/check_docs_consistency.py` 가 통과한다(로컬/CI).
+- [ ] `python3 scripts/check_architecture_gates.py` 가 통과한다(AG-001~003).
 - [ ] 시스템 `manifest.yaml` 을 추가·변경했다면, 짝이 되는 `docs/scenarios/{code}.md` 를 같은 PR에서 갱신했다(모듈 추가/순서/의존성/`workflow_step`/타임아웃).
 - [ ] 사이트 흐름·selector 를 바꿨다면, 해당 시나리오 문서의 단계 설명을 갱신했다.
 - [ ] API 라우트를 추가·변경·삭제했다면, `E2E_ARCHITECTURE.md` §5.2 를 갱신했다.

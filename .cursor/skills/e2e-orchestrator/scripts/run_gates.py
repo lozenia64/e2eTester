@@ -1,57 +1,29 @@
 #!/usr/bin/env python3
-"""Run e2eTester CI gates and write gates-report.json."""
+"""Run e2eTester CI gates and write gates-report.json (orchestrator QC)."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-
-GATE_COMMANDS: dict[str, list[str]] = {
-    "docs_consistency": ["python3", "scripts/check_docs_consistency.py"],
-    "ruff": ["python3", "-m", "ruff", "check", "."],
-    "ruff_format": ["python3", "-m", "ruff", "format", "--check", "."],
-    "pytest": ["python3", "-m", "pytest", "tests/", "-q"],
-}
-
-PROFILE_GATES: dict[str, list[str]] = {
-    "step_fix": ["docs_consistency", "ruff", "ruff_format", "pytest"],
-    "new_module": ["docs_consistency", "ruff", "ruff_format", "pytest"],
-    "new_system": ["docs_consistency", "ruff", "ruff_format", "pytest"],
-    "platform": ["docs_consistency", "ruff", "ruff_format", "pytest"],
-    "healing_patch": ["docs_consistency", "ruff", "ruff_format", "pytest"],
-    "docs_only": ["docs_consistency"],
-    "spike": [],
-}
+from typing import Any
 
 
-def run_command(cmd: list[str], cwd: Path) -> dict:
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-        return {
-            "command": " ".join(cmd),
-            "passed": proc.returncode == 0,
-            "returncode": proc.returncode,
-            "stdout": proc.stdout[-8000:] if proc.stdout else "",
-            "stderr": proc.stderr[-8000:] if proc.stderr else "",
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "command": " ".join(cmd),
-            "passed": False,
-            "returncode": -1,
-            "stdout": "",
-            "stderr": "timeout after 600s",
-        }
+def _load_gates_module(workspace: Path) -> Any:
+    gates_path = workspace / "scripts" / "ci" / "gates.py"
+    if not gates_path.is_file():
+        msg = f"gates SSOT not found: {gates_path}"
+        raise FileNotFoundError(msg)
+    spec = importlib.util.spec_from_file_location("e2e_ci_gates", gates_path)
+    if spec is None or spec.loader is None:
+        msg = f"cannot load gates module: {gates_path}"
+        raise ImportError(msg)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def main() -> int:
@@ -76,19 +48,29 @@ def main() -> int:
     if not profile:
         print(json.dumps({"error": "pipeline_profile missing; run intake first or pass --profile"}))
         return 1
-    if profile not in PROFILE_GATES:
-        print(json.dumps({"error": f"unknown pipeline_profile: {profile}"}))
+
+    intake_path = run_dir / "intake.json"
+    risk_flags: list[str] = []
+    if intake_path.is_file():
+        intake = json.loads(intake_path.read_text(encoding="utf-8"))
+        risk_flags = list(intake.get("risk_flags") or [])
+
+    try:
+        gates_mod = _load_gates_module(workspace)
+        gate_names = gates_mod.resolve_gates(profile, risk_flags or None)
+    except (FileNotFoundError, KeyError) as exc:
+        print(json.dumps({"error": str(exc)}))
         return 1
-    gate_names = PROFILE_GATES[profile]
 
     results: dict[str, dict] = {}
     for name in gate_names:
-        results[name] = run_command(GATE_COMMANDS[name], workspace)
+        results[name] = gates_mod.run_gate(name, workspace)
 
     passed = all(r["passed"] for r in results.values()) if results else True
     report = {
         "passed": passed,
         "profile": profile,
+        "risk_flags": risk_flags,
         "gates": results,
         "ran_at": datetime.now(UTC).isoformat(),
     }
