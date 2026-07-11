@@ -119,6 +119,10 @@ def extract_selector_refs(path: str, source: str) -> list[dict[str, Any]]:
 def system_of_path(path: str) -> str:
     """소스 경로에서 소속 시스템 코드를 유추한다(공용 스텝은 공용 라벨)."""
     parts = path.replace("\\", "/").split("/")
+    if "page_objects" in parts:
+        idx = parts.index("page_objects")
+        if idx + 1 < len(parts):
+            return parts[idx + 1]
     if "systems" in parts:
         idx = parts.index("systems")
         if idx + 1 < len(parts):

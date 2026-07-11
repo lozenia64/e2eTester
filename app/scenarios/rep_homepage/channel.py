@@ -26,7 +26,7 @@ class StepAdapter(Protocol):
 class ChannelSteps:
     """채널(드라이버)이 시나리오에 제공하는 도메인 액션 어댑터 묶음.
 
-    각 항목은 해당 채널의 step 모듈(예: ``app.systems.hom.steps.compensation_charge``)이며,
+    각 항목은 해당 채널의 PageObject(예: ``app.automation.page_objects.hom.compensation_charge``)이며,
     시나리오의 단계 핸들러가 채널과 무관하게 호출하는 단일 계약이다. PC/모바일은 같은 이름의
     액션을 서로 다른 셀렉터·UI 텍스트로 구현해 여기에 주입한다.
     """

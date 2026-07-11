@@ -21,6 +21,7 @@ from app.core.models import (
     UpdateScheduleRequest,
 )
 from app.core.settings import get_settings
+from app.orchestrator.schedule_command_port import ScheduleCommandPort
 from app.scheduling.cron import next_run_after, parse_cron
 from app.scheduling.schedule_center import (
     MATCH_BEFORE,
@@ -94,12 +95,12 @@ class SchedulerService:
 
     def __init__(
         self,
-        run_service,
+        run_commands: ScheduleCommandPort,
         suite_service,
         repository: ScheduleRepositoryPort,
         tick_seconds: int = DEFAULT_TICK_SECONDS,
     ) -> None:
-        self._run_service = run_service
+        self._run_commands = run_commands
         self._suite_service = suite_service
         self._repository = repository
         self._tick_seconds = tick_seconds
@@ -115,9 +116,9 @@ class SchedulerService:
         user_id: str | None = None,
         user_name: str | None = None,
     ) -> Schedule:
-        system = self._run_service.get_system(system_code)  # KeyError -> 404
+        system = self._run_commands.get_system(system_code)  # KeyError -> 404
         parse_cron(request.cron)  # ValueError -> 400
-        sanitized_input, resolved_module_ids = self._run_service.validate_run_request(
+        sanitized_input, resolved_module_ids = self._run_commands.validate_run_request(
             system_code, request.input_data, request.selected_module_ids
         )
         schedule = Schedule(
@@ -306,7 +307,7 @@ class SchedulerService:
                             if value.strip()
                         }
                     )
-                sanitized_input, resolved_module_ids = self._run_service.validate_run_request(
+                sanitized_input, resolved_module_ids = self._run_commands.validate_run_request(
                     schedule.system_code,
                     merged_input,
                     request.selected_module_ids
@@ -441,7 +442,7 @@ class SchedulerService:
                 schedule.schedule_id, limit=limit
             )
             return [self._suite_point(suite) for suite in suites]
-        runs = await self._run_service.list_runs_by_schedule(schedule.schedule_id, limit=limit)
+        runs = await self._run_commands.list_runs_by_schedule(schedule.schedule_id, limit=limit)
         return [self._run_point(run) for run in runs]
 
     async def _grouped_execution_points(
@@ -451,7 +452,7 @@ class SchedulerService:
         그룹핑한다 — 보드/캘린더가 예약마다 전체 스캔을 반복(O(#예약 × #Run))하지 않도록
         하는 공용 프리페치."""
         runs_by: dict[str, list[ExecutionPoint]] = {}
-        for run in await self._run_service.list_schedule_tagged_runs():
+        for run in await self._run_commands.list_schedule_tagged_runs():
             runs_by.setdefault(run.schedule_id, []).append(self._run_point(run))
         suites_by: dict[str, list[ExecutionPoint]] = {}
         for suite in await self._suite_service.list_schedule_tagged_suites():
@@ -605,13 +606,13 @@ class SchedulerService:
                 )
         blocks.sort(key=lambda block: block["at"])
 
-        systems = sorted(self._run_service.list_systems(), key=lambda s: (s.display_order, s.name))
+        systems = sorted(self._run_commands.list_systems(), key=lambda s: (s.display_order, s.name))
         if allowed_system_codes is not None:
             allowed = set(allowed_system_codes)
             systems = [s for s in systems if s.system_code in allowed]
         coverage = build_coverage(
             [(s.system_code, s.name) for s in systems],
-            await self._run_service.last_finished_at_by_system(),
+            await self._run_commands.last_finished_at_by_system(),
             now,
         )
 
@@ -712,7 +713,7 @@ class SchedulerService:
         if not schedule.last_run_id:
             return payload
         try:
-            run = await self._run_service.get_run(schedule.last_run_id)
+            run = await self._run_commands.get_run(schedule.last_run_id)
         except KeyError:
             return payload
         countable = [m for m in run.modules if m.status != ModuleStatus.SKIPPED]
@@ -737,7 +738,7 @@ class SchedulerService:
         else:
             if not schedule.last_run_id:
                 raise KeyError("이 예약으로 실행된 Run 이 없습니다.")
-            await self._run_service.submit_otp(schedule.last_run_id, otp_code)
+            await self._run_commands.submit_otp(schedule.last_run_id, otp_code)
         return await self.trigger_status(schedule_id)
 
     # --- 백그라운드 루프 --------------------------------------------------
@@ -869,7 +870,7 @@ class SchedulerService:
     ) -> Run:
         actor_id = user_id or schedule.created_by_user_id
         actor_name = user_name or schedule.created_by_user_name
-        run = await self._run_service.start_run(
+        run = await self._run_commands.start_run(
             schedule.system_code,
             dict(schedule.input_data),
             list(schedule.selected_module_ids)
@@ -925,7 +926,7 @@ class SchedulerService:
 
     async def _last_run_active(self, run_id: str) -> bool:
         try:
-            run = await self._run_service.get_run(run_id)
+            run = await self._run_commands.get_run(run_id)
         except KeyError:
             return False
         return run.status in _ACTIVE_RUN_STATUSES
@@ -953,7 +954,7 @@ class SchedulerService:
         if not schedule.last_run_id:
             return
         try:
-            run = await self._run_service.get_run(schedule.last_run_id)
+            run = await self._run_commands.get_run(schedule.last_run_id)
         except KeyError:
             return
         if schedule.last_run_status != run.status:

@@ -10,43 +10,64 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Protocol
 
 from app.core.models import (
     AnomalyHandling,
     AuthPreset,
-    DashboardEvent,
     PendingExecution,
     Run,
     Schedule,
     SuiteEvent,
     SuiteRun,
 )
+from app.domain.events import DomainEvent
 from app.healing.models import HealingEvent, HealingPatch, HealingPolicy
+from app.realtime.ports import RealtimeNotificationPort
 
 
-class RunRepositoryPort(Protocol):
-    """Run 상태(state) 집합체의 영속 경계.
+class RunWriteRepositoryPort(Protocol):
+    """Run 상태(state) 집합체의 **쓰기** 영속 경계.
 
-    이 포트는 Run 의 권위 있는 상태(status·모듈 전이·comparison 등)만 책임진다.
-    **모듈 로그는 이 집합체에 속하지 않는다** — 고빈도 append-only 텔레메트리라
-    별도 ``RunLogStorePort`` 가 소유하며, 영속 Run blob 에는 로그가 담기지 않는다. 포트는
-    도메인 ``Run`` 으로 말하지만(코어의 언어), 구현 어댑터는 도메인 엔티티를 직접 직렬화하지
-    않고 영속 DTO ``RunRecord``(``app/storage/records.py``)로 매핑한다 — ``RunRecord`` 스키마에
-    ``logs`` 필드가 아예 없으므로 로그 제외가 어댑터의 방어적 코드가 아니라 **타입 수준 사실**
-    이다(영속 스키마 ↔ 도메인 엔티티 분리). 로그를 붙인 읽기 모델 조립은 ``RunService.get_run``
-    의 책임이다.
+    create/save/get/delete 만 담당한다. 이력 조회·WebSocket fan-out 은 각각
+    ``RunHistoryQueryPort``·``RealtimeNotificationPort`` 가 소유한다.
     """
 
-    async def create_run(self, run: Run) -> Run: ...
-    async def save_run(self, run: Run) -> Run: ...
+    async def create_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run: ...
+    async def save_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run: ...
     async def get_run(self, run_id: str) -> Run: ...
-    async def list_runs(self) -> list[Run]: ...
-    async def list_runs_by_user(self, user_id: str) -> list[Run]: ...
     async def delete_run(self, run_id: str) -> None: ...
-    async def publish(self, event: DashboardEvent) -> None: ...
-    async def subscribe(self, run_id: str) -> asyncio.Queue[DashboardEvent]: ...
-    async def unsubscribe(self, run_id: str, queue: asyncio.Queue[DashboardEvent]) -> None: ...
+
+
+class RunHistoryQueryPort(Protocol):
+    """Run 이력·집계용 **읽기** 쿼리 경계(인덱스/프로젝션 기반).
+
+    전체 ``runs`` 테이블 스캔 대신 ``run_history_index`` 등 프로젝션을 조회한다.
+    """
+
+    async def list_all_runs(self) -> list[Run]: ...
+    async def get_run(self, run_id: str) -> Run: ...
+    async def list_runs_by_user(self, user_id: str) -> list[Run]: ...
+    async def list_runs_by_system(self, system_code: str) -> list[Run]: ...
+    async def list_runs_by_schedule(self, schedule_id: str, limit: int = 30) -> list[Run]: ...
+    async def list_schedule_tagged_runs(self) -> list[Run]: ...
+    async def list_runs_since(self, since: datetime) -> list[Run]: ...
+    async def list_runs_with_statuses(self, statuses: frozenset) -> list[Run]: ...
+    async def list_waiting_input_runs(self) -> list[Run]: ...
+    async def last_finished_at_by_system(self) -> dict[str, datetime]: ...
+    async def find_previous_finished_run(self, run: Run) -> Run | None: ...
+
+
+class RunRepositoryPort(
+    RunWriteRepositoryPort, RunHistoryQueryPort, RealtimeNotificationPort, Protocol
+):
+    """Run 저장소 **복합 포트**(하위 호환).
+
+    쓰기(``RunWriteRepositoryPort``)·이력 조회(``RunHistoryQueryPort``)·실시간 알림
+    (``RealtimeNotificationPort``)를 한 타입으로 묶는다. 신규 코드는 가능하면 개별 포트에
+    의존한다.
+    """
 
 
 class RunLogStorePort(Protocol):

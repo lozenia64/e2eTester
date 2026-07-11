@@ -17,6 +17,7 @@ from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
 
 if TYPE_CHECKING:
+    from app.automation.ports import AutomationPort
     from app.healing.engine import SelfHealingEngine
 
 
@@ -113,10 +114,16 @@ class BaseWorkflowExecutor(ABC):
         # 자가 치유 엔진(선택 협력자). 컴포지션 루트가 로더를 통해 attach_healing 으로
         # 주입한다 — 미주입이면 치유 없이 기존과 동일하게 동작한다.
         self._healing: SelfHealingEngine | None = None
+        # Automation BC 포트(선택). 등록된 Flow 가 있으면 레지스트리보다 우선한다.
+        self._automation: AutomationPort | None = None
 
     def attach_healing(self, engine: SelfHealingEngine | None) -> None:
         """자가 치유 엔진을 부착한다(로더/게이트웨이가 생성 직후 호출)."""
         self._healing = engine
+
+    def attach_automation(self, port: AutomationPort | None) -> None:
+        """Automation BC 포트를 부착한다(로더가 생성 직후 호출)."""
+        self._automation = port
 
     @staticmethod
     def _resolve_headless(input_data: dict[str, str]) -> bool:
@@ -218,7 +225,21 @@ class BaseWorkflowExecutor(ABC):
         )
 
     def _dispatch_step(self, context: StepContext) -> StepOutcome:
-        """workflow_step 을 레지스트리에서 찾아 핸들러로 디스패치한다(단일 진입점)."""
+        """workflow_step 을 Automation BC 또는 레지스트리로 디스패치한다."""
+        automation = self._automation
+        if automation is not None:
+            from app.automation.ports import AutomationContext
+
+            auto_ctx = AutomationContext(
+                runtime=context.runtime,
+                page=context.page,
+                artifact_dir=context.artifact_dir,
+                log=context.log,
+                dialog_messages=context.dialog_messages,
+            )
+            outcome = automation.run_step(context.module.workflow_step, auto_ctx)
+            if outcome is not None:
+                return outcome
         handler = self._step_handlers.get(context.module.workflow_step)
         if handler is None:
             raise RuntimeError(

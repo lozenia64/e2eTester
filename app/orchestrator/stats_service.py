@@ -9,7 +9,7 @@ from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES, MODULE_ANOMALY_ST
 from app.orchestrator.run_actor import load_actor_context
 from app.orchestrator.stats_charts import build_usage_charts
 from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
-from app.storage.ports import RunRepositoryPort, ScheduleRepositoryPort, SuiteRepositoryPort
+from app.storage.ports import RunHistoryQueryPort, ScheduleRepositoryPort, SuiteRepositoryPort
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class StatsService:
     def __init__(
         self,
-        run_repo: RunRepositoryPort,
+        run_repo: RunHistoryQueryPort,
         suite_repo: SuiteRepositoryPort,
         registry: ModuleRegistry,
         module_settings_repo: ModuleSettingsRepositoryPort | None = None,
@@ -40,7 +40,7 @@ class StatsService:
     ) -> UsageStats:
         all_runs = [
             run
-            for run in await self._run_repo.list_runs()
+            for run in await self._run_repo.list_all_runs()
             if run.status in ADMIN_VISIBLE_RUN_STATUSES
         ]
 

@@ -4,11 +4,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.runner.artifact_manager import ArtifactManager
-from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
-from app.runner.workflow_engine import StepContext, StepHandler
+from app.runner.workflow_engine import StepHandler
 from app.systems.access_common import browser
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
-from app.systems.hwtc.steps import phone_auth, video_playback
 
 DEFAULT_BASE_URL = "https://sls.hwgeneralins.com"
 
@@ -51,44 +49,7 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
         browser.shutdown_browser(runtime.page, runtime.context)
 
     def build_step_registry(self) -> Mapping[str, StepHandler]:
-        # main_access 는 부모(접속 점검)와 달리 phone_auth 모듈의 진입 화면이라 덮어쓴다.
-        return {
-            **super().build_step_registry(),
-            "main_access": self._step_main_access,
-            "phone_auth": self._step_phone_auth,
-            "video_playback": self._step_video_playback,
-        }
-
-    def _step_main_access(self, ctx: StepContext) -> StepOutcome:
-        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(phone_auth.run_main_access(runtime.page, runtime.base_url))
-
-    def _step_phone_auth(self, ctx: StepContext) -> StepOutcome:
-        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
-        if not runtime.user_id or not runtime.password:
-            raise RuntimeError("아이디와 비밀번호를 입력해 주세요.")
-        if not runtime.phone_auth_sms_requested:
-            message = phone_auth.request_sms(
-                runtime.page,
-                user_id=runtime.user_id,
-                password=runtime.password,
-                base_url=runtime.base_url,
-                dialog_messages=runtime.dialog_messages,
-            )
-            runtime.phone_auth_sms_requested = True
-            if not runtime.otp_code:
-                return StepNeedsInput(message)
-        return StepCompleted(
-            phone_auth.submit_otp_and_login(
-                runtime.page,
-                otp_code=runtime.otp_code,
-                dialog_messages=runtime.dialog_messages,
-            )
-        )
-
-    def _step_video_playback(self, ctx: StepContext) -> StepOutcome:
-        runtime: HwtcRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(video_playback.run(runtime.page, base_url=runtime.base_url))
+        return {}
 
     def update_otp_code(self, runtime: HwtcRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

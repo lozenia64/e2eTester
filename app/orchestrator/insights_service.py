@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import (
         AnomalyHandlingStorePort,
-        RunRepositoryPort,
+        RunHistoryQueryPort,
         ScheduleRepositoryPort,
         SuiteRepositoryPort,
     )
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 class InsightsService:
     def __init__(
         self,
-        run_repo: RunRepositoryPort,
+        run_repo: RunHistoryQueryPort,
         registry: ModuleRegistry,
         anomaly_store: AnomalyHandlingStorePort,
         *,
@@ -62,7 +62,7 @@ class InsightsService:
         return self._registry.get_system(system_code)  # KeyError -> 404
 
     async def _runs_for_system(self, system_code: str):
-        return [r for r in await self._run_repo.list_runs() if r.system_code == system_code]
+        return await self._run_repo.list_runs_by_system(system_code)
 
     @staticmethod
     def _tz():
@@ -73,7 +73,7 @@ class InsightsService:
 
     # ── 이상징후 인박스 ─────────────────────────────────────────────────────
     async def list_anomalies(self, allowed_system_codes: list[str] | None = None) -> dict[str, Any]:
-        runs = await self._run_repo.list_runs()
+        runs = await self._run_repo.list_all_runs()
         handlings = {h.module_run_id: h for h in await self._anomaly_store.list()}
         systems = self._registry.list_systems()
         return build_anomaly_items(

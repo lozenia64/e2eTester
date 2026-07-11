@@ -147,6 +147,11 @@ class _FakeRepo:
     async def list_runs(self):
         return list(self._runs)
 
+    async def list_waiting_input_runs(self):
+        from app.core.enums import RunStatus
+
+        return [run for run in self._runs if run.status == RunStatus.WAITING_INPUT]
+
 
 class _FakeControl:
     """pending_ids: set(run_id) 또는 dict(run_id → paused_at 또는 None)."""
@@ -173,7 +178,7 @@ def _run(run_id, status, minutes_ago=0):
 
 def _service(runs, pending_ids, recorder):
     svc = RunService.__new__(RunService)
-    svc._repository = _FakeRepo(runs)
+    svc._history_query = _FakeRepo(runs)
     svc._control_store = _FakeControl(pending_ids)
 
     async def fake_submit_otp(run_id, code):

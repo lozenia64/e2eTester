@@ -17,15 +17,15 @@
 `app/systems/hom/manifest.yaml` 의 `order` 기준:
 
 1. `hom.main.access`
-2. `hom.login` — 로그인 화면 이동(`app/systems/hom/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/hom/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/hom/steps/kakao_login.py`(카카오·30초·`인증완료`·최대 3회 재시도) 실행
+2. `hom.login` — 로그인 화면 이동과 본인인증 로그인을 한 단계(`login` Flow)에서 처리한다. 셀렉터·UI 조작은 `app/automation/page_objects/hom/` PageObject, 흐름 제어는 `app/automation/flows/rep_homepage/login_flow.py` Flow가 담당한다. `auth_method`에 따라 휴대폰·OTP 또는 카카오·30초·`인증완료`·최대 3회 재시도 실행
 3. `hom.contract.list`
 4. `hom.contract.detail`
-5. `hom.compensation.charge` — `app/systems/hom/steps/compensation_charge.py` (`compensation_charge` 단계)
-6. `hom.compensation.result` — `app/systems/hom/steps/compensation_result.py` (`compensation_result` 단계)
-7. `hom.compensation.cancel` — `app/systems/hom/steps/compensation_cancel.py` (`compensation_cancel` 단계)
-8. `hom.proof.long_term_policy` — `app/systems/hom/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+5. `hom.compensation.charge` — `app/automation/page_objects/hom/compensation_charge.py` PageObject (`compensation_charge` Flow)
+6. `hom.compensation.result` — `app/automation/page_objects/hom/compensation_result.py` PageObject (`compensation_result` Flow)
+7. `hom.compensation.cancel` — `app/automation/page_objects/hom/compensation_cancel.py` PageObject (`compensation_cancel` Flow)
+8. `hom.proof.long_term_policy` — `app/automation/page_objects/hom/long_term_policy_certificate.py` PageObject (`long_term_policy_certificate` Flow)
 
-`app/systems/hom/steps/compensation_result.py`·`app/systems/hom/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/hom/steps/compensation_result_common.py`에서 공유한다.
+`compensation_result`·`compensation_cancel` PageObject는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/automation/page_objects/hom/compensation_result_common.py`에서 공유한다. 청구 식별 문구 상수는 `app/automation/scenarios/rep_homepage/constants.py`가 SSOT이다.
 
 모듈별 `timeout_seconds`: 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
 

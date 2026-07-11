@@ -28,7 +28,10 @@ class _NoopEventBus:
 
 
 class _NoopQueue:
-    def submit(self, *_args, **_kwargs) -> None:
+    async def submit(self, *_args, **_kwargs) -> None:
+        pass
+
+    async def enqueue_run_job(self, *_args, **_kwargs) -> None:
         pass
 
 
@@ -58,9 +61,12 @@ def _run(
 
 
 def _service(tmp_path: Path) -> RunService:
+    repo = InMemoryRunRepository()
     return RunService(
         registry=ModuleRegistry(),
-        repository=InMemoryRunRepository(),
+        write_repo=repo,
+        history_query=repo,
+        realtime=repo,
         log_store=InMemoryRunLogStore(),
         execution_gateway=_NoopGateway(),
         event_bus=_NoopEventBus(),
@@ -88,7 +94,7 @@ async def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_pat
         _run("run_error_today", status=RunStatus.ERROR, requested_at=today),
     ]
     for run in runs:
-        await service._repository.create_run(run)
+        await service._write_repo.create_run(run)
 
     deleted = await service.purge_runs(
         statuses=RUN_DAILY_PURGE_STATUSES,
@@ -96,7 +102,7 @@ async def test_purge_runs_deletes_only_error_and_cancelled_before_cutoff(tmp_pat
     )
 
     assert set(deleted) == {"run_error_old", "run_cancel_old"}
-    remaining = {run.run_id: run.status for run in await service._repository.list_runs()}
+    remaining = {run.run_id: run.status for run in await service._history_query.list_all_runs()}
     assert remaining == {
         "run_passed_old": RunStatus.PASSED,
         "run_anomaly_old": RunStatus.ANOMALY,
@@ -113,7 +119,7 @@ async def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
     )
     yesterday = today_start - timedelta(hours=2)
 
-    await service._repository.create_run(
+    await service._write_repo.create_run(
         _run("run_error_yesterday", status=RunStatus.ERROR, requested_at=yesterday),
     )
 
@@ -126,4 +132,4 @@ async def test_retention_scheduler_purge_now_uses_timezone_midnight(tmp_path):
     result = await scheduler.purge_now()
 
     assert result.deleted_run_ids == ["run_error_yesterday"]
-    assert await service._repository.list_runs() == []
+    assert await service._history_query.list_all_runs() == []

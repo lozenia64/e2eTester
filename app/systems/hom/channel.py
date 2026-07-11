@@ -1,14 +1,12 @@
 """HOM = 대표홈페이지 **PC 채널** 드라이버 정의.
 
-대표홈페이지 시나리오(1벌)를 PC 셀렉터 어댑터(`app.systems.hom.steps.*`)로 구동하기
-위한 ``ChannelProfile`` 만 선언한다. 워크플로 로직은 여기 없고
-``app.scenarios.rep_homepage.executor.RepHomepageExecutor`` 에 단 한 번 존재한다.
+대표홈페이지 시나리오(1벌)를 PC PageObject(`app.automation.page_objects.hom.*`)로 구동하기
+위한 ``ChannelProfile`` 만 선언한다. 워크플로 로직은 automation BC Flow 가 담당한다.
 """
 
 from __future__ import annotations
 
-from app.scenarios.rep_homepage.channel import ChannelProfile, ChannelSteps
-from app.systems.hom.steps import (
+from app.automation.page_objects.hom import (
     compensation_cancel,
     compensation_charge,
     compensation_result,
@@ -20,9 +18,10 @@ from app.systems.hom.steps import (
     main_access,
     phone_login,
 )
-from app.systems.hom.steps import (
+from app.automation.page_objects.hom import (
     login_common as common,
 )
+from app.scenarios.rep_homepage.channel import ChannelProfile, ChannelSteps
 
 PC_CHANNEL = ChannelProfile(
     code="hom",

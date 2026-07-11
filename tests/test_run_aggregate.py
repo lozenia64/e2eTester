@@ -40,9 +40,12 @@ def _run(modules: list[RunModule], status: RunStatus = RunStatus.PENDING) -> Run
 
 def test_begin_sets_running_and_started_at():
     run = _run([_module("a", 0)])
-    RunAggregate(run).begin()
-    assert run.status == RunStatus.RUNNING
-    assert run.started_at is not None
+    aggregate = RunAggregate(run)
+    aggregate.begin()
+    assert aggregate.snapshot.status == RunStatus.RUNNING
+    assert aggregate.snapshot.started_at is not None
+    events = aggregate.pull_events()
+    assert any(event.event_type == "RunStarted" for event in events)
 
 
 def test_dependencies_satisfied_requires_all_passed():
