@@ -108,6 +108,18 @@ http://<PC IP>:2222
 
 Windows 방화벽에서 TCP 2222 인바운드를 허용해야 할 수 있습니다.
 
+### Docker Compose (원격 실행 모드)
+
+Redis + API + 워커(2대)로 분리 실행하려면:
+
+```bash
+docker compose up --build --scale worker=2
+```
+
+- 대시보드: `http://127.0.0.1:2222`
+- `E2E_EXECUTION_MODE=remote` 로 API는 Redis 에 Run 작업을 적재하고, 워커가 Playwright 를 실행합니다.
+- 로컬 개발(단일 프로세스)은 `E2E_EXECUTION_MODE=local`(기본값)을 사용하세요.
+
 ## 사용 흐름
 
 1. 브라우저에서 `/login` 으로 접속해 이메일·비밀번호로 로그인합니다. (최초 관리자 계정은 `.env` 의 `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` 로 시드됩니다.)

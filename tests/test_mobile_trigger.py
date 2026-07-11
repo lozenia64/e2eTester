@@ -112,7 +112,7 @@ def _schedule(**overrides) -> Schedule:
 
 def _scheduler(repo, run_service=None, suite_service=None) -> SchedulerService:
     return SchedulerService(
-        run_service=run_service or _FakeRunService(),
+        run_commands=run_service or _FakeRunService(),
         suite_service=suite_service or _FakeSuiteService(),
         repository=repo,
     )

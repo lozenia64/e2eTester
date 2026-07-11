@@ -10,7 +10,7 @@ from app.orchestrator.ops_service import OpsService
 
 
 class _FakeRunRepo:
-    async def list_runs(self) -> list[Run]:
+    async def list_all_runs(self) -> list[Run]:
         return [
             Run(
                 run_id="run_active",

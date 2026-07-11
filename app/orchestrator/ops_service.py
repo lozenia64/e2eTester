@@ -10,7 +10,7 @@ from app.core.ops_buffer import ops_event_buffer
 from app.core.settings import E2ESettings
 from app.execution.run_queue import RunExecutionQueue
 from app.scheduling.scheduler import SchedulerService
-from app.storage.ports import RunRepositoryPort, ScheduleRepositoryPort, SuiteRepositoryPort
+from app.storage.ports import RunHistoryQueryPort, ScheduleRepositoryPort, SuiteRepositoryPort
 
 _ACTIVE_RUN_STATUSES = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
 _ACTIVE_SUITE_STATUSES = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
@@ -21,7 +21,7 @@ class OpsService:
         self,
         *,
         settings: E2ESettings,
-        run_repo: RunRepositoryPort,
+        run_repo: RunHistoryQueryPort,
         suite_repo: SuiteRepositoryPort,
         schedule_repo: ScheduleRepositoryPort,
         run_queue: RunExecutionQueue,
@@ -36,7 +36,7 @@ class OpsService:
 
     async def build_snapshot(self) -> dict[str, Any]:
         now = datetime.now(UTC)
-        runs = await self._run_repo.list_runs()
+        runs = await self._run_repo.list_all_runs()
         suites = await self._suite_repo.list_suites()
         schedules = await self._schedule_repo.list()
 

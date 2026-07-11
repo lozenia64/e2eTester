@@ -1,0 +1,14 @@
+"""scripts/ 하위에서 ``app`` 패키지를 import 하기 위한 경로 부트스트랩."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def ensure_repo_root_on_path() -> Path:
+    root = Path(__file__).resolve().parent.parent
+    root_str = str(root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    return root

@@ -9,7 +9,7 @@
 - 시스템 코드: `mhm`
 - manifest: `app/systems/mhm/manifest.yaml`
 - 대상 사이트: `https://m.hwgeneralins.com` (고정값)
-- **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `app/systems/mhm/steps/login_common.py` 의 `apply_mobile_device_mode()`(executor `build_runtime()` 단계) → `app/systems/mhm/steps/main_access.py` 의 `run()` 순서를 따른다.
+- **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**하고, 그 다음에 `m.hwgeneralins.com`에 접속한다. 모바일 모드 적용 전에 접속하면 PC 레이아웃으로 열리거나 리다이렉트될 수 있다. 구현은 `app/automation/page_objects/mhm/login_common.py`의 `apply_mobile_device_mode()`(executor `build_runtime()` 단계) → `main_access` PageObject 순서를 따른다.
 - 인증 수단: **휴대폰인증**(OTP pause/resume), **카카오인증**(30초 대기·최대 3회 재시도). 금융인증서·공동인증서는 UI placeholder 이며 API에서 실행을 거부한다.
 - **전체 순차 점검(SUITE)**: 홈 SUITE 카드에서 시스템 체크박스로 포함 여부를 선택할 수 있다. SUITE에 포함되면 이 시스템의 **전체 모듈**이 순차 실행되며, 인증 정보는 SUITE 카드의 MHM 전용 패널에서 설정한다.
 
@@ -18,15 +18,15 @@
 `app/systems/mhm/manifest.yaml` 의 `order` 기준:
 
 1. `mhm.main.access`
-2. `mhm.login` — 로그인 화면 이동(`app/systems/mhm/steps/login_move.py`)과 본인인증 로그인을 한 단계(`login`)에서 처리한다. `auth_method`에 따라 `app/systems/mhm/steps/phone_login.py`(휴대폰·OTP) 또는 `app/systems/mhm/steps/kakao_login.py`(카카오·30초·`인증확인`·최대 3회 재시도) 실행
+2. `mhm.login` — 로그인 화면 이동과 본인인증 로그인을 한 단계(`login` Flow)에서 처리한다. 셀렉터·UI 조작은 `app/automation/page_objects/mhm/` PageObject, 흐름 제어는 `app/automation/flows/rep_homepage/login_flow.py` Flow가 담당한다.
 3. `mhm.contract.list`
 4. `mhm.contract.detail`
-5. `mhm.compensation.charge` — `app/systems/mhm/steps/compensation_charge.py` (`compensation_charge` 단계)
-6. `mhm.compensation.result` — `app/systems/mhm/steps/compensation_result.py` (`compensation_result` 단계)
-7. `mhm.compensation.cancel` — `app/systems/mhm/steps/compensation_cancel.py` (`compensation_cancel` 단계)
-8. `mhm.proof.long_term_policy` — `app/systems/mhm/steps/long_term_policy_certificate.py` (`long_term_policy_certificate` 단계)
+5. `mhm.compensation.charge` — `app/automation/page_objects/mhm/compensation_charge.py` PageObject
+6. `mhm.compensation.result` — `app/automation/page_objects/mhm/compensation_result.py` PageObject
+7. `mhm.compensation.cancel` — `app/automation/page_objects/mhm/compensation_cancel.py` PageObject
+8. `mhm.proof.long_term_policy` — `app/automation/page_objects/mhm/long_term_policy_certificate.py` PageObject
 
-`app/systems/mhm/steps/compensation_result.py`·`app/systems/mhm/steps/compensation_cancel.py`는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/systems/mhm/steps/compensation_result_common.py`에서 공유한다.
+공통 보상 결과 UI 헬퍼는 `app/automation/page_objects/mhm/compensation_result_common.py`에 있다.
 
 모듈별 `timeout_seconds`: 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 MHM 단계는 180초.
 

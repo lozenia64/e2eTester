@@ -55,6 +55,15 @@ class E2ESettings(BaseSettings):
     # 영속 저장소·실행
     db_path: str = Field(default="data/e2etester.db", validation_alias="E2E_DB_PATH")
     run_concurrency: int = Field(default=4, ge=1, validation_alias="E2E_RUN_CONCURRENCY")
+    # 원격 실행(Phase 2): local=API 프로세스 in-process, remote=워커+Redis
+    execution_mode: str = Field(default="local", validation_alias="E2E_EXECUTION_MODE")
+    redis_url: str = Field(default="redis://127.0.0.1:6379/0", validation_alias="E2E_REDIS_URL")
+    worker_concurrency: int = Field(default=2, ge=1, validation_alias="E2E_WORKER_CONCURRENCY")
+    session_lease_ttl: int = Field(default=60, ge=5, validation_alias="E2E_SESSION_LEASE_TTL")
+    worker_base_url: str = Field(
+        default="http://127.0.0.1:8100",
+        validation_alias="E2E_WORKER_BASE_URL",
+    )
 
     # Gemini / AI 실패 분석
     failure_analyzer_enabled: bool = Field(

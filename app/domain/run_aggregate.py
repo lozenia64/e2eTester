@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
+from app.domain import events as domain_events
+from app.domain.events import DomainEvent
 
 # 더 이상 전이시키지 않는(이미 끝난) 모듈 상태들.
 _MODULE_TERMINAL = {
@@ -41,8 +43,36 @@ class RunAggregate:
     """
 
     def __init__(self, run: Run) -> None:
-        self.run = run
+        self._state = run
         self._modules_by_id = {module.module_id: module for module in run.modules}
+        self._pending_events: list[DomainEvent] = []
+
+    @property
+    def snapshot(self) -> Run:
+        """현재 Run 상태의 읽기 스냅샷(동일 객체 참조 — 호출자가 변이하지 않도록 주의)."""
+        return self._state
+
+    def pull_events(self) -> list[DomainEvent]:
+        """누적된 도메인 이벤트를 꺼내고 내부 버퍼를 비운다(영속/outbox 기록 직전)."""
+        pulled = list(self._pending_events)
+        self._pending_events.clear()
+        return pulled
+
+    @classmethod
+    def for_new_run(cls, run: Run) -> RunAggregate:
+        """신규 Run 생성 시 ``RunCreated`` 이벤트를 함께 산출한다."""
+        aggregate = cls(run)
+        aggregate._emit(
+            domain_events.run_created(
+                run.run_id,
+                run.system_code,
+                run.triggered_by,
+            )
+        )
+        return aggregate
+
+    def _emit(self, event: DomainEvent) -> None:
+        self._pending_events.append(event)
 
     # --- 조회(규칙/판정) --------------------------------------------------
 
@@ -60,10 +90,10 @@ class RunAggregate:
         )
 
     def has_module_error(self) -> bool:
-        return any(module.status in MODULE_ERROR_STATUSES for module in self.run.modules)
+        return any(module.status in MODULE_ERROR_STATUSES for module in self._state.modules)
 
     def has_module_anomaly(self) -> bool:
-        return any(module.status in MODULE_ANOMALY_STATUSES for module in self.run.modules)
+        return any(module.status in MODULE_ANOMALY_STATUSES for module in self._state.modules)
 
     def compute_final_status(self, forced_status: RunStatus | None) -> RunStatus:
         """종료 시점의 Run 상태 판정 규칙(강제 상태가 있으면 그것이 우선).
@@ -101,23 +131,27 @@ class RunAggregate:
 
     def begin(self) -> None:
         """Run 실행 시작: RUNNING + started_at."""
-        self.run.status = RunStatus.RUNNING
-        self.run.started_at = datetime.now(UTC)
+        self._state.status = RunStatus.RUNNING
+        self._state.started_at = datetime.now(UTC)
+        self._emit(domain_events.run_started(self._state.run_id))
 
     def block_for_dependencies(self, module: RunModule) -> None:
         module.status = ModuleStatus.BLOCKED
         module.message = "선행 모듈 실패로 인해 실행되지 않음"
+        self._emit(domain_events.run_module_blocked(self._state.run_id, module.module_id))
 
     def mark_queued(self, module: RunModule) -> None:
         module.status = ModuleStatus.QUEUED
         module.message = "실행 대기열에 등록됨"
         module.failure_analysis = None
+        self._emit(domain_events.run_module_queued(self._state.run_id, module.module_id))
 
     def mark_running(self, module: RunModule) -> None:
         module.status = ModuleStatus.RUNNING
         module.started_at = datetime.now(UTC)
         module.message = "실행 준비 중"
         module.failure_analysis = None
+        self._emit(domain_events.run_module_running(self._state.run_id, module.module_id))
 
     def record_result(
         self,
@@ -152,7 +186,9 @@ class RunAggregate:
 
     def attach_comparison(self, comparison) -> None:
         """직전 Run 대비 비교 결과를 부착한다(finalize 시점의 도메인 변이 경로)."""
-        self.run.comparison = comparison
+        self._state.comparison = comparison
+        baseline_id = comparison.baseline_run_id if comparison.has_baseline else None
+        self._emit(domain_events.run_comparison_attached(self._state.run_id, baseline_id))
 
     def hydrate_logs(self, logs_by_module: dict[str, list[str]]) -> None:
         """로그 스토어의 로그를 각 모듈에 채워 읽기 모델을 조립한다.
@@ -160,13 +196,14 @@ class RunAggregate:
         로그 본문은 별도 로그 스토어(집합체)가 소유하지만, 읽기 시 모듈에 채워 넣는 것도
         엔티티 필드 변이이므로 이 경로로만 수행한다(애그리거트 = 유일한 변이자).
         """
-        for module in self.run.modules:
+        for module in self._state.modules:
             module.logs = logs_by_module.get(module.module_id, [])
 
     def finish_timing(self, module: RunModule) -> None:
         """모듈 종료 시각·소요시간 확정(정상 종료 경로)."""
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)
+        self._emit_module_completed(module)
 
     def fail_module(self, module: RunModule, message: str) -> None:
         """단계 진입 전/도중 e2eTester(플랫폼) 오류로 모듈을 종료한다."""
@@ -174,6 +211,7 @@ class RunAggregate:
         module.message = message
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)
+        self._emit_module_completed(module)
 
     def mark_fatal(self, module: RunModule, message: str) -> None:
         """예상치 못한 실행 오류를 특정 모듈에 귀속해 ERROR 처리한다."""
@@ -183,6 +221,7 @@ class RunAggregate:
         module.message = message
         module.ended_at = datetime.now(UTC)
         module.duration_ms = self._duration_ms(module)
+        self._emit_module_completed(module)
 
     def mark_waiting_input(self, module: RunModule, message: str, artifacts: list[str]) -> None:
         """OTP 등 사용자 입력 대기로 Run 을 일시정지한다(모듈 종료가 아님)."""
@@ -191,17 +230,19 @@ class RunAggregate:
         module.artifacts = artifacts
         module.artifact_count = len(artifacts)
         module.failure_analysis = None
-        self.run.status = RunStatus.WAITING_INPUT
-        self.run.awaiting_input_module_id = module.module_id
-        self.run.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
+        self._state.status = RunStatus.WAITING_INPUT
+        self._state.awaiting_input_module_id = module.module_id
+        self._state.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
+        self._emit(domain_events.run_paused_for_otp(self._state.run_id, module.module_id))
 
     def resume_after_input(self, module: RunModule) -> None:
         """입력(OTP)이 접수되어 재개 대기 상태로 되돌린다."""
-        self.run.status = RunStatus.RUNNING
-        self.run.awaiting_input_module_id = None
-        self.run.awaiting_input_prompt = None
+        self._state.status = RunStatus.RUNNING
+        self._state.awaiting_input_module_id = None
+        self._state.awaiting_input_prompt = None
         module.status = ModuleStatus.QUEUED
         module.message = "OTP 입력이 접수되어 재개 대기 중"
+        self._emit(domain_events.run_resumed(self._state.run_id, module.module_id))
 
     def cancel_modules(self, modules: list[RunModule]) -> list[RunModule]:
         """아직 끝나지 않은 모듈들을 사용자 취소로 종료한다. 실제 전이된 모듈만 반환."""
@@ -215,34 +256,70 @@ class RunAggregate:
             module.status = ModuleStatus.CANCELLED
             module.message = "사용자 요청으로 취소됨"
             changed.append(module)
+        if changed:
+            self._emit(
+                domain_events.run_modules_cancelled(
+                    self._state.run_id,
+                    [module.module_id for module in changed],
+                )
+            )
         return changed
 
     def finalize(self, forced_status: RunStatus | None) -> RunStatus:
         """Run 을 종료 상태로 봉인한다(비교 계산·영속·이벤트는 호출자 책임). 결과 상태 반환."""
-        self.run.ended_at = datetime.now(UTC)
-        self.run.awaiting_input_module_id = None
-        self.run.awaiting_input_prompt = None
-        self.run.status = self.compute_final_status(forced_status)
-        return self.run.status
+        self._state.ended_at = datetime.now(UTC)
+        self._state.awaiting_input_module_id = None
+        self._state.awaiting_input_prompt = None
+        self._state.status = self.compute_final_status(forced_status)
+        self._emit_run_finished()
+        return self._state.status
 
     def seal_interrupted(self) -> bool:
         """재기동으로 이어받을 수 없는 진행 중 Run 을 CANCELLED 로 봉인한다.
 
         실제로 봉인했으면 True. 이미 종료 상태면 아무것도 하지 않고 False.
         """
-        if self.run.status not in _RUN_ACTIVE:
+        if self._state.status not in _RUN_ACTIVE:
             return False
-        self.run.status = RunStatus.CANCELLED
-        self.run.ended_at = self.run.ended_at or datetime.now(UTC)
-        self.run.awaiting_input_module_id = None
-        self.run.awaiting_input_prompt = None
-        for module in self.run.modules:
+        self._state.status = RunStatus.CANCELLED
+        self._state.ended_at = self._state.ended_at or datetime.now(UTC)
+        self._state.awaiting_input_module_id = None
+        self._state.awaiting_input_prompt = None
+        for module in self._state.modules:
             if module.status in _MODULE_ACTIVE:
                 module.status = ModuleStatus.CANCELLED
                 module.message = "서버 재시작으로 중단됨"
+        self._emit(domain_events.run_sealed_interrupted(self._state.run_id))
+        self._emit_run_finished()
         return True
 
     # --- 내부 -------------------------------------------------------------
+
+    def _emit_module_completed(self, module: RunModule) -> None:
+        self._emit(
+            domain_events.run_module_completed(
+                self._state.run_id,
+                module.module_id,
+                module.status,
+                system_code=self._state.system_code,
+                schedule_id=self._state.schedule_id,
+                suite_id=self._state.suite_id,
+            )
+        )
+
+    def _emit_run_finished(self) -> None:
+        self._emit(
+            domain_events.run_finished(
+                self._state.run_id,
+                self._state.status,
+                system_code=self._state.system_code,
+                schedule_id=self._state.schedule_id,
+                suite_id=self._state.suite_id,
+                requested_at=self._state.requested_at,
+                ended_at=self._state.ended_at,
+                created_by_user_id=self._state.created_by_user_id,
+            )
+        )
 
     @staticmethod
     def _duration_ms(module: RunModule) -> int | None:

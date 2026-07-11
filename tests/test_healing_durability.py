@@ -57,7 +57,7 @@ def test_auto_generated_looking_id_is_downgraded():
 
 
 def test_system_inference_from_path():
-    assert system_of_path("app/systems/hrp/steps/login.py") == "hrp"
+    assert system_of_path("app/automation/page_objects/hrp/login.py") == "hrp"
     assert system_of_path("app/systems/access_common/browser.py") == "공용(access_common)"
     assert system_of_path("app/scenarios/rep_homepage/constants.py").startswith("공용(rep_homepage")
 

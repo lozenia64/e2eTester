@@ -172,6 +172,34 @@ e2eTester/
       scheduler.py
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
+    automation/                    # Automation BC (Flow + PageObject 4-layer)
+      ports.py                     # AutomationPort / AutomationContext / Flow
+      scenario_engine.py           # workflow_step → Flow 디스패치
+      wiring.py                    # 시스템별 ScenarioEngine 팩토리
+      flows/
+        rep_homepage/              # 대표홈페이지 시나리오 Flow
+          access_flow.py
+          login_flow.py
+          contract_flow.py
+          compensation_flow.py
+        access/                    # 접속 점검 공용 Flow
+          access_flow.py
+          login_flow.py
+        fp/
+        hrp/
+        hwtc/
+        chbot/
+      page_objects/
+        hom/
+        mhm/
+        fp/
+        hrp/
+        hwtc/
+        chbot/
+      scenarios/
+        rep_homepage/
+          constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
+      fixtures/                    # 계약 테스트용 최소 HTML
     runner/
       artifact_manager.py
       screenshot.py                # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
@@ -180,48 +208,22 @@ e2eTester/
       workflow_engine.py           # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
     scenarios/
       rep_homepage/                # 대표홈페이지(PC·모바일) 공용 시나리오 (채널 무관 1벌)
-        constants.py               # 청구 본문 문구 등 도메인 결합 규칙 SSOT
-        channel.py                 # ChannelProfile / ChannelSteps (채널 어댑터 계약)
+        constants.py               # → app/automation/scenarios/rep_homepage/constants.py shim
+        channel.py                 # ChannelProfile / ChannelSteps (PageObject 어댑터 계약)
         runtime.py                 # RepHomepageRuntime (PC·모바일 단일 런타임)
-        executor.py                # RepHomepageExecutor (단일 build_step_registry 시나리오 디스패치)
+        executor.py                # RepHomepageExecutor (런타임 기동; 단계는 automation Flow)
     systems/
-      loader.py                    # execution_mode -> 시스템별 executor 로딩
+      loader.py                    # execution_mode -> executor 로딩 + ScenarioEngine 부착
       hom/
-        channel.py                 # PC 채널 프로파일(PC_CHANNEL): hom.steps 어댑터 주입
+        channel.py                 # PC 채널 프로파일(PC_CHANNEL): hom PageObject 주입
         executor.py                # 얇은 팩토리 (RepHomepageExecutor + PC_CHANNEL)
         manifest.yaml
         scripts/
           login_phone.py           # 수동 실행용 CLI (manifest 워크플로 아님)
-        steps/
-          login_common.py
-          main_access.py
-          login_move.py
-          phone_login.py
-          kakao_login.py
-          contract_list.py
-          contract_detail.py
-          compensation_charge.py
-          compensation_result_common.py
-          compensation_result.py
-          compensation_cancel.py
-          long_term_policy_certificate.py
       mhm/
-        channel.py                 # 모바일 채널 프로파일(MOBILE_CHANNEL): mhm.steps 어댑터 주입(mobile=True)
+        channel.py                 # 모바일 채널 프로파일(MOBILE_CHANNEL): mhm PageObject 주입
         executor.py                # 얇은 팩토리 (RepHomepageExecutor + MOBILE_CHANNEL)
         manifest.yaml
-        steps/                     # hom 과 동일한 시나리오 계약을 구현하는 모바일 셀렉터 어댑터
-          login_common.py
-          main_access.py
-          login_move.py
-          phone_login.py
-          kakao_login.py
-          contract_list.py
-          contract_detail.py
-          compensation_charge.py
-          compensation_result_common.py
-          compensation_result.py
-          compensation_cancel.py
-          long_term_policy_certificate.py
       access_common/
         browser.py                 # 공용 브라우저 기동/팝업/모바일 모드 헬퍼
         executor.py                # AccessWorkflowExecutor (FP/HRP/HWTC/CHBOT 공통 베이스)
@@ -229,29 +231,15 @@ e2eTester/
       fp/
         executor.py                # FpWorkflowExecutor
         manifest.yaml
-        steps/
-          identity_verification.py
-          document_writing.py
       hrp/
         executor.py                # HrpWorkflowExecutor
         manifest.yaml
-        steps/
-          login.py
-          salvage_bid_inquiry_common.py
-          salvage_bid_inquiry_list.py
-          salvage_bid_inquiry_detail.py
       hwtc/
         executor.py                # HwtcWorkflowExecutor
         manifest.yaml
-        steps/
-          phone_auth.py
-          video_playback.py
       chbot/
         executor.py                # ChbotWorkflowExecutor
         manifest.yaml
-        steps/
-          simple_auth.py
-          contract_list.py
     storage/
       ports.py                     # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule 등
       records.py                   # 영속 DTO + 매퍼(RunRecord/SuiteRecord 등): 도메인 ↔ 온디스크 스키마 분리, 로그 제외는 타입 수준
@@ -997,23 +985,34 @@ Suite (`/ws/suites/{suite_id}`):
 - 계약목록·계약상세 조회 selector 보강
 - 실패 시 디버그 아티팩트 확장 (`trace.zip`, `dom.html` 등)
 
-### Phase 2. 저장소와 실행 모델 개선 — (대부분 완료)
+### Phase 2. 저장소와 실행 모델 개선 — ✅ 완료
 
-- ✅ 저장소 포트(`app/storage/ports.py`) 도입 + `InMemory*Repository` 를 `Sqlite*Repository`(SQLite 영속)로 교체
-- ✅ 서버 재시작 복구 시나리오: 진행 중 Run/Suite 는 기동 시 `CANCELLED` 로 봉인, 과거 예약은 다음 cron 시각으로 재계산
-- 남은 작업: OTP 대기 상태는 살아있는 브라우저 세션에 묶여 영구 저장으로 이어받을 수 없음(재실행으로 대체). 다중 프로세스가 필요하면 Postgres 어댑터 추가
+- ✅ 저장소 포트(`app/storage/ports.py`) 도입 + `Sqlite*Repository`(SQLite 영속)
+- ✅ **CQRS write/read 분리**: `RunWriteRepositoryPort` + `RunHistoryQueryPort` + projection tables (`app/projections/`)
+- ✅ **Transactional Outbox** + `OutboxRelay` (`app/eventsourcing/`) — domain event → projection · EventBus · WS fan-out
+- ✅ **RealtimeNotificationPort** (`app/realtime/`) — WebSocket pub/sub을 저장소에서 분리
+- ✅ PII 영속: `EncryptedSqliteRunInputStore` / `EncryptedSqliteSuiteInputStore` (AES-GCM)
+- ✅ `list_runs()` 전수 스캔 제거 — `scripts/check_architecture_gates.py` CI 게이트
 
-### Phase 3. 런타임 추상화 — (대부분 완료)
+### Phase 3. 런타임 추상화 — ✅ 완료
 
-- ✅ `ExecutionGateway` 포트 도입 (`BrowserGateway` 역할)
-- ✅ sync API 호출·스레드 모델·런타임 수명을 gateway(`LocalExecutionGateway`) 뒤로 이동
-- 남은 작업: Playwright MCP 구현체 추가 (포트는 이미 존재하므로 새 어댑터만 작성)
+- ✅ `ExecutionGateway` 포트 (`LocalExecutionGateway` / `SimulatedExecutionGateway` / `RemoteExecutionGateway`)
+- ✅ sync API·스레드 모델·런타임 수명을 gateway 뒤로 이동
+- ✅ `E2E_EXECUTION_MODE=remote` 시 `RemoteExecutionGateway` + Redis job broker
 
-### Phase 4. 실행 분리
+### Phase 4. 실행 분리 — ✅ 완료
 
-- Web 프로세스와 Worker 프로세스 분리 (`ExecutionGateway` 의 out-of-process 구현체로 교체; 오케스트레이터 무수정)
-- timeout·kill 정책 추가 (전역 동시 Run 수 제한은 `RunExecutionQueue` + `E2E_RUN_CONCURRENCY` 로 구현됨)
-- 시스템/계정 단위 동시 실행 제어 (영속 프로파일 격리 필요)
+- ✅ Web 프로세스와 Worker 프로세스 분리 (`worker/` + `docker-compose.yml`)
+- ✅ Redis session registry + heartbeat — OTP `WAITING_INPUT` 시 worker 생존이면 API 재기동 후 재개 가능
+- ✅ `RunExecutionQueue` → `JobQueuePort` (`RedisJobQueue` / `InMemoryJobQueue`)
+- 남은 작업: Playwright MCP Gateway 어댑터 (`worker/` HTTP surface 확장), 시스템/계정 단위 동시 실행 제어
+
+### Phase 5. Automation Bounded Context — ✅ 완료
+
+- ✅ `app/automation/` — BDR 4계층 (Scenario → Flow → PageObject ACL)
+- ✅ `app/systems/*/steps/` 제거 — 6시스템 전부 automation BC로 이전
+- ✅ 자가 치유 approve: 소스 직접 패치 금지 → `artifacts/healing_patches/` 패치 파일만 생성
+- ✅ contract tests (`tests/contract/`)
 
 ## 13. 목표 아키텍처
 
@@ -1038,29 +1037,34 @@ Backend
   -> Module Registry
 ```
 
-> **진행 상태:** 위 목표 중 `Run Orchestrator → BrowserGateway → Browser` 경계는 이미 `ExecutionGateway` 포트(+`LocalExecutionGateway`)로 구현되었고, `Worker Process` 만 아직 in-process 다(동일 포트로 교체 가능). 부수 관심사 분리(`EventBus`)도 완료. `Persistent Run State Store` 도 저장소 포트(`app/storage/ports.py`) + SQLite 어댑터로 구현됐다(단일 파일; 다중 프로세스용 원격 저장소는 어댑터 추가로 확장). 남은 큰 축은 out-of-process 워커다.
+> **진행 상태 (2026-07):** 이상적 아키텍처 리팩토링 3단계(CQRS → Worker → Automation BC) **완료**.
 >
-> **방향 확정(SSOT):** 목표 아키텍처는 이 문서(§13)가 소유한다. [docs/ARCHITECTURE_REVIEW_IDEAL.md](docs/ARCHITECTURE_REVIEW_IDEAL.md) 개선안 #3 이 제시한 두 갈래 — (A) 정직하게 in-process 로 좁히기 vs (B) 진짜 워커 분리 — 중 **본 프로젝트의 목표는 (B) out-of-process 워커**다. 다만 그 전까지 포트가 제공하지 못하는 이동성을 약속하지 않도록, 현재 상태 서술(§5.6·§10)은 "재기동 시 진행 중 Run 은 CANCELLED 봉인, 세션 토큰은 프로세스 수명 한정"임을 명시한다. 리뷰 문서는 시점 고정 평가(역사 기록)로만 참조한다.
+> - **Write path**: `RunAggregate` → `SqliteRunWriteRepository` + domain event store + transactional outbox → `OutboxRelay`
+> - **Read path**: projection tables + `RunHistoryQueryPort` (전수 스캔 없음)
+> - **Realtime**: `RealtimeNotificationPort` (저장소와 분리)
+> - **Execution**: `E2E_EXECUTION_MODE=local`(개발) / `remote`(prod: `worker/` + Redis)
+> - **Automation**: `app/automation/` BC — `systems/*/steps/` 삭제됨
+>
+> **방향 확정(SSOT):** 목표는 (B) out-of-process 워커 — **달성**. `E2E_EXECUTION_MODE=remote` + `docker-compose.yml`. OTP 재개는 worker heartbeat + session lease가 유효할 때 API 재기동 후에도 가능. worker 미가동·lease 만료 시에만 `reconcile_interrupted_runs`가 `CANCELLED` 봉인.
 
 이 목표 구조로 가면 아래가 가능해진다.
 
-- 서버 재시작 후 Run 상태 유지
-- 실행 격리
-- 병렬도 제어
-- 테스트 모듈과 브라우저 구현 분리 (✅ `ExecutionGateway` 로 달성)
-- Playwright MCP 기반 이관 (포트 준비 완료)
+- 서버 재시작 후 Run 상태 유지 (✅ SQLite + encrypted input store)
+- 실행 격리 (✅ `worker/` 프로세스 + `RemoteExecutionGateway`)
+- 병렬도 제어 (✅ `RedisJobQueue` + `E2E_RUN_CONCURRENCY`)
+- 테스트 모듈과 브라우저 구현 분리 (✅ `ExecutionGateway` + `app/automation/` BC)
+- Playwright MCP 기반 이관 (worker HTTP surface 준비; MCP 어댑터는 후속)
 
 ## 14. 결론
 
-현재 소스코드는 단순한 Playwright 스크립트 모음이 아니라, 이미 웹 트리거형 E2E 플랫폼의 최소 실행 골격을 갖춘 샘플이다.
+현재 소스코드는 **이상적 아키텍처 기준 3단계 리팩토링이 완료된** 웹 트리거형 E2E 플랫폼이다.
 
 정리하면 현재 상태는 아래다.
 
-- 웹에서 시스템 실행 가능
-- **전체 시스템 순차 점검(Suite)** 과 시스템별 선택 실행 가능
-- 실시간 모듈 노드 대시보드 존재
-- 입력 대기(`WAITING_INPUT`) pause/resume 구조 존재 (Run·Suite)
-- 로그인 이후 후속 모듈 실행 구조 존재
-- manifest 기반 확장 포인트 존재
+- CQRS + Event Sourcing(outbox) + projection 기반 조회
+- Out-of-process 브라우저 실행 (`worker/` + Redis)
+- Automation Bounded Context (`app/automation/`: Flow + PageObject)
+- 웹에서 시스템 실행·Suite 순차 점검·실시간 대시보드·OTP pause/resume
+- manifest 기반 확장 + contract tests
 
-앞으로의 핵심 작업은 “새 모듈 추가” 자체보다, 현재 구조를 깨지 않고 저장소, 워커, MCP abstraction을 점진적으로 넣는 것이다.
+앞으로의 핵심 작업은 Playwright MCP Gateway 어댑터 정식화와 운영 환경 Redis/Worker 스케일링 튜닝이다.

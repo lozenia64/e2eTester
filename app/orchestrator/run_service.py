@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
@@ -19,27 +18,32 @@ from app.domain.run_state_machine import (
     RejectUnexpectedInput,
     RunStateMachine,
 )
-from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
+from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.orchestrator.daily_dashboard import build_daily_dashboard
 from app.orchestrator.run_comparator import RunComparator
 from app.orchestrator.run_event_publisher import RunEventPublisher
 from app.orchestrator.run_planner import RunPlanner
 from app.orchestrator.run_summary import summarize_run
+from app.realtime.ports import RealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 from app.storage.ports import (
     RunControlStorePort,
+    RunHistoryQueryPort,
     RunInputStorePort,
     RunLogStorePort,
-    RunRepositoryPort,
+    RunWriteRepositoryPort,
 )
 
 if TYPE_CHECKING:
-    from app.execution.run_queue import JobQueue
+    from app.execution.job_queue_port import JobQueuePort
+    from app.execution.redis_session_registry import RedisSessionRegistry
     from app.healing.ports import HealingRecorderPort as HealingRecorder
     from app.orchestrator.run_actor import ActorContext
+
+from app.execution.job_queue_port import RunJobDescriptor
 
 logger = get_logger(__name__)
 
@@ -63,29 +67,34 @@ class RunService:
     def __init__(
         self,
         registry: ModuleRegistry,
-        repository: RunRepositoryPort,
+        write_repo: RunWriteRepositoryPort,
+        history_query: RunHistoryQueryPort,
+        realtime: RealtimeNotificationPort,
         log_store: RunLogStorePort,
         execution_gateway: ExecutionGateway,
         event_bus: EventBus,
         control_store: RunControlStorePort,
         input_store: RunInputStorePort,
-        run_queue: JobQueue,
+        run_queue: JobQueuePort,
         comparator: RunComparator | None = None,
         planner: RunPlanner | None = None,
         artifact_manager: ArtifactManager | None = None,
         healing_recorder: HealingRecorder | None = None,
+        session_registry: RedisSessionRegistry | None = None,
     ) -> None:
         self._registry = registry
-        self._repository = repository
+        self._write_repo = write_repo
+        self._history_query = history_query
+        self._realtime = realtime
         self._log_store = log_store
         self._gateway = execution_gateway
         self._event_bus = event_bus
         # 실행 코루틴은 더 이상 fire-and-forget asyncio.create_task 가 아니라, 감독되는 작업
         # 큐(워커 풀 · 예외 격리 · 동시성 제한 · 수명 관리)에 제출한다.
         self._run_queue = run_queue
-        self._comparator = comparator or RunComparator(repository)
+        self._comparator = comparator or RunComparator(history_query)
         self._planner = planner or RunPlanner()
-        self._events = RunEventPublisher(repository)
+        self._events = RunEventPublisher(realtime)
         self._artifact_manager = artifact_manager or ArtifactManager()
         # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 더 이상 서비스-인스턴스 메모리 dict 가 아니라
         # 영속 스토어(권위 있는 단일 출처)가 소유한다. PII 입력값도 전용 스토어로 분리한다.
@@ -97,6 +106,8 @@ class RunService:
         # 자가 치유 이벤트 기록자(선택 협력자). 실행 어댑터는 치유 시도 '사실'만
         # StepExecutionResult 에 실어 보고하고, 영속·패치 제안은 여기서 위임한다.
         self._healing_recorder = healing_recorder
+        # 원격 모드 OTP 교차 재기동: 워커 세션 리스가 살아 있으면 WAITING_INPUT 을 봉인하지 않는다.
+        self._session_registry = session_registry
 
     # --- 조회 -------------------------------------------------------------
 
@@ -111,10 +122,10 @@ class RunService:
 
         영속 Run blob 에는 로그가 없으므로(별도 로그 스토어 소유), 여기서 ``RunLogStorePort``
         의 로그를 모듈에 채워 넣어 스냅샷/상세 화면/실패 분석이 기대하는 형태로 조립한다.
-        내부 쓰기 경로는 이 메서드가 아니라 ``self._repository.get_run`` 을 직접 써서 로그
+        내부 쓰기 경로는 이 메서드가 아니라 ``self._write_repo.get_run`` 을 직접 써서 로그
         하이드레이션 비용을 치르지 않는다(write-model).
         """
-        run = await self._repository.get_run(run_id)
+        run = await self._write_repo.get_run(run_id)
         await self._attach_logs(run)
         return run
 
@@ -135,9 +146,9 @@ class RunService:
         scope: Literal["today", "before_today"] | None = None,
     ) -> list[dict]:
         if user_id is not None:
-            runs = await self._repository.list_runs_by_user(user_id)
+            runs = await self._history_query.list_runs_by_user(user_id)
         else:
-            runs = await self._repository.list_runs()
+            runs = await self._history_query.list_all_runs()
         runs.sort(key=lambda run: run.requested_at, reverse=True)
 
         active_statuses = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
@@ -204,32 +215,17 @@ class RunService:
 
         이상건 인박스와 같은 스캔-도출 패턴 — 별도 인덱스 없이 ``list_runs()`` 를 필터한다.
         """
-        runs = [run for run in await self._repository.list_runs() if run.schedule_id == schedule_id]
-        runs.sort(key=lambda run: run.requested_at, reverse=True)
-        return runs[:limit]
+        runs = await self._history_query.list_runs_by_schedule(schedule_id, limit=limit)
+        return runs
 
     async def list_schedule_tagged_runs(self) -> list[Run]:
         """schedule_id 태깅된 Run 전체 — 관제 보드/캘린더가 저장소를 예약마다 다시 훑지
         않도록, 호출자가 1회 스캔 결과를 예약별로 그룹핑해 쓴다."""
-        return [run for run in await self._repository.list_runs() if run.schedule_id]
+        return await self._history_query.list_schedule_tagged_runs()
 
     async def last_finished_at_by_system(self) -> dict[str, datetime]:
         """시스템별 마지막 '점검 완료' 시각(취소 제외) — 커버리지 진단(점검 공백)용."""
-        finished = {
-            RunStatus.PASSED,
-            RunStatus.ANOMALY,
-            RunStatus.ERROR,
-            RunStatus.FAILED,
-        }
-        latest: dict[str, datetime] = {}
-        for run in await self._repository.list_runs():
-            if run.status not in finished:
-                continue
-            moment = _as_utc(run.ended_at or run.requested_at)
-            current = latest.get(run.system_code)
-            if current is None or moment > current:
-                latest[run.system_code] = moment
-        return latest
+        return await self._history_query.last_finished_at_by_system()
 
     async def get_daily_dashboard(
         self,
@@ -247,11 +243,7 @@ class RunService:
             systems = [s for s in systems if s.system_code in allowed]
 
         today_start_utc = schedule_today_start_utc()
-        today_runs = [
-            run
-            for run in await self._repository.list_runs()
-            if _as_utc(run.requested_at) >= today_start_utc
-        ]
+        today_runs = await self._history_query.list_runs_since(today_start_utc)
 
         return build_daily_dashboard(
             systems,
@@ -261,14 +253,14 @@ class RunService:
         )
 
     async def delete_run(self, run_id: str) -> None:
-        run = await self._repository.get_run(run_id)
+        run = await self._write_repo.get_run(run_id)
         if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
             raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
         if await self._control_store.get_pending(run_id) is not None:
             raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
 
         await self._log_store.delete_by_run_id(run_id)
-        await self._repository.delete_run(run_id)
+        await self._write_repo.delete_run(run_id)
         self._artifact_manager.delete_run_artifacts(run_id)
         await self._input_store.delete(run_id)
         await self._control_store.delete(run_id)
@@ -293,7 +285,7 @@ class RunService:
                 if requested_before.tzinfo is not None
                 else requested_before.replace(tzinfo=UTC)
             )
-        for run in await self._repository.list_runs():
+        for run in await self._history_query.list_all_runs():
             if run.status not in statuses or run.status in active:
                 continue
             if cutoff_utc is not None:
@@ -307,7 +299,7 @@ class RunService:
             if await self._control_store.get_pending(run.run_id) is not None:
                 continue
             await self._log_store.delete_by_run_id(run.run_id)
-            await self._repository.delete_run(run.run_id)
+            await self._write_repo.delete_run(run.run_id)
             self._artifact_manager.delete_run_artifacts(run.run_id)
             await self._input_store.delete(run.run_id)
             await self._control_store.delete(run.run_id)
@@ -318,26 +310,61 @@ class RunService:
         """재기동 시 비종료 상태로 남은 Run 을 CANCELLED 로 정리한다.
 
         영속 저장소(SQLite)를 쓰면 서버가 내려갈 때 RUNNING/WAITING_INPUT 이던 Run 이
-        그대로 복원된다. 하지만 그 Run 이 쓰던 브라우저 세션·OTP 대기 핸들은 프로세스와 함께
-        사라졌으므로 이어받을 수 없다. 좀비 상태를 막기 위해 종료로 봉인한다(필요하면 사용자가
-        ``rerun`` 으로 다시 실행). 인메모리 저장소에서는 복원될 Run 이 없어 no-op 이다.
+        그대로 복원된다. 로컬 모드에서는 브라우저 세션이 프로세스와 함께 사라지므로 봉인한다.
+        원격 모드에서는 ``RedisSessionRegistry`` 하트비트가 살아 있는 WAITING_INPUT Run 은
+        OTP 교차 재기동을 위해 봉인하지 않는다.
         """
         count = 0
-        for run in await self._repository.list_runs():
-            if not RunAggregate(run).seal_interrupted():
+        for run in await self._history_query.list_all_runs():
+            if run.status == RunStatus.WAITING_INPUT and self._session_registry is not None:
+                pending = await self._control_store.get_pending(run.run_id)
+                if pending is not None and await self._session_registry.is_alive(
+                    pending.session_id
+                ):
+                    continue
+            aggregate = RunAggregate(run)
+            if not aggregate.seal_interrupted():
                 continue
-            await self._repository.save_run(run)
+            await self._persist(run, aggregate)
             # 재기동으로 죽은 브라우저를 가리키던 dangling 세션 토큰을 정리한다(영속 제어 스토어
             # 사용 시 재기동 후에도 남아 있을 수 있다). 입력값은 보존돼 rerun 에 쓰인다.
             await self._control_store.clear_pending(run.run_id)
             count += 1
         return count
 
+    async def dispatch_run_job(self, descriptor: RunJobDescriptor) -> None:
+        """직렬화된 Run 작업 설명자를 실행한다(워커·로컬 큐 공용 진입점)."""
+        input_data = await self._input_store.get(descriptor.run_id)
+        if input_data is None:
+            raise KeyError(f"Run inputs are no longer available: {descriptor.run_id}")
+        if descriptor.kind == "resume":
+            pending = await self._control_store.get_pending(descriptor.run_id)
+            if pending is None:
+                raise KeyError(f"Run is not waiting for OTP: {descriptor.run_id}")
+            handle = ExecutionHandle(
+                execution_mode=pending.execution_mode,
+                session_id=pending.session_id,
+            )
+            # submit_otp 가 큐에 넣기 전에 pending 을 지우면 워커가 세션을 복원할 수 없다.
+            await self._control_store.clear_pending(descriptor.run_id)
+            await self._execute_run(
+                descriptor.run_id,
+                input_data,
+                pending.resume_index,
+                handle,
+            )
+            return
+        await self._execute_run(descriptor.run_id, input_data, descriptor.start_index, None)
+
     async def subscribe(self, run_id: str):
-        return await self._repository.subscribe(run_id)
+        return await self._realtime.subscribe(run_id)
 
     async def unsubscribe(self, run_id: str, queue):
-        await self._repository.unsubscribe(run_id, queue)
+        await self._realtime.unsubscribe(run_id, queue)
+
+    async def _persist(self, run: Run, aggregate: RunAggregate | None = None) -> None:
+        events = aggregate.pull_events() if aggregate is not None else []
+        await self._write_repo.save_run(run, events=events)
 
     # --- 명령(요청 처리) --------------------------------------------------
 
@@ -385,7 +412,8 @@ class RunService:
             created_by_user_name=user_name,
         )
         await self._input_store.put(run_id, dict(sanitized_input))
-        await self._repository.create_run(run)
+        aggregate = RunAggregate.for_new_run(run)
+        await self._write_repo.create_run(run, events=aggregate.pull_events())
         await self._events.run_event("run_created", run)
         logger.info(
             "Run 생성",
@@ -397,14 +425,17 @@ class RunService:
             schedule_id=run.schedule_id,
             user_name=run.created_by_user_name,
         )
-        await self._run_queue.submit(
-            functools.partial(self._execute_run, run.run_id, sanitized_input),
-            label=f"run:{run.run_id}",
+        await self._run_queue.enqueue_run_job(
+            RunJobDescriptor(
+                run_id=run.run_id,
+                kind="execute",
+                label=f"run:{run.run_id}",
+            )
         )
         return run
 
     async def submit_otp(self, run_id: str, otp_code: str) -> Run:
-        run = await self._repository.get_run(run_id)
+        run = await self._write_repo.get_run(run_id)
         pending = await self._control_store.get_pending(run_id)
         if pending is None:
             raise KeyError(f"Run is not waiting for OTP: {run_id}")
@@ -421,17 +452,19 @@ class RunService:
         aggregate = RunAggregate(run)
         waiting_module = aggregate.module(pending.module_id)
         aggregate.resume_after_input(waiting_module)
-        await self._repository.save_run(run)
+        await self._persist(run, aggregate)
         await self._events.module_event("module_queued", run, waiting_module)
         await self._events.run_event("run_resumed", run)
-        await self._event_bus.publish(RunResumed(run=run))
-        await self._control_store.clear_pending(run_id)
         logger.info(
             "Run OTP 재개", log_event="run.resumed", run_id=run_id, module_id=pending.module_id
         )
-        await self._run_queue.submit(
-            functools.partial(self._execute_run, run_id, input_data, pending.resume_index, handle),
-            label=f"run:{run_id}:resume",
+        await self._run_queue.enqueue_run_job(
+            RunJobDescriptor(
+                run_id=run_id,
+                kind="resume",
+                start_index=pending.resume_index,
+                label=f"run:{run_id}:resume",
+            )
         )
         return run
 
@@ -448,9 +481,7 @@ class RunService:
         ``paused_at`` 이 없는 레거시 pending 행만 생성 시각으로 폴백한다.
         """
         candidates: list[tuple[Run, PendingExecution]] = []
-        for run in await self._repository.list_runs():
-            if run.status != RunStatus.WAITING_INPUT:
-                continue
+        for run in await self._history_query.list_waiting_input_runs():
             pending = await self._control_store.get_pending(run.run_id)
             if pending is None:
                 continue
@@ -475,7 +506,7 @@ class RunService:
         return await self.submit_otp(target.run_id, otp_code)
 
     async def cancel_run(self, run_id: str) -> Run:
-        run = await self._repository.get_run(run_id)
+        run = await self._write_repo.get_run(run_id)
         if run.status in {
             RunStatus.PASSED,
             RunStatus.ANOMALY,
@@ -509,7 +540,7 @@ class RunService:
         user_id: str | None = None,
         user_name: str | None = None,
     ) -> Run:
-        original = await self._repository.get_run(run_id)
+        original = await self._write_repo.get_run(run_id)
         stored_input = await self._input_store.get(run_id)
         if stored_input is None:
             raise ValueError(
@@ -533,7 +564,7 @@ class RunService:
         start_index: int = 0,
         handle: ExecutionHandle | None = None,
     ) -> None:
-        run = await self._repository.get_run(run_id)
+        run = await self._write_repo.get_run(run_id)
         with log_context(
             run_id=run.run_id,
             system_code=run.system_code,
@@ -564,7 +595,7 @@ class RunService:
         aggregate = RunAggregate(run)
         if start_index == 0:
             aggregate.begin()
-            await self._repository.save_run(run)
+            await self._persist(run, aggregate)
             await self._events.run_event("run_started", run)
             logger.info(
                 "Run 시작", log_event="run.started", run_id=run.run_id, system_code=run.system_code
@@ -589,7 +620,7 @@ class RunService:
                     break
                 if isinstance(entry, BlockModule):
                     aggregate.block_for_dependencies(module)
-                    await self._repository.save_run(run)
+                    await self._persist(run, aggregate)
                     await self._events.module_event("module_finished", run, module)
                     continue
                 assert isinstance(entry, ExecuteModule)
@@ -673,7 +704,7 @@ class RunService:
 
                 self._record_module_result(aggregate, module, execution_result)
                 aggregate.finish_timing(module)
-                await self._repository.save_run(run)
+                await self._persist(run, aggregate)
                 await self._events.module_event("module_finished", run, module)
         except Exception as exc:
             forced_status = RunStatus.ERROR
@@ -703,13 +734,15 @@ class RunService:
     # --- 모듈 상태 전이 보조 ----------------------------------------------
 
     async def _transition_to_queued(self, run: Run, module: RunModule) -> None:
-        RunAggregate(run).mark_queued(module)
-        await self._repository.save_run(run)
+        aggregate = RunAggregate(run)
+        aggregate.mark_queued(module)
+        await self._persist(run, aggregate)
         await self._events.module_event("module_queued", run, module)
 
     async def _transition_to_running(self, run: Run, module: RunModule) -> None:
-        RunAggregate(run).mark_running(module)
-        await self._repository.save_run(run)
+        aggregate = RunAggregate(run)
+        aggregate.mark_running(module)
+        await self._persist(run, aggregate)
         await self._events.module_event("module_started", run, module)
 
     def _record_module_result(
@@ -728,8 +761,9 @@ class RunService:
     async def _fail_module(self, run: Run, module: RunModule, exc: Exception) -> None:
         """세션 기동 실패 등 단계 진입 전에 난 오류로 모듈을 실패 처리한다."""
         await self._handle_module_log(run, module, f"[error] {exc}")
-        RunAggregate(run).fail_module(module, str(exc))
-        await self._repository.save_run(run)
+        aggregate = RunAggregate(run)
+        aggregate.fail_module(module, str(exc))
+        await self._persist(run, aggregate)
         await self._events.module_event("module_finished", run, module)
 
     async def _pause_for_input(
@@ -741,14 +775,11 @@ class RunService:
         handle: ExecutionHandle,
         execution_result,
     ) -> None:
-        RunAggregate(run).mark_waiting_input(
-            module, execution_result.message, execution_result.artifacts
-        )
-        await self._repository.save_run(run)
+        aggregate = RunAggregate(run)
+        aggregate.mark_waiting_input(module, execution_result.message, execution_result.artifacts)
+        await self._persist(run, aggregate)
         await self._events.module_event("module_waiting_input", run, module)
         await self._events.run_event("run_waiting_input", run)
-        # Suite Saga 가 하위 Run 의 일시정지를 폴링이 아니라 도메인 이벤트로 감지하도록 발행.
-        await self._event_bus.publish(RunWaitingInput(run=run))
         # 재개 컨텍스트(직렬화 토큰 + resume index)는 메모리 dict 가 아니라 제어 스토어가 소유한다.
         # 입력값(PII)은 start_run 에서 이미 input_store 에 보관됐다.
         await self._control_store.set_pending(
@@ -782,9 +813,11 @@ class RunService:
         await self._finalize_run(run, RunStatus.CANCELLED)
 
     async def _mark_modules_cancelled(self, run: Run, modules: list[RunModule]) -> None:
-        changed = RunAggregate(run).cancel_modules(modules)
+        aggregate = RunAggregate(run)
+        changed = aggregate.cancel_modules(modules)
+        if changed:
+            await self._persist(run, aggregate)
         for module in changed:
-            await self._repository.save_run(run)
             await self._events.module_event("module_finished", run, module)
 
     async def _mark_unexpected_run_failure(
@@ -794,7 +827,6 @@ class RunService:
         ordered_modules: list[RunModule],
         exc: Exception,
     ) -> None:
-        await self._repository.save_run(run)
         aggregate = RunAggregate(run)
         target_module = aggregate.select_failure_target(current_module, ordered_modules)
         if target_module is None:
@@ -808,7 +840,7 @@ class RunService:
 
         await self._handle_module_log(run, target_module, f"[fatal] {exc}")
         aggregate.mark_fatal(target_module, f"예상하지 못한 실행 오류: {exc}")
-        await self._repository.save_run(run)
+        await self._persist(run, aggregate)
         await self._events.module_event("module_finished", run, target_module)
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
@@ -816,15 +848,12 @@ class RunService:
         final_status = aggregate.finalize(forced_status)
         if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
             aggregate.attach_comparison(await self._comparator.compute(run))
-        await self._repository.save_run(run)
+        await self._persist(run, aggregate)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.
         await self._control_store.delete(run.run_id)
         await self._events.run_event("run_finished", run)
-        # 부수 관심사(AI 실패 분석·종료 메일)는 이벤트 구독자가 처리한다. 실패 분석이 모듈
-        # 로그(`module.logs`)를 참조하므로, 로그가 하이드레이션된 읽기 모델을 이벤트로 싣는다.
-        finished = await self.get_run(run.run_id)
-        await self._event_bus.publish(RunFinished(run=finished))
+        # 부수 관심사(AI 실패 분석·종료 메일)는 OutboxRelay → EventBus 가 처리한다.
         logger.info(
             "Run 종료",
             log_event="run.finished",
