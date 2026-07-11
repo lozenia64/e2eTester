@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -23,7 +23,7 @@ def main() -> int:
     run_dir = workspace / ".cursor" / "orchestration" / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     run_json = {
         "run_id": run_id,
         "workspace": str(workspace),

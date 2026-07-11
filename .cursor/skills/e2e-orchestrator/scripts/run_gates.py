@@ -7,7 +7,7 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 GATE_COMMANDS: dict[str, list[str]] = {
@@ -84,7 +84,7 @@ def main() -> int:
         "passed": passed,
         "profile": profile,
         "gates": results,
-        "ran_at": datetime.now(timezone.utc).isoformat(),
+        "ran_at": datetime.now(UTC).isoformat(),
     }
 
     out_path = run_dir / "gates-report.json"

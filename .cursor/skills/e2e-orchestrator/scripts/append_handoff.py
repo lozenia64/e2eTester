@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -20,7 +20,7 @@ def main() -> int:
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     event = {
         "timestamp": now,
         "from_agent": args.from_agent,

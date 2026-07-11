@@ -96,9 +96,7 @@ def write_samples(run_dir: Path) -> None:
         "gates": {},
         "ran_at": "smoke-test",
     }
-    (run_dir / "gates-report.json").write_text(
-        json.dumps(gates, indent=2) + "\n", encoding="utf-8"
-    )
+    (run_dir / "gates-report.json").write_text(json.dumps(gates, indent=2) + "\n", encoding="utf-8")
 
     (run_dir / "review-report.json").write_text(
         json.dumps({"passed": True, "issues": []}, indent=2) + "\n", encoding="utf-8"
@@ -123,7 +121,12 @@ def write_samples(run_dir: Path) -> None:
 def main() -> int:
     workspace = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
     init = subprocess.run(
-        [sys.executable, str(SCRIPTS_DIR / "init_run.py"), str(workspace), "HOM login 스텝 셀렉터 수정"],
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "init_run.py"),
+            str(workspace),
+            "HOM login 스텝 셀렉터 수정",
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -135,7 +138,9 @@ def main() -> int:
     run_json_path = run_dir / "run.json"
     run_json = json.loads(run_json_path.read_text(encoding="utf-8"))
     run_json["pipeline_profile"] = "step_fix"
-    run_json_path.write_text(json.dumps(run_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    run_json_path.write_text(
+        json.dumps(run_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
     failed: list[str] = []
     for agent in STEP_FIX_GRAPH:
