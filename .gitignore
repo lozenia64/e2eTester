@@ -9,4 +9,5 @@ data/
 *.db-wal
 *.db-shm
 .claude/
-.cursor/orchestration/
+# e2e-orchestrator run state (PII, intermediate artifacts)
+.cursor/orchestration/runs/
