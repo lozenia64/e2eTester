@@ -150,6 +150,19 @@ class RunAggregate:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis
 
+    def attach_comparison(self, comparison) -> None:
+        """직전 Run 대비 비교 결과를 부착한다(finalize 시점의 도메인 변이 경로)."""
+        self.run.comparison = comparison
+
+    def hydrate_logs(self, logs_by_module: dict[str, list[str]]) -> None:
+        """로그 스토어의 로그를 각 모듈에 채워 읽기 모델을 조립한다.
+
+        로그 본문은 별도 로그 스토어(집합체)가 소유하지만, 읽기 시 모듈에 채워 넣는 것도
+        엔티티 필드 변이이므로 이 경로로만 수행한다(애그리거트 = 유일한 변이자).
+        """
+        for module in self.run.modules:
+            module.logs = logs_by_module.get(module.module_id, [])
+
     def finish_timing(self, module: RunModule) -> None:
         """모듈 종료 시각·소요시간 확정(정상 종료 경로)."""
         module.ended_at = datetime.now(UTC)

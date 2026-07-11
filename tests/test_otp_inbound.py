@@ -149,11 +149,18 @@ class _FakeRepo:
 
 
 class _FakeControl:
+    """pending_ids: set(run_id) 또는 dict(run_id → paused_at 또는 None)."""
+
     def __init__(self, pending_ids):
-        self._pending = set(pending_ids)
+        if isinstance(pending_ids, dict):
+            self._pending = dict(pending_ids)
+        else:
+            self._pending = dict.fromkeys(pending_ids)
 
     async def get_pending(self, run_id):
-        return object() if run_id in self._pending else None
+        if run_id not in self._pending:
+            return None
+        return SimpleNamespace(paused_at=self._pending[run_id])
 
 
 def _run(run_id, status, minutes_ago=0):
@@ -205,13 +212,54 @@ async def test_waiting_finder_ignores_waiting_without_pending():
         await svc.submit_otp_to_waiting("123456")
 
 
-async def test_waiting_finder_picks_most_recent_when_multiple():
+async def test_waiting_finder_picks_most_recently_paused_when_multiple():
+    # 정렬 키는 OTP 대기 진입 시각(paused_at)이다 — 방금 도착한 SMS 에 대응하는 Run.
+    now = datetime.now(UTC)
+    runs = [
+        _run("paused_earlier", RunStatus.WAITING_INPUT, minutes_ago=1),
+        _run("paused_later", RunStatus.WAITING_INPUT, minutes_ago=10),
+    ]
+    recorder: list = []
+    svc = _service(
+        runs,
+        pending_ids={
+            "paused_earlier": now - timedelta(minutes=5),
+            "paused_later": now - timedelta(minutes=1),
+        },
+        recorder=recorder,
+    )
+    # Run 생성은 paused_earlier 가 더 최근이지만, 대기 진입은 paused_later 가 더 최근 —
+    # 생성 시각을 키로 쓰면 오주입되는 바로 그 사례를 고정한다.
+    result = await svc.submit_otp_to_waiting("123456")
+    assert result.run_id == "paused_later"
+    assert recorder == [("paused_later", "123456")]
+
+
+async def test_waiting_finder_falls_back_to_requested_at_for_legacy_pending():
+    # paused_at 이 없는 레거시 pending 행은 Run 생성 시각으로 폴백한다.
     runs = [
         _run("old", RunStatus.WAITING_INPUT, minutes_ago=10),
         _run("new", RunStatus.WAITING_INPUT, minutes_ago=1),
     ]
     recorder: list = []
-    svc = _service(runs, pending_ids={"old", "new"}, recorder=recorder)
+    svc = _service(runs, pending_ids={"old": None, "new": None}, recorder=recorder)
     result = await svc.submit_otp_to_waiting("123456")
     assert result.run_id == "new"
     assert recorder == [("new", "123456")]
+
+
+async def test_sqlite_control_store_stamps_and_roundtrips_paused_at(tmp_path):
+    from app.storage.sqlite_run_control_store import SqliteRunControlStore
+
+    store = SqliteRunControlStore(tmp_path / "control.db")
+    before = datetime.now(UTC)
+    await store.set_pending(
+        "run-1", session_id="s", execution_mode="m", resume_index=2, module_id="mod"
+    )
+    pending = await store.get_pending("run-1")
+    assert pending is not None
+    assert pending.paused_at is not None
+    assert before <= pending.paused_at <= datetime.now(UTC)
+
+    await store.clear_pending("run-1")
+    assert await store.get_pending("run-1") is None
