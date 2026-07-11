@@ -20,6 +20,7 @@ from app.orchestrator.stats_charts import (
     RED,
     TEXT,
     _axis_style,
+    _axis_title,
     _base_layout,
     _empty_figure,
 )
@@ -258,7 +259,7 @@ def cumulative_step_duration_bar(cumulative: list[dict[str, Any]]) -> dict[str, 
     fig.update_layout(
         **_base_layout(height=max(220, 44 * len(rows))),
         bargap=0.32,
-        xaxis=dict(title="초", titlefont=dict(size=11, color=AXIS), **_axis_style()),
+        xaxis=dict(title=_axis_title("초"), **_axis_style()),
         yaxis=dict(autorange="reversed", **_axis_style(showgrid=False)),
         showlegend=False,
     )
