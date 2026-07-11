@@ -60,7 +60,9 @@ class RemoteExecutionGateway(ExecutionGateway):
             run_id=run_id,
             module_id=module_id,
         )
-        response = await self._post_json("/sessions/open", request.model_dump(), OpenSessionResponse)
+        response = await self._post_json(
+            "/sessions/open", request.model_dump(), OpenSessionResponse
+        )
         return ExecutionHandle(execution_mode=execution_mode, session_id=response.session_id)
 
     async def run_step(

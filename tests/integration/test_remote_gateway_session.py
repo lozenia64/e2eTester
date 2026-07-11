@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import socket
 import threading
+import time
 
 import pytest
 import uvicorn
@@ -17,11 +19,20 @@ from worker.session_server import SessionServer
 
 
 def _free_port() -> int:
-    import socket
-
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+def _wait_for_server(host: str, port: int, *, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                return
+        except OSError:
+            time.sleep(0.05)
+    raise TimeoutError(f"워커 HTTP 서버가 {timeout}s 내에 준비되지 않았습니다: {host}:{port}")
 
 
 @pytest.fixture
@@ -39,6 +50,7 @@ def remote_gateway(monkeypatch):
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
+    _wait_for_server("127.0.0.1", port)
     gateway = RemoteExecutionGateway(f"http://127.0.0.1:{port}")
     yield gateway, fake, session_server
     server.should_exit = True

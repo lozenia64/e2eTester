@@ -10,14 +10,10 @@ from app.scenarios.rep_homepage.runtime import RepHomepageRuntime
 class ContractListFlow:
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(
-            runtime.channel.steps.contract_list.run(ctx.page, runtime.config)
-        )
+        return StepCompleted(runtime.channel.steps.contract_list.run(ctx.page, runtime.config))
 
 
 class ContractDetailFlow:
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
-        return StepCompleted(
-            runtime.channel.steps.contract_detail.run(ctx.page, runtime.config)
-        )
+        return StepCompleted(runtime.channel.steps.contract_detail.run(ctx.page, runtime.config))

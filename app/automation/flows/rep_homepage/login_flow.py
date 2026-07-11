@@ -18,14 +18,10 @@ class LoginFlow:
             )
         if not runtime.phone_login_sms_requested:
             steps.login_move.run(ctx.page)
-            message = steps.phone_login.request_sms(
-                ctx.page, runtime.config, ctx.dialog_messages
-            )
+            message = steps.phone_login.request_sms(ctx.page, runtime.config, ctx.dialog_messages)
             runtime.phone_login_sms_requested = True
             if not runtime.config.otp_code:
                 return StepNeedsInput(message)
         return StepCompleted(
-            steps.phone_login.submit_otp_and_login(
-                ctx.page, runtime.config, ctx.dialog_messages
-            )
+            steps.phone_login.submit_otp_and_login(ctx.page, runtime.config, ctx.dialog_messages)
         )

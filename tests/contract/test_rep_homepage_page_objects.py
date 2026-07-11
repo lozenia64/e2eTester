@@ -5,11 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 _FIXTURE = (
-    Path(__file__).resolve().parents[2]
-    / "app"
-    / "automation"
-    / "fixtures"
-    / "hom_login_form.html"
+    Path(__file__).resolve().parents[2] / "app" / "automation" / "fixtures" / "hom_login_form.html"
 )
 
 _EXPECTED_SELECTORS = ("#custNm", "#btnSendCrtfNo", "#smsCertNo", "#btnNext2")
