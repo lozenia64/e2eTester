@@ -19,8 +19,11 @@ python3 -m pip install -r requirements-dev.txt
 # Run the server (then open http://127.0.0.1:2222 or http://<PC IP>:2222)
 python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 
-# The three checks CI runs on every PR (.github/workflows/docs-consistency.yml) — run all before opening a PR
+# The CI gates GitHub Actions runs on every PR (.github/workflows/ci.yml) — run all before opening a PR
+python3 scripts/ci/run_all_gates.py --profile full   # SSOT: all standard gates (same as CI)
+# Or individually:
 python3 scripts/check_docs_consistency.py   # docs ↔ source consistency guard
+python3 scripts/check_architecture_gates.py # architecture policy (AG-001~003)
 python3 -m ruff check . && python3 -m ruff format --check .   # lint + format (config in pyproject.toml)
 python3 -m pytest tests/ -q                 # unit tests (pure domain/builders — no browser/DB needed)
 
@@ -28,7 +31,7 @@ python3 -m pytest tests/ -q                 # unit tests (pure domain/builders �
 # "e2e-orchestrator 실행: <request>" — see .cursor/skills/e2e-orchestrator/SKILL.md
 ```
 
-There is no build step. Automated checks are threefold and CI-gated: (1) the docs consistency guard (`scripts/check_docs_consistency.py`), which asserts machine-checkable facts (manifest module ids, API routes, env var names, default model chain) match the docs; (2) ruff lint/format; (3) the pytest unit suite in `tests/` covering the pure layers (domain aggregates/state machines, planners, builders, stores) without a browser. Live-site behavioral verification remains manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
+There is no build step. Automated checks are CI-gated in tiers (see `docs/CI.md`): (1) docs consistency guard (`scripts/check_docs_consistency.py`), which asserts machine-checkable facts (manifest module ids, API routes, env var names, default model chain) match the docs; (2) architecture policy gates (`scripts/check_architecture_gates.py`); (3) ruff lint/format; (4) the pytest unit suite in `tests/` covering the pure layers without a browser. Conditional security gates (pip-audit, bandit) run on auth/PII path changes or weekly schedule. Live-site behavioral verification remains manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
 
 Optional features (AI failure analysis via Gemini, end-of-run Gmail notifications) are configured via env vars / `.env` (see `.env.example`); real env vars take precedence over `.env`. Both are disabled by default and the app must keep working when they are unset or misconfigured.
 
