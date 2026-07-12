@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.runner.step_logging import log
+
 from . import login_common as common
 
 CONTRACT_LIST_URL_FRAGMENT = "/myh/ciq/PsnCrInq1010"
@@ -40,7 +42,7 @@ def _open_myhanwha_menu(page, timeout_ms: int) -> None:
             menu = candidate.first
             if not menu.is_visible(timeout=2000):
                 continue
-            print("[step] Open MY한화 mobile menu")
+            log("[step] Open MY한화 mobile menu")
             common.click_with_log(menu, "Open MY한화 mobile menu")
             common.wait_timeout_with_log(page, 600, "MY한화 menu expand delay")
             return

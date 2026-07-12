@@ -8,6 +8,7 @@ from app.automation.scenarios.rep_homepage.constants import (
     KAKAO_AUTH_MAX_ATTEMPTS,
     is_kakao_auth_incomplete_message,
 )
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -97,7 +98,7 @@ def open_kakao_login_page(page) -> None:
         return
 
     if LOGIN_TYPE_SELECT_URL_FRAGMENT not in page.url:
-        print(
+        log(
             f"[warn] 로그인 방법 선택 URL이 아닐 수 있음 "
             f"(기대: …{LOGIN_TYPE_SELECT_URL_FRAGMENT}): {page.url}"
         )
@@ -112,7 +113,7 @@ def open_kakao_login_page(page) -> None:
 
 def _ensure_kakao_consents(page) -> None:
     """카카오 본인인증 페이지에서 전체동의 체크박스를 선택한다."""
-    print("[step] Kakao 필수 동의")
+    log("[step] Kakao 필수 동의")
     root = _kakao_form_root(page)
     checkbox = root.locator("#G29")
     if checkbox.is_checked():
@@ -126,7 +127,7 @@ def _ensure_kakao_consents(page) -> None:
 
 def fill_kakao_form(page, config: common.LoginConfig) -> None:
     """카카오 본인인증 페이지에 이름·생년월일·휴대전화번호를 입력한다."""
-    print("[step] Fill Kakao auth form (이름, 생년월일, 휴대폰)")
+    log("[step] Fill Kakao auth form (이름, 생년월일, 휴대폰)")
     root = _kakao_form_root(page)
 
     name_f = root.locator("#name")
@@ -159,17 +160,17 @@ def _dismiss_visible_alert(page, timeout_ms: int, reason: str) -> None:
             f"{reason} 닫힘",
         )
     except Exception as exc:
-        print(f"[warn] {reason}을 찾지 못했거나 이미 닫힘: {exc}")
+        log(f"[warn] {reason}을 찾지 못했거나 이미 닫힘: {exc}")
 
 
 def dismiss_kakao_auth_request_alert(page, timeout_ms: int) -> None:
     """인증요청 성공 후 뜨는 '카카오인증 요청 메시지가 발송되었습니다' 알림을 닫는다."""
-    print("[step] Kakao 인증요청 발송 알림 닫기")
+    log("[step] Kakao 인증요청 발송 알림 닫기")
     _dismiss_visible_alert(page, timeout_ms, "카카오 인증요청 발송 알림")
 
 
 def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int) -> None:
-    print("[step] Kakao 인증요청 클릭")
+    log("[step] Kakao 인증요청 클릭")
     dialog_index = len(dialog_messages)
     root = _kakao_form_root(page)
     common.scroll_to_page_bottom(page)
@@ -200,20 +201,20 @@ def _detect_and_dismiss_incomplete_modal(page, timeout_ms: int) -> bool:
     incomplete_text = _find_incomplete_modal_text(page)
     if incomplete_text is None:
         return False
-    print(f"[dialog] {incomplete_text.strip()}")
+    log(f"[dialog] {incomplete_text.strip()}")
     _dismiss_visible_alert(page, timeout_ms, "카카오 인증 미완료 알림")
     return True
 
 
 def click_kakao_auth_complete(page, timeout_ms: int) -> bool:
     """카카오톡 인증 완료 후 '인증확인'을 눌러 로그인을 마친다. 버튼이 비활성이면 False."""
-    print("[step] Kakao 인증확인 클릭")
+    log("[step] Kakao 인증확인 클릭")
     root = _kakao_form_root(page)
     common.scroll_to_page_bottom(page)
     complete_btn = _kakao_auth_confirm_button(root)
     common.wait_locator_visible_with_log(complete_btn, timeout_ms, "Kakao 인증확인 버튼 표시")
     if complete_btn.is_disabled():
-        print("[warn] Kakao 인증확인 버튼이 비활성 상태 — 카카오톡 인증 미완료로 간주")
+        log("[warn] Kakao 인증확인 버튼이 비활성 상태 — 카카오톡 인증 미완료로 간주")
         return False
     common.click_with_log(complete_btn, "Click Kakao 인증확인")
     common.wait_timeout_with_log(page, 1000, "Post-Kakao-인증확인 settle")
@@ -255,7 +256,7 @@ def _try_kakao_auth_attempt(page, config: common.LoginConfig, dialog_messages: l
         return False
     result = _check_kakao_auth_result(page, dialog_messages, dialog_index, config.timeout_ms)
     if result == "incomplete":
-        print("[warn] 카카오 인증 미완료 — 재시도")
+        log("[warn] 카카오 인증 미완료 — 재시도")
         return False
     return True
 
@@ -266,7 +267,7 @@ def run(page, config: common.LoginConfig, dialog_messages: list[str]) -> str:
     _ensure_kakao_consents(page)
 
     for attempt in range(1, KAKAO_AUTH_MAX_ATTEMPTS + 1):
-        print(f"[step] Kakao 인증 시도 {attempt}/{KAKAO_AUTH_MAX_ATTEMPTS}")
+        log(f"[step] Kakao 인증 시도 {attempt}/{KAKAO_AUTH_MAX_ATTEMPTS}")
         submit_kakao_auth_request(page, dialog_messages, config.timeout_ms)
         if _try_kakao_auth_attempt(page, config, dialog_messages):
             break

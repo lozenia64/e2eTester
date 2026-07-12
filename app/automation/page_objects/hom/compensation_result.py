@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT
+from app.runner.step_logging import log
 
 from . import compensation_result_common as result_common
 from . import login_common as common
@@ -109,7 +110,7 @@ def _verify_preview_popup(page, receipt_number: str, timeout_ms: int) -> None:
         popup_timeout_ms,
         "제출서류확인 팝업 전체 다운로드 버튼",
     )
-    print("[step] 제출서류확인 팝업 검증 완료")
+    log("[step] 제출서류확인 팝업 검증 완료")
     popup.close()
 
 

@@ -5,6 +5,7 @@ import re
 from playwright.sync_api import FrameLocator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 FIRST_PAGE_PATH = "/first.do"
@@ -35,9 +36,9 @@ def _ensure_first_page(page: Page, base_url: str) -> None:
     if FIRST_PAGE_PATH in page.url:
         return
     login_url = _first_page_url(base_url)
-    print(f"[wait] Navigate to login page: {login_url}")
+    log(f"[wait] Navigate to login page: {login_url}")
     page.goto(login_url, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
-    print(f"[wait] Login page ready: {page.url}")
+    log(f"[wait] Login page ready: {page.url}")
 
 
 def _auth_frame_ready(page: Page, *, timeout_ms: int = 1000) -> bool:
@@ -62,7 +63,7 @@ def _wait_for_auth_popup(page: Page) -> FrameLocator:
         timeout=browser.MAX_TIMEOUT_MS,
     )
     frame.locator(SMS_BUTTON_SELECTOR).wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    print("[wait] User auth popup ready")
+    log("[wait] User auth popup ready")
     return frame
 
 
@@ -77,20 +78,20 @@ def _click_frame_button(frame: FrameLocator, *, name: str, selector: str) -> Non
     try:
         button.click(timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
-        print(f"[warn] Role click failed for {name!r}; retry with force")
+        log(f"[warn] Role click failed for {name!r}; retry with force")
         frame.locator(selector).click(force=True, timeout=browser.MAX_TIMEOUT_MS)
 
 
 def _submit_credentials(page: Page, user_id: str, password: str) -> None:
-    print("[step] Fill login credentials")
+    log("[step] Fill login credentials")
     page.locator(USER_ID_SELECTOR).fill(user_id)
     page.locator(PASSWORD_SELECTOR).fill(password)
-    print("[step] Submit login form")
+    log("[step] Submit login form")
     page.locator(LOGIN_BUTTON_SELECTOR).click()
 
 
 def _issue_sms_code(frame: FrameLocator) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     _click_frame_button(frame, name="인증번호 받기", selector=SMS_BUTTON_SELECTOR)
     frame.locator(TIMER_SELECTOR).wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     otp_input = frame.locator(OTP_INPUT_SELECTOR)
@@ -98,7 +99,7 @@ def _issue_sms_code(frame: FrameLocator) -> None:
     if not otp_input.is_enabled():
         raise RuntimeError("인증번호 입력란이 비활성 상태입니다. SMS 발급을 다시 시도해 주세요.")
     timer_text = frame.locator(TIMER_SELECTOR).inner_text()
-    print(f"[wait] SMS auth timer started: {timer_text.strip()}")
+    log(f"[wait] SMS auth timer started: {timer_text.strip()}")
 
 
 def _resolve_otp_code(otp_code: str) -> str:
@@ -116,7 +117,7 @@ def _wait_for_auth_success(page: Page, dialog_messages: list[str]) -> None:
             raise RuntimeError(f"로그인 실패: {dialog_messages[-1]}")
         raise RuntimeError(f"로그인 후 메인화면({AUTH_SUCCESS_PATH})으로 이동하지 못했습니다.")
     browser.maybe_close_popup(page)
-    print(f"[step] Login succeeded: {page.url}")
+    log(f"[step] Login succeeded: {page.url}")
 
 
 def request_otp(
@@ -138,7 +139,7 @@ def request_otp(
         _submit_credentials(page, user_id, password)
         frame = _wait_for_auth_popup(page)
     else:
-        print("[step] User auth popup already open")
+        log("[step] User auth popup already open")
         frame = _auth_frame(page)
 
     _issue_sms_code(frame)
@@ -157,7 +158,7 @@ def submit_otp_and_login(
 
     resolved = _resolve_otp_code(otp_code)
     frame = _ensure_auth_frame(page)
-    print("[step] Submit SMS verification code")
+    log("[step] Submit SMS verification code")
     otp_input = frame.locator(OTP_INPUT_SELECTOR)
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     otp_input.fill(resolved)

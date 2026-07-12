@@ -8,6 +8,7 @@ from pathlib import Path
 
 # 청구 본문 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
 from app.automation.scenarios.rep_homepage.constants import CLAIM_CONTENT_TEXT
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -54,14 +55,14 @@ CLAIM_TYPE_NOTICE_PATTERN = re.compile(r"청구유형\s*선택\s*안내")
 
 
 def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "f => window.location.href.includes(f)",
         arg=fragment,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def _normalize_text(value: str) -> str:
@@ -69,7 +70,7 @@ def _normalize_text(value: str) -> str:
 
 
 def _wait_for_overlay_to_clear(page, selector: str, timeout_ms: int, description: str) -> None:
-    print(f"[wait] Start overlay clear wait: {description} ({timeout_ms} ms)")
+    log(f"[wait] Start overlay clear wait: {description} ({timeout_ms} ms)")
     page.wait_for_function(
         """
         overlaySelector => {
@@ -91,7 +92,7 @@ def _wait_for_overlay_to_clear(page, selector: str, timeout_ms: int, description
         arg=selector,
         timeout=timeout_ms,
     )
-    print(f"[wait] End overlay clear wait: {description}")
+    log(f"[wait] End overlay clear wait: {description}")
 
 
 def _first_visible_selector(page, selector: str, description: str):
@@ -300,7 +301,7 @@ def _set_accident_date_one_month_ago(page) -> None:
                 """
             )
             if _normalize_text(normalized_value):
-                print(f"[step] 사고일을 1개월 전 날짜로 입력: {normalized_value}")
+                log(f"[step] 사고일을 1개월 전 날짜로 입력: {normalized_value}")
                 common.wait_timeout_with_log(page, 400, "사고일 입력 반영 대기")
                 return
     except Exception:
@@ -401,7 +402,7 @@ def _set_accident_date_one_month_ago(page) -> None:
     )
     if not applied:
         raise RuntimeError("사고일 입력 필드를 찾지 못했습니다.")
-    print(f"[step] 사고일을 1개월 전 날짜로 입력: {values['dotted']}")
+    log(f"[step] 사고일을 1개월 전 날짜로 입력: {values['dotted']}")
     common.wait_timeout_with_log(page, 400, "사고일 입력 반영 대기")
 
 
@@ -417,7 +418,7 @@ def _maybe_confirm_claim_type_notice_popup(page) -> bool:
 def _select_claim_type_other(page) -> None:
     other_radio = page.locator(CHARGE04_OTHER_RADIO_SELECTOR).first
     other_label = page.locator(CHARGE04_OTHER_LABEL_SELECTOR).first
-    print("[click] 청구유형: 기타 라벨")
+    log("[click] 청구유형: 기타 라벨")
     try:
         if other_label.is_visible(timeout=1500):
             common.click_with_log(other_label, "청구유형: 기타 라벨 클릭")
@@ -465,7 +466,7 @@ def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
                     """
                 )
                 if textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT:
-                    print(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
+                    log(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
                     return
         except Exception:
             pass
@@ -480,7 +481,7 @@ def _click_lookup_and_prepare_claim_content(page, timeout_ms: int) -> None:
                     textarea.is_visible(timeout=800)
                     and textarea.input_value(timeout=800) == CLAIM_CONTENT_TEXT
                 ):
-                    print(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
+                    log(f"[step] 청구내용 입력: {CLAIM_CONTENT_TEXT}")
                     return
             except Exception:
                 pass
@@ -600,7 +601,7 @@ def _maybe_close_upload_notice_popup(page) -> None:
     ):
         return
     if _dismiss_modal_with_close_like_button(page, modal_pattern):
-        print("[click] 서류제출 시 유의사항 팝업 닫기 (DOM fallback)")
+        log("[click] 서류제출 시 유의사항 팝업 닫기 (DOM fallback)")
         common.wait_timeout_with_log(page, 400, "유의사항 팝업 닫기 후 안정화")
 
 
@@ -631,7 +632,7 @@ def _resolve_visible_frame_selector(page, selectors: tuple[str, ...], descriptio
 
 
 def _wait_for_uploaded_item(page, frame_selector: str, description: str, timeout_ms: int) -> None:
-    print(f"[wait] Start upload reflection wait: {description} ({timeout_ms} ms)")
+    log(f"[wait] Start upload reflection wait: {description} ({timeout_ms} ms)")
     page.wait_for_function(
         """
         ({ frameSelector }) => {
@@ -654,7 +655,7 @@ def _wait_for_uploaded_item(page, frame_selector: str, description: str, timeout
         arg={"frameSelector": frame_selector},
         timeout=timeout_ms,
     )
-    print(f"[wait] End upload reflection wait: {description}")
+    log(f"[wait] End upload reflection wait: {description}")
 
 
 def _upload_file_to_frame(
@@ -665,7 +666,7 @@ def _upload_file_to_frame(
     frame_locator = page.frame_locator(frame_selector)
     add_button = frame_locator.locator(CHARGE05_FILE_ADD_BUTTON_SELECTOR).first
     input_locator = frame_locator.locator(CHARGE05_FILE_INPUT_SELECTOR).first
-    print(f"[upload] {description}: {file_path.name}")
+    log(f"[upload] {description}: {file_path.name}")
     common.wait_locator_visible_with_log(
         frame, common.MAX_TIMEOUT_MS, f"{description} 업로드 프레임"
     )
@@ -748,7 +749,7 @@ def _open_charge00_from_menu(page, timeout_ms: int) -> bool:
         bosang = page.get_by_role("link", name=re.compile(r"^보상$")).first
         if not bosang.is_visible(timeout=2000):
             return False
-        print("[step] Hover GNB 보상")
+        log("[step] Hover GNB 보상")
         bosang.hover(timeout=timeout_ms)
         common.wait_timeout_with_log(page, 600, "보상 메뉴 펼침 대기")
         link = common.first_visible_locator(
@@ -759,7 +760,7 @@ def _open_charge00_from_menu(page, timeout_ms: int) -> bool:
         _wait_url_contains(page, "charge00.do", timeout_ms)
         return True
     except Exception as exc:
-        print(f"[warn] 메뉴로 charge00 이동 실패, 직접 URL 시도: {exc}")
+        log(f"[warn] 메뉴로 charge00 이동 실패, 직접 URL 시도: {exc}")
         return False
 
 
@@ -795,7 +796,7 @@ def _confirm_ready_and_go_charge02(page, timeout_ms: int) -> None:
         page.get_by_role("link", name=READY_LINK_PATTERN),
         "팝업: 준비가 된 상태입니다 링크",
     )
-    print("[click] 팝업에서 서류 준비 완료 확인(준비가 된 상태)")
+    log("[click] 팝업에서 서류 준비 완료 확인(준비가 된 상태)")
     with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout_ms):
         try:
             ready.click(timeout=timeout_ms)
@@ -892,7 +893,7 @@ def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
             page.get_by_role("link", name="신규접수"),
             "신규접수(링크)",
         )
-        print("[click] 신규접수 링크 클릭")
+        log("[click] 신규접수 링크 클릭")
         try:
             new_rx.click(timeout=min(1200, timeout_ms))
             break
@@ -917,7 +918,7 @@ def _open_new_reception_and_confirm_layer(page, timeout_ms: int) -> None:
 def _agree_entire_summary_consent_and_apply(page, timeout_ms: int) -> None:
     label = page.locator(CHARGE03_ALL_CONSENT_LABEL_SELECTOR).first
     common.wait_locator_visible_with_log(label, timeout_ms, "요약 동의서 전체동의 라벨")
-    print("[click] [필수]보험금 청구를 위한 요약 동의서 — 전체동의 라벨")
+    log("[click] [필수]보험금 청구를 위한 요약 동의서 — 전체동의 라벨")
     try:
         label.click(timeout=timeout_ms)
     except Exception:

@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
+
 DEFAULT_BASE_URL: Final[str] = "https://m.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("mhwgeneralins-login-result.png")
 DEFAULT_ENV_FILE_PATH: Final[Path] = Path(".env")
@@ -334,7 +336,7 @@ def add_dialog_logger(page: Page) -> list[str]:
 
     def _handle(dialog) -> None:
         messages.append(dialog.message)
-        print(f"[dialog] {dialog.message}")
+        log(f"[dialog] {dialog.message}")
         dialog.accept()
 
     page.on("dialog", _handle)
@@ -366,14 +368,14 @@ def maybe_close_home_popup(page: Page) -> None:
     try:
         if close_button.first.is_visible(timeout=3000):
             click_with_log(close_button.first, "Close landing popup")
-            print("[step] Closed landing popup")
+            log("[step] Closed landing popup")
     except PlaywrightTimeoutError:
         return
 
 
 def maybe_close_pre_login_bottom_popup(page: Page) -> None:
     """로그인 버튼 클릭 전 하단 이벤트 배너 팝업(.dialog.bottom.bottom_bnr)을 닫는다."""
-    print("[step] Check pre-login bottom banner popup")
+    log("[step] Check pre-login bottom banner popup")
     dialog_candidates = [
         page.locator(".dialog.bottom.bottom_bnr.show"),
         page.locator('[role="dialog"].bottom.bottom_bnr.show'),
@@ -390,10 +392,10 @@ def maybe_close_pre_login_bottom_popup(page: Page) -> None:
             continue
 
     if dialog is None:
-        print("[step] No pre-login bottom banner popup detected")
+        log("[step] No pre-login bottom banner popup detected")
         return
 
-    print("[step] Pre-login bottom banner popup detected")
+    log("[step] Pre-login bottom banner popup detected")
     close_candidates = [
         dialog.locator("button.btn.s1.c1.ui_dialog_close"),
         dialog.get_by_role("button", name="닫기", exact=True),
@@ -406,15 +408,15 @@ def maybe_close_pre_login_bottom_popup(page: Page) -> None:
                 wait_timeout_with_log(page, 500, "Post bottom-banner-popup close settle")
                 try:
                     if not dialog.is_visible(timeout=2000):
-                        print("[step] Pre-login bottom banner popup dismissed")
+                        log("[step] Pre-login bottom banner popup dismissed")
                         return
                 except PlaywrightTimeoutError:
-                    print("[step] Pre-login bottom banner popup dismissed")
+                    log("[step] Pre-login bottom banner popup dismissed")
                     return
         except Exception:
             continue
 
-    print("[warn] Pre-login bottom banner popup is still visible after close attempts")
+    log("[warn] Pre-login bottom banner popup is still visible after close attempts")
 
 
 def resolve_user_data_dir() -> Path:
@@ -466,7 +468,7 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
     is_mobile = device.get("is_mobile", True)
     has_touch = device.get("has_touch", True)
 
-    print(
+    log(
         f"[step] Enable mobile device mode: {MHM_MOBILE_DEVICE_NAME} "
         f"({width}x{height}, scale={device_scale_factor}) before site navigation"
     )
@@ -486,12 +488,12 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
         cdp.send("Emulation.setUserAgentOverride", {"userAgent": user_agent})
         if has_touch:
             cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": True})
-        print("[step] Mobile device emulation applied (CDP)")
+        log("[step] Mobile device emulation applied (CDP)")
     except Exception as exc:
-        print(f"[warn] CDP mobile emulation fallback (viewport only): {exc}")
+        log(f"[warn] CDP mobile emulation fallback (viewport only): {exc}")
 
     page._mhm_mobile_mode_applied = True
-    print("[step] Mobile mode ready - safe to navigate to m.hwgeneralins.com")
+    log("[step] Mobile mode ready - safe to navigate to m.hwgeneralins.com")
 
 
 def ensure_mobile_mode_before_navigation(page: Page) -> None:
@@ -503,45 +505,45 @@ def ensure_mobile_mode_before_navigation(page: Page) -> None:
 
 
 def wait_timeout_with_log(page: Page, timeout_ms: int, reason: str) -> None:
-    print(f"[wait] Start timeout wait: {reason} ({timeout_ms} ms)")
+    log(f"[wait] Start timeout wait: {reason} ({timeout_ms} ms)")
     page.wait_for_timeout(timeout_ms)
-    print(f"[wait] End timeout wait: {reason}")
+    log(f"[wait] End timeout wait: {reason}")
 
 
 def wait_url_with_log(page: Page, url_or_pattern, timeout_ms: int, reason: str) -> None:
-    print(f"[wait] Start URL wait: {reason} ({timeout_ms} ms)")
+    log(f"[wait] Start URL wait: {reason} ({timeout_ms} ms)")
     page.wait_for_url(url_or_pattern, timeout=timeout_ms)
-    print(f"[wait] End URL wait: {reason} -> {page.url}")
+    log(f"[wait] End URL wait: {reason} -> {page.url}")
 
 
 def wait_locator_visible_with_log(locator, timeout_ms: int, reason: str) -> None:
-    print(f"[wait] Start locator visible wait: {reason} ({timeout_ms} ms)")
+    log(f"[wait] Start locator visible wait: {reason} ({timeout_ms} ms)")
     locator.wait_for(state="visible", timeout=timeout_ms)
-    print(f"[wait] End locator visible wait: {reason}")
+    log(f"[wait] End locator visible wait: {reason}")
 
 
 def wait_function_with_log(page: Page, expression: str, timeout_ms: int, reason: str) -> None:
-    print(f"[wait] Start function wait: {reason} ({timeout_ms} ms)")
+    log(f"[wait] Start function wait: {reason} ({timeout_ms} ms)")
     page.wait_for_function(expression, timeout=timeout_ms)
-    print(f"[wait] End function wait: {reason}")
+    log(f"[wait] End function wait: {reason}")
 
 
 def click_with_log(locator, description: str) -> None:
-    print(f"[click] {description}")
+    log(f"[click] {description}")
     locator.click()
 
 
 def open_url(page: Page, target_url: str) -> None:
-    print(f"[wait] Start direct navigation: {target_url} ({MAX_TIMEOUT_MS} ms default)")
+    log(f"[wait] Start direct navigation: {target_url} ({MAX_TIMEOUT_MS} ms default)")
     page.goto(target_url, wait_until="domcontentloaded", timeout=MAX_TIMEOUT_MS)
-    print(f"[wait] End direct navigation: {target_url} -> {page.url}")
+    log(f"[wait] End direct navigation: {target_url} -> {page.url}")
 
 
 def click_and_wait_for_navigation(page: Page, locator, expected_url: str) -> None:
-    print(f"[wait] Start navigation wait: {expected_url} ({MAX_TIMEOUT_MS} ms default)")
+    log(f"[wait] Start navigation wait: {expected_url} ({MAX_TIMEOUT_MS} ms default)")
     with page.expect_navigation(wait_until="domcontentloaded"):
         click_with_log(locator, f"Navigate to {expected_url}")
-    print(f"[wait] End navigation wait: {expected_url} -> {page.url}")
+    log(f"[wait] End navigation wait: {expected_url} -> {page.url}")
     wait_url_with_log(
         page, re.compile(expected_url), MAX_TIMEOUT_MS, f"Confirm URL matches {expected_url}"
     )
@@ -551,9 +553,9 @@ def grant_browser_permissions(context, base_url: str) -> None:
     origin = normalize_base_url(base_url)
     try:
         context.grant_permissions(["local-network-access"], origin=origin)
-        print(f"[step] Granted browser permission: local-network-access for {origin}")
+        log(f"[step] Granted browser permission: local-network-access for {origin}")
     except Exception as exc:
-        print(f"[warn] Failed to pre-grant local-network-access permission: {exc}")
+        log(f"[warn] Failed to pre-grant local-network-access permission: {exc}")
 
 
 def click_label(page: Page, field_id: str) -> None:
@@ -662,7 +664,7 @@ def fill_kakao_phone_segments(
 
 
 def fill_identity(page: Page, config: LoginConfig) -> None:
-    print("[step] Fill identity and phone fields")
+    log("[step] Fill identity and phone fields")
     page.locator("#custNm").fill(config.name)
     page.locator("#custDscNo1").fill(config.birthdate)
     select_identity_options(page, config)
@@ -671,7 +673,7 @@ def fill_identity(page: Page, config: LoginConfig) -> None:
 
 
 def scroll_to_page_bottom(page: Page) -> None:
-    print("[step] Scroll to page bottom")
+    log("[step] Scroll to page bottom")
     page.evaluate(
         """
         () => {
@@ -687,17 +689,17 @@ def scroll_to_page_bottom(page: Page) -> None:
 
 
 def request_sms_code(page: Page, dialog_messages: list[str], timeout_ms: int) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     dialog_index = len(dialog_messages)
     scroll_to_page_bottom(page)
-    print(f"[wait] Start response wait: hp-sms-request.json ({timeout_ms} ms)")
+    log(f"[wait] Start response wait: hp-sms-request.json ({timeout_ms} ms)")
     with page.expect_response(
         lambda response: "hp-sms-request.json" in response.url, timeout=timeout_ms
     ) as response_info:
         click_with_log(page.locator("#btnSendCrtfNo"), "Request SMS verification code")
 
     response = response_info.value
-    print(f"[wait] End response wait: hp-sms-request.json -> {response.status} {response.url}")
+    log(f"[wait] End response wait: hp-sms-request.json -> {response.status} {response.url}")
     wait_timeout_with_log(page, 1000, "Post-SMS-request settle delay")
 
     if not response.ok:
@@ -748,7 +750,7 @@ def handle_post_otp_privacy_step(page: Page, timeout_ms: int) -> None:
             wait_locator_visible_with_log(locator, 3000, description)
         except PlaywrightTimeoutError:
             return False
-        print(f"[step] {description}")
+        log(f"[step] {description}")
         click_with_log(locator, description)
         wait_timeout_with_log(page, 800, f"Post-click settle delay: {description}")
         return True
@@ -794,7 +796,7 @@ def handle_post_otp_privacy_step(page: Page, timeout_ms: int) -> None:
 
 
 def submit_otp(page: Page, otp_code: str, dialog_messages: list[str], timeout_ms: int) -> None:
-    print("[step] Submit OTP")
+    log("[step] Submit OTP")
     dialog_index = len(dialog_messages)
     page.locator("#smsCertNo").fill(otp_code)
     click_with_log(page.locator("#btnNext2"), "Submit OTP confirmation")
@@ -805,12 +807,12 @@ def submit_otp(page: Page, otp_code: str, dialog_messages: list[str], timeout_ms
 
 def wait_for_login_success(page: Page, config: LoginConfig, dialog_messages: list[str]) -> None:
     dialog_index = len(dialog_messages)
-    print(f"[wait] Start login success wait via main page URL ({config.timeout_ms} ms)")
+    log(f"[wait] Start login success wait via main page URL ({config.timeout_ms} ms)")
     ensure_no_failure_dialogs(dialog_messages, dialog_index, "post-login")
     wait_for_main_page(page, config.post_login_fragment, config.timeout_ms)
     maybe_close_post_login_popup(page, config.timeout_ms)
     ensure_no_failure_dialogs(dialog_messages, dialog_index, "post-login")
-    print("[wait] End login success wait via main page URL")
+    log("[wait] End login success wait via main page URL")
 
 
 def dismiss_coach_mark_if_present(page: Page, timeout_ms: int = 8000) -> None:
@@ -821,15 +823,15 @@ def dismiss_coach_mark_if_present(page: Page, timeout_ms: int = 8000) -> None:
     except Exception:
         return
 
-    print("[step] Dismiss post-login coach mark overlay")
+    log("[step] Dismiss post-login coach mark overlay")
     remaining_ms = timeout_ms
     while remaining_ms > 0:
         try:
             if not coach.first.is_visible(timeout=500):
-                print("[step] Coach mark overlay dismissed")
+                log("[step] Coach mark overlay dismissed")
                 return
         except Exception:
-            print("[step] Coach mark overlay dismissed")
+            log("[step] Coach mark overlay dismissed")
             return
 
         click_targets = [
@@ -857,17 +859,17 @@ def dismiss_coach_mark_if_present(page: Page, timeout_ms: int = 8000) -> None:
 
 def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> None:
     fragment = expected_fragment or "/myh/mai/MySubMain1000"
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "expectedFragment => window.location.href.includes(expectedFragment)",
         arg=fragment,
         timeout=timeout_ms,
     )
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -> None:
-    print("[step] Check post-login popup")
+    log("[step] Check post-login popup")
     dismiss_coach_mark_if_present(page, min(timeout_ms, 8000))
 
     overlay_candidates = [
@@ -976,7 +978,7 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
         try:
             if overlay.first.is_visible(timeout=1200):
                 popup_detected = True
-                print("[step] Post-login popup overlay detected")
+                log("[step] Post-login popup overlay detected")
                 break
         except Exception:
             continue
@@ -986,7 +988,7 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
             try:
                 if modal.is_visible(timeout=1200):
                     popup_detected = True
-                    print("[step] Post-login popup modal detected")
+                    log("[step] Post-login popup modal detected")
                     break
             except Exception:
                 continue
@@ -1011,7 +1013,7 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
         deadline_ms -= slice_ms
 
     if not popup_detected and popup_button is None:
-        print("[step] No post-login popup detected")
+        log("[step] No post-login popup detected")
         return
 
     strategy_used = ""
@@ -1020,9 +1022,9 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
         click_with_log(popup_button, "Dismiss post-login popup with '다음에 할게요'")
         strategy_used = "locator"
         if wait_for_popup_to_clear(2500):
-            print("[step] Post-login popup dismissed")
+            log("[step] Post-login popup dismissed")
             return
-        print("[warn] Popup click completed but overlay is still blocking")
+        log("[warn] Popup click completed but overlay is still blocking")
 
     for attempt in range(2):
         clicked_via_dom = page.evaluate(
@@ -1094,14 +1096,14 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
         )
         if clicked_via_dom:
             strategy_used = f"dom:{clicked_via_dom}"
-            print(f"[step] Post-login popup dismissed via DOM fallback: {clicked_via_dom}")
+            log(f"[step] Post-login popup dismissed via DOM fallback: {clicked_via_dom}")
             if wait_for_popup_to_clear(2500):
-                print("[step] Post-login popup dismissed")
+                log("[step] Post-login popup dismissed")
                 return
-            print("[warn] Popup DOM fallback click did not remove blocking overlay")
+            log("[warn] Popup DOM fallback click did not remove blocking overlay")
 
         if not popup_blocking():
-            print("[step] Post-login popup dismissed")
+            log("[step] Post-login popup dismissed")
             return
         if attempt == 0:
             wait_timeout_with_log(page, 500, "Retry post-login popup dismiss")
@@ -1137,40 +1139,40 @@ def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -
     )
 
     if forcibly_hidden:
-        print(
+        log(
             f"[warn] Forcibly hid blocking post-login popup after failed dismiss strategy: {strategy_used or 'none'}"
         )
         if wait_for_popup_to_clear(1500):
-            print("[step] Post-login popup dismissed")
+            log("[step] Post-login popup dismissed")
             return
 
     raise RuntimeError("로그인 후 팝업을 닫았지만 차단 오버레이가 계속 남아 있습니다.")
 
 
 def shutdown_browser(page: Page, context, browser=None) -> None:
-    print("[step] Closing page")
+    log("[step] Closing page")
     try:
         page.close(run_before_unload=False)
     except Exception as exc:
-        print(f"[warn] Failed to close page cleanly: {exc}")
+        log(f"[warn] Failed to close page cleanly: {exc}")
 
     # persistent context 는 별도 browser 객체가 없으며, context 를 닫으면 브라우저도 종료된다.
-    print("[step] Closing browser context")
+    log("[step] Closing browser context")
     try:
         context.close()
     except Exception as exc:
-        print(f"[warn] Failed to close browser context cleanly: {exc}")
+        log(f"[warn] Failed to close browser context cleanly: {exc}")
 
     if browser is not None:
-        print("[step] Closing browser")
+        log("[step] Closing browser")
         try:
             browser.close()
         except Exception as exc:
-            print(f"[warn] Failed to close browser cleanly: {exc}")
+            log(f"[warn] Failed to close browser cleanly: {exc}")
 
 
 def keep_script_alive_with_browser_open(page: Page, context) -> None:
-    print(
+    log(
         "[result] Keeping browser open. Close the browser window or press Ctrl+C to end the script."
     )
     sys.stdout.flush()
@@ -1180,4 +1182,4 @@ def keep_script_alive_with_browser_open(page: Page, context) -> None:
         while context.pages and not page.is_closed():
             page.wait_for_timeout(1000)
     except KeyboardInterrupt:
-        print("\n[step] KeyboardInterrupt received. Cleaning up browser and exiting.")
+        log("\n[step] KeyboardInterrupt received. Cleaning up browser and exiting.")

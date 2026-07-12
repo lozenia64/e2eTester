@@ -5,6 +5,7 @@ import re
 from playwright.sync_api import FrameLocator, Locator, Page
 
 from app.automation.page_objects.hrp.login import AUTH_SUCCESS_PATH
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 MAIN_PAGE_PATH = AUTH_SUCCESS_PATH
@@ -31,12 +32,12 @@ def ensure_main_page(page: Page, base_url: str) -> None:
         browser.maybe_close_popup(page)
         return
     url = main_url(base_url)
-    print(f"[wait] Navigate to main page: {url}")
+    log(f"[wait] Navigate to main page: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     browser.maybe_close_popup(page)
     if MAIN_PAGE_PATH not in page.url:
         raise RuntimeError(f"메인화면({MAIN_PAGE_PATH})으로 이동하지 못했습니다: {page.url}")
-    print(f"[wait] Main page ready: {page.url}")
+    log(f"[wait] Main page ready: {page.url}")
 
 
 def bottom_tab_links(page: Page) -> Locator:
@@ -50,18 +51,18 @@ def bottom_tab_links(page: Page) -> Locator:
 def assert_bottom_tab(page: Page, tab_name: str) -> None:
     tab = bottom_tab_links(page).get_by_role("link", name=tab_name, exact=True)
     tab.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    print(f"[step] Bottom tab confirmed: {tab_name}")
+    log(f"[step] Bottom tab confirmed: {tab_name}")
 
 
 def open_bid_inquiry_menu(page: Page) -> None:
-    print("[step] Open salvage bid inquiry from top menu")
+    log("[step] Open salvage bid inquiry from top menu")
     page.get_by_role("link", name=SALVAGE_MENU, exact=True).click()
     page.get_by_role("link", name=BID_INQUIRY_MENU, exact=True).click()
     page.get_by_role("heading", name=LIST_HEADING, level=2).wait_for(
         state="visible",
         timeout=browser.MAX_TIMEOUT_MS,
     )
-    print("[step] Bid inquiry list screen opened")
+    log("[step] Bid inquiry list screen opened")
 
 
 def list_frame(page: Page) -> FrameLocator:
@@ -96,7 +97,7 @@ def ensure_bid_inquiry_list_screen(page: Page) -> None:
         timeout=browser.MAX_TIMEOUT_MS,
     )
     list_frame(page)
-    print("[step] Bid inquiry list screen ready")
+    log("[step] Bid inquiry list screen ready")
 
 
 def receipt_number_for_row_one(page: Page) -> str:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 # 청구 본문 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
 from app.automation.scenarios.rep_homepage.constants import CLAIM_CONTENT_TEXT
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -84,14 +85,14 @@ SECONDARY_UPLOAD_BUTTON_PATTERN = re.compile(r"진료비\s*세부")
 
 
 def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "f => window.location.href.includes(f)",
         arg=fragment,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def _normalize_text(value: str) -> str:
@@ -256,12 +257,12 @@ def _click_existing_claim_history_no(page) -> bool:
         if alert.count() > 0:
             no_button = alert.first.locator('button.btn:has-text("아니오")').first
             if no_button.count() > 0:
-                print("[click] 동일 발병일/사고유형 청구 이력 안내: 아니오")
+                log("[click] 동일 발병일/사고유형 청구 이력 안내: 아니오")
                 no_button.click(force=True, timeout=3000)
                 common.wait_timeout_with_log(page, 500, "기존 청구내역 확인 팝업 닫힘 대기")
                 return True
     except Exception as exc:
-        print(f"[warn] 기존 청구내역 확인 팝업 Playwright 클릭 실패: {exc}")
+        log(f"[warn] 기존 청구내역 확인 팝업 Playwright 클릭 실패: {exc}")
 
     clicked = page.evaluate(
         """
@@ -293,7 +294,7 @@ def _click_existing_claim_history_no(page) -> bool:
         """
     )
     if clicked:
-        print(f"[click] 동일 발병일/사고유형 청구 이력 안내(DOM): {clicked}")
+        log(f"[click] 동일 발병일/사고유형 청구 이력 안내(DOM): {clicked}")
         common.wait_timeout_with_log(page, 500, "기존 청구내역 확인 팝업 닫힘 대기")
         return True
     return False
@@ -347,7 +348,7 @@ def _click_claim_flow_dialog_button(
         [text_pattern.pattern, label_sources],
     )
     if clicked:
-        print(f"[click] {description}: {clicked}")
+        log(f"[click] {description}: {clicked}")
         common.wait_timeout_with_log(page, 500, f"{description} 후 안정화")
         return True
 
@@ -362,7 +363,7 @@ def _click_claim_flow_dialog_button(
                 button = dialog.locator(f'button:has-text("{label}")').first
             if button.count() == 0:
                 continue
-            print(f"[click] {description}: {label if isinstance(label, str) else label.pattern}")
+            log(f"[click] {description}: {label if isinstance(label, str) else label.pattern}")
             button.click(force=True, timeout=3000)
             common.wait_timeout_with_log(page, 500, f"{description} 후 안정화")
             return True
@@ -461,7 +462,7 @@ def _set_accident_date_one_month_ago(page) -> None:
                 }
                 """
             )
-            print(f"[step] 발병(사고)일을 1개월 전 날짜로 입력: {dotted}")
+            log(f"[step] 발병(사고)일을 1개월 전 날짜로 입력: {dotted}")
             common.wait_timeout_with_log(page, 400, "발병(사고)일 입력 반영 대기")
             return
     except Exception:
@@ -526,7 +527,7 @@ def _close_gnb_menu_if_open(page) -> None:
         """
     )
     if clicked:
-        print("[click] 전체메뉴 닫기(청구 화면 상호작용 전)")
+        log("[click] 전체메뉴 닫기(청구 화면 상호작용 전)")
         common.wait_timeout_with_log(page, 400, "전체메뉴 닫힘 대기")
 
 
@@ -557,10 +558,10 @@ def _click_silsom24_dismiss_via_dom(page) -> str:
 
 
 def _wait_for_silsom24_popup(page, wait_ms: int = 3000) -> bool:
-    print(f"[wait] 실손24 알림 팝업 노출 대기 ({wait_ms} ms)")
+    log(f"[wait] 실손24 알림 팝업 노출 대기 ({wait_ms} ms)")
     for _ in range(max(1, wait_ms // 200)):
         if _silsom24_dialog_open(page):
-            print("[wait] 실손24 알림 팝업 표시됨")
+            log("[wait] 실손24 알림 팝업 표시됨")
             return True
         common.wait_timeout_with_log(page, 200, "실손24 팝업 표시 대기")
     return _silsom24_dialog_open(page)
@@ -581,7 +582,7 @@ def _dismiss_silsom24_popup(page, timeout_ms: int) -> None:
             try:
                 if target.count() == 0:
                     continue
-                print(f"[click] 실손24 알림 닫기: {description}")
+                log(f"[click] 실손24 알림 닫기: {description}")
                 target.click(force=True, timeout=3000)
                 dismissed_label = description
                 common.wait_timeout_with_log(page, 500, "실손24 팝업 닫힘 대기")
@@ -592,11 +593,11 @@ def _dismiss_silsom24_popup(page, timeout_ms: int) -> None:
         if not dismissed_label:
             dismissed_label = _click_silsom24_dismiss_via_dom(page)
             if dismissed_label:
-                print(f"[click] 실손24 알림 닫기(DOM): {dismissed_label}")
+                log(f"[click] 실손24 알림 닫기(DOM): {dismissed_label}")
                 common.wait_timeout_with_log(page, 500, "실손24 팝업 닫힘 대기")
 
         if not _silsom24_dialog_open(page):
-            print("[step] 실손24 알림 팝업 닫기 완료")
+            log("[step] 실손24 알림 팝업 닫기 완료")
             return
         if not dismissed_label:
             common.wait_timeout_with_log(page, 400, "실손24 팝업 재시도 대기")
@@ -640,7 +641,7 @@ def _click_claim_entry_menu(page, timeout_ms: int) -> None:
         claim_entry.scroll_into_view_if_needed(timeout=timeout_ms)
         common.click_with_log(claim_entry, "질병/상해보험 > 보험금청구 접수")
     except Exception as exc:
-        print(f"[warn] 보험금청구 접수 메뉴 일반 클릭 실패, JS 클릭 시도: {exc}")
+        log(f"[warn] 보험금청구 접수 메뉴 일반 클릭 실패, JS 클릭 시도: {exc}")
         claim_entry.evaluate("element => element.click()")
 
 
@@ -667,7 +668,7 @@ def _wait_for_loading_overlay_gone(page, timeout_ms: int) -> None:
             timeout=wait_ms,
         )
     except Exception:
-        print("[warn] 로딩 오버레이(#loading) 대기 시간 초과, 계속 진행")
+        log("[warn] 로딩 오버레이(#loading) 대기 시간 초과, 계속 진행")
 
 
 def _scroll_target_to_center(target) -> None:
@@ -704,7 +705,7 @@ def _click_selection_label(
             target.scroll_into_view_if_needed(timeout=3000)
             _scroll_target_to_center(target)
             common.wait_timeout_with_log(page, 200, f"{description} 스크롤 안정화")
-            print(f"[click] {description}")
+            log(f"[click] {description}")
             target.click(force=True, timeout=3000)
             common.wait_timeout_with_log(page, 400, f"{description} 후 안정화")
             return
@@ -758,7 +759,7 @@ def _click_selection_label(
         [label_selector, input_selector, label_text or "", _is_native_css_selector(label_selector)],
     )
     if clicked:
-        print(f"[click] {description} (DOM fallback: {clicked})")
+        log(f"[click] {description} (DOM fallback: {clicked})")
         common.wait_timeout_with_log(page, 400, f"{description} 후 안정화")
         return
     raise RuntimeError(f"{description} 요소를 찾지 못했습니다.")
@@ -797,7 +798,7 @@ def _click_next_target_selection(page, timeout_ms: int) -> None:
             next_button.wait_for(state="visible", timeout=1500)
             if next_button.is_enabled(timeout=800):
                 next_button.scroll_into_view_if_needed(timeout=3000)
-                print("[click] 청구 대상 선택 다음")
+                log("[click] 청구 대상 선택 다음")
                 next_button.click(force=True, timeout=3000)
                 common.wait_timeout_with_log(page, 400, "청구 대상 선택 다음 후 안정화")
                 return
@@ -813,7 +814,7 @@ def _click_compensation_tab(page, timeout_ms: int) -> None:
     try:
         common.click_with_log(compensation_tab, "전체메뉴 보상 탭")
     except Exception as exc:
-        print(f"[warn] 보상 탭 일반 클릭 실패, JS 클릭 시도: {exc}")
+        log(f"[warn] 보상 탭 일반 클릭 실패, JS 클릭 시도: {exc}")
         compensation_tab.evaluate("element => element.click()")
     common.wait_timeout_with_log(page, 400, "보상 탭 전환 대기")
 
@@ -833,7 +834,7 @@ def _navigate_to_claim_entry(page, timeout_ms: int, base_url: str) -> None:
         _dismiss_claim_entry_popups(page, timeout_ms)
         return
     except Exception as exc:
-        print(f"[warn] 메뉴로 보험금청구 접수 진입 실패, 직접 URL 시도: {exc}")
+        log(f"[warn] 메뉴로 보험금청구 접수 진입 실패, 직접 URL 시도: {exc}")
 
     common.open_url(page, f"{base_url.rstrip('/')}{CLAIM_INTRO_URL_FRAGMENT}")
     _wait_url_contains(page, CLAIM_INTRO_URL_FRAGMENT, timeout_ms)
@@ -891,7 +892,7 @@ def _click_claim_reason_complete(page, timeout_ms: int) -> None:
             complete_button.wait_for(state="visible", timeout=1500)
             _scroll_target_to_center(complete_button)
             if complete_button.is_enabled(timeout=800):
-                print("[click] 청구사유 입력완료(1/3)")
+                log("[click] 청구사유 입력완료(1/3)")
                 complete_button.click(force=True, timeout=3000)
                 common.wait_timeout_with_log(page, 400, "청구사유 입력완료(1/3) 후 안정화")
                 return
@@ -993,7 +994,7 @@ def _click_label_in_modal(
         [label_for or "", text_pattern.pattern if text_pattern else ""],
     )
     if label_text:
-        print(f"[click] {description}: {label_text}")
+        log(f"[click] {description}: {label_text}")
         common.wait_timeout_with_log(modal.page, 400, f"{description} 후 안정화")
         return True
     return False
@@ -1033,7 +1034,7 @@ def _click_button_in_modal(
             pattern_source,
         )
         if clicked:
-            print(f"[click] {description}: {clicked}")
+            log(f"[click] {description}: {clicked}")
             common.wait_timeout_with_log(modal.page, 400, f"{description} 후 안정화")
             return True
     return False
@@ -1111,12 +1112,12 @@ def _maybe_click_consent_action(
     action = _find_visible_action(root, names, description)
     if action is None:
         return False
-    print(f"[click] {description}")
+    log(f"[click] {description}")
     try:
         _scroll_target_to_center(action)
         action.click(force=True, timeout=3000)
     except Exception as exc:
-        print(f"[warn] {description} Playwright 클릭 실패, DOM 클릭 시도: {exc}")
+        log(f"[warn] {description} Playwright 클릭 실패, DOM 클릭 시도: {exc}")
         action.evaluate(
             """
             (element) => {
@@ -1201,7 +1202,7 @@ def _ensure_checkbox_checked(
     try:
         checkbox = page.locator(input_selector).first
         if checkbox.count() > 0 and checkbox.is_checked(timeout=800):
-            print(f"[step] {description} (이미 선택됨)")
+            log(f"[step] {description} (이미 선택됨)")
             return
     except Exception:
         pass
@@ -1236,7 +1237,7 @@ def _is_medical_beneficiary_none_selected(page) -> bool:
 
 def _select_medical_beneficiary_none(page) -> None:
     if _is_medical_beneficiary_none_selected(page):
-        print("[step] 의료급여 수급권자: 해당없음 (이미 선택됨)")
+        log("[step] 의료급여 수급권자: 해당없음 (이미 선택됨)")
         return
     _click_selection_label(
         page,
@@ -1288,7 +1289,7 @@ def _click_detail_complete_button(page, timeout_ms: int) -> None:
             complete_button.wait_for(state="visible", timeout=1500)
             _scroll_target_to_center(complete_button)
             if complete_button.is_enabled(timeout=800):
-                print("[click] 상세정보 입력완료(2/3)")
+                log("[click] 상세정보 입력완료(2/3)")
                 complete_button.click(force=True, timeout=3000)
                 common.wait_timeout_with_log(page, 400, "상세정보 입력완료(2/3) 후 안정화")
                 return
@@ -1311,7 +1312,7 @@ def _fill_claim_content(page) -> None:
         }
         """
     )
-    print(f"[step] 사고 내용 입력: {CLAIM_CONTENT_TEXT}")
+    log(f"[step] 사고 내용 입력: {CLAIM_CONTENT_TEXT}")
 
 
 def _account_select_dialog_open(page) -> bool:
@@ -1344,11 +1345,11 @@ def _open_account_select_dialog(page, timeout_ms: int) -> None:
 
     trigger = page.locator(ACCOUNT_SELECT_TRIGGER_SELECTOR).first
     common.wait_locator_visible_with_log(trigger, timeout_ms, "계좌선택 트리거(a.select_btn)")
-    print("[click] 등록 계좌 선택 팝업 열기")
+    log("[click] 등록 계좌 선택 팝업 열기")
     try:
         trigger.click(force=True, timeout=3000)
     except Exception as exc:
-        print(f"[warn] 계좌선택 트리거 일반 클릭 실패, JS 클릭 시도: {exc}")
+        log(f"[warn] 계좌선택 트리거 일반 클릭 실패, JS 클릭 시도: {exc}")
         trigger.evaluate("element => element.click()")
     common.wait_timeout_with_log(page, 400, "계좌선택 팝업 표시 대기")
 
@@ -1369,12 +1370,12 @@ def _click_saved_account_item(page, timeout_ms: int) -> None:
     try:
         if saved_account.count() > 0:
             common.wait_locator_visible_with_log(saved_account, timeout_ms, "등록된 계좌 항목")
-            print("[click] 등록된 계좌 선택")
+            log("[click] 등록된 계좌 선택")
             saved_account.click(force=True, timeout=3000)
             common.wait_timeout_with_log(page, 400, "계좌 선택 반영 대기")
             return
     except Exception as exc:
-        print(f"[warn] 등록 계좌 Playwright 클릭 실패: {exc}")
+        log(f"[warn] 등록 계좌 Playwright 클릭 실패: {exc}")
 
     selected_label = page.evaluate(
         """
@@ -1410,7 +1411,7 @@ def _click_saved_account_item(page, timeout_ms: int) -> None:
         """
     )
     if selected_label:
-        print(f"[click] 등록된 계좌 선택(DOM): {selected_label}")
+        log(f"[click] 등록된 계좌 선택(DOM): {selected_label}")
         common.wait_timeout_with_log(page, 400, "계좌 선택 반영 대기")
         return
     raise RuntimeError("등록된 계좌 항목을 찾지 못했습니다.")
@@ -1418,7 +1419,7 @@ def _click_saved_account_item(page, timeout_ms: int) -> None:
 
 def _select_saved_bank_account(page, timeout_ms: int) -> None:
     if _is_saved_account_selected(page):
-        print("[step] 등록 계좌가 이미 선택되어 있습니다.")
+        log("[step] 등록 계좌가 이미 선택되어 있습니다.")
         return
 
     account_combo = page.locator(ACCOUNT_COMBO_SELECTOR).first
@@ -1432,7 +1433,7 @@ def _select_saved_bank_account(page, timeout_ms: int) -> None:
         if not _account_select_dialog_open(page):
             return
         common.wait_timeout_with_log(page, 400, "계좌선택 팝업 닫힘 대기")
-    print("[warn] 계좌선택 팝업이 닫히지 않았지만 계속 진행")
+    log("[warn] 계좌선택 팝업이 닫히지 않았지만 계속 진행")
 
 
 def _complete_detail_step(page, timeout_ms: int) -> None:
@@ -1494,7 +1495,7 @@ def _upload_via_album(
     common.click_with_log(category_button, f"{description} 업로드 영역 열기")
     common.wait_timeout_with_log(page, 500, "서류 등록 시트 표시 대기")
     album_label = page.locator('label[for="galleyFile"]').first
-    print(f"[upload] {description}: {file_path.name}")
+    log(f"[upload] {description}: {file_path.name}")
     try:
         with page.expect_file_chooser(timeout=5000) as chooser_info:
             common.click_with_log(album_label, f"{description} 앨범 선택")
@@ -1575,7 +1576,7 @@ def _dismiss_service_satisfaction_popup(page, timeout_ms: int) -> None:
     for _ in range(max(5, timeout_ms // 400)):
         if not _service_satisfaction_popup_open(page):
             if saw_popup:
-                print("[step] 서비스만족도 조사 팝업 닫기 완료")
+                log("[step] 서비스만족도 조사 팝업 닫기 완료")
                 return
             common.wait_timeout_with_log(page, 400, "서비스만족도 조사 팝업 표시 대기")
             continue
@@ -1608,7 +1609,7 @@ def _dismiss_service_satisfaction_popup(page, timeout_ms: int) -> None:
             """
         )
         if clicked:
-            print(f"[click] 서비스만족도 조사 팝업 닫기: {clicked}")
+            log(f"[click] 서비스만족도 조사 팝업 닫기: {clicked}")
             common.wait_timeout_with_log(page, 500, "서비스만족도 조사 팝업 닫힘 대기")
             if not _service_satisfaction_popup_open(page):
                 return
@@ -1619,17 +1620,17 @@ def _dismiss_service_satisfaction_popup(page, timeout_ms: int) -> None:
             try:
                 close_button = dialog.locator(SERVICE_SATISFACTION_CLOSE_SELECTOR).first
                 if close_button.count() > 0:
-                    print("[click] 서비스만족도 조사 팝업 닫기: 팝업창 닫기")
+                    log("[click] 서비스만족도 조사 팝업 닫기: 팝업창 닫기")
                     close_button.click(force=True, timeout=3000)
                     common.wait_timeout_with_log(page, 500, "서비스만족도 조사 팝업 닫힘 대기")
                     if not _service_satisfaction_popup_open(page):
                         return
             except Exception as exc:
-                print(f"[warn] 서비스만족도 조사 팝업 Playwright 닫기 실패: {exc}")
+                log(f"[warn] 서비스만족도 조사 팝업 Playwright 닫기 실패: {exc}")
         common.wait_timeout_with_log(page, 400, "서비스만족도 조사 팝업 재시도")
     if _service_satisfaction_popup_open(page):
         raise RuntimeError("서비스만족도 조사 팝업을 닫지 못했습니다.")
-    print("[step] 서비스만족도 조사 팝업 없음")
+    log("[step] 서비스만족도 조사 팝업 없음")
 
 
 def _assert_claim_complete(page, timeout_ms: int) -> None:

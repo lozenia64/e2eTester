@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.runner.step_logging import log
+
 from . import contract_list
 from . import login_common as common
 
@@ -22,7 +24,7 @@ POLICY_NUMBER_PATTERN = re.compile(r"\d[\d-]{5,}")
 
 
 def _ensure_contract_list_context(page, timeout_ms: int) -> None:
-    print(
+    log(
         f"[wait] Start URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT} ({timeout_ms} ms)"
     )
     page.wait_for_function(
@@ -33,7 +35,7 @@ def _ensure_contract_list_context(page, timeout_ms: int) -> None:
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
     common.maybe_close_post_login_popup(page, timeout_ms)
     contract_list.assert_inquiry_page_available(page, context="계약상세 조회")
-    print(f"[wait] End URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT}")
+    log(f"[wait] End URL contains wait: {contract_list.CONTRACT_LIST_URL_FRAGMENT}")
 
 
 def _normalize_text(value: str) -> str:
@@ -47,7 +49,7 @@ def _find_contract_entry_in_row(row):
             if candidate.count() == 0 or not candidate.is_visible(timeout=1000):
                 continue
         except Exception as exc:
-            print(f"[warn] Failed to inspect contract detail link candidate: {exc}")
+            log(f"[warn] Failed to inspect contract detail link candidate: {exc}")
             continue
 
         label = _normalize_text(candidate.inner_text(timeout=1000))
@@ -74,7 +76,7 @@ def _find_contract_entry_in_row(row):
 def _select_first_contract_detail(page) -> None:
     rows = page.locator("table tbody tr")
     row_count = rows.count()
-    print(f"[step] Contract table rows found: {row_count}")
+    log(f"[step] Contract table rows found: {row_count}")
 
     for index in range(row_count):
         row = rows.nth(index)
@@ -96,14 +98,14 @@ def _select_first_contract_detail(page) -> None:
 
 
 def _wait_for_contract_detail(page, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {CONTRACT_DETAIL_URL_FRAGMENT} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {CONTRACT_DETAIL_URL_FRAGMENT} ({timeout_ms} ms)")
     page.wait_for_function(
         "fragment => window.location.href.includes(fragment)",
         arg=CONTRACT_DETAIL_URL_FRAGMENT,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {CONTRACT_DETAIL_URL_FRAGMENT}")
+    log(f"[wait] End URL contains wait: {CONTRACT_DETAIL_URL_FRAGMENT}")
 
 
 def _wait_for_detail_sections(page, timeout_ms: int) -> list[str]:

@@ -7,6 +7,7 @@ from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.automation.page_objects.hwtc.phone_auth import AUTH_SUCCESS_PATH
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 MAIN_PAGE_PATH = AUTH_SUCCESS_PATH
@@ -85,21 +86,21 @@ def _ensure_main_page(page: Page, base_url: str) -> None:
         browser.maybe_close_popup(page)
         return
     main_url = _main_url(base_url)
-    print(f"[wait] Navigate to main page: {main_url}")
+    log(f"[wait] Navigate to main page: {main_url}")
     page.goto(main_url, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     browser.maybe_close_popup(page)
     if MAIN_PAGE_PATH not in page.url:
         raise RuntimeError(f"메인화면({MAIN_PAGE_PATH})으로 이동하지 못했습니다: {page.url}")
-    print(f"[wait] Main page ready: {page.url}")
+    log(f"[wait] Main page ready: {page.url}")
 
 
 def _open_it_course_list(page: Page) -> None:
-    print("[step] Open IT course list from top menu")
+    log("[step] Open IT course list from top menu")
     page.get_by_role("link", name=CONTENT_PLUS_MENU, exact=True).hover()
     page.get_by_role("link", name=IT_COURSE_MENU, exact=True).click()
     page.wait_for_url(f"**{IT_COURSE_LIST_PATH}", timeout=browser.MAX_TIMEOUT_MS)
     browser.maybe_close_popup(page)
-    print(f"[step] IT course list opened: {page.url}")
+    log(f"[step] IT course list opened: {page.url}")
 
 
 def _first_education_video_item(page: Page):
@@ -113,7 +114,7 @@ def _first_education_video_item(page: Page):
 
 
 def _open_first_video_detail(page: Page) -> None:
-    print("[step] Open first education video detail")
+    log("[step] Open first education video detail")
     first_item = _first_education_video_item(page)
     first_item.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     onclick = first_item.locator(".cover.vod a").get_attribute("onclick")
@@ -123,12 +124,12 @@ def _open_first_video_detail(page: Page) -> None:
     if not match:
         raise RuntimeError(f"교육영상 상세 진입 함수를 해석하지 못했습니다: {onclick}")
     content_id = match.group(1)
-    print(f"[step] Open video content: {content_id}")
+    log(f"[step] Open video content: {content_id}")
     page.evaluate("(contentId) => goView(contentId)", content_id)
     page.wait_for_url(f"**{VIDEO_DETAIL_PATH}", timeout=browser.MAX_TIMEOUT_MS)
     browser.maybe_close_popup(page)
     _wait_for_player_ready(page)
-    print(f"[step] Video detail opened: {page.url}")
+    log(f"[step] Video detail opened: {page.url}")
 
 
 def _video_player_region(page: Page) -> Locator:
@@ -215,7 +216,7 @@ def _enrich_with_js_state(page: Page, signals: dict[str, object]) -> dict[str, o
     try:
         js_state = root.evaluate(_JS_READ_FROM_ROOT)
     except Exception as exc:
-        print(f"[warn] Player JS state skipped: {exc}")
+        log(f"[warn] Player JS state skipped: {exc}")
         return signals
     if not isinstance(js_state, dict):
         return signals
@@ -291,7 +292,7 @@ def _format_playback_signals(signals: dict[str, object] | None) -> str:
 
 def _click_play_control(page: Page) -> str:
     if _button_visible_in_player(page, PAUSE_BUTTON_NAMES):
-        print("[step] Video already playing (Pause control visible)")
+        log("[step] Video already playing (Pause control visible)")
         return "already-playing"
 
     for name in PLAY_BUTTON_NAMES:
@@ -302,7 +303,7 @@ def _click_play_control(page: Page) -> str:
             try:
                 if button.first.is_visible(timeout=LOCATOR_VISIBLE_TIMEOUT_MS):
                     button.first.click(timeout=browser.MAX_TIMEOUT_MS)
-                    print(f"[step] Click video play control via role button ({name})")
+                    log(f"[step] Click video play control via role button ({name})")
                     return name
             except PlaywrightTimeoutError:
                 continue
@@ -315,18 +316,16 @@ def _click_play_control(page: Page) -> str:
         raise RuntimeError(
             "동영상 재생 버튼(.vjs-big-play-button / .vjs-poster)을 찾지 못했습니다."
         )
-    print(f"[step] Click video play control via {clicked}")
+    log(f"[step] Click video play control via {clicked}")
     return clicked
 
 
 def _activate_detail_video_player(page: Page) -> None:
-    print("[step] Activate detail page video player")
+    log("[step] Activate detail page video player")
     _wait_for_player_ready(page)
     signals = _read_playback_signals(page)
     if _signals_show_playing(signals):
-        print(
-            f"[step] Video already active before play click ({_format_playback_signals(signals)})"
-        )
+        log(f"[step] Video already active before play click ({_format_playback_signals(signals)})")
         return
     _click_play_control(page)
     page.wait_for_timeout(1500)
@@ -338,7 +337,7 @@ def _probe_playback(page: Page, *, timeout_seconds: float) -> bool:
     while time.monotonic() < deadline:
         signals = _read_playback_signals(page)
         if _signals_show_playing(signals, previous_remaining=previous_remaining):
-            print(f"[wait] Playback detected ({_format_playback_signals(signals)})")
+            log(f"[wait] Playback detected ({_format_playback_signals(signals)})")
             return True
         remaining = str(signals.get("remainingTimeText") or "")
         if remaining:
@@ -348,11 +347,11 @@ def _probe_playback(page: Page, *, timeout_seconds: float) -> bool:
 
 
 def _start_video_playback(page: Page) -> None:
-    print("[step] Start video playback")
+    log("[step] Start video playback")
     _activate_detail_video_player(page)
     if _probe_playback(page, timeout_seconds=PLAYBACK_PROBE_TIMEOUT_SECONDS):
         return
-    print("[warn] Playback start probe did not confirm playing; continuing to observation window")
+    log("[warn] Playback start probe did not confirm playing; continuing to observation window")
 
 
 def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float, dict[str, object]]:
@@ -364,7 +363,7 @@ def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float,
         float(start_video.get("currentTime") or 0) if isinstance(start_video, dict) else 0.0
     )
 
-    print(
+    log(
         f"[wait] Observe playback for {wait_seconds} seconds "
         f"({_format_playback_signals(start_signals)})"
     )
@@ -400,16 +399,14 @@ def _observe_playback_progress(page: Page, *, wait_seconds: int) -> tuple[float,
                 previous_video_time = current_time
 
         if _signals_show_playing(signals, previous_remaining=start_remaining or None):
-            print(
-                f"[wait] Playback signal during observation ({_format_playback_signals(signals)})"
-            )
+            log(f"[wait] Playback signal during observation ({_format_playback_signals(signals)})")
 
     end_remaining = str(last_signals.get("remainingTimeText") or "")
     total_remaining_drop = _remaining_time_drop_seconds(start_remaining, end_remaining)
     if total_remaining_drop is not None and total_remaining_drop > max_remaining_drop:
         max_remaining_drop = total_remaining_drop
 
-    print(
+    log(
         f"[step] Playback observation summary "
         f"pauseSeen={saw_pause} "
         f"remainingDrop={max_remaining_drop:.1f}s "
@@ -426,13 +423,13 @@ def _assert_playback_progress(page: Page, *, wait_seconds: int) -> float:
     measured, end_signals = _observe_playback_progress(page, wait_seconds=wait_seconds)
 
     if measured >= MIN_REMAINING_TIME_DROP_SECONDS:
-        print("[step] Playback accepted via time progression")
+        log("[step] Playback accepted via time progression")
         return measured
     if end_signals.get("pauseVisible"):
-        print("[step] Playback accepted via Pause control")
+        log("[step] Playback accepted via Pause control")
         return max(measured, float(MIN_REMAINING_TIME_DROP_SECONDS))
     if _signals_show_playing(end_signals):
-        print("[step] Playback accepted via player UI state")
+        log("[step] Playback accepted via player UI state")
         return max(measured, float(MIN_REMAINING_TIME_DROP_SECONDS))
 
     raise RuntimeError(

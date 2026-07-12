@@ -8,6 +8,7 @@ from app.automation.scenarios.rep_homepage.constants import (
     KAKAO_AUTH_MAX_ATTEMPTS,
     is_kakao_auth_incomplete_message,
 )
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -59,7 +60,7 @@ def _ensure_kakao_popup_visible(page):
     except Exception:
         pass
 
-    print("[step] Kakao 인증 팝업 재오픈 (재시도)")
+    log("[step] Kakao 인증 팝업 재오픈 (재시도)")
     login_cta = page.locator('a[href="#uiPOPKakaoLogin"]').first
     try:
         common.wait_locator_visible_with_log(
@@ -145,9 +146,7 @@ def _wait_for_kakao_required_consents(page, timeout_ms: int, reason: str) -> Non
 def open_kakao_identity_popup(page) -> None:
     """로그인 허브에서 카카오 인증 카드의 로그인 링크를 눌러 팝업을 연다."""
     if LOGIN_HUB_URL_FRAGMENT not in page.url:
-        print(
-            f"[warn] 로그인 허브 URL이 아닐 수 있음 (기대: …{LOGIN_HUB_URL_FRAGMENT}): {page.url}"
-        )
+        log(f"[warn] 로그인 허브 URL이 아닐 수 있음 (기대: …{LOGIN_HUB_URL_FRAGMENT}): {page.url}")
 
     login_cta = page.locator('a[href="#uiPOPKakaoLogin"]').first
     try:
@@ -176,7 +175,7 @@ def open_kakao_identity_popup(page) -> None:
 
 def _ensure_kakao_consents(page) -> None:
     """카카오 팝업에서 전체동의를 눌러 필수 2개 항목을 동의 상태로 맞춘다."""
-    print("[step] Kakao 필수 동의")
+    log("[step] Kakao 필수 동의")
     popup = _visible_kakao_popup(page)
     common.scroll_to_page_bottom(page)
 
@@ -203,7 +202,7 @@ def _ensure_kakao_consents(page) -> None:
 
 def fill_kakao_form(page, config: common.LoginConfig) -> None:
     """카카오 팝업 필드는 숨김 템플릿과 id가 겹칠 수 있어, 반드시 *표시 중* 칸만 채운다 (접근성 이름 기준)."""
-    print("[step] Fill Kakao auth form (이름, 생년월일, 휴대폰)")
+    log("[step] Fill Kakao auth form (이름, 생년월일, 휴대폰)")
     popup = _visible_kakao_popup(page)
 
     name_f = common.first_visible_locator(
@@ -227,7 +226,7 @@ def _is_kakao_resend_cooldown_dialog(message: str) -> bool:
 
 
 def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int) -> None:
-    print("[step] Kakao 인증요청 클릭")
+    log("[step] Kakao 인증요청 클릭")
     dialog_index = len(dialog_messages)
     common.scroll_to_page_bottom(page)
 
@@ -256,7 +255,7 @@ def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int)
     if is_resend:
         recent = common.get_new_dialogs(dialog_messages, dialog_index)
         if any(_is_kakao_resend_cooldown_dialog(message) for message in recent):
-            print("[warn] 카카오 인증재요청 60초 제한 — 쿨다운 대기 후 재클릭")
+            log("[warn] 카카오 인증재요청 60초 제한 — 쿨다운 대기 후 재클릭")
             common.wait_timeout_with_log(page, 35_000, "카카오 인증재요청 쿨다운 (60초)")
             cooldown_index = len(dialog_messages)
             auth_req = _find_visible_kakao_auth_request(page)
@@ -271,7 +270,7 @@ def submit_kakao_auth_request(page, dialog_messages: list[str], timeout_ms: int)
 
 def click_kakao_auth_complete(page) -> None:
     """카카오톡 인증 안내 단계에서 '인증완료'를 눌러 다음 단계로 진행한다."""
-    print("[step] Kakao 인증완료 클릭")
+    log("[step] Kakao 인증완료 클릭")
     common.scroll_to_page_bottom(page)
 
     if _is_kakao_result_modal_open(page):
@@ -336,7 +335,7 @@ def _try_kakao_auth_attempt(page, config: common.LoginConfig, dialog_messages: l
     click_kakao_auth_complete(page)
     result = _check_kakao_auth_result(dialog_messages, dialog_index)
     if result == "incomplete":
-        print("[warn] 카카오 인증 미완료 — 재시도")
+        log("[warn] 카카오 인증 미완료 — 재시도")
         return False
     return True
 
@@ -347,7 +346,7 @@ def run(page, config: common.LoginConfig, dialog_messages: list[str]) -> str:
     _ensure_kakao_consents(page)
 
     for attempt in range(1, KAKAO_AUTH_MAX_ATTEMPTS + 1):
-        print(f"[step] Kakao 인증 시도 {attempt}/{KAKAO_AUTH_MAX_ATTEMPTS}")
+        log(f"[step] Kakao 인증 시도 {attempt}/{KAKAO_AUTH_MAX_ATTEMPTS}")
         submit_kakao_auth_request(page, dialog_messages, config.timeout_ms)
         if _try_kakao_auth_attempt(page, config, dialog_messages):
             break

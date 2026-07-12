@@ -11,6 +11,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.core.settings import get_settings
+from app.runner.step_logging import log
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 PC_VIEWPORT: Final[dict[str, int]] = {"width": 1339, "height": 1038}
@@ -157,7 +158,7 @@ def launch_legacy_persistent_browser_context(
         "args": [f"--disable-features={disabled_features}"],
     }
     try:
-        print(
+        log(
             f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({user_data_dir})"
         )
         return playwright.chromium.launch_persistent_context(
@@ -166,7 +167,7 @@ def launch_legacy_persistent_browser_context(
             **common_args,
         )
     except Exception as exc:
-        print(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
+        log(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
         return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
 
 
@@ -209,7 +210,7 @@ def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_
         "args": [PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE],
     }
     try:
-        print(
+        log(
             f"[step] Launch Playwright MCP-style browser: {PREFERRED_BROWSER_CHANNEL} "
             f"({user_data_dir})"
         )
@@ -226,7 +227,7 @@ def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_
                 "Cursor Playwright MCP 브라우저를 닫거나 "
                 "E2E_PLAYWRIGHT_MCP_PROFILE_DIR 로 별도 프로필을 지정하세요."
             ) from exc
-        print(f"[warn] Falling back to bundled Chromium (MCP-style): {exc}")
+        log(f"[warn] Falling back to bundled Chromium (MCP-style): {exc}")
         return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
 
 
@@ -243,7 +244,7 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
     is_mobile = device.get("is_mobile", True)
     has_touch = device.get("has_touch", True)
 
-    print(
+    log(
         f"[step] Enable mobile device mode: {MOBILE_DEVICE_NAME} "
         f"({width}x{height}, scale={device_scale_factor}) before site navigation"
     )
@@ -262,18 +263,18 @@ def apply_mobile_device_mode(playwright, page: Page) -> None:
         cdp.send("Emulation.setUserAgentOverride", {"userAgent": user_agent})
         if has_touch:
             cdp.send("Emulation.setTouchEmulationEnabled", {"enabled": True})
-        print("[step] Mobile device emulation applied (CDP)")
+        log("[step] Mobile device emulation applied (CDP)")
     except Exception as exc:
-        print(f"[warn] CDP mobile emulation fallback (viewport only): {exc}")
+        log(f"[warn] CDP mobile emulation fallback (viewport only): {exc}")
 
 
 def grant_browser_permissions(context, base_url: str) -> None:
     origin = origin_of(base_url)
     try:
         context.grant_permissions(["local-network-access"], origin=origin)
-        print(f"[step] Granted browser permission: local-network-access for {origin}")
+        log(f"[step] Granted browser permission: local-network-access for {origin}")
     except Exception as exc:
-        print(f"[warn] Failed to pre-grant local-network-access permission: {exc}")
+        log(f"[warn] Failed to pre-grant local-network-access permission: {exc}")
 
 
 def add_dialog_logger(page: Page) -> list[str]:
@@ -286,7 +287,7 @@ def add_dialog_logger(page: Page) -> list[str]:
                 dialog.accept()
                 return
             messages.append(dialog.message)
-            print(f"[dialog] {dialog.message}")
+            log(f"[dialog] {dialog.message}")
             dialog.accept()
         except Exception:
             if not devtools:
@@ -301,23 +302,23 @@ def maybe_close_popup(page: Page) -> None:
     close_button = page.get_by_role("button", name=re.compile("닫기|오늘 ?하루|그만 ?보기"))
     try:
         if close_button.first.is_visible(timeout=3000):
-            print("[step] Close landing popup")
+            log("[step] Close landing popup")
             close_button.first.click()
     except PlaywrightTimeoutError:
         return
     except Exception as exc:
-        print(f"[warn] Landing popup close skipped: {exc}")
+        log(f"[warn] Landing popup close skipped: {exc}")
 
 
 def shutdown_browser(page: Page, context) -> None:
-    print("[step] Closing page")
+    log("[step] Closing page")
     try:
         page.close(run_before_unload=False)
     except Exception as exc:
-        print(f"[warn] Failed to close page cleanly: {exc}")
+        log(f"[warn] Failed to close page cleanly: {exc}")
     # persistent context 는 별도 browser 객체가 없으며, context 를 닫으면 브라우저도 종료된다.
-    print("[step] Closing browser context")
+    log("[step] Closing browser context")
     try:
         context.close()
     except Exception as exc:
-        print(f"[warn] Failed to close browser context cleanly: {exc}")
+        log(f"[warn] Failed to close browser context cleanly: {exc}")

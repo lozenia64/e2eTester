@@ -6,6 +6,7 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 CONTRACT_WRITE_PAGE_PATH = "/fp/loan/sales02.do"
@@ -87,23 +88,23 @@ def _resolve_otp_code(otp_code: str) -> str:
 
 def _ensure_contract_write_page(page: Page, base_url: str) -> None:
     if CONTRACT_WRITE_PAGE_PATH in page.url:
-        print(f"[wait] Reuse contract write page: {page.url}")
+        log(f"[wait] Reuse contract write page: {page.url}")
         return
     target = f"{browser.normalize_base_url(base_url, base_url)}{CONTRACT_WRITE_PAGE_PATH}"
-    print(f"[step] Open contract write page: {target}")
+    log(f"[step] Open contract write page: {target}")
     page.goto(target, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     page.wait_for_url(
         lambda url: CONTRACT_WRITE_PAGE_PATH in url,
         timeout=browser.MAX_TIMEOUT_MS,
     )
-    print(f"[wait] Contract write page ready: {page.url}")
+    log(f"[wait] Contract write page ready: {page.url}")
 
 
 def _dismiss_oz_jquery_dialog(popup: Page) -> None:
     confirm = popup.locator(".ui-dialog-buttonpane button").filter(has_text="확인")
     try:
         if confirm.count() > 0 and confirm.first.is_visible():
-            print("[step] Dismiss OZ form dialog (확인)")
+            log("[step] Dismiss OZ form dialog (확인)")
             confirm.first.click()
     except PlaywrightTimeoutError:
         return
@@ -111,7 +112,7 @@ def _dismiss_oz_jquery_dialog(popup: Page) -> None:
 
 def _wait_for_oz_form_ready(popup: Page) -> None:
     """OZ 뷰어는 양식 본문을 canvas로 그리므로 DOM 텍스트 대신 canvas·제출 버튼을 확인한다."""
-    print("[step] Verify OZ form viewer ready (document canvas + signature pad)")
+    log("[step] Verify OZ form viewer ready (document canvas + signature pad)")
     popup.wait_for_load_state("load", timeout=OZ_POPUP_TIMEOUT_MS)
     popup.locator(OZ_SUBMIT_BUTTON).wait_for(
         state="visible",
@@ -133,7 +134,7 @@ def _wait_for_oz_form_ready(popup: Page) -> None:
             and sig_box["width"] > 20
             and sig_box["height"] > 10
         ):
-            print(
+            log(
                 "[wait] OZ canvases ready: "
                 f"doc {int(doc_box['width'])}x{int(doc_box['height'])}, "
                 f"sign {int(sig_box['width'])}x{int(sig_box['height'])}"
@@ -149,7 +150,7 @@ def _verify_oz_signature_registered(popup: Page) -> None:
     sign_len = int(state.get("signLen") or 0)
     validity = str(state.get("validity") or "")
     if validity == "valid" and sign_len > 0:
-        print(f"[wait] OZ signature registered (validity=valid, signLen={sign_len})")
+        log(f"[wait] OZ signature registered (validity=valid, signLen={sign_len})")
         return
     raise RuntimeError(
         "정보보호서약서 서명이 OZ 뷰어에 등록되지 않았습니다. "
@@ -160,7 +161,7 @@ def _verify_oz_signature_registered(popup: Page) -> None:
 def _draw_circle_signature(popup: Page) -> None:
     """OZ 서명란은 overlay canvas(index 2)에 trusted mouse 로 그려야 INPUT_JSON.sign 이 채워진다."""
     signature_canvas = popup.locator("canvas").nth(SIGNATURE_CANVAS_INDEX)
-    print("[step] Scroll OZ signature pad into view")
+    log("[step] Scroll OZ signature pad into view")
     signature_canvas.scroll_into_view_if_needed()
     popup.wait_for_timeout(500)
     box = signature_canvas.bounding_box()
@@ -169,7 +170,7 @@ def _draw_circle_signature(popup: Page) -> None:
     center_x = box["width"] / 2
     center_y = box["height"] / 2
     radius = min(box["width"], box["height"]) * OZ_SIGNATURE_RADIUS_RATIO
-    print(
+    log(
         "[step] Draw O-shaped signature on OZ signature pad "
         f"(viewport {int(box['x'])},{int(box['y'])} {int(box['width'])}x{int(box['height'])})"
     )
@@ -189,7 +190,7 @@ def _draw_circle_signature(popup: Page) -> None:
 
 
 def _open_and_submit_information_security_pledge(page: Page) -> None:
-    print(f"[step] Open row-8 form view: {ROW8_FORM_LABEL!r}")
+    log(f"[step] Open row-8 form view: {ROW8_FORM_LABEL!r}")
     view_button = page.locator(ROW8_FORM_VIEW_BUTTON)
     view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
 
@@ -197,24 +198,24 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
         view_button.click()
     popup = popup_info.value
     popup.wait_for_load_state("domcontentloaded", timeout=OZ_POPUP_TIMEOUT_MS)
-    print(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
+    log(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
     popup.wait_for_timeout(OZ_POPUP_OPEN_SETTLE_MS)
     if OZ_POPUP_URL_FRAGMENT not in popup.url:
         raise RuntimeError(f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}")
-    print(f"[wait] OZ form popup ready: {popup.url}")
+    log(f"[wait] OZ form popup ready: {popup.url}")
     _wait_for_oz_form_ready(popup)
     _draw_circle_signature(popup)
-    print("[step] Submit OZ form (제출하기)")
+    log("[step] Submit OZ form (제출하기)")
     popup.locator(OZ_SUBMIT_BUTTON).click()
     popup.wait_for_timeout(1500)
     _dismiss_oz_jquery_dialog(popup)
 
     try:
         popup.wait_for_event("close", timeout=OZ_POPUP_TIMEOUT_MS)
-        print("[wait] OZ form popup closed")
+        log("[wait] OZ form popup closed")
     except PlaywrightTimeoutError:
         if not popup.is_closed():
-            print("[warn] OZ popup still open after submit; continue on main page")
+            log("[warn] OZ popup still open after submit; continue on main page")
             try:
                 popup.close()
             except Exception:
@@ -222,12 +223,12 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
 
 
 def _wait_for_row8_complete(page: Page) -> None:
-    print(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
+    log(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
     page.wait_for_timeout(FORM_SUBMIT_SETTLE_MS)
     status = page.locator(ROW8_STATUS_CELL)
     status.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     text = (status.text_content() or "").strip()
-    print(f"[step] Verify row-8 status cell: {text!r}")
+    log(f"[step] Verify row-8 status cell: {text!r}")
     if ROW8_COMPLETE_TEXT not in text:
         raise RuntimeError(
             f"순번 8 정보보호서약서 상태가 {ROW8_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
@@ -235,7 +236,7 @@ def _wait_for_row8_complete(page: Page) -> None:
 
 
 def _open_phone_auth_section(page: Page, dialog_messages: list[str]) -> None:
-    print("[step] Open phone authentication (인증하기)")
+    log("[step] Open phone authentication (인증하기)")
     dialog_index = len(dialog_messages)
     page.locator(AUTH_BUTTON).click()
     page.wait_for_timeout(500)
@@ -244,16 +245,16 @@ def _open_phone_auth_section(page: Page, dialog_messages: list[str]) -> None:
         state="visible",
         timeout=browser.MAX_TIMEOUT_MS,
     )
-    print("[wait] Phone authentication section visible")
+    log("[wait] Phone authentication section visible")
 
 
 def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     dialog_index = len(dialog_messages)
     sms_link = page.locator(SMS_REQUEST_LINK)
     sms_link.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     timeout_ms = browser.MAX_TIMEOUT_MS
-    print(f"[wait] Start response wait: {HP_SMS_REQUEST_PATH} ({timeout_ms} ms)")
+    log(f"[wait] Start response wait: {HP_SMS_REQUEST_PATH} ({timeout_ms} ms)")
     with page.expect_response(
         lambda response: HP_SMS_REQUEST_PATH in response.url,
         timeout=timeout_ms,
@@ -261,7 +262,7 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
         sms_link.click()
 
     sms_response = sms_info.value
-    print(
+    log(
         f"[wait] End response wait: {HP_SMS_REQUEST_PATH} -> "
         f"{sms_response.status} {sms_response.url}"
     )
@@ -280,16 +281,16 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     if not otp_input.is_enabled():
         raise RuntimeError("인증번호 입력란이 비활성 상태입니다. SMS 발급을 다시 시도해 주세요.")
-    print("[wait] SMS auth input ready")
+    log("[wait] SMS auth input ready")
 
 
 def _wait_for_document_complete_page(page: Page) -> None:
-    print(f"[wait] Start document complete page wait: {DOCUMENT_COMPLETE_PAGE_PATH}")
+    log(f"[wait] Start document complete page wait: {DOCUMENT_COMPLETE_PAGE_PATH}")
     page.wait_for_url(
         lambda url: DOCUMENT_COMPLETE_PAGE_PATH in url,
         timeout=OZ_POPUP_TIMEOUT_MS,
     )
-    print(f"[wait] Document complete page ready: {page.url}")
+    log(f"[wait] Document complete page ready: {page.url}")
 
 
 def request_otp(
@@ -321,7 +322,7 @@ def submit_otp_and_complete(
         )
 
     resolved = _resolve_otp_code(otp_code)
-    print("[step] Submit SMS verification code and complete documents")
+    log("[step] Submit SMS verification code and complete documents")
     otp_input = page.locator(OTP_INPUT)
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     otp_input.fill(resolved)

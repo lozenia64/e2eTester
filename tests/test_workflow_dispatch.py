@@ -56,7 +56,11 @@ class _FakeExecutor(BaseWorkflowExecutor):
         }
 
     def _step_ok(self, ctx: StepContext) -> StepOutcome:
-        print("[step] ok 실행")
+        # PageObject 스타일: 컨텍스트-로컬 log() 로 흘려보낸다(전역 stdout 미접촉).
+        from app.runner.step_logging import log
+
+        log("[step] ok 실행")
+        ctx.log("[step] ok via ctx")
         return StepCompleted("정상 종료")
 
     def _step_needs_input(self, ctx: StepContext) -> StepOutcome:
@@ -97,7 +101,9 @@ def test_step_completed_maps_to_passed(tmp_path):
     result, logs = _run(executor, "ok", tmp_path)
     assert result.status == ModuleStatus.PASSED
     assert result.message == "정상 종료"
+    # step_logging.log(컨텍스트-로컬)와 ctx.log 둘 다 같은 싱크로 모인다(전역 stdout 미경유).
     assert any("ok 실행" in line for line in logs)
+    assert any("ok via ctx" in line for line in logs)
 
 
 def test_step_needs_input_maps_to_waiting_input(tmp_path):

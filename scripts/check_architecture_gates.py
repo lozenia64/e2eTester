@@ -7,6 +7,8 @@
   AG-003  app/domain/ 에 I/O·async 런타임 import 금지 (순수 도메인 유지)
   AG-004  app/orchestrator/ 에서 list_all_runs( / list_runs_since( 금지
   AG-005  app/ 에서 aggregate .snapshot / .suite 접근 금지 (domain/storage/tests 제외)
+  AG-006  스텝 계층(automation/systems/runner)에서 print( / redirect_stdout 금지
+          (전역 stdout 치환 경합 방지 — step_logging.log / ctx.log 만 사용)
 """
 
 from __future__ import annotations
@@ -132,6 +134,41 @@ def check_ag005_aggregate_encapsulation() -> list[str]:
     return violations
 
 
+# AG-006: 스텝 실행 계층은 전역 stdout 을 건드리지 않는다(동시 스텝 스레드 경합 방지).
+# 명시적 로깅 능력(step_logging.log / ctx.log)만 사용한다.
+STEP_LAYER_DIRS = ("app/automation", "app/systems", "app/runner")
+# login_phone.py 는 매니페스트 워크플로가 아닌 매뉴얼 CLI 진입점이라 print 를 허용한다.
+AG006_ALLOWED_SUFFIXES = ("systems/hom/scripts/login_phone.py",)
+# step_logging 정의부는 문서 문자열에서 print/redirect_stdout 을 언급한다(정책 설명).
+AG006_ALLOWED_FILES = ("runner/step_logging.py",)
+PRINT_CALL_PATTERN = re.compile(r"(?<![\w.])print\s*\(")
+REDIRECT_STDOUT_PATTERN = re.compile(r"redirect_stdout|redirect_stderr")
+
+
+def check_ag006_step_layer_no_global_stdout() -> list[str]:
+    violations: list[str] = []
+    for dir_rel in STEP_LAYER_DIRS:
+        base = ROOT / dir_rel
+        if not base.exists():
+            continue
+        for path in base.rglob("*.py"):
+            rel = _rel(path)
+            if any(rel.endswith(suffix) for suffix in AG006_ALLOWED_SUFFIXES):
+                continue
+            if any(rel.endswith(suffix) for suffix in AG006_ALLOWED_FILES):
+                continue
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                # 백틱으로 감싼 문서 문자열 내 언급(``print()`` 등)은 코드가 아니므로 제외한다
+                # (단일·이중 백틱 모두: 백틱 런 사이 내용을 제거).
+                code = re.sub(r"`+[^`]*`+", "", line)
+                if PRINT_CALL_PATTERN.search(code) or REDIRECT_STDOUT_PATTERN.search(code):
+                    violations.append(f"{rel}:{line_no}: {stripped}")
+    return violations
+
+
 RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
     (
         "AG-001",
@@ -149,6 +186,11 @@ RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
         "AG-005",
         "aggregate .snapshot / .suite outside app/domain/",
         check_ag005_aggregate_encapsulation,
+    ),
+    (
+        "AG-006",
+        "print( / redirect_stdout in step layer (use step_logging.log / ctx.log)",
+        check_ag006_step_layer_no_global_stdout,
     ),
 ]
 

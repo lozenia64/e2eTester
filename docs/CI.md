@@ -29,7 +29,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | Tier | 게이트 | 설명 |
 | --- | --- | --- |
 | 0 | `ruff`, `ruff_format`, `docs_consistency` | 즉시 실패 (~10–30초) |
-| 1 | `architecture_gates` | 정책-as-code (AG-001~005) |
+| 1 | `architecture_gates` | 정책-as-code (AG-001~006) |
 | 1 | `projection_validate` | 이벤트 재생 ↔ 라이브 projection 지문 일치 (`scripts/rebuild_projections.py --validate`) |
 | 2 | `pytest` | 순수 도메인/오케스트레이터 단위 테스트 |
 | 3 | `pip_audit`, `bandit_security` | auth/PII 경로 변경 또는 주간 schedule |
@@ -43,6 +43,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | AG-003 | `app/domain/` 에 I/O·async 런타임 import 금지 |
 | AG-004 | `app/orchestrator/` 에서 `list_all_runs()` / `list_runs_since()` 금지 |
 | AG-005 | `app/` 에서 aggregate `.snapshot` / `.suite` 직접 접근 금지 (`domain`/`storage`/`tests` 제외) |
+| AG-006 | 스텝 계층(`app/automation`·`app/systems`·`app/runner`)에서 `print(` / `redirect_stdout` 금지 (전역 stdout 경합 방지 — `step_logging.log`·`ctx.log` 만; 매뉴얼 CLI `login_phone.py` 제외) |
 
 프로젝션 정합성 검증(선택·Tier 1):
 

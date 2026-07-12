@@ -5,6 +5,7 @@ from datetime import date
 
 # 청구 식별 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -22,14 +23,14 @@ RESULT02_DETAIL_STABILIZE_MS = 2000
 
 
 def wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "f => window.location.href.includes(f)",
         arg=fragment,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def normalize_text(value: str) -> str:
@@ -68,7 +69,7 @@ def _open_result01_from_menu(page, timeout_ms: int) -> bool:
         bosang = page.get_by_role("link", name=re.compile(r"^보상$")).first
         if not bosang.is_visible(timeout=2000):
             return False
-        print("[step] Hover GNB 보상")
+        log("[step] Hover GNB 보상")
         bosang.hover(timeout=timeout_ms)
         common.wait_timeout_with_log(page, 600, "보상 메뉴 펼침 대기")
         link = common.first_visible_locator(
@@ -80,7 +81,7 @@ def _open_result01_from_menu(page, timeout_ms: int) -> bool:
         wait_url_contains(page, "result01.do", timeout_ms)
         return True
     except Exception as exc:
-        print(f"[warn] 메뉴로 result01 이동 실패, 직접 URL 시도: {exc}")
+        log(f"[warn] 메뉴로 result01 이동 실패, 직접 URL 시도: {exc}")
         return False
 
 
@@ -112,7 +113,7 @@ def _is_tab_active(page, selector: str) -> bool:
 def select_results_tab(page, selector: str, label: str, timeout_ms: int) -> None:
     tab = common.first_visible_locator(page.locator(selector), f"{label} 탭")
     if _is_tab_active(page, selector):
-        print(f"[step] {label} 탭이 이미 활성 상태")
+        log(f"[step] {label} 탭이 이미 활성 상태")
         return
     common.click_with_log(tab, f"{label} 탭 클릭")
     page.wait_for_function(
@@ -169,7 +170,7 @@ def find_processing_claim_row(page, timeout_ms: int):
             button_names = set(row_button_names(row))
             if {"제출서류확인", "접수취소"} - button_names:
                 continue
-            print(f"[step] 결과 목록 대상 행 선택: {row_text}")
+            log(f"[step] 결과 목록 대상 행 선택: {row_text}")
             return row
         common.wait_timeout_with_log(page, 400, "결과 조회 목록 대상 행 대기")
     raise RuntimeError("오늘 접수된 취소 대상 보험금청구 결과 행을 찾지 못했습니다.")

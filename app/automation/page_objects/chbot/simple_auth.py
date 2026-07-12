@@ -6,6 +6,7 @@ import time
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 CHAT_MESSAGE_INPUT = "#message"
@@ -92,7 +93,7 @@ def _parse_phone_number(raw_phone: str) -> tuple[str, str, str]:
 
 
 def _step_pause(page: Page) -> None:
-    print(f"[wait] Step transition pause ({STEP_TRANSITION_PAUSE_MS} ms)")
+    log(f"[wait] Step transition pause ({STEP_TRANSITION_PAUSE_MS} ms)")
     page.wait_for_timeout(STEP_TRANSITION_PAUSE_MS)
 
 
@@ -115,7 +116,7 @@ def _scroll_chat_to_bottom(page: Page) -> None:
 
 def _wait_for_text(page: Page, text: str, *, timeout_ms: int | None = None) -> None:
     timeout = timeout_ms or browser.MAX_TIMEOUT_MS
-    print(f"[wait] Visible text: {text!r}")
+    log(f"[wait] Visible text: {text!r}")
     page.get_by_text(text, exact=False).last.wait_for(state="visible", timeout=timeout)
     _scroll_chat_to_bottom(page)
 
@@ -127,10 +128,10 @@ def _phone_auth_container(page: Page) -> Locator:
 def _agree_phone_auth_terms(container: Locator) -> None:
     checkbox = container.locator("input[name='checkbox']")
     if checkbox.is_checked():
-        print("[step] Terms already agreed")
+        log("[step] Terms already agreed")
         return
 
-    print("[step] Agree to phone-auth terms (label click; checkbox is visually hidden)")
+    log("[step] Agree to phone-auth terms (label click; checkbox is visually hidden)")
     agree_label = container.locator(".check_header label, label:has-text('약관 전체동의')").first
     agree_label.scroll_into_view_if_needed()
     agree_label.click()
@@ -151,7 +152,7 @@ def _agree_phone_auth_terms(container: Locator) -> None:
 
 
 def _send_chat_message(page: Page, message: str) -> None:
-    print(f"[step] Send chat message: {message!r}")
+    log(f"[step] Send chat message: {message!r}")
     input_box = page.locator(CHAT_MESSAGE_INPUT)
     deadline = time.monotonic() + browser.MAX_TIMEOUT_MS / 1000
     while time.monotonic() < deadline:
@@ -170,14 +171,14 @@ def _send_chat_message(page: Page, message: str) -> None:
 
 
 def _fill_identity_form(page: Page, *, name: str, birthdate: str, gender_code: str) -> None:
-    print("[step] Fill identity verification form")
+    log("[step] Fill identity verification form")
     page.locator(IDENTITY_NAME_INPUT).last.fill(name)
     page.locator(IDENTITY_BIRTH_INPUT).last.fill(birthdate)
     page.locator(IDENTITY_GENDER_SELECT).last.select_option(gender_code)
 
 
 def _click_identity_confirm(page: Page) -> None:
-    print("[step] Confirm identity verification")
+    log("[step] Confirm identity verification")
     confirm = page.locator(IDENTITY_CONFIRM_BUTTON).last
     confirm.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     confirm.click()
@@ -185,7 +186,7 @@ def _click_identity_confirm(page: Page) -> None:
 
 
 def _select_phone_auth(page: Page) -> None:
-    print("[step] Select phone authentication")
+    log("[step] Select phone authentication")
     _step_pause(page)
     _wait_for_text(page, "간편인증 선택")
     _step_pause(page)
@@ -203,7 +204,7 @@ def _fill_phone_auth_form(
     phone_middle: str,
     phone_last: str,
 ) -> None:
-    print("[step] Agree to phone-auth terms and fill phone fields")
+    log("[step] Agree to phone-auth terms and fill phone fields")
     container = _phone_auth_container(page)
     container.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     container.scroll_into_view_if_needed()
@@ -217,7 +218,7 @@ def _fill_phone_auth_form(
 
 
 def _request_sms_code(page: Page) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     container = _phone_auth_container(page)
     container.locator(SMS_REQUEST_LINK).first.click()
 
@@ -227,13 +228,13 @@ def _request_sms_code(page: Page) -> None:
         try:
             readonly = otp_input.get_attribute("readonly")
             if readonly is None:
-                print("[wait] OTP input enabled")
+                log("[wait] OTP input enabled")
                 return
         except PlaywrightTimeoutError:
             pass
         page.wait_for_timeout(250)
 
-    print("[wait] OTP input still readonly; SMS request assumed complete")
+    log("[wait] OTP input still readonly; SMS request assumed complete")
 
 
 def _fill_otp_code(page: Page, otp_code: str) -> None:
@@ -242,7 +243,7 @@ def _fill_otp_code(page: Page, otp_code: str) -> None:
         raise ValueError("인증번호 형식이 올바르지 않습니다.")
     code = resolved.group(0)
 
-    print("[step] Fill OTP code")
+    log("[step] Fill OTP code")
     container = _phone_auth_container(page)
     otp_input = container.locator(OTP_INPUT)
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
@@ -266,14 +267,14 @@ def _fill_otp_code(page: Page, otp_code: str) -> None:
 
 
 def _submit_otp(page: Page) -> None:
-    print("[step] Submit OTP confirmation")
+    log("[step] Submit OTP confirmation")
     container = _phone_auth_container(page)
     container.locator(OTP_CONFIRM_BUTTON).click()
     _scroll_chat_to_bottom(page)
 
 
 def _verify_welcome(page: Page) -> None:
-    print("[wait] Welcome message after authentication")
+    log("[wait] Welcome message after authentication")
     _wait_for_text(page, "환영합니다", timeout_ms=browser.MAX_TIMEOUT_MS)
 
 
