@@ -12,20 +12,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from app.core.enums import AnomalyState
-from app.core.run_models import AnomalyHandling
-from app.core.status_labels import (
-    anomaly_state_label,
-    module_status_badge_tone,
-    module_status_label,
-)
-from app.orchestrator.insights_common import (
+from app.contexts.insights.application.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
     RunHistoryView,
     module_kind,
     module_occurred_at,
     module_run_id,
     screenshot_url,
+)
+from app.core.enums import AnomalyState
+from app.core.run_models import AnomalyHandling
+from app.core.status_labels import (
+    anomaly_state_label,
+    module_status_badge_tone,
+    module_status_label,
 )
 
 if TYPE_CHECKING:

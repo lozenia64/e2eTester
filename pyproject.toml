@@ -39,8 +39,8 @@ testpaths = ["tests"]
 # 테스트는 일부 import 미사용/픽스처 패턴을 허용
 "tests/*" = ["F401", "F811"]
 # Plotly 차트 설정은 dict(...) 형태가 관용적(공식 예제 스타일) — 리터럴 강제 제외
-"app/orchestrator/stats_charts.py" = ["C408"]
-"app/orchestrator/insights_charts.py" = ["C408"]
+"app/contexts/insights/application/stats_charts.py" = ["C408"]
+"app/contexts/insights/application/insights_charts.py" = ["C408"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "research", "artifacts", "data", ".cursor"]

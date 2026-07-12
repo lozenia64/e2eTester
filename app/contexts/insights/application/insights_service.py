@@ -10,30 +10,30 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from app.contexts.run.views.actor import load_actor_context
-from app.core.enums import AnomalyState
-from app.core.run_models import AnomalyHandling
-from app.orchestrator.insights_anomalies import (
+from app.contexts.insights.application.insights_anomalies import (
     AnomalyModuleEnrichment,
     build_anomaly_items_from_index,
 )
-from app.orchestrator.insights_breakdown import build_module_breakdown
-from app.orchestrator.insights_charts import (
+from app.contexts.insights.application.insights_breakdown import build_module_breakdown
+from app.contexts.insights.application.insights_charts import (
     calendar_heatmap_chart,
     cumulative_step_duration_bar,
     failure_category_donut,
     health_trend_chart,
     module_duration_sparkline,
 )
-from app.orchestrator.insights_common import (
+from app.contexts.insights.application.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
     RunHistoryView,
     build_run_history_views,
     screenshot_url,
     split_module_run_id,
 )
-from app.orchestrator.insights_health import build_system_health
-from app.orchestrator.insights_timeline import build_system_timeline
+from app.contexts.insights.application.insights_health import build_system_health
+from app.contexts.insights.application.insights_timeline import build_system_timeline
+from app.contexts.run.views.actor import load_actor_context
+from app.core.enums import AnomalyState
+from app.core.run_models import AnomalyHandling
 from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:

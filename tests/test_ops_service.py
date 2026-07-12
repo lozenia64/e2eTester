@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.insights.application.ops_service import OpsService
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.schedule_models import Schedule
 from app.core.settings import E2ESettings
 from app.execution.run_queue import RunExecutionQueue
-from app.orchestrator.ops_service import OpsService
 from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow, SuiteSummaryRow
 
 

@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.auth.service import UserService
+from app.contexts.insights.application.insights_service import InsightsService
+from app.contexts.insights.application.ops_service import OpsService
+from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.preset.application.service import PresetService
 from app.contexts.run.application.service import RunService
 from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
@@ -28,11 +32,7 @@ from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.healing.engine import SelfHealingEngine
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.healing_service import HealingService
-from app.orchestrator.insights_service import InsightsService
-from app.orchestrator.ops_service import OpsService
-from app.orchestrator.preset_service import PresetService
 from app.orchestrator.queries import DailyDashboardQueries, RunQueries
-from app.orchestrator.stats_service import StatsService
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector

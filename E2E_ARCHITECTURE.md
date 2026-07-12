@@ -191,12 +191,7 @@ e2eTester/
     notifications/
       run_completion_email.py
       report_renderer.py
-    orchestrator/                  # 잔여 공유·타 컨텍스트 서비스(run/suite 는 contexts/ 로 이동됨)
-      daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
-      preset_service.py            # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
-      stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
-      stats_charts.py              # 통계 차트 데이터 구성
-      ops_service.py               # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
+    contexts/insights/application/ # 운영 인텔리전스 컨텍스트(읽기 전용 — 프로젝션 소비)
       insights_service.py          # InsightsService: 운영 인텔리전스 얇은 I/O 인터프리터
       insights_anomalies.py        # 이상징후 인박스 목록 도출(순수 빌더)
       insights_health.py           # 시스템 헬스 대시보드(순수 빌더)
@@ -204,6 +199,13 @@ e2eTester/
       insights_breakdown.py        # 모듈 딥다이브(순수 빌더)
       insights_charts.py           # 인사이트 Plotly figure JSON 구성
       insights_common.py           # 인사이트 공용 헬퍼
+      stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
+      stats_charts.py              # 통계 차트 데이터 구성
+      ops_service.py               # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
+      daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
+    contexts/preset/application/
+      service.py                   # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
+    orchestrator/                  # 잔여 공유 서비스(run/suite/insights/preset 는 contexts/ 로 이동됨)
       healing_service.py           # HealingService: 치유 기록·정책·패치 얇은 I/O 인터프리터
     registry/
       loader.py

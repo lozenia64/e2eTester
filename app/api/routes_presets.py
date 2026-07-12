@@ -10,7 +10,7 @@ from app.auth.models import User
 from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 
 if TYPE_CHECKING:
-    from app.orchestrator.preset_service import PresetService
+    from app.contexts.preset.application.service import PresetService
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 

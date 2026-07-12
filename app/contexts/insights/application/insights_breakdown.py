@@ -13,17 +13,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from app.core.enums import ModuleStatus
-from app.core.status_labels import (
-    module_status_badge_tone,
-    module_status_label,
-)
-from app.orchestrator.insights_common import (
+from app.contexts.insights.application.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
     CONCLUSIVE_MODULE_STATUSES,
     RunHistoryView,
     screenshot_url,
     sort_runs_desc,
+)
+from app.core.enums import ModuleStatus
+from app.core.status_labels import (
+    module_status_badge_tone,
+    module_status_label,
 )
 
 if TYPE_CHECKING:

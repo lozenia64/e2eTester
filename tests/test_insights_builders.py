@@ -5,18 +5,18 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.core.enums import AnomalyState, ModuleStatus, RunStatus
-from app.core.run_models import AnomalyHandling, FailureAnalysis
-from app.core.system_models import ModuleDefinition, SystemDefinition
-from app.orchestrator.insights_anomalies import build_anomaly_items
-from app.orchestrator.insights_breakdown import build_module_breakdown
-from app.orchestrator.insights_common import (
+from app.contexts.insights.application.insights_anomalies import build_anomaly_items
+from app.contexts.insights.application.insights_breakdown import build_module_breakdown
+from app.contexts.insights.application.insights_common import (
     ModuleHistoryView,
     RunComparisonView,
     RunHistoryView,
 )
-from app.orchestrator.insights_health import build_system_health
-from app.orchestrator.insights_timeline import build_system_timeline
+from app.contexts.insights.application.insights_health import build_system_health
+from app.contexts.insights.application.insights_timeline import build_system_timeline
+from app.core.enums import AnomalyState, ModuleStatus, RunStatus
+from app.core.run_models import AnomalyHandling, FailureAnalysis
+from app.core.system_models import ModuleDefinition, SystemDefinition
 
 KST = ZoneInfo("Asia/Seoul")
 NOW = datetime(2026, 7, 9, 3, 0, tzinfo=UTC)

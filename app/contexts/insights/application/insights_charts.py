@@ -11,7 +11,7 @@ from typing import Any
 
 import plotly.graph_objects as go
 
-from app.orchestrator.stats_charts import (
+from app.contexts.insights.application.stats_charts import (
     AXIS,
     COLORWAY,
     FONT_FAMILY,

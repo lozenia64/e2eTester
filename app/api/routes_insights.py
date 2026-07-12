@@ -9,7 +9,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 
 if TYPE_CHECKING:
-    from app.orchestrator.insights_service import InsightsService
+    from app.contexts.insights.application.insights_service import InsightsService
 
 
 router = APIRouter(prefix="/api/systems", tags=["insights"])

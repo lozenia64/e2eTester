@@ -12,17 +12,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from app.contexts.insights.application.insights_common import (
+    ANOMALY_OR_ERROR_STATUSES,
+    RunHistoryView,
+    screenshot_url,
+    sort_runs_desc,
+)
 from app.core.status_labels import (
     module_status_badge_tone,
     module_status_label,
     run_status_badge_tone,
     run_status_label,
-)
-from app.orchestrator.insights_common import (
-    ANOMALY_OR_ERROR_STATUSES,
-    RunHistoryView,
-    screenshot_url,
-    sort_runs_desc,
 )
 
 if TYPE_CHECKING:

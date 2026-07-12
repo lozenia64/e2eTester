@@ -26,10 +26,10 @@ from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
+    from app.contexts.insights.application.ops_service import OpsService
+    from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.run.application.service import RunService
-    from app.orchestrator.ops_service import OpsService
     from app.orchestrator.queries import RunQueries
-    from app.orchestrator.stats_service import StatsService
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
 
