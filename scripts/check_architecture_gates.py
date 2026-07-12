@@ -10,6 +10,8 @@
   AG-006  스텝 계층(automation/systems/runner)에서 print( / redirect_stdout 금지
           (전역 stdout 치환 경합 방지 — step_logging.log / ctx.log 만 사용)
   AG-007  *QueryPort 프로토콜은 Run/SuiteRun 반환 금지 (화면형 Row DTO 만 — blob 재수화 봉쇄)
+  AG-008  오케스트레이터 서비스에서 run/suite/step/module 필드 직접 변이 금지
+          (애그리거트가 유일한 상태 변이자 — 서비스가 우회 변이하는 이중 권위 차단)
 """
 
 from __future__ import annotations
@@ -168,6 +170,38 @@ def check_ag007_query_ports_return_rows() -> list[str]:
     return violations
 
 
+# AG-008: 오케스트레이터 서비스는 도메인 엔티티 필드를 직접 변이하지 않는다(유일 변이자 =
+# 애그리거트). run.<field> = / suite.<field> = / step.<field> = / module.<field> = 대입을 금지해
+# 서비스가 애그리거트를 우회해 상태를 바꾸는 이중 권위를 막는다. 로컬 변수 재바인딩
+# (run = ..., suite = ...)은 대상이 아니다(속성 대입만 탐지).
+AG008_SERVICE_FILES = (
+    "orchestrator/run_service.py",
+    "orchestrator/suite_service.py",
+)
+DIRECT_MUTATION_PATTERN = re.compile(
+    r"\b(?:run|suite|step|module)\.(?:status|started_at|ended_at|awaiting_input_module_id|"
+    r"awaiting_input_prompt|awaiting_input_run_id|current_step_index|active_run_id|"
+    r"created_by_user_id|created_by_user_name|run_id)\s*=\s*(?!=)"
+)
+
+
+def check_ag008_service_no_direct_entity_mutation() -> list[str]:
+    violations: list[str] = []
+    for suffix in AG008_SERVICE_FILES:
+        path = ORCHESTRATOR_DIR / Path(suffix).name
+        if not path.is_file():
+            continue
+        rel = _rel(path)
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            code = re.sub(r"`+[^`]*`+", "", line)
+            if DIRECT_MUTATION_PATTERN.search(code):
+                violations.append(f"{rel}:{line_no}: {stripped}")
+    return violations
+
+
 def check_ag006_step_layer_no_global_stdout() -> list[str]:
     violations: list[str] = []
     for dir_rel in STEP_LAYER_DIRS:
@@ -219,6 +253,11 @@ RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
         "AG-007",
         "*QueryPort returns Run/SuiteRun (query ports must return screen-shaped rows)",
         check_ag007_query_ports_return_rows,
+    ),
+    (
+        "AG-008",
+        "direct entity mutation in orchestrator services (aggregate is the sole mutator)",
+        check_ag008_service_no_direct_entity_mutation,
     ),
 ]
 

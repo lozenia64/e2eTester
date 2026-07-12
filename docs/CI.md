@@ -29,7 +29,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | Tier | 게이트 | 설명 |
 | --- | --- | --- |
 | 0 | `ruff`, `ruff_format`, `docs_consistency` | 즉시 실패 (~10–30초) |
-| 1 | `architecture_gates` | 정책-as-code (AG-001~007) |
+| 1 | `architecture_gates` | 정책-as-code (AG-001~008) |
 | 1 | `import_contracts` | import 그래프 경계 계약 (`lint-imports` — pyproject `[tool.importlinter]`: 도메인 순수성·코어 무-Playwright) |
 | 1 | `projection_validate` | 이벤트 재생 ↔ 라이브 projection 지문 일치 (`scripts/rebuild_projections.py --validate`) |
 | 1 | `snapshot_validate` | 이벤트 폴드 ↔ 라이브 aggregate_snapshots 동등 (`scripts/rebuild_snapshots.py --validate`) |
@@ -47,6 +47,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | AG-005 | `app/` 에서 aggregate `.snapshot` / `.suite` 직접 접근 금지 (`domain`/`storage`/`tests` 제외) |
 | AG-006 | 스텝 계층(`app/automation`·`app/systems`·`app/runner`)에서 `print(` / `redirect_stdout` 금지 (전역 stdout 경합 방지 — `step_logging.log`·`ctx.log` 만; 매뉴얼 CLI `login_phone.py` 제외) |
 | AG-007 | 질의 포트(`app/storage/ports.py` `*QueryPort`)의 반환 타입에 `Run`/`SuiteRun` 엔티티 금지 (읽기 경로는 화면형 DTO 만) |
+| AG-008 | 오케스트레이터 서비스(`run_service.py`·`suite_service.py`)에서 `run`/`suite`/`step`/`module` 필드 직접 대입 금지 (애그리거트가 유일한 상태 변이자) |
 
 프로젝션/스냅샷 정합성 검증(선택·Tier 1):
 
