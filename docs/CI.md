@@ -30,6 +30,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | --- | --- | --- |
 | 0 | `ruff`, `ruff_format`, `docs_consistency` | 즉시 실패 (~10–30초) |
 | 1 | `architecture_gates` | 정책-as-code (AG-001~007) |
+| 1 | `import_contracts` | import 그래프 경계 계약 (`lint-imports` — pyproject `[tool.importlinter]`: 도메인 순수성·코어 무-Playwright) |
 | 1 | `projection_validate` | 이벤트 재생 ↔ 라이브 projection 지문 일치 (`scripts/rebuild_projections.py --validate`) |
 | 1 | `snapshot_validate` | 이벤트 폴드 ↔ 라이브 aggregate_snapshots 동등 (`scripts/rebuild_snapshots.py --validate`) |
 | 2 | `pytest` | 순수 도메인/오케스트레이터 단위 테스트 |

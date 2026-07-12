@@ -26,6 +26,7 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "--db",
         "data/.ci_snapshot_validate.db",
     ],
+    "import_contracts": ["python3", "-m", "importlinter.cli", "lint"],
     "ruff": ["python3", "-m", "ruff", "check", "."],
     "ruff_format": ["python3", "-m", "ruff", "format", "--check", "."],
     "pytest": ["python3", "-m", "pytest", "tests/", "-q"],
@@ -55,6 +56,7 @@ GATE_TIERS: dict[str, int] = {
     "ruff": 0,
     "ruff_format": 0,
     "architecture_gates": 1,
+    "import_contracts": 1,
     "projection_validate": 1,
     "snapshot_validate": 1,
     "pytest": 2,
@@ -65,6 +67,7 @@ GATE_TIERS: dict[str, int] = {
 STANDARD_GATES: list[str] = [
     "docs_consistency",
     "architecture_gates",
+    "import_contracts",
     "projection_validate",
     "snapshot_validate",
     "ruff",

@@ -45,3 +45,33 @@ testpaths = ["tests"]
 [tool.bandit]
 exclude_dirs = ["tests", "research", "artifacts", "data", ".cursor"]
 skips = ["B101"]  # assert in tests is fine; tests dir excluded anyway
+
+# 아키텍처 경계를 import 그래프로 강제(정규식 게이트 AG-002/003 을 계약으로 보강).
+# 전체 바운디드 컨텍스트(contexts/) 재편은 후속이며, 여기서는 이미 성립하는 두 계약을 고정한다:
+# (1) 도메인 순수성 — app.domain 은 저장소/실행/API/오케스트레이터 등 I/O·인프라를 import 하지 않음,
+# (2) 코어 무-Playwright — app.domain/app.orchestrator 는 playwright 를 import 하지 않음.
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure (no I/O/infra imports)"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = [
+    "app.storage",
+    "app.execution",
+    "app.api",
+    "app.orchestrator",
+    "app.eventsourcing",
+    "app.web",
+    "app.composition",
+    "app.projections",
+    "app.realtime",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain/orchestrator do not import Playwright"
+type = "forbidden"
+source_modules = ["app.domain", "app.orchestrator"]
+forbidden_modules = ["playwright"]
