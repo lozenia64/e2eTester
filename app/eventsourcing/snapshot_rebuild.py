@@ -14,9 +14,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.domain.run_decider import rebuild_state
+from app.domain.suite_decider import rebuild_state as rebuild_suite_state
 from app.eventsourcing.event_store import _row_to_event
 from app.eventsourcing.support import SqliteDatabase
-from app.storage.records import RunRecord
+from app.storage.records import RunRecord, SuiteRecord
 
 
 @dataclass
@@ -31,31 +32,32 @@ class RebuildReport:
         return not self.mismatches
 
 
-async def _run_stream_ids(db: SqliteDatabase) -> list[str]:
+async def _stream_ids(db: SqliteDatabase, aggregate_type: str) -> list[str]:
     rows = await db.fetchall(
-        "SELECT DISTINCT aggregate_id FROM domain_events WHERE aggregate_type = 'Run'"
+        "SELECT DISTINCT aggregate_id FROM domain_events WHERE aggregate_type = ?",
+        (aggregate_type,),
     )
     return [row["aggregate_id"] for row in rows]
 
 
-async def _run_events(db: SqliteDatabase, run_id: str):
+async def _events(db: SqliteDatabase, aggregate_type: str, aggregate_id: str):
     rows = await db.fetchall(
         """
         SELECT event_id, aggregate_type, aggregate_id, event_type, payload, occurred_at, version
         FROM domain_events
-        WHERE aggregate_type = 'Run' AND aggregate_id = ?
+        WHERE aggregate_type = ? AND aggregate_id = ?
         ORDER BY sequence_id ASC
         """,
-        (run_id,),
+        (aggregate_type, aggregate_id),
     )
     return [_row_to_event(row) for row in rows]
 
 
-async def _stream_position(db: SqliteDatabase, run_id: str) -> int:
+async def _stream_position(db: SqliteDatabase, aggregate_type: str, aggregate_id: str) -> int:
     row = await db.fetchone(
         "SELECT COALESCE(MAX(stream_position), 0) AS pos, COUNT(*) AS n "
-        "FROM domain_events WHERE aggregate_type = 'Run' AND aggregate_id = ?",
-        (run_id,),
+        "FROM domain_events WHERE aggregate_type = ? AND aggregate_id = ?",
+        (aggregate_type, aggregate_id),
     )
     if row is None:
         return 0
@@ -71,40 +73,84 @@ def snapshot_state_json(run_id: str, events) -> str | None:
     return RunRecord.serialize(state.to_run())
 
 
+def _suite_state_json(events) -> str | None:
+    state = rebuild_suite_state(events)
+    if state is None:
+        return None
+    return SuiteRecord.serialize(state.to_suite())
+
+
+async def _rebuild_streams(
+    db: SqliteDatabase,
+    *,
+    aggregate_type: str,
+    to_state_json,
+    verify_only: bool,
+    report: RebuildReport,
+) -> None:
+    now = datetime.now(UTC).isoformat()
+    for aggregate_id in await _stream_ids(db, aggregate_type):
+        events = await _events(db, aggregate_type, aggregate_id)
+        state_json = to_state_json(events)
+        if state_json is None:
+            continue
+        report.rebuilt += 1
+        stream_id = f"{aggregate_type}:{aggregate_id}"
+        existing = await db.fetchone(
+            "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", (stream_id,)
+        )
+        if existing is not None and not _same_state(existing["state_json"], state_json):
+            report.mismatches.append(aggregate_id)
+        if verify_only:
+            continue
+        version = await _stream_position(db, aggregate_type, aggregate_id)
+        await db.execute(
+            """
+            INSERT INTO aggregate_snapshots
+                (stream_id, aggregate_type, version, state_json, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(stream_id) DO UPDATE SET
+                version = excluded.version,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at
+            """,
+            (stream_id, aggregate_type, version, state_json, now),
+        )
+
+
 async def rebuild_run_snapshots(db: SqliteDatabase, *, verify_only: bool = False) -> RebuildReport:
     """모든 Run 스트림을 폴드해 ``aggregate_snapshots`` 를 재구성/검증한다.
 
     ``verify_only`` 면 기록하지 않고 기존 스냅샷과의 도메인 동등성만 대조한다.
     """
     report = RebuildReport()
-    now = datetime.now(UTC).isoformat()
-    for run_id in await _run_stream_ids(db):
-        events = await _run_events(db, run_id)
-        state_json = snapshot_state_json(run_id, events)
-        if state_json is None:
-            continue
-        report.rebuilt += 1
-        stream_id = f"Run:{run_id}"
-        existing = await db.fetchone(
-            "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", (stream_id,)
-        )
-        if existing is not None and not _same_state(existing["state_json"], state_json):
-            report.mismatches.append(run_id)
-        if verify_only:
-            continue
-        version = await _stream_position(db, run_id)
-        await db.execute(
-            """
-            INSERT INTO aggregate_snapshots
-                (stream_id, aggregate_type, version, state_json, updated_at)
-            VALUES (?, 'Run', ?, ?, ?)
-            ON CONFLICT(stream_id) DO UPDATE SET
-                version = excluded.version,
-                state_json = excluded.state_json,
-                updated_at = excluded.updated_at
-            """,
-            (stream_id, version, state_json, now),
-        )
+    await _rebuild_streams(
+        db,
+        aggregate_type="Run",
+        to_state_json=lambda events: snapshot_state_json("", events),
+        verify_only=verify_only,
+        report=report,
+    )
+    return report
+
+
+async def rebuild_all_snapshots(db: SqliteDatabase, *, verify_only: bool = False) -> RebuildReport:
+    """Run + Suite 모든 스트림을 폴드해 스냅샷을 재구성/검증한다(이벤트=진실)."""
+    report = RebuildReport()
+    await _rebuild_streams(
+        db,
+        aggregate_type="Run",
+        to_state_json=lambda events: snapshot_state_json("", events),
+        verify_only=verify_only,
+        report=report,
+    )
+    await _rebuild_streams(
+        db,
+        aggregate_type="Suite",
+        to_state_json=_suite_state_json,
+        verify_only=verify_only,
+        report=report,
+    )
     return report
 
 

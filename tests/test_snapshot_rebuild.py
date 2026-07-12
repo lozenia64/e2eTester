@@ -148,3 +148,50 @@ async def test_verify_only_detects_no_mismatch_for_consistent_store(tmp_path: Pa
     report = await rebuild_run_snapshots(db, verify_only=True)
     assert report.ok
     assert report.mismatches == []
+
+
+@pytest.mark.asyncio
+async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
+    """Suite 스트림도 이벤트 폴드로 스냅샷이 재구성된다(Run 과 동형)."""
+    from app.core.enums import SuiteStatus
+    from app.core.models import SuiteRun, SuiteStep
+    from app.domain.suite_aggregate import SuiteAggregate
+    from app.eventsourcing.snapshot_rebuild import rebuild_all_snapshots
+    from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+
+    db = SqliteDatabase(tmp_path / "suite.db")
+    await ensure_schema(db)
+    repo = SqliteSuiteWriteRepository(db)
+    suite = SuiteRun(
+        suite_id="suite_s",
+        status=SuiteStatus.PENDING,
+        steps=[SuiteStep(system_code="hom", system_name="HOM", order=0)],
+        requested_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+        selected_system_codes=["hom"],
+    )
+    aggregate = SuiteAggregate.for_new_suite(suite)
+    await repo.create_suite(suite, events=aggregate.pull_events())
+    aggregate = SuiteAggregate(await repo.get_suite("suite_s"))
+    aggregate.begin()
+    step = aggregate.start_step(0)
+    aggregate.link_run(step, "run_child")
+    aggregate.record_step_result(step, SuiteStatus.PASSED, step_index=0)
+    aggregate.finalize(SuiteStatus.PASSED)
+    await repo.save_suite(aggregate.persistable_state(), events=aggregate.pull_events())
+
+    # stream_position 이 단조.
+    rows = await db.fetchall(
+        "SELECT stream_position FROM domain_events WHERE aggregate_type='Suite' "
+        "AND aggregate_id=? ORDER BY sequence_id ASC",
+        ("suite_s",),
+    )
+    assert [r["stream_position"] for r in rows] == list(range(1, len(rows) + 1))
+
+    # 스냅샷을 지우고 이벤트만으로 재구성 → 일치.
+    await db.execute("DELETE FROM aggregate_snapshots")
+    report = await rebuild_all_snapshots(db)
+    assert report.ok
+    snap = await db.fetchone(
+        "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", ("Suite:suite_s",)
+    )
+    assert snap is not None
