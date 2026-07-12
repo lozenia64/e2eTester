@@ -44,7 +44,7 @@ Optional features (AI failure analysis via Gemini, end-of-run Gmail notification
 
 ## Architecture
 
-Single process (API): web layer and orchestration live in FastAPI; browser execution is in-process (`local`) or delegated to `worker/` (`remote`). Flow:
+Execution-plane separation (WP-C1): the API process runs the web layer + orchestration only — **no Playwright, no execution threads**. Real browser modules are always delegated to a `worker/` process via `WorkerExecutionGateway` (the API composition root never instantiates the in-process `LocalExecutionGateway`, which is now worker-only); only SIM modules run in-process via `SimulatedExecutionGateway`. This makes a worker (+Redis) required infrastructure for real runs — use `scripts/run_local.py` to start API + worker together. Flow:
 
 ```
 Browser → FastAPI (app/main.py — lifespan only)

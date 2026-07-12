@@ -27,7 +27,6 @@ from app.eventsourcing.outbox import SqliteOutbox
 from app.eventsourcing.relay import OutboxRelay
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
-from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
@@ -50,7 +49,6 @@ from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
-    SqliteHealingPolicyReader,
     SqliteHealingPolicyStore,
 )
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
@@ -233,10 +231,11 @@ class AppContainer:
                 interactive_workers=self.settings.run_concurrency_interactive,
             )
 
-        if self.settings.execution_mode == "local":
-            self.healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(self.db_path))
-        else:
-            self.healing_engine = None
+        # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
+        # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
+        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. LocalExecutionGateway(in-process
+        # 브라우저)는 워커 전용이 되어 API 컴포지션에서 인스턴스화하지 않는다.
+        self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
 
         self.healing_service = HealingService(
             event_store=SqliteHealingEventStore(self.db_path),
@@ -245,19 +244,12 @@ class AppContainer:
             registry=self.registry,
         )
 
-        if self.settings.execution_mode == "remote":
-            gateways = [
+        self.execution_gateway = CompositeExecutionGateway(
+            [
                 WorkerExecutionGateway(self.settings.worker_base_url, self.session_registry),
                 SimulatedExecutionGateway(),
             ]
-        else:
-            gateways = [
-                LocalExecutionGateway(
-                    self.artifact_manager, self.system_codes, healing_engine=self.healing_engine
-                ),
-                SimulatedExecutionGateway(),
-            ]
-        self.execution_gateway = CompositeExecutionGateway(gateways)
+        )
 
     def wire_orchestration(self) -> None:
         self.event_bus = EventBus()
