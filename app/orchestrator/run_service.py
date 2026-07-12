@@ -217,6 +217,12 @@ class RunService:
                     pending.session_id
                 ):
                     continue
+            # Phase C: 내구 체크포인트가 있으면 봉인하지 않는다(임의 워커가 이어받을 수 있음).
+            # WAITING_INPUT 은 그대로 두어 submit_otp 가 체크포인트로 재개하게 하고, 그 외
+            # 진행 중 Run 은 체크포인트 다음 모듈부터 재개 잡을 재발행한다. 봉인은 체크포인트조차
+            # 없는 스트림에만 적용된다(로컬/시뮬 모드는 체크포인트를 캡처하지 않아 종전대로 봉인).
+            if await self._resume_from_checkpoint_if_available(run):
+                continue
             aggregate = RunAggregate(run)
             if not aggregate.seal_interrupted():
                 continue
@@ -226,6 +232,37 @@ class RunService:
             await self._control_store.clear_pending(run.run_id)
             count += 1
         return count
+
+    async def _resume_from_checkpoint_if_available(self, run: Run) -> bool:
+        """내구 체크포인트가 있으면 재기동 후 이어받는다(있으면 True — 봉인하지 않음).
+
+        WAITING_INPUT 은 재개 잡을 발행하지 않고 그대로 두어(OTP 아직 미제출) 이후 ``submit_otp``
+        가 체크포인트로 재개하게 한다. 그 외 진행 중 Run 은 체크포인트 다음 모듈부터 재개 잡을
+        재발행한다. 체크포인트가 없으면 False(호출자가 봉인).
+        """
+        if self._session_checkpoint_store is None:
+            return False
+        checkpoint = await self._session_checkpoint_store.get(run.run_id)
+        if checkpoint is None:
+            return False
+        if run.status == RunStatus.WAITING_INPUT:
+            return True  # OTP 대기 유지 — submit_otp 가 재개.
+        await self._run_queue.enqueue_run_job(
+            RunJobDescriptor(
+                run_id=run.run_id,
+                kind="resume",
+                start_index=checkpoint.module_index + 1,
+                label=f"run:{run.run_id}:checkpoint-resume",
+                execution_profile=self._registry.get_execution_profile(run.system_code),
+            )
+        )
+        logger.info(
+            "체크포인트에서 Run 재개 잡 재발행",
+            log_event="run.checkpoint_resume",
+            run_id=run.run_id,
+            module_index=checkpoint.module_index,
+        )
+        return True
 
     async def dispatch_run_job(self, descriptor: RunJobDescriptor) -> None:
         """직렬화된 Run 작업 설명자를 실행한다(워커·로컬 큐 공용 진입점)."""

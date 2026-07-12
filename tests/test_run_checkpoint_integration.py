@@ -118,3 +118,48 @@ async def test_save_checkpoint_noop_without_store(tmp_path):
     handle = ExecutionHandle(execution_mode="simulated", session_id="sess-none")
     # 스토어 미주입이면 조용히 no-op(예외 없음).
     await service._save_checkpoint(run, module_index=0, handle=handle)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_seals_run_without_checkpoint(tmp_path):
+    """체크포인트가 없으면 재기동 시 진행 중 Run 을 봉인한다(로컬/시뮬 모드 종전 동작)."""
+    store = InMemorySessionCheckpointStore()
+    service, run = await _make_service(tmp_path, store)
+    sealed = await service.reconcile_interrupted_runs()
+    assert sealed == 1
+    reloaded = await service._write_repo.get_run(run.run_id)
+    assert reloaded.status == RunStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_reconcile_skips_sealing_when_checkpoint_present(tmp_path):
+    """체크포인트가 있으면 봉인하지 않고 재개 잡을 재발행한다(임의 워커가 이어받음)."""
+    from app.execution.session_checkpoint import SessionCheckpoint
+
+    store = InMemorySessionCheckpointStore()
+    service, run = await _make_service(tmp_path, store)
+    # 재개 잡 재발행만 관측한다(실행하지 않는 기록용 핸들러).
+    dispatched: list = []
+    service._run_queue.set_run_job_handler(lambda d: dispatched.append(d) or _noop())
+    service._run_queue.start()
+    await store.save(
+        SessionCheckpoint(
+            run_id=run.run_id,
+            system_code=run.system_code,
+            execution_mode="simulated",
+            module_index=0,
+            session_id="sess",
+            storage_state="{}",
+        )
+    )
+    sealed = await service.reconcile_interrupted_runs()
+    await service._run_queue.join()
+    assert sealed == 0
+    reloaded = await service._write_repo.get_run(run.run_id)
+    assert reloaded.status != RunStatus.CANCELLED  # 봉인되지 않고 재개 대상으로 남는다.
+    assert [d.kind for d in dispatched] == ["resume"]
+    assert dispatched[0].start_index == 1  # checkpoint.module_index + 1
+
+
+async def _noop() -> None:
+    return None
