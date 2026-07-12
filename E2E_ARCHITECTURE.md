@@ -37,8 +37,8 @@ Browser
           -> RunStateMachine / RunAggregate (app/domain/ — 결정 전이표 + 상태 변이·불변식, 순수)
           -> RunSnapshot / SuiteSnapshot (app/domain/snapshots.py — aggregate.to_snapshot() 읽기 전용 스냅샷)
           -> ModuleRegistry           (app/registry/loader.py + systems/*/manifest.yaml, execution_profile 포함)
-          -> RunWriteRepositoryPort + RunHistoryQueryPort + RunLogStorePort + RunControlStorePort + RunInputStorePort
-          -> CQRS 조회 포트: AnomalyInboxQueryPort / DailyStatusQueryPort / StatsQueryPort (projection 테이블)
+          -> RunWriteRepositoryPort + RunLogStorePort + RunControlStorePort + RunInputStorePort
+          -> CQRS 조회 포트(app/orchestrator/queries/ 질의 핸들러가 소비): RunSummaryQueryPort / ModuleHistoryQueryPort / SuiteSummaryQueryPort / AnomalyInboxQueryPort / DailyStatusQueryPort / StatsQueryPort (projection 테이블, blob 미접근)
           -> ExecutionGateway PORT    (app/execution/gateway.py — 오케스트레이션 ↔ 실행 경계)
               -> CompositeExecutionGateway (execution_mode 로 어댑터 라우팅)
                   -> LocalExecutionGateway / RemoteExecutionGateway / SimulatedExecutionGateway
@@ -262,10 +262,13 @@ e2eTester/
       sqlite_support.py            # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
       listener_registry.py         # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       sqlite_run_write_repository.py # RunWriteRepositoryPort + outbox 동시 기록
-      sqlite_run_history_query.py  # RunHistoryQueryPort (projection 인덱스)
+      sqlite_run_summary_query.py  # RunSummaryQueryPort (run_history_index 화면형 행, SQL 필터/정렬/페이지)
+      sqlite_module_history_query.py # ModuleHistoryQueryPort (module_history_index 모듈 실행 이력 행)
+      sqlite_suite_summary_query.py # SuiteSummaryQueryPort (suite_history_index 요약 행)
+      in_memory_run_summary_query.py # RunSummaryQueryPort 인메모리 어댑터(테스트 전용)
       sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
       sqlite_daily_status_query.py # DailyStatusQueryPort
-      sqlite_stats_query.py        # StatsQueryPort
+      sqlite_stats_query.py        # StatsQueryPort (stats_rollup + run/module 이력 행, blob 미접근)
       sqlite_run_log_store.py      # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
       sqlite_run_control_store.py  # SQLite Run 제어 상태 어댑터(취소·OTP 재개, run_control 테이블)
       sqlite_suite_repository.py   # SQLite Suite 어댑터(기본 사용)
@@ -696,12 +699,14 @@ manifest 에 들어 있는 정보:
 
 저장소는 `ExecutionGateway` 와 같은 **포트-어댑터** 구조다. **쓰기(CQRS command)** 는 `RunWriteRepositoryPort` + domain event store + transactional outbox, **읽기(CQRS query)** 는 projection 테이블 + 전용 조회 포트다:
 
-- `RunHistoryQueryPort` — Run 이력·요약 (`list_run_summaries`, AG-001: `list_runs()` 전수 스캔 금지)
+- `RunSummaryQueryPort` — Run 요약 목록 (`run_history_index` 화면형 행; 필터·정렬·페이지는 전부 SQL, `Run` 엔티티 반환 금지, AG-001: `list_runs()` 전수 스캔 금지)
+- `ModuleHistoryQueryPort` — 모듈 실행 이력 (`module_history_index` projection; 인사이트/통계/일간 소요시간 소비)
+- `SuiteSummaryQueryPort` — Suite 요약 목록 (`suite_history_index` projection)
 - `AnomalyInboxQueryPort` — 이상징후 인박스 (`anomaly_inbox_index` projection)
 - `DailyStatusQueryPort` — 일간 점검 현황 (`daily_system_status` projection)
-- `StatsQueryPort` — 관리자 통계 롤업 (`stats_rollup` projection)
+- `StatsQueryPort` — 관리자 통계 롤업 (`stats_rollup` + run/module 이력 행, blob 미접근)
 
-오케스트레이터/인사이트 서비스는 구체 SQLite 어댑터가 아니라 위 포트에만 의존한다(`app/storage/ports.py`). 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다.
+오케스트레이터/인사이트 서비스는 구체 SQLite 어댑터가 아니라 위 포트에만 의존한다(`app/storage/ports.py`). **읽기 경로는 blob 을 읽지 않는다**: 목록/집계/실시간 팬아웃은 화면형 projection 행만 소비하고, 단건 애그리거트 로드(`RunWriteRepositoryPort.get_run`)는 상세 화면과 쓰기 경로에만 허용된다. 목록 질의는 커맨드 서비스(`RunService`)가 아니라 전용 질의 핸들러(`app/orchestrator/queries/` 의 `RunQueries`/`DailyDashboardQueries`)가 라우트에 직접 주입돼 담당한다. 제어 상태(취소 의도·OTP 재개)와 입력값(PII)은 상태 blob 과 분리된 형제 스토어가 소유한다.
 
 **영속 DTO ↔ 도메인 엔티티 분리(persistence model):** 저장소 포트는 도메인(`Run`/`SuiteRun`)으로 말하지만, 어댑터는 도메인 엔티티를 직접 직렬화하지 않고 **영속 DTO**(`app/storage/records.py` 의 `RunRecord`/`RunModuleRecord`/`SuiteRecord`/`SuiteStepRecord` + `from_domain`/`to_domain` 매퍼)로 매핑한다. SQLite·인메모리 **두 어댑터가 같은 매퍼**를 쓰므로, 과거 어댑터마다 중복되던 "로그 strip" 매직(`_PERSIST_EXCLUDE` exclude / `_persist_copy` deep-copy 후 비우기)이 사라졌다. 온디스크 JSON 형태는 종전과 동일해 기존 SQLite 데이터와 호환된다.
 
@@ -1023,7 +1028,7 @@ Suite (`/ws/suites/{suite_id}`):
 ### Phase 2. 저장소와 실행 모델 개선 — ✅ 완료
 
 - ✅ 저장소 포트(`app/storage/ports.py`) 도입 + `Sqlite*Repository`(SQLite 영속)
-- ✅ **CQRS write/read 분리**: `RunWriteRepositoryPort` + `RunHistoryQueryPort` + projection tables (`app/projections/`)
+- ✅ **CQRS write/read 분리**: `RunWriteRepositoryPort` + 화면형 질의 포트(`RunSummaryQueryPort`/`ModuleHistoryQueryPort`/`SuiteSummaryQueryPort`) + projection tables (`app/projections/`) — 읽기 경로 blob 재수화 제거
 - ✅ **Transactional Outbox** + `OutboxRelay` (`app/eventsourcing/`) — domain event → projection · EventBus · WS fan-out
 - ✅ **RealtimeNotificationPort** (`app/realtime/`) — WebSocket pub/sub을 저장소에서 분리
 - ✅ PII 영속: `EncryptedSqliteRunInputStore` / `EncryptedSqliteSuiteInputStore` (AES-GCM)
@@ -1083,8 +1088,8 @@ Backend
 > **진행 상태 (2026-07):** 이상적 아키텍처 리팩토링 3단계(CQRS → Worker → Automation BC) **완료**.
 >
 > - **Write path**: `RunAggregate` → `SqliteRunWriteRepository` + domain event store + transactional outbox → `OutboxRelay`
-> - **Read path**: projection tables + `RunHistoryQueryPort` (전수 스캔 없음)
-> - **Realtime**: `RealtimeNotificationPort` (저장소와 분리)
+> - **Read path**: projection tables + 화면형 질의 포트(`RunSummaryQueryPort`/`ModuleHistoryQueryPort`/`SuiteSummaryQueryPort`) — 목록/집계/실시간 팬아웃 모두 blob 미접근, 필터·정렬·페이지는 SQL
+> - **Realtime**: `RealtimeNotificationPort` (저장소와 분리) — `RealtimeProjector` 는 fat event payload 만으로 WS 를 조립(blob 재수화 없음)
 > - **Execution**: `E2E_EXECUTION_MODE=local`(개발) / `remote`(prod: `worker/` + Redis)
 > - **Automation**: `app/automation/` BC — `systems/*/steps/` 삭제됨
 >

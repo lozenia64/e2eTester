@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.core.enums import ModuleStatus
 from app.core.models import Run, RunComparison
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
-from app.storage.ports import RunHistoryQueryPort
+
+if TYPE_CHECKING:
+    from app.storage.ports import RunSummaryQueryPort, RunWriteRepositoryPort
 
 
 class RunComparator:
@@ -11,15 +15,29 @@ class RunComparator:
 
     AI 분석·메일 발송과 달리 비교 결과는 Run 의 파생 필드(``comparison``)이며 종료 메일이
     이를 참조한다. 따라서 이벤트 구독자(비결정적 순서)로 빼지 않고, Run 종료(finalize)
-    시점에 결정적으로 계산되도록 오케스트레이터에 주입한다(이력 조회 포트에만 의존).
+    시점에 결정적으로 계산되도록 오케스트레이터에 주입한다.
+
+    기준선 탐색은 요약 인덱스(단일 SELECT)로 ID 만 찾고, 모듈 비교에 필요한 기준선 본문은
+    단건 애그리거트 로드로 가져온다(쓰기 경로의 합법적 단일 로드).
     """
 
-    def __init__(self, history_query: RunHistoryQueryPort) -> None:
-        self._history_query = history_query
+    def __init__(
+        self,
+        summary_query: RunSummaryQueryPort,
+        write_repo: RunWriteRepositoryPort,
+    ) -> None:
+        self._summary_query = summary_query
+        self._write_repo = write_repo
 
     async def compute(self, run: Run) -> RunComparison:
-        baseline = await self._history_query.find_previous_finished_run(run)
-        if baseline is None:
+        baseline_id = await self._summary_query.find_previous_finished_run_id(
+            run.system_code, run.requested_at, run.run_id
+        )
+        if baseline_id is None:
+            return RunComparison(has_baseline=False)
+        try:
+            baseline = await self._write_repo.get_run(baseline_id)
+        except KeyError:
             return RunComparison(has_baseline=False)
 
         baseline_status = {

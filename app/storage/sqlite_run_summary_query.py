@@ -5,11 +5,12 @@ blob(``runs``) 테이블을 절대 만지지 않는다. 필터·정렬·페이�
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from app.core.enums import RunStatus
 from app.eventsourcing.support import SqliteDatabase
-from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
+from app.storage.query_rows import Page, RunComparisonRow, RunSummaryFilter, RunSummaryRow
 
 _TERMINAL_FOR_BASELINE = (
     RunStatus.PASSED.value,
@@ -167,3 +168,26 @@ class SqliteRunSummaryQuery:
             (system_code, *_TERMINAL_FOR_BASELINE, before.isoformat(), exclude_run_id),
         )
         return row["run_id"] if row else None
+
+    async def list_comparisons(self, run_ids: list[str]) -> dict[str, RunComparisonRow]:
+        if not run_ids:
+            return {}
+        placeholders = ",".join("?" for _ in run_ids)
+        rows = await self._db.fetchall(
+            f"""
+            SELECT run_id, baseline_run_id, newly_failed, recovered, still_failing
+            FROM run_comparison_cache
+            WHERE run_id IN ({placeholders})
+            """,
+            tuple(run_ids),
+        )
+        return {
+            row["run_id"]: RunComparisonRow(
+                run_id=row["run_id"],
+                baseline_run_id=row["baseline_run_id"],
+                newly_failed=tuple(json.loads(row["newly_failed"] or "[]")),
+                recovered=tuple(json.loads(row["recovered"] or "[]")),
+                still_failing=tuple(json.loads(row["still_failing"] or "[]")),
+            )
+            for row in rows
+        }

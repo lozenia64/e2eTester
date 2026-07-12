@@ -11,8 +11,8 @@ from app.storage.query_rows import ModuleHistoryRow
 
 _SELECT_COLUMNS = """
     run_id, module_id, system_code, module_name, status, message, started_at, ended_at,
-    duration_ms, current_url, artifacts, ai_category, ai_summary, suite_id, schedule_id,
-    triggered_by, requested_at, created_by_user_id, created_by_user_name
+    duration_ms, current_url, artifacts, ai_category, ai_summary, ai_action, suite_id,
+    schedule_id, triggered_by, requested_at, created_by_user_id, created_by_user_name
 """
 
 
@@ -38,6 +38,7 @@ def _row_to_history(row) -> ModuleHistoryRow:
         artifacts=tuple(json.loads(row["artifacts"] or "[]")),
         ai_category=row["ai_category"],
         ai_summary=row["ai_summary"],
+        ai_action=row["ai_action"],
         suite_id=row["suite_id"],
         schedule_id=row["schedule_id"],
         triggered_by=row["triggered_by"],

@@ -14,9 +14,12 @@ from app.storage.in_memory_stats_query import InMemoryStatsQuery
 from app.storage.run_repository import InMemoryRunRepository
 
 
-class _FakeSuiteRepo:
-    async def list_suites(self):
+class _FakeSuiteSummaryQuery:
+    async def list_summaries(self, *, limit: int | None = None):
         return []
+
+    async def counts_by_status(self) -> dict[str, int]:
+        return {}
 
 
 class _FakeRegistry:
@@ -78,7 +81,7 @@ async def test_saved_seconds_sums_without_per_run_truncation():
 
     service = StatsService(
         stats_query=InMemoryStatsQuery(run_repo),
-        suite_repo=_FakeSuiteRepo(),
+        suite_summary_query=_FakeSuiteSummaryQuery(),
         registry=registry,
     )
     stats = await service.get_usage_stats()
@@ -130,7 +133,7 @@ async def test_usage_stats_includes_anomaly_excludes_error():
 
     service = StatsService(
         stats_query=InMemoryStatsQuery(run_repo),
-        suite_repo=_FakeSuiteRepo(),
+        suite_summary_query=_FakeSuiteSummaryQuery(),
         registry=registry,
     )
     stats = await service.get_usage_stats()

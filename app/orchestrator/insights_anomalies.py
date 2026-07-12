@@ -21,6 +21,7 @@ from app.core.status_labels import (
 )
 from app.orchestrator.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
+    RunHistoryView,
     module_kind,
     module_occurred_at,
     module_run_id,
@@ -28,7 +29,7 @@ from app.orchestrator.insights_common import (
 )
 
 if TYPE_CHECKING:
-    from app.core.models import Run, SystemDefinition
+    from app.core.models import SystemDefinition
     from app.storage.query_rows import AnomalyInboxRow
 
 
@@ -132,12 +133,12 @@ def build_anomaly_items_from_index(
 
 def build_anomaly_items(
     systems: list[SystemDefinition],
-    runs: list[Run],
+    runs: list[RunHistoryView],
     handlings: dict[str, AnomalyHandling],
     *,
     allowed_system_codes: list[str] | None = None,
 ) -> dict[str, Any]:
-    """이상건 목록 + 상태별 카운트를 만든다(레거시 Run 스캔 — 단위 테스트용)."""
+    """이상건 목록 + 상태별 카운트를 만든다(읽기 뷰 스캔 — 단위 테스트용 보조 경로)."""
     system_names = {s.system_code: s.name for s in systems}
     allowed = set(allowed_system_codes) if allowed_system_codes is not None else None
 
@@ -150,7 +151,6 @@ def build_anomaly_items(
                 continue
             mr_id = module_run_id(run.run_id, module.module_id)
             handling = handlings.get(mr_id)
-            analysis = module.failure_analysis
             items.append(
                 {
                     "module_run_id": mr_id,
@@ -168,8 +168,8 @@ def build_anomaly_items(
                     "current_url": module.current_url,
                     "message": module.message,
                     "screenshot": screenshot_url(module),
-                    "ai_summary": analysis.user_summary if analysis else None,
-                    "ai_category": analysis.category if analysis else None,
+                    "ai_summary": module.ai_summary,
+                    "ai_category": module.ai_category,
                     "handling": _handling_view(handling),
                 }
             )

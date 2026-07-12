@@ -23,16 +23,36 @@ if TYPE_CHECKING:
     from app.orchestrator.insights_service import InsightsService
     from app.orchestrator.ops_service import OpsService
     from app.orchestrator.preset_service import PresetService
+    from app.orchestrator.queries import DailyDashboardQueries, RunQueries
     from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
     from app.orchestrator.suite_service import SuiteService
     from app.registry.loader import ModuleRegistry
     from app.scheduling.scheduler import SchedulerService
-    from app.storage.ports import ScheduleRepositoryPort, SuiteRepositoryPort
+    from app.storage.ports import (
+        ScheduleRepositoryPort,
+        SuiteRepositoryPort,
+        SuiteSummaryQueryPort,
+    )
 
 
 def get_run_service(connection: HTTPConnection) -> RunService:
     return connection.app.state.run_service
+
+
+def get_run_queries(connection: HTTPConnection) -> RunQueries:
+    """Run 목록/상세 질의 핸들러(읽기 전용 — CQRS query side)."""
+    return connection.app.state.run_queries
+
+
+def get_daily_queries(connection: HTTPConnection) -> DailyDashboardQueries:
+    """일간 점검 현황 질의 핸들러(읽기 전용)."""
+    return connection.app.state.daily_queries
+
+
+def get_suite_summary_query(connection: HTTPConnection) -> SuiteSummaryQueryPort:
+    """Suite 요약 질의 포트(actor context 등 읽기 전용 조립용)."""
+    return connection.app.state.suite_summary_query
 
 
 def get_suite_service(connection: HTTPConnection) -> SuiteService:

@@ -33,8 +33,10 @@ from app.storage.ports import (
     SuiteControlStorePort,
     SuiteInputStorePort,
     SuiteReadRepositoryPort,
+    SuiteSummaryQueryPort,
     SuiteWriteRepositoryPort,
 )
+from app.storage.query_rows import SuiteSummaryRow
 
 logger = get_logger(__name__)
 
@@ -66,6 +68,7 @@ class SuiteService:
         event_bus: EventBus,
         cancel_store: SuiteControlStorePort,
         input_store: SuiteInputStorePort,
+        summary_query: SuiteSummaryQueryPort,
     ) -> None:
         self._registry = registry
         self._run_commands = run_commands
@@ -75,6 +78,8 @@ class SuiteService:
         self._event_bus = event_bus
         self._cancel_store = cancel_store
         self._input_store = input_store
+        # 목록/보드 질의는 blob 스캔이 아니라 suite_history_index 프로젝션 행으로만 답한다.
+        self._summary_query = summary_query
         # Suite 단위 임계영역 직렬화(이벤트 핸들러/advance 가 같은 Suite 를 동시에 만지지 않게).
         self._locks: dict[str, asyncio.Lock] = {}
 
@@ -90,33 +95,35 @@ class SuiteService:
         return await self._read_repo.get_suite(suite_id)
 
     async def list_suite_summaries(self, limit: int = 20) -> list[dict]:
-        suites = await self._read_repo.list_suites()
-        suites.sort(key=lambda suite: suite.requested_at, reverse=True)
-        return [self._summarize_suite(suite) for suite in suites[:limit]]
+        rows = await self._summary_query.list_summaries(limit=limit)
+        return [self._summarize_suite_row(row) for row in rows]
 
-    async def list_suites_by_schedule(self, schedule_id: str, limit: int = 30) -> list[SuiteRun]:
+    async def list_suites_by_schedule(
+        self, schedule_id: str, limit: int = 30
+    ) -> list[SuiteSummaryRow]:
         """특정 예약이 트리거한 Suite 를 최근순으로 돌려준다(예약 상세 이력용)."""
-        suites = [
-            suite
-            for suite in await self._read_repo.list_suites()
-            if suite.schedule_id == schedule_id
-        ]
-        suites.sort(key=lambda suite: suite.requested_at, reverse=True)
-        return suites[:limit]
+        rows = await self._summary_query.list_summaries()
+        return [row for row in rows if row.schedule_id == schedule_id][:limit]
 
-    async def list_schedule_tagged_suites(self) -> list[SuiteRun]:
-        """schedule_id 태깅된 Suite 전체 — 관제 보드/캘린더의 1회 스캔·그룹핑용."""
-        return [suite for suite in await self._read_repo.list_suites() if suite.schedule_id]
+    async def list_schedule_tagged_suites(self) -> list[SuiteSummaryRow]:
+        """schedule_id 태깅된 Suite 전체 — 관제 보드/캘린더의 1회 조회·그룹핑용."""
+        rows = await self._summary_query.list_summaries()
+        return [row for row in rows if row.schedule_id]
 
     async def reconcile_interrupted_suites(self) -> int:
         """재기동 시 비종료 상태로 남은 Suite 를 CANCELLED 로 정리한다.
 
         ``RunService.reconcile_interrupted_runs`` 와 같은 이유로, 영속 저장소에서 복원된
-        진행 중 Suite 는 이어받을 수 없으므로 종료로 봉인한다(인메모리에서는 no-op).
+        진행 중 Suite 는 이어받을 수 없으므로 종료로 봉인한다. 후보는 요약 인덱스에서
+        진행 중 상태만 골라내고, 봉인 자체는 단건 애그리거트 로드(쓰기 경로)로 수행한다.
         봉인 규칙(어떤 상태가 '진행 중'인가)은 도메인 애그리거트가 가진다.
         """
+        active = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
         count = 0
-        for suite in await self._read_repo.list_suites():
+        for row in await self._summary_query.list_summaries():
+            if row.status not in active:
+                continue
+            suite = await self._read_repo.get_suite(row.suite_id)
             aggregate = SuiteAggregate(suite)
             if not aggregate.seal_interrupted():
                 continue
@@ -127,27 +134,27 @@ class SuiteService:
         return count
 
     @staticmethod
-    def _summarize_suite(suite: SuiteRun) -> dict:
-        passed = sum(1 for step in suite.steps if step.status == SuiteStatus.PASSED)
-        anomaly = sum(1 for step in suite.steps if step.status in SUITE_ANOMALY_STATUSES)
-        error = sum(1 for step in suite.steps if step.status in SUITE_ERROR_STATUSES)
-        skipped = sum(1 for step in suite.steps if step.status == SuiteStatus.SKIPPED)
-        selected_total = len(suite.steps) - skipped
+    def _summarize_suite_row(row: SuiteSummaryRow) -> dict:
+        passed = sum(1 for step in row.steps if step.status == SuiteStatus.PASSED)
+        anomaly = sum(1 for step in row.steps if step.status in SUITE_ANOMALY_STATUSES)
+        error = sum(1 for step in row.steps if step.status in SUITE_ERROR_STATUSES)
+        skipped = sum(1 for step in row.steps if step.status == SuiteStatus.SKIPPED)
+        selected_total = len(row.steps) - skipped
         return {
-            "suite_id": suite.suite_id,
-            "status": suite.status,
-            "requested_at": suite.requested_at.isoformat(),
-            "started_at": suite.started_at.isoformat() if suite.started_at else None,
-            "ended_at": suite.ended_at.isoformat() if suite.ended_at else None,
-            "step_total": len(suite.steps),
+            "suite_id": row.suite_id,
+            "status": row.status,
+            "requested_at": row.requested_at.isoformat(),
+            "started_at": row.started_at.isoformat() if row.started_at else None,
+            "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+            "step_total": row.step_total,
             "step_selected_total": selected_total,
             "step_passed": passed,
             "step_failed": anomaly,
             "step_error": error,
             "step_skipped": skipped,
-            "current_step_index": suite.current_step_index,
-            "active_run_id": suite.active_run_id,
-            "awaiting_input_run_id": suite.awaiting_input_run_id,
+            "current_step_index": row.current_step_index,
+            "active_run_id": row.active_run_id,
+            "awaiting_input_run_id": row.awaiting_input_run_id,
         }
 
     async def subscribe(self, suite_id: str):

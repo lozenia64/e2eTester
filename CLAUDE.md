@@ -51,7 +51,7 @@ Browser → FastAPI (app/main.py — lifespan only)
       → SqliteRunWriteRepository + transactional outbox
           → OutboxRelay → ProjectionHandlers + EventBus + RealtimeProjector (single WS notification pipeline; no direct repo→WS publish)
   → SuiteService (event-driven saga via RunCommandPort)
-  → CQRS query ports: RunHistoryQueryPort, AnomalyInboxQueryPort, DailyStatusQueryPort, StatsQueryPort
+  → CQRS query handlers (app/orchestrator/queries/) over projection query ports: RunSummaryQueryPort, ModuleHistoryQueryPort, SuiteSummaryQueryPort, AnomalyInboxQueryPort, DailyStatusQueryPort, StatsQueryPort (screen-shaped rows, no blob rehydration)
 ```
 
 Key points that span multiple files:

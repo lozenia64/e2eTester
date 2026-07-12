@@ -21,7 +21,7 @@ from app.core.models import (
     UpdateScheduleRequest,
 )
 from app.core.settings import get_settings
-from app.orchestrator.schedule_command_port import ScheduleCommandPort
+from app.orchestrator.schedule_command_port import ScheduleCommandPort, ScheduleRunQueryPort
 from app.scheduling.cron import next_run_after, parse_cron
 from app.scheduling.schedule_center import (
     MATCH_BEFORE,
@@ -36,6 +36,7 @@ from app.scheduling.schedule_center import (
     match_occurrences,
 )
 from app.storage.ports import ScheduleRepositoryPort
+from app.storage.query_rows import RunSummaryRow, SuiteSummaryRow
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"
 DEFAULT_TICK_SECONDS = 20
@@ -109,11 +110,14 @@ class SchedulerService:
         run_commands: ScheduleCommandPort,
         suite_service,
         repository: ScheduleRepositoryPort,
+        run_queries: ScheduleRunQueryPort,
         tick_seconds: int = DEFAULT_TICK_SECONDS,
     ) -> None:
         self._run_commands = run_commands
         self._suite_service = suite_service
         self._repository = repository
+        # Run 이력은 blob 이 아니라 요약 인덱스 행으로만 읽는다(관제 보드/캘린더/상세 이력).
+        self._run_queries = run_queries
         self._tick_seconds = tick_seconds
         self._timezone, self._timezone_name = _resolve_timezone()
         self._running = False
@@ -423,7 +427,7 @@ class SchedulerService:
     # --- 예약 점검 관리 센터 읽기 모델 (관제 보드 / 캘린더 / 이력) ------------
 
     @staticmethod
-    def _run_point(run: Run) -> ExecutionPoint:
+    def _run_point(run: RunSummaryRow) -> ExecutionPoint:
         return ExecutionPoint(
             execution_id=run.run_id,
             kind="run",
@@ -434,7 +438,7 @@ class SchedulerService:
         )
 
     @staticmethod
-    def _suite_point(suite: SuiteRun) -> ExecutionPoint:
+    def _suite_point(suite: SuiteSummaryRow) -> ExecutionPoint:
         return ExecutionPoint(
             execution_id=suite.suite_id,
             kind="suite",
@@ -453,7 +457,7 @@ class SchedulerService:
                 schedule.schedule_id, limit=limit
             )
             return [self._suite_point(suite) for suite in suites]
-        runs = await self._run_commands.list_runs_by_schedule(schedule.schedule_id, limit=limit)
+        runs = await self._run_queries.list_schedule_runs(schedule.schedule_id, limit=limit)
         return [self._run_point(run) for run in runs]
 
     async def _grouped_execution_points(
@@ -463,7 +467,7 @@ class SchedulerService:
         그룹핑한다 — 보드/캘린더가 예약마다 전체 스캔을 반복(O(#예약 × #Run))하지 않도록
         하는 공용 프리페치."""
         runs_by: dict[str, list[ExecutionPoint]] = {}
-        for run in await self._run_commands.list_schedule_tagged_runs():
+        for run in await self._run_queries.list_schedule_tagged_runs():
             runs_by.setdefault(run.schedule_id, []).append(self._run_point(run))
         suites_by: dict[str, list[ExecutionPoint]] = {}
         for suite in await self._suite_service.list_schedule_tagged_suites():
@@ -623,7 +627,7 @@ class SchedulerService:
             systems = [s for s in systems if s.system_code in allowed]
         coverage = build_coverage(
             [(s.system_code, s.name) for s in systems],
-            await self._run_commands.last_finished_at_by_system(),
+            await self._run_queries.last_finished_at_by_system(),
             now,
         )
 

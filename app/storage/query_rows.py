@@ -31,6 +31,7 @@ class DailyStatusRow:
     module_id: str
     last_status: ModuleStatus
     last_run_id: str | None
+    duration_ms: int | None
     updated_at: datetime
 
 
@@ -119,12 +120,24 @@ class ModuleHistoryRow:
     artifacts: tuple[str, ...]
     ai_category: str | None
     ai_summary: str | None
+    ai_action: str | None
     suite_id: str | None
     schedule_id: str | None
     triggered_by: str | None
     requested_at: datetime | None
     created_by_user_id: str | None
     created_by_user_name: str | None
+
+
+@dataclass(frozen=True)
+class RunComparisonRow:
+    """``run_comparison_cache`` 한 행 — 직전 Run 대비 모듈 상태 변화."""
+
+    run_id: str
+    baseline_run_id: str | None
+    newly_failed: tuple[str, ...]
+    recovered: tuple[str, ...]
+    still_failing: tuple[str, ...]
 
 
 @dataclass(frozen=True)

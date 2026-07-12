@@ -60,12 +60,18 @@ def run_started(run_id: str) -> DomainEvent:
     return DomainEvent.create("Run", run_id, "RunStarted", {})
 
 
-def module_queued(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "ModuleQueued", {"module_id": module_id})
+def module_queued(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
+    # 실시간 프로젝터가 blob 재수화 없이 module_* WS 이벤트를 만들 수 있도록
+    # 모듈 본문(로그 제외)을 payload 에 동봉한다(fat event).
+    return DomainEvent.create(
+        "Run", run_id, "ModuleQueued", {"module_id": module_id, "module": module}
+    )
 
 
-def module_started(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "ModuleStarted", {"module_id": module_id})
+def module_started(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
+    return DomainEvent.create(
+        "Run", run_id, "ModuleStarted", {"module_id": module_id, "module": module}
+    )
 
 
 def module_finished(
@@ -84,9 +90,10 @@ def module_finished(
     created_by_user_id: str | None = None,
     current_url: str | None = None,
     artifacts: list[str] | None = None,
+    module: dict | None = None,
 ) -> DomainEvent:
-    # 프로젝션(이상건 인박스·일간 현황·모듈 이력)이 blob 재수화 없이 행을 만들 수 있도록
-    # 모듈 종료 사실의 파생 값을 payload 에 함께 싣는다(fat event).
+    # 프로젝션(이상건 인박스·일간 현황·모듈 이력)과 실시간 프로젝터가 blob 재수화 없이
+    # 행/WS payload 를 만들 수 있도록 모듈 종료 사실의 파생 값을 payload 에 싣는다(fat event).
     return DomainEvent.create(
         "Run",
         run_id,
@@ -105,25 +112,44 @@ def module_finished(
             "created_by_user_id": created_by_user_id,
             "current_url": current_url,
             "artifacts": list(artifacts or []),
+            "module": module,
         },
     )
 
 
-def module_log_appended(run_id: str, module_id: str, message: str) -> DomainEvent:
+def module_log_appended(
+    run_id: str,
+    module_id: str,
+    message: str,
+    *,
+    system_code: str,
+    run_status: RunStatus,
+) -> DomainEvent:
+    # 로그는 요약(run_summary)을 동봉하지 않는 핫패스 — 실시간 봉투(DashboardEvent)에
+    # 필요한 최소 두 필드만 스칼라로 싣는다.
     return DomainEvent.create(
         "Run",
         run_id,
         "ModuleLogAppended",
-        {"module_id": module_id, "message": message},
+        {
+            "module_id": module_id,
+            "message": message,
+            "system_code": system_code,
+            "run_status": run_status.value,
+        },
     )
 
 
-def run_waiting_input(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunWaitingInput", {"module_id": module_id})
+def run_waiting_input(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
+    return DomainEvent.create(
+        "Run", run_id, "RunWaitingInput", {"module_id": module_id, "module": module}
+    )
 
 
-def run_resumed(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunResumed", {"module_id": module_id})
+def run_resumed(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
+    return DomainEvent.create(
+        "Run", run_id, "RunResumed", {"module_id": module_id, "module": module}
+    )
 
 
 def run_finished(
@@ -153,12 +179,21 @@ def run_finished(
     )
 
 
-def run_module_blocked(run_id: str, module_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunModuleBlocked", {"module_id": module_id})
+def run_module_blocked(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
+    return DomainEvent.create(
+        "Run", run_id, "RunModuleBlocked", {"module_id": module_id, "module": module}
+    )
 
 
-def run_modules_cancelled(run_id: str, module_ids: list[str]) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunModulesCancelled", {"module_ids": module_ids})
+def run_modules_cancelled(
+    run_id: str, module_ids: list[str], *, modules: list[dict] | None = None
+) -> DomainEvent:
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "RunModulesCancelled",
+        {"module_ids": module_ids, "modules": list(modules or [])},
+    )
 
 
 def run_comparison_attached(
@@ -187,12 +222,14 @@ def run_sealed_interrupted(run_id: str) -> DomainEvent:
     return DomainEvent.create("Run", run_id, "RunSealedInterrupted", {})
 
 
-def run_module_retried(run_id: str, module_id: str, attempt: int) -> DomainEvent:
+def run_module_retried(
+    run_id: str, module_id: str, attempt: int, *, module: dict | None = None
+) -> DomainEvent:
     return DomainEvent.create(
         "Run",
         run_id,
         "RunModuleRetried",
-        {"module_id": module_id, "attempt": attempt},
+        {"module_id": module_id, "attempt": attempt, "module": module},
     )
 
 
@@ -211,13 +248,22 @@ def module_failure_analysis_attached(
     *,
     category: str | None = None,
     user_summary: str | None = None,
+    recommended_action: str | None = None,
+    module: dict | None = None,
 ) -> DomainEvent:
-    # 모듈 이력 프로젝션이 실패 유형 분포·요약을 blob 재수화 없이 채우도록 동봉한다(fat event).
+    # 모듈 이력 프로젝션이 실패 유형 분포·요약·권장 조치를 blob 재수화 없이 채우도록
+    # 동봉한다(fat event).
     return DomainEvent.create(
         "Run",
         run_id,
         "ModuleFailureAnalysisAttached",
-        {"module_id": module_id, "category": category, "user_summary": user_summary},
+        {
+            "module_id": module_id,
+            "category": category,
+            "user_summary": user_summary,
+            "recommended_action": recommended_action,
+            "module": module,
+        },
     )
 
 

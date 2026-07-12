@@ -10,13 +10,15 @@ from app.core.models import (
     AnomalyHandling,
     FailureAnalysis,
     ModuleDefinition,
-    Run,
-    RunComparison,
-    RunModule,
     SystemDefinition,
 )
 from app.orchestrator.insights_anomalies import build_anomaly_items
 from app.orchestrator.insights_breakdown import build_module_breakdown
+from app.orchestrator.insights_common import (
+    ModuleHistoryView,
+    RunComparisonView,
+    RunHistoryView,
+)
 from app.orchestrator.insights_health import build_system_health
 from app.orchestrator.insights_timeline import build_system_timeline
 
@@ -34,18 +36,20 @@ _FA = FailureAnalysis(
 
 
 def _mod(mid, order, status, dur, *, depends=None, analysis=None, arts=None, ts=NOW):
-    return RunModule(
+    del order, depends  # 뷰는 실행 이력 행이라 정의 순서/의존성을 갖지 않는다.
+    return ModuleHistoryView(
         module_id=mid,
         name=mid.upper(),
-        group="g",
-        order=order,
         status=status,
+        message="",
         duration_ms=dur,
+        current_url=None,
+        artifacts=tuple(arts or []),
         started_at=ts,
         ended_at=ts,
-        depends_on=depends or [],
-        failure_analysis=analysis,
-        artifacts=arts or [],
+        ai_category=analysis.category if analysis else None,
+        ai_summary=analysis.user_summary if analysis else None,
+        ai_action=analysis.recommended_action if analysis else None,
     )
 
 
@@ -117,13 +121,13 @@ def _runs():
                 ts=ts,
             ),
         ]
-        comp = RunComparison(
-            has_baseline=True,
-            newly_failed=["login"] if i == 2 else [],
-            recovered=["login"] if i == 1 else [],
+        comp = RunComparisonView(
+            newly_failed=("login",) if i == 2 else (),
+            recovered=("login",) if i == 1 else (),
+            still_failing=(),
         )
         runs.append(
-            Run(
+            RunHistoryView(
                 run_id=f"r{i}",
                 system_code="hom",
                 system_name="대표홈(PC)",
@@ -131,10 +135,13 @@ def _runs():
                 requested_at=ts,
                 started_at=ts,
                 ended_at=ts,
-                modules=modules,
                 triggered_by="schedule" if i % 2 else "manual",
-                comparison=comp,
+                suite_id=None,
+                schedule_id=None,
+                created_by_user_id=None,
                 created_by_user_name="홍길동",
+                modules=tuple(modules),
+                comparison=comp,
             )
         )
     return runs
@@ -212,7 +219,7 @@ def test_module_breakdown_slowdown_detection():
         ts = NOW - timedelta(days=5 - i)  # 오래된 것 → 최근 순
         login_dur = 2000 + i * 700  # 2000ms → 5500ms 점증
         runs.append(
-            Run(
+            RunHistoryView(
                 run_id=f"s{i}",
                 system_code="hom",
                 system_name="대표홈(PC)",
@@ -220,11 +227,17 @@ def test_module_breakdown_slowdown_detection():
                 requested_at=ts,
                 started_at=ts,
                 ended_at=ts,
-                modules=[
+                triggered_by="manual",
+                suite_id=None,
+                schedule_id=None,
+                created_by_user_id=None,
+                created_by_user_name=None,
+                modules=(
                     _mod("access", 1, ModuleStatus.PASSED, 1000, ts=ts),
                     _mod("login", 2, ModuleStatus.PASSED, login_dur, depends=["access"], ts=ts),
                     _mod("claim", 3, ModuleStatus.PASSED, 3000, depends=["login"], ts=ts),
-                ],
+                ),
+                comparison=None,
             )
         )
     b = build_module_breakdown(_system(), runs)

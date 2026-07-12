@@ -10,9 +10,14 @@ from app.core.ops_buffer import ops_event_buffer
 from app.core.settings import E2ESettings
 from app.execution.run_queue import RunExecutionQueue
 from app.scheduling.scheduler import SchedulerService
-from app.storage.ports import RunHistoryQueryPort, ScheduleRepositoryPort, SuiteRepositoryPort
+from app.storage.ports import (
+    RunSummaryQueryPort,
+    ScheduleRepositoryPort,
+    SuiteSummaryQueryPort,
+)
+from app.storage.query_rows import Page, RunSummaryFilter
 
-_ACTIVE_RUN_STATUSES = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+_ACTIVE_RUN_STATUSES = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})
 _ACTIVE_SUITE_STATUSES = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
 
 
@@ -21,66 +26,58 @@ class OpsService:
         self,
         *,
         settings: E2ESettings,
-        run_repo: RunHistoryQueryPort,
-        suite_repo: SuiteRepositoryPort,
+        run_summary_query: RunSummaryQueryPort,
+        suite_summary_query: SuiteSummaryQueryPort,
         schedule_repo: ScheduleRepositoryPort,
         run_queue: RunExecutionQueue,
         scheduler: SchedulerService | None = None,
     ) -> None:
         self._settings = settings
-        self._run_repo = run_repo
-        self._suite_repo = suite_repo
+        self._run_summary_query = run_summary_query
+        self._suite_summary_query = suite_summary_query
         self._schedule_repo = schedule_repo
         self._run_queue = run_queue
         self._scheduler = scheduler
 
     async def build_snapshot(self) -> dict[str, Any]:
         now = datetime.now(UTC)
-        runs = await self._run_repo.list_runs_with_statuses(frozenset(RunStatus))
-        suites = await self._suite_repo.list_suites()
+        # 상태별 카운트는 SQL GROUP BY, 활성 목록은 상태 필터 SELECT — blob 스캔 없음.
+        run_counts = await self._run_summary_query.counts_by_status()
+        active_run_rows = await self._run_summary_query.list_summaries(
+            RunSummaryFilter(statuses=_ACTIVE_RUN_STATUSES), Page(limit=30)
+        )
+        suite_counts = await self._suite_summary_query.counts_by_status()
+        suite_rows = await self._suite_summary_query.list_summaries()
         schedules = await self._schedule_repo.list()
 
-        run_counts: dict[str, int] = {}
-        active_runs: list[dict[str, Any]] = []
-        for run in runs:
-            key = run.status.value
-            run_counts[key] = run_counts.get(key, 0) + 1
-            if run.status not in _ACTIVE_RUN_STATUSES:
-                continue
-            active_runs.append(
-                {
-                    "run_id": run.run_id,
-                    "system_code": run.system_code,
-                    "status": run.status.value,
-                    "triggered_by": run.triggered_by,
-                    "suite_id": run.suite_id,
-                    "schedule_id": run.schedule_id,
-                    "requested_at": run.requested_at.isoformat(),
-                    "created_by_user_name": run.created_by_user_name,
-                }
-            )
-        active_runs.sort(key=lambda item: item["requested_at"], reverse=True)
+        active_runs = [
+            {
+                "run_id": row.run_id,
+                "system_code": row.system_code,
+                "status": row.status.value,
+                "triggered_by": row.triggered_by,
+                "suite_id": row.suite_id,
+                "schedule_id": row.schedule_id,
+                "requested_at": row.requested_at.isoformat(),
+                "created_by_user_name": row.created_by_user_name,
+            }
+            for row in active_run_rows
+        ]
 
-        suite_counts: dict[str, int] = {}
-        active_suites: list[dict[str, Any]] = []
-        for suite in suites:
-            key = suite.status.value
-            suite_counts[key] = suite_counts.get(key, 0) + 1
-            if suite.status not in _ACTIVE_SUITE_STATUSES:
-                continue
-            active_suites.append(
-                {
-                    "suite_id": suite.suite_id,
-                    "status": suite.status.value,
-                    "active_run_id": suite.active_run_id,
-                    "awaiting_input_run_id": suite.awaiting_input_run_id,
-                    "current_step_index": suite.current_step_index,
-                    "step_total": len(suite.steps),
-                    "requested_at": suite.requested_at.isoformat(),
-                    "created_by_user_name": suite.created_by_user_name,
-                }
-            )
-        active_suites.sort(key=lambda item: item["requested_at"], reverse=True)
+        active_suites = [
+            {
+                "suite_id": row.suite_id,
+                "status": row.status.value,
+                "active_run_id": row.active_run_id,
+                "awaiting_input_run_id": row.awaiting_input_run_id,
+                "current_step_index": row.current_step_index,
+                "step_total": row.step_total,
+                "requested_at": row.requested_at.isoformat(),
+                "created_by_user_name": row.created_by_user_name,
+            }
+            for row in suite_rows
+            if row.status in _ACTIVE_SUITE_STATUSES
+        ]
 
         enabled_schedules = [schedule for schedule in schedules if schedule.enabled]
         due_window = now + timedelta(hours=24)
@@ -118,13 +115,13 @@ class OpsService:
                 else self._settings.schedule_tz,
             },
             "runs": {
-                "total": len(runs),
+                "total": sum(run_counts.values()),
                 "active_count": len(active_runs),
                 "counts_by_status": run_counts,
-                "active": active_runs[:30],
+                "active": active_runs,
             },
             "suites": {
-                "total": len(suites),
+                "total": sum(suite_counts.values()),
                 "active_count": len(active_suites),
                 "counts_by_status": suite_counts,
                 "active": active_suites[:20],

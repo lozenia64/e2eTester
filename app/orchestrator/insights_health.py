@@ -18,20 +18,22 @@ from app.core.status_labels import (
 from app.orchestrator.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
     CONCLUSIVE_MODULE_STATUSES,
+    ModuleHistoryView,
+    RunHistoryView,
     local_date_key,
     sort_runs_asc,
     sort_runs_desc,
 )
 
 if TYPE_CHECKING:
-    from app.core.models import Run, RunModule, SystemDefinition
+    from app.core.models import SystemDefinition
 
 
 def _as_utc(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
-def _run_totals(run: Run) -> tuple[int, int, int]:
+def _run_totals(run: RunHistoryView) -> tuple[int, int, int]:
     """(passed_modules, conclusive_modules, duration_ms) 한 Run 집계."""
     passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
     conclusive = sum(1 for m in run.modules if m.status in CONCLUSIVE_MODULE_STATUSES)
@@ -58,7 +60,7 @@ def _date_axis(now_local_date, days: int) -> list[str]:
     return [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
 
 
-def _streak(runs_desc: list[Run]) -> int:
+def _streak(runs_desc: list[RunHistoryView]) -> int:
     """가장 최근부터 연속으로 '정상(PASSED)'인 Run 수."""
     streak = 0
     for run in runs_desc:
@@ -69,12 +71,12 @@ def _streak(runs_desc: list[Run]) -> int:
     return streak
 
 
-def _module_conclusive_status(module: RunModule) -> ModuleStatus | None:
+def _module_conclusive_status(module: ModuleHistoryView) -> ModuleStatus | None:
     return module.status if module.status in CONCLUSIVE_MODULE_STATUSES else None
 
 
 def _stability_ranking(
-    system: SystemDefinition, window_runs_asc: list[Run]
+    system: SystemDefinition, window_runs_asc: list[RunHistoryView]
 ) -> list[dict[str, Any]]:
     """모듈별 안정성: flaky 점수(상태 뒤집힘 횟수)·통과율·평균소요·마지막 상태."""
     ordered_modules = sorted(system.modules, key=lambda m: m.order)
@@ -128,7 +130,7 @@ def _stability_ranking(
 
 def build_system_health(
     system: SystemDefinition,
-    runs: list[Run],
+    runs: list[RunHistoryView],
     *,
     days: int,
     now: datetime,

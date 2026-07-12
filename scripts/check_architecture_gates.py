@@ -2,7 +2,7 @@
 """아키텍처 정책 게이트 (policy-as-code).
 
 규칙:
-  AG-001  app/ 내 list_runs() 직접 호출 금지 (RunHistoryQueryPort 사용)
+  AG-001  app/ 내 list_runs() 직접 호출 금지 (RunSummaryQueryPort 등 프로젝션 질의 사용)
   AG-002  app/orchestrator/ 에서 playwright import 금지
   AG-003  app/domain/ 에 I/O·async 런타임 import 금지 (순수 도메인 유지)
   AG-004  app/orchestrator/ 에서 list_all_runs( / list_runs_since( 금지
@@ -26,15 +26,10 @@ AGGREGATE_ALLOWED_PREFIXES = (
     "tests/",
 )
 
-# AG-001: 포트 정의·이력 조회 어댑터·하위 호환 인메모리 구현은 허용
+# AG-001: 포트 정의·테스트용 인메모리 구현만 허용(프로덕션 blob 스캔 어댑터는 삭제됨)
 LIST_RUNS_ALLOWED_SUFFIXES = (
     "storage/ports.py",
     "storage/run_repository.py",
-    "storage/sqlite_run_repository.py",
-    "storage/sqlite_run_history_query.py",
-    "storage/composite_run_repository.py",
-    "api/routes_runs.py",
-    "api/routes_admin.py",
 )
 LIST_RUNS_PATTERN = re.compile(r"\.list_runs\s*\(")
 
@@ -138,7 +133,11 @@ def check_ag005_aggregate_encapsulation() -> list[str]:
 
 
 RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
-    ("AG-001", "list_runs() direct usage in app/ (use RunHistoryQueryPort)", check_ag001_list_runs),
+    (
+        "AG-001",
+        "list_runs() direct usage in app/ (use projection query ports)",
+        check_ag001_list_runs,
+    ),
     ("AG-002", "playwright import in app/orchestrator/", check_ag002_orchestrator_no_playwright),
     ("AG-003", "I/O or async runtime import in app/domain/", check_ag003_domain_purity),
     (

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
-from app.core.models import PendingExecution, Run, RunModule
+from app.core.models import Run, RunModule
 from app.domain.events import run_deleted as domain_run_deleted
 from app.domain.execution_policy import module_policy_from_definition
 from app.domain.run_aggregate import RunAggregate
@@ -25,28 +25,24 @@ from app.domain.run_state_machine import (
 )
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
-from app.orchestrator.daily_dashboard import build_daily_dashboard_from_projection
 from app.orchestrator.run_comparator import RunComparator
 from app.orchestrator.run_planner import RunPlanner
-from app.orchestrator.run_summary import summarize_run
 from app.realtime.ports import RealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 from app.storage.ports import (
-    DailyStatusQueryPort,
     RunControlStorePort,
-    RunHistoryQueryPort,
     RunInputStorePort,
     RunLogStorePort,
+    RunSummaryQueryPort,
     RunWriteRepositoryPort,
 )
+from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
     from app.execution.job_queue_port import JobQueuePort
     from app.execution.redis_session_registry import RedisSessionRegistry
     from app.healing.ports import HealingRecorderPort as HealingRecorder
-    from app.orchestrator.run_actor import ActorContext
 
 from app.execution.job_queue_port import RunJobDescriptor
 
@@ -58,7 +54,7 @@ def _as_utc(moment: datetime) -> datetime:
 
 
 class RunService:
-    """Run 의 생명주기를 관장하는 오케스트레이터(애플리케이션 서비스).
+    """Run 의 생명주기를 관장하는 오케스트레이터(**커맨드 전용** 애플리케이션 서비스).
 
     책임은 *실행 순서*와 *부작용 조율*(영속·이벤트 발행·게이트웨이 호출)로 한정한다. "무엇이
     합법한 상태 전이인가"라는 규칙·불변식·상태 변경은 도메인 애그리거트 ``RunAggregate``
@@ -67,13 +63,18 @@ class RunService:
     검증·계획은 ``RunPlanner`` 에, 이력 비교는 ``RunComparator`` 에, AI 실패 분석·종료 메일
     같은 부수 관심사는 ``EventBus`` 구독자에게 위임한다. 외부로 나가는 Run 본문은 ``RunView``
     프로젝션을 거친다. 이 클래스는 Playwright/스레드/Gemini/SMTP 를 전혀 import 하지 않는다.
+
+    **목록/대시보드 질의는 이 서비스의 책임이 아니다** — 라우트는
+    ``app/orchestrator/queries/`` 의 질의 핸들러(``RunQueries``/``DailyDashboardQueries``)를
+    직접 주입받는다. 이 서비스가 요약 질의 포트를 쓰는 곳은 커맨드 내부 판단(정리 대상
+    선별·OTP 대기 Run 탐색)뿐이며, 그마저 blob 이 아니라 프로젝션 행/ID 만 읽는다.
     """
 
     def __init__(
         self,
         registry: ModuleRegistry,
         write_repo: RunWriteRepositoryPort,
-        history_query: RunHistoryQueryPort,
+        summary_query: RunSummaryQueryPort,
         realtime: RealtimeNotificationPort,
         log_store: RunLogStorePort,
         execution_gateway: ExecutionGateway,
@@ -86,11 +87,10 @@ class RunService:
         artifact_manager: ArtifactManager | None = None,
         healing_recorder: HealingRecorder | None = None,
         session_registry: RedisSessionRegistry | None = None,
-        daily_status_query: DailyStatusQueryPort | None = None,
     ) -> None:
         self._registry = registry
         self._write_repo = write_repo
-        self._history_query = history_query
+        self._summary_query = summary_query
         self._realtime = realtime
         self._log_store = log_store
         self._gateway = execution_gateway
@@ -98,7 +98,7 @@ class RunService:
         # 실행 코루틴은 더 이상 fire-and-forget asyncio.create_task 가 아니라, 감독되는 작업
         # 큐(워커 풀 · 예외 격리 · 동시성 제한 · 수명 관리)에 제출한다.
         self._run_queue = run_queue
-        self._comparator = comparator or RunComparator(history_query)
+        self._comparator = comparator or RunComparator(summary_query, write_repo)
         self._planner = planner or RunPlanner()
         self._artifact_manager = artifact_manager or ArtifactManager()
         # 제어 상태(취소 의도·OTP 재개 컨텍스트)는 더 이상 서비스-인스턴스 메모리 dict 가 아니라
@@ -113,7 +113,6 @@ class RunService:
         self._healing_recorder = healing_recorder
         # 원격 모드 OTP 교차 재기동: 워커 세션 리스가 살아 있으면 WAITING_INPUT 을 봉인하지 않는다.
         self._session_registry = session_registry
-        self._daily_status_query = daily_status_query
 
     # --- 조회 -------------------------------------------------------------
 
@@ -139,148 +138,6 @@ class RunService:
         """로그 스토어의 로그를 Run 의 각 모듈에 하이드레이션한다(읽기 모델 조립)."""
         logs_by_module = await self._log_store.get_all(run.run_id)
         RunAggregate(run).hydrate_logs(logs_by_module)
-
-    async def list_run_summaries(
-        self,
-        limit: int = 50,
-        user_id: str | None = None,
-        system_code: str | None = None,
-        user_name_query: str | None = None,
-        actor_context: ActorContext | None = None,
-        run_status: RunStatus | None = None,
-        run_statuses: frozenset[RunStatus] | None = None,
-        scope: Literal["today", "before_today"] | None = None,
-    ) -> list[dict]:
-        if user_id is not None:
-            runs = await self._history_query.list_runs_by_user(user_id)
-        else:
-            runs = await self._history_query.list_runs_with_statuses(frozenset(RunStatus))
-        runs.sort(key=lambda run: run.requested_at, reverse=True)
-
-        active_statuses = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
-        today_start_utc = schedule_today_start_utc() if scope is not None else None
-
-        normalized_name_query = (user_name_query or "").strip().casefold()
-
-        def _matches_filters(run: Run, summary: dict) -> bool:
-            if run_statuses is not None and run.status not in run_statuses:
-                return False
-            if run_status is not None and run.status != run_status:
-                return False
-            if system_code and summary.get("system_code") != system_code:
-                return False
-            if normalized_name_query:
-                actor_name = (summary.get("created_by_user_name") or "").casefold()
-                if normalized_name_query not in actor_name:
-                    return False
-            return True
-
-        def _run_at_utc(run: Run) -> datetime:
-            return (
-                run.requested_at
-                if run.requested_at.tzinfo is not None
-                else run.requested_at.replace(tzinfo=UTC)
-            )
-
-        if scope == "today":
-            active_summaries: list[dict] = []
-            today_finished_summaries: list[dict] = []
-            for run in runs:
-                run_at = _run_at_utc(run)
-                is_active = run.status in active_statuses
-                if not is_active and run_at < today_start_utc:
-                    continue
-                summary = summarize_run(run, actor_context=actor_context)
-                if not _matches_filters(run, summary):
-                    continue
-                if is_active:
-                    active_summaries.append(summary)
-                else:
-                    today_finished_summaries.append(summary)
-            remaining = max(0, limit - len(active_summaries))
-            return active_summaries + today_finished_summaries[:remaining]
-
-        summaries: list[dict] = []
-        for run in runs:
-            if scope is not None:
-                run_at = _run_at_utc(run)
-                is_active = run.status in active_statuses
-                if scope == "before_today":
-                    if is_active or run_at >= today_start_utc:
-                        continue
-            summary = summarize_run(run, actor_context=actor_context)
-            if not _matches_filters(run, summary):
-                continue
-            summaries.append(summary)
-            if len(summaries) >= limit:
-                break
-        return summaries
-
-    async def list_runs_by_schedule(self, schedule_id: str, limit: int = 30) -> list[Run]:
-        """특정 예약이 트리거한 Run 을 최근순으로 돌려준다(예약 상세 이력용).
-
-        이상건 인박스와 같은 스캔-도출 패턴 — 별도 인덱스 없이 ``list_runs()`` 를 필터한다.
-        """
-        runs = await self._history_query.list_runs_by_schedule(schedule_id, limit=limit)
-        return runs
-
-    async def list_schedule_tagged_runs(self) -> list[Run]:
-        """schedule_id 태깅된 Run 전체 — 관제 보드/캘린더가 저장소를 예약마다 다시 훑지
-        않도록, 호출자가 1회 스캔 결과를 예약별로 그룹핑해 쓴다."""
-        return await self._history_query.list_schedule_tagged_runs()
-
-    async def last_finished_at_by_system(self) -> dict[str, datetime]:
-        """시스템별 마지막 '점검 완료' 시각(취소 제외) — 커버리지 진단(점검 공백)용."""
-        return await self._history_query.last_finished_at_by_system()
-
-    async def get_daily_dashboard(
-        self,
-        *,
-        allowed_system_codes: list[str] | None = None,
-    ) -> dict:
-        """사용자 대시보드용 **일간 점검 현황**을 집계한다(읽기 전용 뷰).
-
-        접근 가능한 시스템(``allowed_system_codes`` 미지정 시 전체)의 KST 오늘 Run 을 모아
-        시스템·모듈별 최신 점검 상태를 만든다. PII 입력값은 포함하지 않는다(파생 상태만).
-        """
-        systems = self._registry.list_systems()
-        if allowed_system_codes is not None:
-            allowed = set(allowed_system_codes)
-            systems = [s for s in systems if s.system_code in allowed]
-
-        today_start_utc = schedule_today_start_utc()
-        date_label = schedule_today_label()
-        if self._daily_status_query is None:
-            raise RuntimeError("DailyStatusQueryPort is not configured")
-        status_rows = await self._daily_status_query.list_for_date(date_label, allowed_system_codes)
-        run_summaries = await self._daily_status_query.list_run_summaries_for_date(
-            date_label, today_start_utc, allowed_system_codes
-        )
-        duration_by_module_run = await self._load_daily_module_durations(status_rows)
-
-        return build_daily_dashboard_from_projection(
-            systems,
-            status_rows,
-            run_summaries,
-            duration_by_module_run=duration_by_module_run,
-            generated_at=datetime.now(UTC),
-            date_label=date_label,
-        )
-
-    async def _load_daily_module_durations(self, status_rows) -> dict[tuple[str, str], int | None]:
-        durations: dict[tuple[str, str], int | None] = {}
-        seen_runs: set[str] = set()
-        for row in status_rows:
-            if not row.last_run_id or row.last_run_id in seen_runs:
-                continue
-            seen_runs.add(row.last_run_id)
-            try:
-                run = await self._write_repo.get_run(row.last_run_id)
-            except KeyError:
-                continue
-            for module in run.modules:
-                durations[(row.last_run_id, module.module_id)] = module.duration_ms
-        return durations
 
     async def delete_run(self, run_id: str) -> None:
         run = await self._write_repo.get_run(run_id)
@@ -310,7 +167,7 @@ class RunService:
         진행 중(PENDING/RUNNING/WAITING_INPUT) Run 과 OTP 대기 중인 Run 은 건너뛴다.
         """
         deleted: list[str] = []
-        active = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+        active = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})
         cutoff_utc = None
         if requested_before is not None:
             cutoff_utc = (
@@ -318,26 +175,19 @@ class RunService:
                 if requested_before.tzinfo is not None
                 else requested_before.replace(tzinfo=UTC)
             )
-        for run in await self._history_query.list_runs_with_statuses(statuses):
-            if run.status in active:
+        run_ids = await self._summary_query.list_run_ids(
+            RunSummaryFilter(statuses=statuses - active, requested_before=cutoff_utc)
+        )
+        for run_id in run_ids:
+            if await self._control_store.get_pending(run_id) is not None:
                 continue
-            if cutoff_utc is not None:
-                run_at = (
-                    run.requested_at
-                    if run.requested_at.tzinfo is not None
-                    else run.requested_at.replace(tzinfo=UTC)
-                )
-                if run_at >= cutoff_utc:
-                    continue
-            if await self._control_store.get_pending(run.run_id) is not None:
-                continue
-            await self._log_store.delete_by_run_id(run.run_id)
-            await self._write_repo.delete_run(run.run_id)
-            await self._write_repo.append_events([domain_run_deleted(run.run_id)])
-            self._artifact_manager.delete_run_artifacts(run.run_id)
-            await self._input_store.delete(run.run_id)
-            await self._control_store.delete(run.run_id)
-            deleted.append(run.run_id)
+            await self._log_store.delete_by_run_id(run_id)
+            await self._write_repo.delete_run(run_id)
+            await self._write_repo.append_events([domain_run_deleted(run_id)])
+            self._artifact_manager.delete_run_artifacts(run_id)
+            await self._input_store.delete(run_id)
+            await self._control_store.delete(run_id)
+            deleted.append(run_id)
         return deleted
 
     async def reconcile_interrupted_runs(self) -> int:
@@ -350,7 +200,12 @@ class RunService:
         """
         count = 0
         active_statuses = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})
-        for run in await self._history_query.list_runs_with_statuses(active_statuses):
+        run_ids = await self._summary_query.list_run_ids(RunSummaryFilter(statuses=active_statuses))
+        for run_id in run_ids:
+            # 봉인은 쓰기 경로 — 단건 애그리거트 로드가 합법이다.
+            run = await self._write_repo.get_run(run_id)
+            if run.status not in active_statuses:
+                continue
             if run.status == RunStatus.WAITING_INPUT and self._session_registry is not None:
                 pending = await self._control_store.get_pending(run.run_id)
                 if pending is not None and await self._session_registry.is_alive(
@@ -514,30 +369,29 @@ class RunService:
         프록시라 정렬 키로 쓰지 않는다(먼저 생성됐지만 나중에 멈춘 Run 이 오주입되는 문제);
         ``paused_at`` 이 없는 레거시 pending 행만 생성 시각으로 폴백한다.
         """
-        candidates: list[tuple[Run, PendingExecution]] = []
-        for run in await self._history_query.list_waiting_input_runs():
-            pending = await self._control_store.get_pending(run.run_id)
+        waiting_rows = await self._summary_query.list_summaries(
+            RunSummaryFilter(statuses=frozenset({RunStatus.WAITING_INPUT})),
+            Page(limit=200),
+        )
+        candidates: list[tuple[str, datetime]] = []
+        for row in waiting_rows:
+            pending = await self._control_store.get_pending(row.run_id)
             if pending is None:
                 continue
-            candidates.append((run, pending))
+            candidates.append((row.run_id, _as_utc(pending.paused_at or row.requested_at)))
         if not candidates:
             raise KeyError("OTP 입력을 기다리는 Run이 없습니다.")
 
-        def _paused_at(item: tuple[Run, PendingExecution]) -> datetime:
-            run, pending = item
-            moment = pending.paused_at or run.requested_at
-            return _as_utc(moment)
-
-        candidates.sort(key=_paused_at, reverse=True)
-        target = candidates[0][0]
+        candidates.sort(key=lambda item: item[1], reverse=True)
+        target_run_id = candidates[0][0]
         if len(candidates) > 1:
             logger.warning(
                 "OTP 대기 Run 다건 — 최근 요청 Run 에 제출",
                 log_event="run.otp_relay_ambiguous",
                 candidate_count=len(candidates),
-                selected_run_id=target.run_id,
+                selected_run_id=target_run_id,
             )
-        return await self.submit_otp(target.run_id, otp_code)
+        return await self.submit_otp(target_run_id, otp_code)
 
     async def cancel_run(self, run_id: str) -> Run:
         run = await self._write_repo.get_run(run_id)
@@ -954,9 +808,13 @@ class RunService:
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
         aggregate = RunAggregate(run)
-        final_status = aggregate.finalize(forced_status)
+        # 비교 결과를 finalize **이전**에 부착해, RunFinished 이벤트의 run_summary 가 comparison
+        # 을 함께 실어 나가게 한다(실시간 프로젝터가 run_finished WS payload 를 blob 없이 조립).
+        # compute_final_status 는 순수 판정(변이 없음)이라 미리 확인해도 안전하다.
+        final_status = aggregate.compute_final_status(forced_status)
         if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
             aggregate.attach_comparison(await self._comparator.compute(run))
+        final_status = aggregate.finalize(forced_status)
         await self._persist(run, aggregate)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.

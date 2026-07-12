@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-from app.core.models import Run, Schedule, SuiteRun
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
-    from app.storage.ports import ScheduleRepositoryPort, SuiteRepositoryPort
+    from app.core.models import Schedule
+    from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
+    from app.storage.query_rows import SuiteSummaryRow
+
+
+class RunActorSource(Protocol):
+    """실행자 해석에 필요한 최소 속성 계약 — ``Run`` 엔티티든 요약 행이든 만족한다."""
+
+    created_by_user_id: str | None
+    created_by_user_name: str | None
+    suite_id: str | None
+    schedule_id: str | None
 
 
 def _lookup_user(
@@ -23,15 +32,16 @@ def _lookup_user(
 
 
 def resolve_run_actor(
-    run: Run,
+    run: RunActorSource,
     *,
     users_by_id: dict[str, tuple[str, str | None]] | None = None,
-    suites_by_id: dict[str, SuiteRun] | None = None,
+    suites_by_id: dict[str, Any] | None = None,
     schedules_by_id: dict[str, Schedule] | None = None,
 ) -> tuple[str | None, str | None]:
     """Run 의 실행자(user_id, user_name) 를 표시·집계용으로 해석한다.
 
     저장 시점에 이름이 빠진 과거 Run(Suite·예약 하위 Run 등)은 상위 엔티티·user 조회로 보완한다.
+    상위 Suite 는 요약 행(``SuiteSummaryRow``)이면 충분하다(created_by_* 만 읽는다).
     """
     user_id = run.created_by_user_id
     user_name = run.created_by_user_name
@@ -65,10 +75,10 @@ def resolve_run_actor(
 @dataclass(frozen=True)
 class ActorContext:
     users_by_id: dict[str, tuple[str, str | None]]
-    suites_by_id: dict[str, SuiteRun]
+    suites_by_id: dict[str, SuiteSummaryRow]
     schedules_by_id: dict[str, Schedule]
 
-    def resolve(self, run: Run) -> tuple[str | None, str | None]:
+    def resolve(self, run: RunActorSource) -> tuple[str | None, str | None]:
         return resolve_run_actor(
             run,
             users_by_id=self.users_by_id,
@@ -79,13 +89,13 @@ class ActorContext:
 
 async def load_actor_context(
     user_service: UserService,
-    suite_repo: SuiteRepositoryPort,
+    suite_summary_query: SuiteSummaryQueryPort,
     schedule_repo: ScheduleRepositoryPort,
 ) -> ActorContext:
     users_by_id = {
         user.user_id: (user.name, user.email) for user in await user_service.list_users()
     }
-    suites_by_id = {suite.suite_id: suite for suite in await suite_repo.list_suites()}
+    suites_by_id = {row.suite_id: row for row in await suite_summary_query.list_summaries()}
     schedules_by_id = {schedule.schedule_id: schedule for schedule in await schedule_repo.list()}
     return ActorContext(
         users_by_id=users_by_id,

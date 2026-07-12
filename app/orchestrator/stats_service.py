@@ -12,26 +12,27 @@ from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
 from app.storage.ports import (
     ScheduleRepositoryPort,
     StatsQueryPort,
-    SuiteRepositoryPort,
+    SuiteSummaryQueryPort,
 )
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
     from app.registry.loader import ModuleRegistry
+    from app.storage.query_rows import ModuleHistoryRow
 
 
 class StatsService:
     def __init__(
         self,
         stats_query: StatsQueryPort,
-        suite_repo: SuiteRepositoryPort,
+        suite_summary_query: SuiteSummaryQueryPort,
         registry: ModuleRegistry,
         module_settings_repo: ModuleSettingsRepositoryPort | None = None,
         user_service: UserService | None = None,
         schedule_repo: ScheduleRepositoryPort | None = None,
     ) -> None:
         self._stats_query = stats_query
-        self._suite_repo = suite_repo
+        self._suite_summary_query = suite_summary_query
         self._registry = registry
         self._module_settings_repo = module_settings_repo
         self._user_service = user_service
@@ -42,7 +43,11 @@ class StatsService:
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> UsageStats:
-        all_runs = await self._stats_query.list_usage_runs(from_dt, to_dt)
+        all_runs = await self._stats_query.list_usage_run_rows(from_dt, to_dt)
+        module_rows = await self._stats_query.list_usage_module_rows(from_dt, to_dt)
+        modules_by_run: dict[str, list[ModuleHistoryRow]] = {}
+        for row in module_rows:
+            modules_by_run.setdefault(row.run_id, []).append(row)
 
         system_map: dict[str, SystemUsageStat] = {}
         user_map: dict[str | None, UserUsageStat] = {}
@@ -70,18 +75,19 @@ class StatsService:
         if self._user_service is not None and self._schedule_repo is not None:
             actor_context = await load_actor_context(
                 self._user_service,
-                self._suite_repo,
+                self._suite_summary_query,
                 self._schedule_repo,
             )
 
         for run in all_runs:
-            passed = sum(1 for m in run.modules if m.status == ModuleStatus.PASSED)
-            failed = sum(1 for m in run.modules if m.status in MODULE_ANOMALY_STATUSES)
-            duration = sum(m.duration_ms or 0 for m in run.modules)
+            run_modules = modules_by_run.get(run.run_id, [])
+            passed = sum(1 for m in run_modules if m.status == ModuleStatus.PASSED)
+            failed = sum(1 for m in run_modules if m.status in MODULE_ANOMALY_STATUSES)
+            duration = sum(m.duration_ms or 0 for m in run_modules)
             sys_seconds = module_seconds.get(run.system_code, {})
             saved_seconds = sum(
                 sys_seconds.get(m.module_id, 0)
-                for m in run.modules
+                for m in run_modules
                 if m.status == ModuleStatus.PASSED
             )
             code = run.system_code

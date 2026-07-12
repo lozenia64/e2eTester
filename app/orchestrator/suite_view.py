@@ -75,6 +75,36 @@ class SuiteView(BaseModel):
         """Suite → 와이어 JSON(dict). 엔티티를 직접 ``model_dump`` 하지 않는 단일 경로."""
         return cls.from_suite(suite).model_dump(mode="json")
 
+    @classmethod
+    def dump_from_summary(cls, suite_id: str, summary: dict) -> dict:
+        """이벤트에 동봉된 ``suite_summary`` 로 suite_* WS payload 를 만든다(blob 재수화 없음).
+
+        실시간 프로젝터가 Suite 상태 blob 을 읽지 않도록, ``SuiteAggregate`` 가 발행 시점에
+        계산한 요약(fat event)으로 ``dump`` 와 동일한 스키마를 재구성한다(스키마 계약의 단일
+        출처). ``filter_suite_event_for_user`` 가 payload 를 ``SuiteRun`` 으로 재검증하므로 steps
+        는 유효한 ``SuiteStep`` dict 여야 한다(요약이 그 형태를 그대로 싣는다).
+        """
+        status = SuiteStatus(summary["status"])
+        return cls(
+            suite_id=suite_id,
+            status=status,
+            status_label=suite_status_label(status),
+            steps=[SuiteStep(**step) for step in summary.get("steps", [])],
+            current_step_index=summary.get("current_step_index", 0),
+            requested_at=summary["requested_at"],
+            started_at=summary.get("started_at"),
+            ended_at=summary.get("ended_at"),
+            active_run_id=summary.get("active_run_id"),
+            awaiting_input_run_id=summary.get("awaiting_input_run_id"),
+            awaiting_input_prompt=summary.get("awaiting_input_prompt"),
+            browser_mode=summary.get("browser_mode") or "headed",
+            selected_system_codes=summary.get("selected_system_codes", []),
+            created_by_user_id=summary.get("created_by_user_id"),
+            created_by_user_name=summary.get("created_by_user_name"),
+            triggered_by=summary.get("triggered_by", "manual"),
+            schedule_id=summary.get("schedule_id"),
+        ).model_dump(mode="json")
+
 
 def resolve_suite_request_for_user(
     payload: StartSuiteRequest,

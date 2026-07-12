@@ -20,18 +20,19 @@ from app.core.status_labels import (
 )
 from app.orchestrator.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
+    RunHistoryView,
     screenshot_url,
     sort_runs_desc,
 )
 
 if TYPE_CHECKING:
-    from app.core.models import Run, SystemDefinition
+    from app.core.models import SystemDefinition
     from app.orchestrator.run_actor import ActorContext
 
 TRIGGER_LABELS = {"manual": "수동", "schedule": "예약", "suite": "Suite"}
 
 
-def _trigger(run: Run) -> str:
+def _trigger(run: RunHistoryView) -> str:
     if run.suite_id:
         return "suite"
     if run.triggered_by == "schedule":
@@ -39,7 +40,7 @@ def _trigger(run: Run) -> str:
     return "manual"
 
 
-def _duration_ms(run: Run) -> int | None:
+def _duration_ms(run: RunHistoryView) -> int | None:
     if run.started_at and run.ended_at:
         delta = (run.ended_at - run.started_at).total_seconds() * 1000
         return round(delta)
@@ -53,7 +54,7 @@ def _names(module_ids: list[str], name_by_id: dict[str, str]) -> list[dict[str, 
 
 def build_system_timeline(
     system: SystemDefinition,
-    runs: list[Run],
+    runs: list[RunHistoryView],
     *,
     limit: int,
     actor_context: ActorContext | None = None,
@@ -70,7 +71,6 @@ def build_system_timeline(
         for module in run.modules:
             if module.status not in ANOMALY_OR_ERROR_STATUSES:
                 continue
-            analysis = module.failure_analysis
             failed_modules.append(
                 {
                     "module_id": module.module_id,
@@ -81,9 +81,9 @@ def build_system_timeline(
                     "current_url": module.current_url,
                     "message": module.message,
                     "screenshot": screenshot_url(module),
-                    "ai_summary": analysis.user_summary if analysis else None,
-                    "ai_category": analysis.category if analysis else None,
-                    "ai_action": analysis.recommended_action if analysis else None,
+                    "ai_summary": module.ai_summary,
+                    "ai_category": module.ai_category,
+                    "ai_action": module.ai_action,
                 }
             )
 

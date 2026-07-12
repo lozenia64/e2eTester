@@ -86,7 +86,7 @@ async def test_module_completed_updates_anomaly_and_daily_projections(tmp_path: 
     day_rows = await daily.list_for_date(schedule_today_label(), None)
     assert any(row.module_id == "hom.login" for row in day_rows)
 
-    stats = SqliteStatsQuery(db, write_repo)
+    stats = SqliteStatsQuery(db)
     rollups = await stats.rollup_between(None, None)
     assert rollups
     assert rollups[0].anomaly_count >= 1

@@ -67,7 +67,7 @@ async def test_submit_otp_keeps_pending_until_resume_dispatch(tmp_path):
     service = RunService(
         registry=ModuleRegistry(),
         write_repo=write_repo,
-        history_query=AsyncMock(),
+        summary_query=AsyncMock(),
         realtime=RealtimeNotificationAdapter(),
         log_store=InMemoryRunLogStore(),
         execution_gateway=CompositeExecutionGateway([SimulatedExecutionGateway()]),

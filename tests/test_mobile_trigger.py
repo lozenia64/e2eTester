@@ -110,11 +110,25 @@ def _schedule(**overrides) -> Schedule:
     return Schedule(**defaults)
 
 
+class _FakeRunQueries:
+    """예약 이력/커버리지 질의 페이크 — 모바일 트리거 테스트에서는 빈 이력이면 충분하다."""
+
+    async def list_schedule_runs(self, schedule_id: str, limit: int = 30):
+        return []
+
+    async def list_schedule_tagged_runs(self):
+        return []
+
+    async def last_finished_at_by_system(self) -> dict:
+        return {}
+
+
 def _scheduler(repo, run_service=None, suite_service=None) -> SchedulerService:
     return SchedulerService(
         run_commands=run_service or _FakeRunService(),
         suite_service=suite_service or _FakeSuiteService(),
         repository=repo,
+        run_queries=_FakeRunQueries(),
     )
 
 

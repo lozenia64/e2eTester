@@ -12,10 +12,11 @@ from app.api.dependencies import (
     get_module_settings_repo,
     get_ops_service,
     get_registry,
+    get_run_queries,
     get_run_service,
     get_schedule_repository,
     get_stats_service,
-    get_suite_repository,
+    get_suite_summary_query,
 )
 from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
@@ -26,10 +27,11 @@ from app.orchestrator.run_actor import load_actor_context
 if TYPE_CHECKING:
     from app.auth.service import UserService
     from app.orchestrator.ops_service import OpsService
+    from app.orchestrator.queries import RunQueries
     from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import ScheduleRepositoryPort, SuiteRepositoryPort
+    from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -48,17 +50,17 @@ async def admin_list_runs(
     system_code: str | None = Query(default=None),
     user_name: str | None = Query(default=None),
     current_user: User = Depends(require_admin),
-    run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
     user_service: UserService = Depends(get_user_service),
-    suite_repo: SuiteRepositoryPort = Depends(get_suite_repository),
+    suite_summary_query: SuiteSummaryQueryPort = Depends(get_suite_summary_query),
     schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
 ) -> list[dict[str, Any]]:
     actor_context = await load_actor_context(
         user_service,
-        suite_repo,
+        suite_summary_query,
         schedule_repo,
     )
-    summaries = await run_service.list_run_summaries(
+    summaries = await run_queries.list_run_summaries(
         limit=limit,
         system_code=system_code,
         user_name_query=user_name,

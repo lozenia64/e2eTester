@@ -191,6 +191,7 @@ async def ensure_schema(db: SqliteDatabase) -> None:
             artifacts TEXT NOT NULL DEFAULT '[]',
             ai_category TEXT,
             ai_summary TEXT,
+            ai_action TEXT,
             suite_id TEXT,
             schedule_id TEXT,
             triggered_by TEXT,
@@ -320,6 +321,7 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         },
     )
     await _ensure_columns(db, "daily_system_status", {"duration_ms": "INTEGER"})
+    await _ensure_columns(db, "module_history_index", {"ai_action": "TEXT"})
     await _migrate_projection_checkpoints_to_cursor(db)
 
 

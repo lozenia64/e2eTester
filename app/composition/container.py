@@ -29,6 +29,7 @@ from app.orchestrator.healing_service import HealingService
 from app.orchestrator.insights_service import InsightsService
 from app.orchestrator.ops_service import OpsService
 from app.orchestrator.preset_service import PresetService
+from app.orchestrator.queries import DailyDashboardQueries, RunQueries
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
 from app.orchestrator.suite_service import SuiteService
@@ -52,16 +53,18 @@ from app.storage.sqlite_healing_stores import (
     SqliteHealingPolicyReader,
     SqliteHealingPolicyStore,
 )
+from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
-from app.storage.sqlite_run_history_query import SqliteRunHistoryQuery
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
+from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_stats_query import SqliteStatsQuery
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
+from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 from app.storage.sqlite_support import DEFAULT_DB_PATH
 from app.storage.sqlite_user_repository import SqliteUserRepository
@@ -94,7 +97,9 @@ class AppContainer:
     user_repository: SqliteUserRepository = field(init=False)
     user_service: UserService = field(init=False)
     run_write_repo: SqliteRunWriteRepository = field(init=False)
-    run_history_query: SqliteRunHistoryQuery = field(init=False)
+    run_summary_query: SqliteRunSummaryQuery = field(init=False)
+    module_history_query: SqliteModuleHistoryQuery = field(init=False)
+    suite_summary_query: SqliteSuiteSummaryQuery = field(init=False)
     run_log_store: SqliteRunLogStore = field(init=False)
     run_control_store: SqliteRunControlStore = field(init=False)
     run_input_store: EncryptedSqliteRunInputStore = field(init=False)
@@ -124,6 +129,8 @@ class AppContainer:
 
     event_bus: EventBus = field(init=False)
     run_service: RunService = field(init=False)
+    run_queries: RunQueries = field(init=False)
+    daily_queries: DailyDashboardQueries = field(init=False)
     suite_service: SuiteService = field(init=False)
     preset_service: PresetService = field(init=False)
 
@@ -156,7 +163,9 @@ class AppContainer:
         self.user_service = UserService(self.user_repository)
 
         self.run_write_repo = SqliteRunWriteRepository(self.es_db)
-        self.run_history_query = SqliteRunHistoryQuery(self.es_db, self.run_write_repo)
+        self.run_summary_query = SqliteRunSummaryQuery(self.es_db)
+        self.module_history_query = SqliteModuleHistoryQuery(self.es_db)
+        self.suite_summary_query = SqliteSuiteSummaryQuery(self.es_db)
         self.run_log_store = SqliteRunLogStore(self.db_path)
         self.run_control_store = SqliteRunControlStore(self.db_path)
         encryption_secret = self.settings.jwt_secret.get_secret_value()
@@ -173,7 +182,7 @@ class AppContainer:
         self.anomaly_handling_store = SqliteAnomalyHandlingStore(self.db_path)
         self.anomaly_inbox_query = SqliteAnomalyInboxQuery(self.es_db)
         self.daily_status_query = SqliteDailyStatusQuery(self.es_db)
-        self.stats_query = SqliteStatsQuery(self.es_db, self.run_write_repo)
+        self.stats_query = SqliteStatsQuery(self.es_db)
 
     def wire_realtime(self) -> None:
         use_redis_fanout = self._should_use_redis_fanout()
@@ -252,7 +261,7 @@ class AppContainer:
         self.run_service = RunService(
             registry=self.registry,
             write_repo=self.run_write_repo,
-            history_query=self.run_history_query,
+            summary_query=self.run_summary_query,
             realtime=self.realtime,
             log_store=self.run_log_store,
             execution_gateway=self.execution_gateway,
@@ -263,10 +272,15 @@ class AppContainer:
             artifact_manager=self.artifact_manager,
             healing_recorder=self.healing_service,
             session_registry=self.session_registry,
-            daily_status_query=self.daily_status_query,
         )
         if isinstance(self.run_queue, ProfilePartitionedRunQueue):
             self.run_queue.set_run_job_handler(self.run_service.dispatch_run_job)
+
+        # 읽기 전용 질의 핸들러(CQRS query side) — 라우트가 직접 주입받는다.
+        self.run_queries = RunQueries(
+            self.run_summary_query, self.run_write_repo, self.run_log_store
+        )
+        self.daily_queries = DailyDashboardQueries(self.registry, self.daily_status_query)
 
         self.preset_service = PresetService(
             repository=self.preset_repository,
@@ -282,6 +296,7 @@ class AppContainer:
             event_bus=self.event_bus,
             cancel_store=self.suite_control_store,
             input_store=self.suite_input_store,
+            summary_query=self.suite_summary_query,
         )
         self.suite_service.register(self.event_bus)
 
@@ -289,6 +304,7 @@ class AppContainer:
             run_commands=self.run_service,
             suite_service=self.suite_service,
             repository=self.schedule_repository,
+            run_queries=self.run_queries,
         )
         realtime_projector = RealtimeProjector(
             self.realtime,
@@ -313,25 +329,26 @@ class AppContainer:
     def wire_read_models(self) -> None:
         self.stats_service = StatsService(
             stats_query=self.stats_query,
-            suite_repo=self.suite_repository,
+            suite_summary_query=self.suite_summary_query,
             registry=self.registry,
             module_settings_repo=self.module_settings_repository,
             user_service=self.user_service,
             schedule_repo=self.schedule_repository,
         )
         self.insights_service = InsightsService(
-            run_repo=self.run_history_query,
+            run_summary_query=self.run_summary_query,
+            module_history_query=self.module_history_query,
             registry=self.registry,
             anomaly_store=self.anomaly_handling_store,
             anomaly_query=self.anomaly_inbox_query,
             user_service=self.user_service,
-            suite_repo=self.suite_repository,
+            suite_summary_query=self.suite_summary_query,
             schedule_repo=self.schedule_repository,
         )
         self.ops_service = OpsService(
             settings=self.settings,
-            run_repo=self.run_history_query,
-            suite_repo=self.suite_repository,
+            run_summary_query=self.run_summary_query,
+            suite_summary_query=self.suite_summary_query,
             schedule_repo=self.schedule_repository,
             run_queue=self.run_queue,
             scheduler=self.scheduler,
@@ -344,6 +361,9 @@ class AppContainer:
         app.state.module_settings_repo = self.module_settings_repository
         app.state.preset_service = self.preset_service
         app.state.run_service = self.run_service
+        app.state.run_queries = self.run_queries
+        app.state.daily_queries = self.daily_queries
+        app.state.suite_summary_query = self.suite_summary_query
         app.state.suite_service = self.suite_service
         app.state.run_queue = self.run_queue
         app.state.registry = self.registry

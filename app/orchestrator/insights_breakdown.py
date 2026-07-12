@@ -21,12 +21,13 @@ from app.core.status_labels import (
 from app.orchestrator.insights_common import (
     ANOMALY_OR_ERROR_STATUSES,
     CONCLUSIVE_MODULE_STATUSES,
+    RunHistoryView,
     screenshot_url,
     sort_runs_desc,
 )
 
 if TYPE_CHECKING:
-    from app.core.models import Run, SystemDefinition
+    from app.core.models import SystemDefinition
 
 _RECENT_RUNS = 40
 _MAX_SHOTS = 6
@@ -43,7 +44,7 @@ def _truncate(text: str, length: int = 40) -> str:
     return text if len(text) <= length else text[: length - 1] + "…"
 
 
-def _module_deepdive(module_id: str, recent_desc: list[Run]) -> dict[str, Any]:
+def _module_deepdive(module_id: str, recent_desc: list[RunHistoryView]) -> dict[str, Any]:
     recent_asc = list(reversed(recent_desc))
     statuses: list[ModuleStatus] = []
     durations: list[int] = []
@@ -84,8 +85,8 @@ def _module_deepdive(module_id: str, recent_desc: list[Run]) -> dict[str, Any]:
                 continue
             if module.status not in ANOMALY_OR_ERROR_STATUSES:
                 continue
-            if module.failure_analysis and module.failure_analysis.category:
-                label = module.failure_analysis.category
+            if module.ai_category:
+                label = module.ai_category
             else:
                 label = _truncate(module.message) or "원인 미상"
                 cat_fallback = True
@@ -148,7 +149,7 @@ def _module_deepdive(module_id: str, recent_desc: list[Run]) -> dict[str, Any]:
     }
 
 
-def build_module_breakdown(system: SystemDefinition, runs: list[Run]) -> dict[str, Any]:
+def build_module_breakdown(system: SystemDefinition, runs: list[RunHistoryView]) -> dict[str, Any]:
     """시스템 1개의 모듈별 딥다이브 데이터 + 파이프라인(플로우) 노드를 만든다."""
     recent_desc = sort_runs_desc(runs)[:_RECENT_RUNS]
     ordered = sorted(system.modules, key=lambda m: m.order)

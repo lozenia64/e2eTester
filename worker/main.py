@@ -30,8 +30,8 @@ from app.storage.sqlite_healing_stores import (
     SqliteHealingPolicyStore,
 )
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
-from app.storage.sqlite_run_history_query import SqliteRunHistoryQuery
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
+from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 from worker.health import SessionHeartbeatManager
 from worker.http_server import create_http_app
@@ -51,7 +51,7 @@ async def _async_main() -> None:
     await ensure_schema(es_db)
 
     run_write_repo = SqliteRunWriteRepository(es_db)
-    run_history_query = SqliteRunHistoryQuery(es_db, run_write_repo)
+    run_summary_query = SqliteRunSummaryQuery(es_db)
     realtime = RealtimeNotificationAdapter()
     run_log_store = SqliteRunLogStore(db_path)
     run_control_store = SqliteRunControlStore(db_path)
@@ -82,7 +82,7 @@ async def _async_main() -> None:
     run_service = RunService(
         registry=registry,
         write_repo=run_write_repo,
-        history_query=run_history_query,
+        summary_query=run_summary_query,
         realtime=realtime,
         log_store=run_log_store,
         execution_gateway=execution_gateway,
@@ -92,7 +92,7 @@ async def _async_main() -> None:
         run_queue=redis_queue,
         artifact_manager=artifact_manager,
         healing_recorder=healing_service,
-        comparator=RunComparator(run_history_query),
+        comparator=RunComparator(run_summary_query, run_write_repo),
     )
 
     session_registry = RedisSessionRegistry(settings.redis_url, settings.session_lease_ttl)

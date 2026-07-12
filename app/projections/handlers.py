@@ -247,12 +247,13 @@ class ProjectionHandlers:
                 (
                     """
                     UPDATE module_history_index
-                    SET ai_category = ?, ai_summary = ?
+                    SET ai_category = ?, ai_summary = ?, ai_action = ?
                     WHERE run_id = ? AND module_id = ?
                     """,
                     (
                         event.payload.get("category"),
                         event.payload.get("user_summary"),
+                        event.payload.get("recommended_action"),
                         event.aggregate_id,
                         event.payload["module_id"],
                     ),
@@ -270,9 +271,9 @@ class ProjectionHandlers:
                 INSERT OR REPLACE INTO module_history_index
                     (run_id, module_id, system_code, module_name, status, message,
                      started_at, ended_at, duration_ms, current_url, artifacts,
-                     ai_category, ai_summary, suite_id, schedule_id, triggered_by,
+                     ai_category, ai_summary, ai_action, suite_id, schedule_id, triggered_by,
                      requested_at, created_by_user_id, created_by_user_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.aggregate_id,

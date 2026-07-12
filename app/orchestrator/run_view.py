@@ -73,3 +73,35 @@ class RunView(BaseModel):
     def dump(cls, run: Run) -> dict:
         """Run → 와이어 JSON(dict). 엔티티를 직접 ``model_dump`` 하지 않는 단일 경로."""
         return cls.from_run(run).model_dump(mode="json")
+
+    @classmethod
+    def dump_from_summary(cls, run_id: str, summary: dict) -> dict:
+        """이벤트에 동봉된 ``run_summary`` 로 run_* WS payload 를 만든다(blob 재수화 없음).
+
+        실시간 프로젝터가 ``run_created``/``run_started``/``run_finished``/``run_waiting_input``/
+        ``run_resumed`` WS 이벤트를 조립하는 경로다. 이 이벤트들의 프런트엔드 핸들러는 모듈
+        목록을 순회하지 않으므로(모듈 카드 갱신은 ``module_*``·``snapshot`` 이벤트가 담당)
+        ``modules`` 는 빈 리스트로 둔다. 나머지 필드는 ``run_summary`` 에서 그대로 채워, 출력
+        스키마가 ``dump`` 와 동일하게 유지된다(스키마 계약의 단일 출처).
+        """
+        comparison_data = summary.get("comparison")
+        return cls(
+            run_id=run_id,
+            system_code=summary["system_code"],
+            system_name=summary.get("system_name") or "",
+            status=RunStatus(summary["status"]),
+            status_label=run_status_label(RunStatus(summary["status"])),
+            requested_at=summary["requested_at"],
+            started_at=summary.get("started_at"),
+            ended_at=summary.get("ended_at"),
+            modules=[],
+            selected_module_ids=summary.get("selected_module_ids", []),
+            awaiting_input_module_id=summary.get("awaiting_input_module_id"),
+            awaiting_input_prompt=summary.get("awaiting_input_prompt"),
+            triggered_by=summary.get("triggered_by", "manual"),
+            schedule_id=summary.get("schedule_id"),
+            suite_id=summary.get("suite_id"),
+            comparison=RunComparison(**comparison_data) if comparison_data else None,
+            created_by_user_id=summary.get("created_by_user_id"),
+            created_by_user_name=summary.get("created_by_user_name"),
+        ).model_dump(mode="json")

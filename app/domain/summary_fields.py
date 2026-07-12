@@ -61,6 +61,9 @@ def run_summary_fields(run: Run) -> dict:
         "suite_id": run.suite_id,
         "created_by_user_id": run.created_by_user_id,
         "created_by_user_name": run.created_by_user_name,
+        # 실시간 프로젝터가 blob 재수화 없이 run_* WS payload(RunView)를 조립하는 데 필요.
+        "selected_module_ids": list(run.selected_module_ids),
+        "comparison": run.comparison.model_dump(mode="json") if run.comparison else None,
     }
 
 
