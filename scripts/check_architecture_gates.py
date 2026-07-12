@@ -9,6 +9,7 @@
   AG-005  app/ 에서 aggregate .snapshot / .suite 접근 금지 (domain/storage/tests 제외)
   AG-006  스텝 계층(automation/systems/runner)에서 print( / redirect_stdout 금지
           (전역 stdout 치환 경합 방지 — step_logging.log / ctx.log 만 사용)
+  AG-007  *QueryPort 프로토콜은 Run/SuiteRun 반환 금지 (화면형 Row DTO 만 — blob 재수화 봉쇄)
 """
 
 from __future__ import annotations
@@ -145,6 +146,28 @@ PRINT_CALL_PATTERN = re.compile(r"(?<![\w.])print\s*\(")
 REDIRECT_STDOUT_PATTERN = re.compile(r"redirect_stdout|redirect_stderr")
 
 
+# AG-007: *QueryPort 프로토콜 메서드는 도메인 엔티티(Run/SuiteRun)를 반환하지 않는다.
+# 화면형 행(Row DTO)만 반환하도록 강제해 blob 재수화 경로 부활을 타입 수준에서 봉쇄한다.
+PORTS_FILE = APP_DIR / "storage" / "ports.py"
+QUERY_PORT_CLASS_PATTERN = re.compile(r"^class\s+(\w*QueryPort)\b")
+ANY_CLASS_PATTERN = re.compile(r"^class\s+\w+")
+ENTITY_RETURN_PATTERN = re.compile(r"->\s*(?:list\[)?(?:Run|SuiteRun)\b")
+
+
+def check_ag007_query_ports_return_rows() -> list[str]:
+    violations: list[str] = []
+    if not PORTS_FILE.is_file():
+        return violations
+    in_query_port = False
+    for line_no, line in enumerate(PORTS_FILE.read_text(encoding="utf-8").splitlines(), start=1):
+        if ANY_CLASS_PATTERN.match(line):
+            in_query_port = bool(QUERY_PORT_CLASS_PATTERN.match(line))
+            continue
+        if in_query_port and ENTITY_RETURN_PATTERN.search(line):
+            violations.append(f"storage/ports.py:{line_no}: {line.strip()}")
+    return violations
+
+
 def check_ag006_step_layer_no_global_stdout() -> list[str]:
     violations: list[str] = []
     for dir_rel in STEP_LAYER_DIRS:
@@ -191,6 +214,11 @@ RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
         "AG-006",
         "print( / redirect_stdout in step layer (use step_logging.log / ctx.log)",
         check_ag006_step_layer_no_global_stdout,
+    ),
+    (
+        "AG-007",
+        "*QueryPort returns Run/SuiteRun (query ports must return screen-shaped rows)",
+        check_ag007_query_ports_return_rows,
     ),
 ]
 
