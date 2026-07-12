@@ -7,11 +7,10 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
 from dataclasses import replace
 
 from app.platform.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import BaseWorkflowExecutor, StepHandler
+from app.runner.workflow_engine import BaseWorkflowExecutor
 from app.scenarios.rep_homepage.channel import ChannelProfile
 from app.scenarios.rep_homepage.runtime import RepHomepageRuntime
 
@@ -81,10 +80,6 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: RepHomepageRuntime) -> None:
         runtime.channel.common.shutdown_browser(runtime.page, runtime.context, runtime.browser)
-
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        # 단계 실행은 automation BC Flow 가 담당 — 레거시 폴백용 빈 레지스트리.
-        return {}
 
     def update_otp_code(self, runtime: RepHomepageRuntime, otp_code: str) -> None:
         runtime.config = replace(runtime.config, otp_code=otp_code)

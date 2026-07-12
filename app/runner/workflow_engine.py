@@ -326,17 +326,16 @@ class BaseWorkflowExecutor(ABC):
         self, input_data: dict[str, str], run_id: str, module_id: str
     ) -> WorkflowRuntime: ...
 
-    @abstractmethod
     def build_step_registry(self) -> Mapping[str, StepHandler]:
-        """workflow_step → 단계 핸들러 매핑을 돌려준다(if/elif 디스패치 대체).
+        """workflow_step → 단계 핸들러 매핑(레거시 in-process 디스패치). **기본은 빈 매핑**이다.
 
-        핸들러는 ``StepContext`` 를 받아 ``StepOutcome`` 을 돌려준다. ``StepContext.artifact_dir``
-        은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며, 다운로드 등
-        파일 산출물이 필요한 단계만 사용한다. 스크린샷은 공용 엔진이 책임지므로 핸들러에
-        스크린샷 경로를 넘기지 않는다. 서브클래스는 ``super().build_step_registry()`` 와 병합해
-        부모가 제공하는 단계(예: ``main_access``)를 물려받거나 덮어쓸 수 있다.
+        실 시스템은 Automation Flow BC(``attach_automation``)가 전 workflow_step 을 커버하므로
+        (계약 테스트 ``tests/contract/test_scenario_manifest_alignment.py`` 가 매니페스트의 모든
+        workflow_step 에 Flow 가 등록됨을 증명) 이 레지스트리를 재정의하지 않는다 — 디스패치는
+        Flow 단일 경로다. 이 훅은 Flow 를 쓰지 않는 테스트/특수 실행기가 핸들러를 직접 등록할
+        때만 재정의한다(``_dispatch_step`` 은 Flow 우선, 없으면 이 레지스트리로 폴백).
         """
-        ...
+        return {}
 
     @abstractmethod
     def _shutdown_browser(self, runtime: WorkflowRuntime) -> None: ...

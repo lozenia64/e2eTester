@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.platform.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import StepHandler
 from app.systems.access_common import browser
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 
@@ -47,9 +45,6 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: HwtcRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
-
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        return {}
 
     def update_otp_code(self, runtime: HwtcRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

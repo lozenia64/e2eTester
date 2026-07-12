@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.platform.artifact_manager import ArtifactManager
-from app.runner.step_outcome import StepCompleted, StepOutcome
-from app.runner.workflow_engine import BaseWorkflowExecutor, StepContext, StepHandler
-from app.systems.access_common import browser, main_access
+from app.runner.workflow_engine import BaseWorkflowExecutor
+from app.systems.access_common import browser
 
 
 @dataclass
@@ -80,14 +78,6 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: AccessRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
-
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        return {"main_access": self._step_main_access}
-
-    def _step_main_access(self, ctx: StepContext) -> StepOutcome:
-        runtime: AccessRuntime = ctx.runtime  # type: ignore[assignment]
-        # page 는 공통 능력(ctx.page), base_url 은 이 시스템 전용 상태(runtime).
-        return StepCompleted(main_access.run(ctx.page, runtime.base_url))
 
 
 def create_access_executor(
