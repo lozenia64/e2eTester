@@ -11,10 +11,6 @@ from app.domain.events import DomainEvent
 from app.domain.snapshots import RunSnapshot
 from app.domain.summary_fields import run_summary_fields
 
-# 요약 동봉을 생략하는 이벤트: 로그 스트리밍 핫패스(라인마다 요약 재계산은 낭비이고,
-# 로그는 요약 인덱스의 어떤 컬럼도 바꾸지 않는다).
-_NO_SUMMARY_EVENT_TYPES = {"ModuleLogAppended"}
-
 # 더 이상 전이시키지 않는(이미 끝난) 모듈 상태들.
 _MODULE_TERMINAL = {
     ModuleStatus.PASSED,
@@ -89,10 +85,12 @@ class RunAggregate:
         ``run_summary`` 섹션(파생 요약 필드)을 동봉한다(fat event). 모듈 본문(``module``/
         ``modules``)을 실은 이벤트에는 실시간 프로젝터의 ``module_*`` WS 봉투가 요구하는
         Run 현재 상태(``run_status``)도 함께 싣는다(프로젝터가 blob 을 읽지 않도록).
+
+        로그는 더 이상 도메인 이벤트가 아니므로(WP-B5), 모든 발행 이벤트가 상태 전이 =
+        요약을 동봉한다(요약 생략 예외 없음).
         """
         payload = dict(event.payload)
-        if event.event_type not in _NO_SUMMARY_EVENT_TYPES:
-            payload["run_summary"] = run_summary_fields(self._state)
+        payload["run_summary"] = run_summary_fields(self._state)
         if "module" in payload or "modules" in payload:
             payload["run_status"] = self._state.status.value
         self._pending_events.append(replace(event, payload=payload))
@@ -230,19 +228,6 @@ class RunAggregate:
         바꿔 **애그리거트가 유일한 변이자**라는 불변을 지킨다.
         """
         module.message = message
-
-    def append_module_log(self, module: RunModule, message: str) -> None:
-        """로그 한 줄을 기록하고 ``ModuleLogAppended`` 이벤트를 산출한다."""
-        module.message = message
-        self._emit(
-            domain_events.module_log_appended(
-                self._state.run_id,
-                module.module_id,
-                message,
-                system_code=self._state.system_code,
-                run_status=self._state.status,
-            )
-        )
 
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""

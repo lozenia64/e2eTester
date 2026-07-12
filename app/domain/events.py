@@ -129,29 +129,6 @@ def module_finished(
     )
 
 
-def module_log_appended(
-    run_id: str,
-    module_id: str,
-    message: str,
-    *,
-    system_code: str,
-    run_status: RunStatus,
-) -> DomainEvent:
-    # 로그는 요약(run_summary)을 동봉하지 않는 핫패스 — 실시간 봉투(DashboardEvent)에
-    # 필요한 최소 두 필드만 스칼라로 싣는다.
-    return DomainEvent.create(
-        "Run",
-        run_id,
-        "ModuleLogAppended",
-        {
-            "module_id": module_id,
-            "message": message,
-            "system_code": system_code,
-            "run_status": run_status.value,
-        },
-    )
-
-
 def run_waiting_input(run_id: str, module_id: str, *, module: dict | None = None) -> DomainEvent:
     return DomainEvent.create(
         "Run", run_id, "RunWaitingInput", {"module_id": module_id, "module": module}

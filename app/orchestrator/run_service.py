@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
-from app.core.models import Run, RunModule
+from app.core.models import DashboardEvent, Run, RunModule
 from app.domain.events import run_deleted as domain_run_deleted
 from app.domain.execution_policy import module_policy_from_definition
 from app.domain.run_aggregate import RunAggregate
@@ -833,12 +833,25 @@ class RunService:
     # --- 로그 기록 --------------------------------------------------------
 
     async def _handle_module_log(self, run: Run, module: RunModule, line: str) -> None:
+        """로그 한 줄을 로그 스토어에 적재하고 실시간 채널로 직행 발행한다.
+
+        로그는 **도메인 이벤트가 아니다**(WP-B5): 이벤트 스토어/아웃박스/프로젝션 어떤 것도
+        바꾸지 않고, 유실 허용 가능한 고빈도 스트림이다. 따라서 ``ModuleLogAppended`` 이벤트를
+        발행해 릴레이→프로젝터를 거치는 대신, 영속은 로그 스토어가 책임지고 UI 전달은
+        ``module_log`` DashboardEvent 로 실시간 채널에 직접 넣는다(쓰기 핫패스 경량화).
+        모듈의 최신 메시지 갱신은 애그리거트(유일한 변이자)를 거치되 이벤트는 내지 않는다.
+        """
         trimmed = line.strip()
         if not trimmed:
             return
-        aggregate = RunAggregate(run)
-        aggregate.append_module_log(module, trimmed)
+        RunAggregate(run).note_module_message(module, trimmed)
         await self._log_store.append(run.run_id, module.module_id, trimmed)
-        events = aggregate.pull_events()
-        if events:
-            await self._write_repo.append_events(events)
+        await self._realtime.publish(
+            DashboardEvent(
+                event_type="module_log",
+                run_id=run.run_id,
+                system_code=run.system_code,
+                run_status=run.status,
+                payload={"module_id": module.module_id, "message": trimmed},
+            )
+        )

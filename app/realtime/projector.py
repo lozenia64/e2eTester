@@ -63,23 +63,10 @@ class RealtimeProjector:
             await self._apply_suite(event)
 
     async def _apply_run(self, event: DomainEvent) -> None:
+        # 로그(module_log)는 더 이상 도메인 이벤트가 아니다(WP-B5) — RunService 가 실시간 채널로
+        # 직접 발행하므로 이 프로젝터(아웃박스 릴레이 경로)는 로그를 다루지 않는다.
         run_id = event.aggregate_id
         summary = event.payload.get("run_summary")
-
-        if event.event_type == "ModuleLogAppended":
-            await self._run_realtime.publish(
-                DashboardEvent(
-                    event_type="module_log",
-                    run_id=run_id,
-                    system_code=event.payload["system_code"],
-                    run_status=RunStatus(event.payload["run_status"]),
-                    payload={
-                        "module_id": event.payload["module_id"],
-                        "message": event.payload["message"],
-                    },
-                )
-            )
-            return
 
         system_code = summary["system_code"] if summary else ""
         run_status = (

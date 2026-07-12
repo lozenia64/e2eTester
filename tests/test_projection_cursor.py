@@ -84,9 +84,8 @@ async def test_duplicate_delivery_does_not_double_count_rollup(tmp_path: Path) -
 async def test_cursor_advances_even_for_unhandled_event_types(tmp_path: Path) -> None:
     """어떤 프로젝션도 소비하지 않는 이벤트도 커서를 전진시킨다(커서 정체 방지)."""
     db, projections = await _make_handlers(tmp_path, "advance.db")
-    noop = DomainEvent.create(
-        "Run", "run_x", "ModuleLogAppended", {"module_id": "m", "message": "x"}
-    )
+    # 어떤 프로젝션도 소비하지 않는 합성 이벤트 타입(커서 전진만 확인).
+    noop = DomainEvent.create("Run", "run_x", "RunDiagnosticNoted", {"note": "x"})
 
     await projections.apply(noop, 7)
 
