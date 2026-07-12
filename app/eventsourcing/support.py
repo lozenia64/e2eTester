@@ -88,6 +88,10 @@ class _Transaction:
     def executemany(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
         self._db._conn.executemany(sql, params_seq)
 
+    def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+        # 트랜잭션 내부 읽기(예: 스트림의 다음 stream_position 계산). 락은 이미 보유 중이다.
+        return self._db._conn.execute(sql, params).fetchone()
+
 
 async def ensure_schema(db: SqliteDatabase) -> None:
     """Create event sourcing and projection tables if missing."""
@@ -101,12 +105,33 @@ async def ensure_schema(db: SqliteDatabase) -> None:
             event_type TEXT NOT NULL,
             payload TEXT NOT NULL,
             occurred_at TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1
+            version INTEGER NOT NULL DEFAULT 1,
+            stream_position INTEGER
         )
         """,
         """
         CREATE INDEX IF NOT EXISTS idx_domain_events_aggregate
         ON domain_events (aggregate_type, aggregate_id, sequence_id)
+        """,
+        # 스트림 내 위치의 유일성 = 낙관적 동시성 제어(같은 위치 이중 append → UNIQUE 위반).
+        # 단일 프로세스 asyncio.Lock 이 실경합을 막지만, 계약을 스키마 수준에서 못박아
+        # 다중 프로세스 전환 시에도 lost-update 를 구조적으로 차단한다.
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_domain_events_stream_position
+        ON domain_events (aggregate_type, aggregate_id, stream_position)
+        WHERE stream_position IS NOT NULL
+        """,
+        # 애그리거트 스냅샷 = 이벤트 폴드(evolve)의 파생 캐시. state_json 은 이벤트 스트림에서
+        # scripts/rebuild_snapshots.py 로 언제든 재구성 가능하며(이벤트=진실), version 은 마지막
+        # 반영 stream_position 이다.
+        """
+        CREATE TABLE IF NOT EXISTS aggregate_snapshots (
+            stream_id TEXT PRIMARY KEY,
+            aggregate_type TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            state_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
         """,
         """
         CREATE TABLE IF NOT EXISTS outbox (
@@ -322,6 +347,9 @@ async def ensure_schema(db: SqliteDatabase) -> None:
     )
     await _ensure_columns(db, "daily_system_status", {"duration_ms": "INTEGER"})
     await _ensure_columns(db, "module_history_index", {"ai_action": "TEXT"})
+    # 기존 배포 DB 의 domain_events 에 stream_position 컬럼을 증분 추가한다(낙관적 동시성 위치).
+    # NULL 로 시작하며 append 경로가 스트림별 위치를 채운다(부분 UNIQUE 인덱스는 NULL 을 무시).
+    await _ensure_columns(db, "domain_events", {"stream_position": "INTEGER"})
     await _migrate_projection_checkpoints_to_cursor(db)
 
 

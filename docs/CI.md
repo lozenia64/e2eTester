@@ -29,8 +29,9 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | Tier | 게이트 | 설명 |
 | --- | --- | --- |
 | 0 | `ruff`, `ruff_format`, `docs_consistency` | 즉시 실패 (~10–30초) |
-| 1 | `architecture_gates` | 정책-as-code (AG-001~006) |
+| 1 | `architecture_gates` | 정책-as-code (AG-001~007) |
 | 1 | `projection_validate` | 이벤트 재생 ↔ 라이브 projection 지문 일치 (`scripts/rebuild_projections.py --validate`) |
+| 1 | `snapshot_validate` | 이벤트 폴드 ↔ 라이브 aggregate_snapshots 동등 (`scripts/rebuild_snapshots.py --validate`) |
 | 2 | `pytest` | 순수 도메인/오케스트레이터 단위 테스트 |
 | 3 | `pip_audit`, `bandit_security` | auth/PII 경로 변경 또는 주간 schedule |
 
@@ -44,14 +45,16 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | AG-004 | `app/orchestrator/` 에서 `list_all_runs()` / `list_runs_since()` 금지 |
 | AG-005 | `app/` 에서 aggregate `.snapshot` / `.suite` 직접 접근 금지 (`domain`/`storage`/`tests` 제외) |
 | AG-006 | 스텝 계층(`app/automation`·`app/systems`·`app/runner`)에서 `print(` / `redirect_stdout` 금지 (전역 stdout 경합 방지 — `step_logging.log`·`ctx.log` 만; 매뉴얼 CLI `login_phone.py` 제외) |
+| AG-007 | 질의 포트(`app/storage/ports.py` `*QueryPort`)의 반환 타입에 `Run`/`SuiteRun` 엔티티 금지 (읽기 경로는 화면형 DTO 만) |
 
-프로젝션 정합성 검증(선택·Tier 1):
+프로젝션/스냅샷 정합성 검증(선택·Tier 1):
 
 ```bash
 python3 scripts/rebuild_projections.py --validate --db data/e2etester.db
+python3 scripts/rebuild_snapshots.py --validate --db data/e2etester.db
 ```
 
-CI 표준 게이트(`run_all_gates.py --profile full`)는 빈 DB 파일 `data/.ci_projection_validate.db` 로 동일 검증을 수행한다.
+`projection_validate` 는 이벤트 재생이 라이브 projection 지문과 일치하는지, `snapshot_validate` 는 이벤트 폴드(`app/domain/run_decider.py:rebuild_state`)가 라이브 `aggregate_snapshots` 와 도메인 동등한지 검증한다 — 둘 다 "이벤트=진실"의 실증 관문이다. CI 표준 게이트(`run_all_gates.py --profile full`)는 빈 DB 파일(`data/.ci_projection_validate.db`·`data/.ci_snapshot_validate.db`)로 동일 검증을 수행한다.
 
 ## GitHub Actions job 구조
 
