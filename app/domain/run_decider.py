@@ -166,3 +166,74 @@ def rebuild_state(events: list[DomainEvent]) -> RunSnapshot | None:
     for event in events:
         state = evolve(state, event)
     return state
+
+
+def decide(command, state: RunSnapshot):
+    """커맨드 + 현재 상태 → 결과 이벤트 목록(순수).
+
+    Decider 패턴의 ``decide``: 의도(커맨드)를 받아 상태 전이 이벤트를 산출한다. 상태 변이·이벤트
+    발행 규칙은 이미 ``RunAggregate`` 에 응축돼 있으므로, 여기서는 불변 상태의 **일회용 복제본**
+    (``state.to_run()``)에 애그리거트를 씌워 해당 전이를 수행하고 산출 이벤트만 돌려준다 —
+    입력 ``state`` 는 건드리지 않는다(순수). 이렇게 하면 ``decide`` 가 만드는 이벤트가 기존
+    쓰기 경로의 이벤트와 **정확히 동일**함이 구조적으로 보장되고(요약·모듈 와이어 동봉 포함),
+    ``evolve`` 로 그 이벤트를 접으면 다시 같은 상태가 나온다(fold 왕복 = 진실).
+
+    인터프리터(``RunService``, WP-B4)는 ``state=load(); events=decide(cmd, state);
+    append(events)`` 패턴으로 이 함수를 호출한다.
+    """
+    # 순환 import 회피(run_aggregate → 이 모듈을 import 하지 않지만, 계층 명확화를 위해 지연).
+    from app.domain import run_commands as c
+    from app.domain.run_aggregate import RunAggregate
+
+    aggregate = RunAggregate(state.to_run())
+
+    if isinstance(command, c.BeginRun):
+        aggregate.begin()
+    elif isinstance(command, c.BlockModule):
+        aggregate.block_for_dependencies(aggregate.module(command.module_id))
+    elif isinstance(command, c.QueueModule):
+        aggregate.mark_queued(aggregate.module(command.module_id))
+    elif isinstance(command, c.StartModule):
+        aggregate.mark_running(aggregate.module(command.module_id))
+    elif isinstance(command, c.RecordStepResult):
+        module = aggregate.module(command.module_id)
+        aggregate.record_result(
+            module,
+            status=command.status,
+            message=command.message,
+            artifacts=list(command.artifacts),
+            current_url=command.current_url,
+            dialog_messages=list(command.dialog_messages),
+        )
+        aggregate.finish_timing(module)
+    elif isinstance(command, c.FailModule):
+        aggregate.fail_module(aggregate.module(command.module_id), command.message)
+    elif isinstance(command, c.MarkModuleFatal):
+        aggregate.mark_fatal(aggregate.module(command.module_id), command.message)
+    elif isinstance(command, c.RetryModule):
+        aggregate.record_retry(aggregate.module(command.module_id))
+    elif isinstance(command, c.PauseForInput):
+        aggregate.mark_waiting_input(
+            aggregate.module(command.module_id), command.message, list(command.artifacts)
+        )
+    elif isinstance(command, c.ResumeAfterInput):
+        aggregate.resume_after_input(aggregate.module(command.module_id))
+    elif isinstance(command, c.CancelModules):
+        ordered = [aggregate.module(mid) for mid in command.module_ids]
+        aggregate.cancel_modules(ordered)
+    elif isinstance(command, c.PreparePartialRerun):
+        aggregate.prepare_partial_rerun(
+            command.from_index, list(aggregate.persistable_state().modules)
+        )
+    elif isinstance(command, c.AttachComparison):
+        aggregate.attach_comparison(command.comparison)
+    elif isinstance(command, c.AttachFailureAnalysis):
+        aggregate.attach_failure_analysis(aggregate.module(command.module_id), command.analysis)
+    elif isinstance(command, c.FinalizeRun):
+        aggregate.finalize(command.forced_status)
+    elif isinstance(command, c.SealInterrupted):
+        aggregate.seal_interrupted()
+    else:  # pragma: no cover - 방어적: 알 수 없는 커맨드
+        raise TypeError(f"알 수 없는 Run 커맨드: {type(command).__name__}")
+
+    return aggregate.pull_events()
