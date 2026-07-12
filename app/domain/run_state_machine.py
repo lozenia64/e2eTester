@@ -116,6 +116,26 @@ class RejectInvalidResumePoint:
 PartialRerunDecision = ResumeFromModule | RejectInvalidResumePoint
 
 
+# --- 세션 재수화 결정(Phase C — 체크포인트 재개) ----------------------------
+
+
+@dataclass(frozen=True)
+class ResumeFromCheckpoint:
+    """저장된 세션 상태(storage_state)가 유효 → 체크포인트 다음 모듈부터 재개한다."""
+
+    from_index: int
+
+
+@dataclass(frozen=True)
+class ReplayFromLogin:
+    """세션 상태가 무효(로그인 만료 등) → 인증 체인을 다시 태우기 위해 로그인 모듈부터 재실행한다."""
+
+    from_index: int
+
+
+RehydrationDecision = ResumeFromCheckpoint | ReplayFromLogin
+
+
 class RunStateMachine:
     """Run 실행의 결정 규칙(전이표). 상태(불리언/상태값)만 받아 명령을 돌려주는 순수 함수 모음.
 
@@ -180,3 +200,25 @@ class RunStateMachine:
         if not partial_rerun_allowed:
             return RejectInvalidResumePoint()
         return ResumeFromModule(from_index=module_ids_in_order.index(from_module_id))
+
+    @staticmethod
+    def decide_rehydration(
+        *,
+        checkpoint_module_index: int,
+        storage_state_valid: bool,
+        login_module_index: int | None,
+    ) -> RehydrationDecision:
+        """워커가 세션 체크포인트로 Run 을 이어받을 때 어디서 재개할지 결정한다(순수 규칙).
+
+        - 저장된 세션 상태가 유효하면 마지막 완료 모듈 **다음**부터 재개(``ResumeFromCheckpoint``).
+        - 무효(로그인 만료 등)면 인증 세션을 다시 세우기 위해 로그인(인증) 모듈부터 재실행
+          (``ReplayFromLogin``). 로그인 모듈 정보가 없으면 처음(0)부터 재실행한다.
+
+        Phase C: ``WAITING_INPUT`` 은 라이브 브라우저가 아니라 내구성 시그널이므로, 재개 워커는
+        체크포인트에서 상태를 복원하되 복원 상태가 무효면 로그인부터 재진입할 수 있어야 한다.
+        """
+        if storage_state_valid:
+            return ResumeFromCheckpoint(from_index=checkpoint_module_index + 1)
+        return ReplayFromLogin(
+            from_index=login_module_index if login_module_index is not None else 0
+        )

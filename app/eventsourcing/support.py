@@ -324,6 +324,23 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         """,
         "CREATE TABLE IF NOT EXISTS suites (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
+        # Phase C: 모듈 경계 내구 체크포인트. storage_state_cipher 는 입력 스토어와 동일 키로
+        # 암호화된 Playwright storage_state(인증 쿠키=민감정보). 재기동/워커 교체 후 재개 워커가
+        # 이 행으로 세션을 복원하고 module_index+1 부터 이어받는다(무효면 로그인부터 재실행).
+        """
+        CREATE TABLE IF NOT EXISTS session_checkpoints (
+            run_id TEXT PRIMARY KEY,
+            session_id TEXT,
+            worker_id TEXT,
+            system_code TEXT NOT NULL,
+            execution_mode TEXT NOT NULL,
+            module_index INTEGER NOT NULL,
+            workflow_step TEXT,
+            storage_state_cipher BLOB,
+            runtime_config_json TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """,
     ]
     for sql in statements:
         await db.execute(sql)
