@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -11,6 +12,15 @@ from app.core.system_models import ModuleDefinition
 from app.execution.results import StepExecutionResult
 from app.platform.artifact_manager import ArtifactManager
 from app.systems.loader import load_workflow_executors
+
+
+def _storage_state_of(runtime: Any) -> str | None:
+    """세션 스레드에서 실행: runtime.page.context.storage_state() → JSON(없으면 None)."""
+    page = getattr(runtime, "page", None)
+    context = getattr(page, "context", None)
+    if context is None:
+        return None
+    return json.dumps(context.storage_state())
 
 
 @dataclass
@@ -146,6 +156,19 @@ class SessionServer:
                 )
         finally:
             session.executor.shutdown(wait=True, cancel_futures=True)
+
+    async def capture_storage_state(self, session_id: str) -> str | None:
+        """세션 브라우저 컨텍스트의 Playwright ``storage_state``(쿠키+localStorage) JSON(Phase C).
+
+        Playwright sync API 는 세션 스레드에서만 호출 가능하므로 세션 전용 풀에서 실행한다.
+        모듈 경계·OTP 일시정지 시 API 가 이 값을 받아 내구 체크포인트에 암호화 저장한다.
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None
+        return await self._run_on_session_thread(
+            session.executor, _storage_state_of, session.runtime
+        )
 
     def get_session_run_id(self, session_id: str) -> str | None:
         session = self._sessions.get(session_id)

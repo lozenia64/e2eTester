@@ -143,6 +143,21 @@ class WorkerExecutionGateway(ExecutionGateway):
         response = await self._post_json("/sessions/heartbeat", request.model_dump(), dict)
         return bool(response.get("ok"))
 
+    async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
+        """워커에서 세션 storage_state 를 받아 온다(Phase C 내구 체크포인트 캡처).
+
+        워커가 세션 스레드에서 ``context.storage_state()`` 를 직렬화해 돌려주고, API 는 이 값을
+        암호화해 ``SessionCheckpointStorePort`` 에 저장한다(워커는 DB 직접 접근 금지). 실패는
+        체크포인트 생략으로 처리(``None``)해 실행을 막지 않는다.
+        """
+        try:
+            response = await self._post_json(
+                f"/sessions/{handle.session_id}/storage-state", {}, dict
+            )
+        except Exception:
+            return None
+        return response.get("storage_state")
+
     async def _post_json(self, path: str, payload: dict, response_type: type):
         url = f"{self._base_url}{path}"
         body = json.dumps(payload).encode("utf-8")

@@ -109,6 +109,16 @@ def create_http_app(
         except Exception as exc:
             return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
 
+    async def capture_storage_state(request: Request) -> JSONResponse:
+        session_id = request.path_params["session_id"]
+        try:
+            storage_state = await session_server.capture_storage_state(session_id)
+            return JSONResponse({"storage_state": storage_state})
+        except KeyError as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=404)
+        except Exception as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
+
     async def heartbeat(request: Request) -> JSONResponse:
         body = HeartbeatRequest.model_validate(await request.json())
         ok = False
@@ -128,6 +138,11 @@ def create_http_app(
             Route(
                 "/sessions/{session_id}/resume-from-step",
                 resume_from_step,
+                methods=["POST"],
+            ),
+            Route(
+                "/sessions/{session_id}/storage-state",
+                capture_storage_state,
                 methods=["POST"],
             ),
             Route("/sessions/close", close_session, methods=["POST"]),
