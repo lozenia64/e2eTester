@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain.run_aggregate import RunAggregate
-from app.domain.suite_aggregate import SuiteAggregate
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.projections.handlers import ProjectionHandlers
 from app.scheduling.scheduler import schedule_today_label

@@ -13,8 +13,8 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app.contexts.suite.domain.decider import rebuild_state as rebuild_suite_state
 from app.domain.run_decider import rebuild_state
-from app.domain.suite_decider import rebuild_state as rebuild_suite_state
 from app.eventsourcing.event_store import _row_to_event
 from app.eventsourcing.support import SqliteDatabase
 from app.storage.records import RunRecord, SuiteRecord

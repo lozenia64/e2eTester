@@ -10,13 +10,13 @@ from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.api.dependencies import get_run_queries, get_run_service, get_suite_service
 from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User
+from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.suite_view import filter_suite_for_user
 
 if TYPE_CHECKING:
+    from app.contexts.suite.application.service import SuiteService
     from app.orchestrator.queries import RunQueries
     from app.orchestrator.run_service import RunService
-    from app.orchestrator.suite_service import SuiteService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")

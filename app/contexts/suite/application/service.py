@@ -4,6 +4,14 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.domain.state_machine import (
+    CancelSuite,
+    FinalizeSuite,
+    RecordAndCancel,
+    StartStep,
+    SuiteStateMachine,
+)
 from app.core.enums import SuiteStatus
 from app.core.logging import get_logger
 from app.core.requests import StartSuiteRequest
@@ -14,14 +22,6 @@ from app.core.status_labels import (
 )
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.core.system_models import SystemDefinition
-from app.domain.suite_aggregate import SuiteAggregate
-from app.domain.suite_state_machine import (
-    CancelSuite,
-    FinalizeSuite,
-    RecordAndCancel,
-    StartStep,
-    SuiteStateMachine,
-)
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.orchestrator.run_command_port import RunCommandPort
 from app.realtime.ports import SuiteRealtimeNotificationPort

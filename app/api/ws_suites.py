@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from app.api.dependencies import get_suite_service
 from app.auth.dependencies import get_user_service
 from app.auth.jwt import decode_token
-from app.orchestrator.suite_view import (
+from app.contexts.suite.views.view import (
     SuiteView,
     filter_suite_event_for_user,
     filter_suite_for_user,
@@ -15,7 +15,7 @@ from app.orchestrator.suite_view import (
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
-    from app.orchestrator.suite_service import SuiteService
+    from app.contexts.suite.application.service import SuiteService
 
 router = APIRouter(tags=["ws"])
 

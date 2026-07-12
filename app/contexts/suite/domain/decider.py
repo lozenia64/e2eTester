@@ -92,8 +92,8 @@ def decide(command, state: SuiteSnapshot):
     복제본(``state.to_suite()``)에 애그리거트를 씌워 전이를 수행하고 산출 이벤트만 돌려준다 —
     입력 ``state`` 는 건드리지 않는다(순수).
     """
-    from app.domain import suite_commands as c
-    from app.domain.suite_aggregate import SuiteAggregate
+    from app.contexts.suite.domain import commands as c
+    from app.contexts.suite.domain.aggregate import SuiteAggregate
 
     suite = state.to_suite()
     aggregate = SuiteAggregate(suite)

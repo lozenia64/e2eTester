@@ -25,8 +25,28 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = ROOT / "app"
 ORCHESTRATOR_DIR = APP_DIR / "orchestrator"
 DOMAIN_DIR = APP_DIR / "domain"
+CONTEXTS_DIR = APP_DIR / "contexts"
+
+
+def _application_dirs() -> list[Path]:
+    """애플리케이션(오케스트레이션) 계층 디렉터리 — 레거시 orchestrator + 컨텍스트별 application."""
+    dirs = [ORCHESTRATOR_DIR] if ORCHESTRATOR_DIR.is_dir() else []
+    if CONTEXTS_DIR.is_dir():
+        dirs += [p for p in CONTEXTS_DIR.glob("*/application") if p.is_dir()]
+    return dirs
+
+
+def _domain_dirs() -> list[Path]:
+    """도메인 계층 디렉터리 — 레거시 domain + 컨텍스트별 domain."""
+    dirs = [DOMAIN_DIR] if DOMAIN_DIR.is_dir() else []
+    if CONTEXTS_DIR.is_dir():
+        dirs += [p for p in CONTEXTS_DIR.glob("*/domain") if p.is_dir()]
+    return dirs
+
+
 AGGREGATE_ALLOWED_PREFIXES = (
     "app/domain/",
+    "app/contexts/",
     "app/storage/",
     "tests/",
 )
@@ -71,33 +91,31 @@ def check_ag001_list_runs() -> list[str]:
 
 def check_ag002_orchestrator_no_playwright() -> list[str]:
     violations: list[str] = []
-    if not ORCHESTRATOR_DIR.is_dir():
-        return violations
-    for path in ORCHESTRATOR_DIR.rglob("*.py"):
-        rel = _rel(path)
-        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            if re.search(r"\b(from|import)\s+playwright\b", line):
-                violations.append(f"{rel}:{line_no}: {stripped}")
+    for base in _application_dirs():
+        for path in base.rglob("*.py"):
+            rel = _rel(path)
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if re.search(r"\b(from|import)\s+playwright\b", line):
+                    violations.append(f"{rel}:{line_no}: {stripped}")
     return violations
 
 
 def check_ag003_domain_purity() -> list[str]:
     violations: list[str] = []
-    if not DOMAIN_DIR.is_dir():
-        return violations
     import_re = re.compile(r"^\s*(?:from|import)\s+([\w.]+)")
-    for path in DOMAIN_DIR.rglob("*.py"):
-        rel = _rel(path)
-        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            match = import_re.match(line)
-            if not match:
-                continue
-            module = match.group(1).split(".")[0]
-            if module in DOMAIN_FORBIDDEN_IMPORTS:
-                violations.append(f"{rel}:{line_no}: {line.strip()}")
+    for base in _domain_dirs():
+        for path in base.rglob("*.py"):
+            rel = _rel(path)
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                match = import_re.match(line)
+                if not match:
+                    continue
+                module = match.group(1).split(".")[0]
+                if module in DOMAIN_FORBIDDEN_IMPORTS:
+                    violations.append(f"{rel}:{line_no}: {line.strip()}")
     return violations
 
 
@@ -109,16 +127,15 @@ AGGREGATE_SUITE_PATTERN = re.compile(r"aggregate\.suite\b")
 
 def check_ag004_orchestrator_history_scan() -> list[str]:
     violations: list[str] = []
-    if not ORCHESTRATOR_DIR.is_dir():
-        return violations
-    for path in ORCHESTRATOR_DIR.rglob("*.py"):
-        rel = _rel(path)
-        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            if LIST_ALL_RUNS_PATTERN.search(line) or LIST_RUNS_SINCE_PATTERN.search(line):
-                violations.append(f"{rel}:{line_no}: {stripped}")
+    for base in _application_dirs():
+        for path in base.rglob("*.py"):
+            rel = _rel(path)
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if LIST_ALL_RUNS_PATTERN.search(line) or LIST_RUNS_SINCE_PATTERN.search(line):
+                    violations.append(f"{rel}:{line_no}: {stripped}")
     return violations
 
 
@@ -174,10 +191,8 @@ def check_ag007_query_ports_return_rows() -> list[str]:
 # 애그리거트). run.<field> = / suite.<field> = / step.<field> = / module.<field> = 대입을 금지해
 # 서비스가 애그리거트를 우회해 상태를 바꾸는 이중 권위를 막는다. 로컬 변수 재바인딩
 # (run = ..., suite = ...)은 대상이 아니다(속성 대입만 탐지).
-AG008_SERVICE_FILES = (
-    "orchestrator/run_service.py",
-    "orchestrator/suite_service.py",
-)
+# run/suite 서비스는 레거시 orchestrator/ 또는 컨텍스트 application/ 어디에 있든 스캔한다.
+AG008_SERVICE_BASENAMES = ("run_service.py", "suite_service.py", "service.py")
 DIRECT_MUTATION_PATTERN = re.compile(
     r"\b(?:run|suite|step|module)\.(?:status|started_at|ended_at|awaiting_input_module_id|"
     r"awaiting_input_prompt|awaiting_input_run_id|current_step_index|active_run_id|"
@@ -187,18 +202,18 @@ DIRECT_MUTATION_PATTERN = re.compile(
 
 def check_ag008_service_no_direct_entity_mutation() -> list[str]:
     violations: list[str] = []
-    for suffix in AG008_SERVICE_FILES:
-        path = ORCHESTRATOR_DIR / Path(suffix).name
-        if not path.is_file():
-            continue
-        rel = _rel(path)
-        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
+    for base in _application_dirs():
+        for path in base.rglob("*.py"):
+            if path.name not in AG008_SERVICE_BASENAMES:
                 continue
-            code = re.sub(r"`+[^`]*`+", "", line)
-            if DIRECT_MUTATION_PATTERN.search(code):
-                violations.append(f"{rel}:{line_no}: {stripped}")
+            rel = _rel(path)
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                code = re.sub(r"`+[^`]*`+", "", line)
+                if DIRECT_MUTATION_PATTERN.search(code):
+                    violations.append(f"{rel}:{line_no}: {stripped}")
     return violations
 
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.auth.service import UserService
+from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
 from app.events.bus import EventBus
@@ -32,7 +33,6 @@ from app.orchestrator.preset_service import PresetService
 from app.orchestrator.queries import DailyDashboardQueries, RunQueries
 from app.orchestrator.run_service import RunService
 from app.orchestrator.stats_service import StatsService
-from app.orchestrator.suite_service import SuiteService
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector

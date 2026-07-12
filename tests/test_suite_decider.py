@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.suite.domain import commands as c
+from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.domain.decider import decide, evolve, is_terminal, rebuild_state
 from app.core.enums import SuiteStatus
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.domain import suite_commands as c
-from app.domain.suite_aggregate import SuiteAggregate
-from app.domain.suite_decider import decide, evolve, is_terminal, rebuild_state
 
 
 def _step(system_code: str, order: int, status: SuiteStatus = SuiteStatus.PENDING) -> SuiteStep:

@@ -153,9 +153,9 @@ async def test_verify_only_detects_no_mismatch_for_consistent_store(tmp_path: Pa
 @pytest.mark.asyncio
 async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
     """Suite 스트림도 이벤트 폴드로 스냅샷이 재구성된다(Run 과 동형)."""
+    from app.contexts.suite.domain.aggregate import SuiteAggregate
     from app.core.enums import SuiteStatus
     from app.core.suite_models import SuiteRun, SuiteStep
-    from app.domain.suite_aggregate import SuiteAggregate
     from app.eventsourcing.snapshot_rebuild import rebuild_all_snapshots
     from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from starlette.requests import HTTPConnection
 
 if TYPE_CHECKING:
+    from app.contexts.suite.application.service import SuiteService
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
     from app.orchestrator.healing_service import HealingService
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
     from app.orchestrator.queries import DailyDashboardQueries, RunQueries
     from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
-    from app.orchestrator.suite_service import SuiteService
     from app.registry.loader import ModuleRegistry
     from app.scheduling.scheduler import SchedulerService
     from app.storage.ports import (

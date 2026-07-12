@@ -7,15 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.dependencies import get_registry, get_suite_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.requests import StartSuiteRequest, SubmitOtpRequest
-from app.orchestrator.suite_view import (
+from app.contexts.suite.views.view import (
     SuiteView,
     filter_suite_for_user,
     resolve_suite_request_for_user,
 )
+from app.core.requests import StartSuiteRequest, SubmitOtpRequest
 
 if TYPE_CHECKING:
-    from app.orchestrator.suite_service import SuiteService
+    from app.contexts.suite.application.service import SuiteService
     from app.registry.loader import ModuleRegistry
 
 router = APIRouter(prefix="/api/suites", tags=["suites"])

@@ -12,6 +12,7 @@ from app.api.dependencies import (
 )
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.contexts.suite.views.view import resolve_suite_request_for_user
 from app.core.requests import (
     CreateScheduleRequest,
     CreateSuiteScheduleRequest,
@@ -20,7 +21,6 @@ from app.core.requests import (
     UpdateScheduleRequest,
 )
 from app.core.schedule_models import Schedule
-from app.orchestrator.suite_view import resolve_suite_request_for_user
 
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry

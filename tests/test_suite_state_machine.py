@@ -5,8 +5,7 @@
 
 from __future__ import annotations
 
-from app.core.enums import RunStatus, SuiteStatus
-from app.domain.suite_state_machine import (
+from app.contexts.suite.domain.state_machine import (
     CancelSuite,
     FinalizeSuite,
     RecordAndAdvance,
@@ -14,6 +13,7 @@ from app.domain.suite_state_machine import (
     StartStep,
     SuiteStateMachine,
 )
+from app.core.enums import RunStatus, SuiteStatus
 
 # --- 하위 Run 상태 → 스텝 상태 매핑 -----------------------------------------
 
