@@ -12,6 +12,22 @@ from datetime import UTC, datetime
 
 from app.eventsourcing.support import SqliteDatabase
 from app.execution.session_checkpoint import SessionCheckpoint
+from app.storage.input_crypto import decrypt_bytes, derive_key, encrypt_bytes
+
+_CHECKPOINT_SALT = b"e2e-session-checkpoint-v1"
+
+
+class StorageStateCipher:
+    """입력 스토어와 동일한 AES-GCM 원시로 storage_state 문자열을 암복호화한다(인증 쿠키 보호)."""
+
+    def __init__(self, encryption_secret: str) -> None:
+        self._key = derive_key(encryption_secret, salt=_CHECKPOINT_SALT)
+
+    def encrypt(self, plaintext: str) -> str:
+        return encrypt_bytes(plaintext.encode("utf-8"), self._key)
+
+    def decrypt(self, ciphertext: str) -> str:
+        return decrypt_bytes(ciphertext, self._key).decode("utf-8")
 
 
 class SqliteSessionCheckpointStore:

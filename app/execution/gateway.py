@@ -83,3 +83,12 @@ class ExecutionGateway(ABC):
         workflow_step: str,
     ) -> None:
         """부분 재실행 시 세션의 재개 지점을 기록한다(브라우저 상태는 세션에 유지)."""
+
+    async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
+        """세션의 Playwright ``storage_state``(쿠키+localStorage)를 직렬화해 돌려준다(Phase C).
+
+        모듈 경계·OTP 일시정지 시 호출해 내구 체크포인트에 저장하면, 재기동/워커 교체 후 임의
+        워커가 세션을 복원할 수 있다. 체크포인트를 지원하지 않는 어댑터는 기본 ``None`` 을
+        돌려준다(추상 아님 — 기존 어댑터 무변경). 실제 캡처는 세션 스레드에서 수행해야 한다.
+        """
+        return None

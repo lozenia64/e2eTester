@@ -61,6 +61,10 @@ from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
+from app.storage.sqlite_session_checkpoint_store import (
+    SqliteSessionCheckpointStore,
+    StorageStateCipher,
+)
 from app.storage.sqlite_stats_query import SqliteStatsQuery
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
@@ -103,6 +107,7 @@ class AppContainer:
     run_log_store: SqliteRunLogStore = field(init=False)
     run_control_store: SqliteRunControlStore = field(init=False)
     run_input_store: EncryptedSqliteRunInputStore = field(init=False)
+    session_checkpoint_store: SqliteSessionCheckpointStore = field(init=False)
     suite_write_repo: SqliteSuiteWriteRepository = field(init=False)
     suite_repository: SqliteSuiteRepository = field(init=False)
     schedule_repository: SqliteScheduleRepository = field(init=False)
@@ -170,6 +175,10 @@ class AppContainer:
         self.run_control_store = SqliteRunControlStore(self.db_path)
         encryption_secret = self.settings.jwt_secret.get_secret_value()
         self.run_input_store = EncryptedSqliteRunInputStore(self.es_db, encryption_secret)
+        # Phase C: 세션 storage_state 를 입력 스토어와 동일 비밀로 암호화해 보관하는 체크포인트 스토어.
+        self.session_checkpoint_store = SqliteSessionCheckpointStore(
+            self.es_db, cipher=StorageStateCipher(encryption_secret)
+        )
 
         self.suite_write_repo = SqliteSuiteWriteRepository(self.es_db)
         self.suite_repository = SqliteSuiteRepository(self.db_path)
@@ -272,6 +281,7 @@ class AppContainer:
             artifact_manager=self.artifact_manager,
             healing_recorder=self.healing_service,
             session_registry=self.session_registry,
+            session_checkpoint_store=self.session_checkpoint_store,
         )
         if isinstance(self.run_queue, ProfilePartitionedRunQueue):
             self.run_queue.set_run_job_handler(self.run_service.dispatch_run_job)

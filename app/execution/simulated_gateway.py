@@ -103,3 +103,7 @@ class SimulatedExecutionGateway(ExecutionGateway):
         workflow_step: str,
     ) -> None:
         self._resume_points[handle.session_id] = (module_index, workflow_step)
+
+    async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
+        """브라우저 없이 체크포인트 시맨틱을 재현한다(WP-C5) — 세션 식별 가능한 결정적 가짜 상태."""
+        return f'{{"simulated_session": "{handle.session_id}"}}'

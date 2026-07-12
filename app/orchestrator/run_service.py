@@ -25,6 +25,7 @@ from app.domain.run_state_machine import (
 )
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
+from app.execution.session_checkpoint import SessionCheckpoint, SessionCheckpointStorePort
 from app.orchestrator.run_comparator import RunComparator
 from app.orchestrator.run_planner import RunPlanner
 from app.realtime.ports import RealtimeNotificationPort
@@ -87,6 +88,7 @@ class RunService:
         artifact_manager: ArtifactManager | None = None,
         healing_recorder: HealingRecorder | None = None,
         session_registry: RedisSessionRegistry | None = None,
+        session_checkpoint_store: SessionCheckpointStorePort | None = None,
     ) -> None:
         self._registry = registry
         self._write_repo = write_repo
@@ -113,6 +115,9 @@ class RunService:
         self._healing_recorder = healing_recorder
         # 원격 모드 OTP 교차 재기동: 워커 세션 리스가 살아 있으면 WAITING_INPUT 을 봉인하지 않는다.
         self._session_registry = session_registry
+        # Phase C: 모듈 경계·OTP 일시정지 시 세션 storage_state 를 내구 체크포인트로 저장하는
+        # 선택 협력자. 미주입/게이트웨이 미지원이면 캡처는 no-op(None)이라 기존 흐름과 동일하다.
+        self._session_checkpoint_store = session_checkpoint_store
 
     # --- 조회 -------------------------------------------------------------
 
@@ -755,12 +760,43 @@ class RunService:
             resume_index=index,
             module_id=module.module_id,
         )
+        # Phase C: OTP 일시정지는 내구 시그널 포인트 — 세션 storage_state 를 체크포인트로 확정해
+        # 재기동/워커 교체 후 임의 워커가 이어받을 수 있게 한다(게이트웨이 미지원 시 no-op).
+        await self._save_checkpoint(run, module_index=index, handle=handle)
         logger.info(
             "Run OTP 대기",
             log_event="run.waiting_input",
             run_id=run.run_id,
             module_id=module.module_id,
         )
+
+    async def _save_checkpoint(
+        self, run: Run, *, module_index: int, handle: ExecutionHandle
+    ) -> None:
+        """세션 storage_state 를 내구 체크포인트로 저장한다(Phase C, 실패는 실행을 막지 않음)."""
+        if self._session_checkpoint_store is None:
+            return
+        try:
+            storage_state = await self._gateway.capture_storage_state(handle)
+            if storage_state is None:
+                return  # 게이트웨이가 체크포인트를 지원하지 않음(예: in-process 레거시).
+            await self._session_checkpoint_store.save(
+                SessionCheckpoint(
+                    run_id=run.run_id,
+                    system_code=run.system_code,
+                    execution_mode=handle.execution_mode,
+                    module_index=module_index,
+                    session_id=handle.session_id,
+                    storage_state=storage_state,
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                "세션 체크포인트 저장 실패(무시하고 진행)",
+                log_event="run.checkpoint_failed",
+                run_id=run.run_id,
+                error=str(exc),
+            )
 
     # --- 취소 / 종료 ------------------------------------------------------
 
