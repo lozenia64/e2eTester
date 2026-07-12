@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from app.core.enums import ModuleStatus
 
 if TYPE_CHECKING:
-    from app.healing.models import HealingAttempt
+    from app.contexts.healing.models import HealingAttempt
 
 
 @dataclass(frozen=True)

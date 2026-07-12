@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.auth.models import User
+from app.contexts.identity.models import User
 
 
 class UserRepositoryPort(Protocol):

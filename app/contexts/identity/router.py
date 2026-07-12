@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth.dependencies import get_current_user, get_user_service
-from app.auth.jwt import create_access_token
-from app.auth.models import TokenResponse, User, UserPublic
+from app.contexts.identity.dependencies import get_current_user, get_user_service
+from app.contexts.identity.jwt import create_access_token
+from app.contexts.identity.models import TokenResponse, User, UserPublic
 
 if TYPE_CHECKING:
-    from app.auth.service import UserService
+    from app.contexts.identity.service import UserService
 
 router = APIRouter(tags=["auth"])
 templates = Jinja2Templates(directory="app/web/templates")

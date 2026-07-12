@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
-from app.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
+from app.contexts.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry

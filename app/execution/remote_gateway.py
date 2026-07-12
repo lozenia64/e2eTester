@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from app.contexts.healing.models import HealingAction, HealingAttempt
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.execution.protocol import (
@@ -19,7 +20,6 @@ from app.execution.protocol import (
     SubmitInputRequest,
 )
 from app.execution.redis_session_registry import RedisSessionRegistry
-from app.healing.models import HealingAction, HealingAttempt
 from app.runner.workflow_common import StepExecutionResult
 
 # 원격 게이트웨이가 지원하는 워크플로 실행 모드 접미사.

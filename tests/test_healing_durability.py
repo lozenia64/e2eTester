@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from app.healing.durability import (
+from app.contexts.healing.durability import (
     build_durability_map,
     classify_selector,
     extract_selector_refs,
     system_of_path,
 )
-from app.healing.models import HealingAction, HealingEvent
+from app.contexts.healing.models import HealingAction, HealingEvent
 
 SAMPLE_SOURCE = """
 USER_ID_SELECTOR = "#firstId"

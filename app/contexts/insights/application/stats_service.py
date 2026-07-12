@@ -16,7 +16,7 @@ from app.storage.ports import (
 )
 
 if TYPE_CHECKING:
-    from app.auth.service import UserService
+    from app.contexts.identity.service import UserService
     from app.registry.loader import ModuleRegistry
     from app.storage.query_rows import ModuleHistoryRow
 

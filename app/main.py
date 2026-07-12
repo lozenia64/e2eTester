@@ -23,8 +23,8 @@ from app.api.routes_systems import router as systems_router
 from app.api.routes_trigger import router as trigger_router
 from app.api.ws_runs import router as ws_runs_router
 from app.api.ws_suites import router as ws_suites_router
-from app.auth.router import router as auth_router
 from app.composition.container import AppContainer
+from app.contexts.identity.router import router as auth_router
 from app.core.logging import bind_log_context, clear_log_context
 from app.core.settings import get_settings
 

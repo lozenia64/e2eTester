@@ -41,9 +41,9 @@ from app.storage.ports import (
 from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
+    from app.contexts.healing.ports import HealingRecorderPort as HealingRecorder
     from app.execution.job_queue_port import JobQueuePort
     from app.execution.redis_session_registry import RedisSessionRegistry
-    from app.healing.ports import HealingRecorderPort as HealingRecorder
 
 from app.execution.job_queue_port import RunJobDescriptor
 

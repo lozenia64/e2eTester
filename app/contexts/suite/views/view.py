@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.auth.models import User
+from app.contexts.identity.models import User
 from app.core.enums import SuiteStatus
 from app.core.requests import StartSuiteRequest
 from app.core.status_labels import suite_status_label

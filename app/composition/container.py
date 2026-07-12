@@ -7,12 +7,16 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
-from app.auth.service import UserService
+from app.contexts.healing.engine import SelfHealingEngine
+from app.contexts.healing.service import HealingService
+from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
 from app.contexts.insights.application.ops_service import OpsService
 from app.contexts.insights.application.stats_service import StatsService
 from app.contexts.preset.application.service import PresetService
 from app.contexts.run.application.service import RunService
+from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
+from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
@@ -29,9 +33,7 @@ from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
 from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.healing.engine import SelfHealingEngine
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.healing_service import HealingService
 from app.orchestrator.queries import DailyDashboardQueries, RunQueries
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
@@ -39,8 +41,6 @@ from app.realtime.projector import RealtimeProjector
 from app.realtime.redis_fanout import RedisRealtimeFanOut
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
-from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
-from app.scheduling.scheduler import SchedulerService
 from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
 from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
 from app.storage.run_history_backfill import backfill_run_history_index

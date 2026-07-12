@@ -17,18 +17,18 @@ from typing import TYPE_CHECKING
 from starlette.requests import HTTPConnection
 
 if TYPE_CHECKING:
+    from app.contexts.healing.service import HealingService
     from app.contexts.insights.application.insights_service import InsightsService
     from app.contexts.insights.application.ops_service import OpsService
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.preset.application.service import PresetService
     from app.contexts.run.application.service import RunService
+    from app.contexts.scheduling.scheduler import SchedulerService
     from app.contexts.suite.application.service import SuiteService
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
-    from app.orchestrator.healing_service import HealingService
     from app.orchestrator.queries import DailyDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
-    from app.scheduling.scheduler import SchedulerService
     from app.storage.ports import (
         ScheduleRepositoryPort,
         SuiteRepositoryPort,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
-from app.healing.models import ScoredCandidate, SelectorHints
+from app.contexts.healing.models import ScoredCandidate, SelectorHints
 
 # Playwright 오류 메시지에서 깨진 셀렉터를 뽑는 패턴(마지막 locator 가 실제 대상).
 _LOCATOR_DQ_RE = re.compile(r'locator\("((?:[^"\\]|\\.)+)"\)')

@@ -12,8 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.healing.metrics import heal_counts_by_selector
-from app.healing.models import CHRONIC_HEAL_THRESHOLD, HealingEvent
+from app.contexts.healing.metrics import heal_counts_by_selector
+from app.contexts.healing.models import CHRONIC_HEAL_THRESHOLD, HealingEvent
 
 # 셀렉터를 첫 인자로 받는 호출들에서 인라인 셀렉터 문자열을 뽑는다.
 _INLINE_CALL_RE = re.compile(

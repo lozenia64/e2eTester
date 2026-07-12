@@ -17,12 +17,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from app.core.logging import get_logger
-from app.core.run_models import Run, RunModule
-from app.core.system_models import ModuleDefinition
-from app.healing.durability import build_durability_map
-from app.healing.metrics import build_healing_metrics
-from app.healing.models import (
+from app.contexts.healing.durability import build_durability_map
+from app.contexts.healing.metrics import build_healing_metrics
+from app.contexts.healing.models import (
     GLOBAL_POLICY_CODE,
     HealingAction,
     HealingAttempt,
@@ -31,7 +28,10 @@ from app.healing.models import (
     HealingPolicy,
     PatchStatus,
 )
-from app.healing.patch_builder import apply_replacement, build_patch_drafts
+from app.contexts.healing.patch_builder import apply_replacement, build_patch_drafts
+from app.core.logging import get_logger
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition
 
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry

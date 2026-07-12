@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from app.healing.metrics import build_healing_metrics, heal_counts_by_selector
-from app.healing.models import HealingAction, HealingEvent, HealingPatch, PatchStatus
+from app.contexts.healing.metrics import build_healing_metrics, heal_counts_by_selector
+from app.contexts.healing.models import HealingAction, HealingEvent, HealingPatch, PatchStatus
 
 NOW = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
 

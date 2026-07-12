@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.scheduling.schedule_center import (
+from app.contexts.scheduling.schedule_center import (
     ExecutionPoint,
     build_coverage,
     build_history_stats,

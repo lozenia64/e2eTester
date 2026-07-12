@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.healing.models import (
+from app.contexts.healing.models import (
     CHRONIC_HEAL_THRESHOLD,
     HealingAction,
     HealingEvent,

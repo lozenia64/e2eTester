@@ -19,9 +19,13 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol
 
+from app.contexts.healing.models import HealingAction, HealingAttempt, ResolvedHealingPolicy
+from app.contexts.healing.selector_healer import (
+    extract_hints,
+    parse_broken_selector,
+    score_candidates,
+)
 from app.core.system_models import ModuleDefinition
-from app.healing.models import HealingAction, HealingAttempt, ResolvedHealingPolicy
-from app.healing.selector_healer import extract_hints, parse_broken_selector, score_candidates
 
 # 라이브 DOM 요소 지문 수집 스크립트(상호작용 가능/식별자 보유 요소 위주, 상한 400개).
 _DOM_SCAN_JS = """

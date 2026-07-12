@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.contexts.healing.models import HealingAction, HealingAttempt, PatchStatus
+from app.contexts.healing.service import HealingService
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition
-from app.healing.models import HealingAction, HealingAttempt, PatchStatus
-from app.orchestrator.healing_service import HealingService
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
@@ -162,7 +162,7 @@ def test_policy_reader_resolves_system_then_global(tmp_path):
 
     import asyncio
 
-    from app.healing.models import HealingPolicy
+    from app.contexts.healing.models import HealingPolicy
 
     store = SqliteHealingPolicyStore(db)
     asyncio.run(store.upsert(HealingPolicy(system_code="*", confidence_threshold=0.9)))

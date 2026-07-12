@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.healing.patch_builder import apply_replacement, build_patch_drafts
+from app.contexts.healing.patch_builder import apply_replacement, build_patch_drafts
 
 SOURCE = """LOGIN_BUTTON_SELECTOR = "#btnRA"
 

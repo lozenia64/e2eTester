@@ -7,11 +7,11 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_healing_service
-from app.auth.dependencies import get_current_user, require_admin
-from app.auth.models import User
+from app.contexts.identity.dependencies import get_current_user, require_admin
+from app.contexts.identity.models import User
 
 if TYPE_CHECKING:
-    from app.orchestrator.healing_service import HealingService
+    from app.contexts.healing.service import HealingService
 
 router = APIRouter(prefix="/api/healing", tags=["healing"])
 

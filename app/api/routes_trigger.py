@@ -24,7 +24,7 @@ from app.core.requests import SubmitOtpRequest
 from app.core.schedule_models import Schedule
 
 if TYPE_CHECKING:
-    from app.scheduling.scheduler import SchedulerService
+    from app.contexts.scheduling.scheduler import SchedulerService
 
 router = APIRouter(tags=["trigger"])
 templates = Jinja2Templates(directory="app/web/templates")

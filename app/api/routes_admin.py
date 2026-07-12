@@ -18,14 +18,14 @@ from app.api.dependencies import (
     get_stats_service,
     get_suite_summary_query,
 )
-from app.auth.dependencies import get_user_service, require_admin
-from app.auth.models import CreateUserRequest, User, UserPublic
+from app.contexts.identity.dependencies import get_user_service, require_admin
+from app.contexts.identity.models import CreateUserRequest, User, UserPublic
 from app.contexts.run.views.actor import load_actor_context
 from app.core.stats_models import ModuleSettings
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 
 if TYPE_CHECKING:
-    from app.auth.service import UserService
+    from app.contexts.identity.service import UserService
     from app.contexts.insights.application.ops_service import OpsService
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.run.application.service import RunService

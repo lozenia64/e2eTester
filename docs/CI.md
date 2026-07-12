@@ -74,7 +74,7 @@ python3 scripts/rebuild_snapshots.py --validate --db data/e2etester.db
 ### Path filter
 
 - **docs-only PR** (`docs/**`, `*.md` 만 변경): `ci / docs` 만 실행 (lint·test 스킵)
-- **security 경로** (`app/auth/**`, OTP/trigger 라우트, input store, requirements): `ci / security` 추가
+- **security 경로** (`app/contexts/identity/**`, OTP/trigger 라우트, input store, requirements): `ci / security` 추가
 
 ### merge queue
 

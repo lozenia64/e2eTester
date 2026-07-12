@@ -7,7 +7,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pwdlib.hashers.bcrypt import BcryptHasher
 
-from app.auth.models import CreateUserRequest, User
+from app.contexts.identity.models import CreateUserRequest, User
 from app.storage.user_repository import UserRepositoryPort
 
 # 첫 해셔(Argon2id)가 신규 비밀번호 해싱에 쓰이고, 모든 해셔가 검증에 쓰인다.

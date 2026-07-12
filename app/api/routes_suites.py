@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import get_registry, get_suite_service
-from app.auth.dependencies import get_current_user
-from app.auth.models import User
+from app.contexts.identity.dependencies import get_current_user
+from app.contexts.identity.models import User
 from app.contexts.suite.views.view import (
     SuiteView,
     filter_suite_for_user,

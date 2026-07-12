@@ -10,7 +10,7 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass, field
 
-from app.healing.durability import classify_selector
+from app.contexts.healing.durability import classify_selector
 
 
 @dataclass(frozen=True)

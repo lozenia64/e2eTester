@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_run_queries, get_run_service
-from app.auth.jwt import decode_token
+from app.contexts.identity.jwt import decode_token
 from app.contexts.run.views.view import RunView
 
 if TYPE_CHECKING:

@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from app.contexts.healing.models import HealingAttempt
+from app.contexts.healing.page_proxy import HealedPage
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
-from app.healing.models import HealingAttempt
-from app.healing.page_proxy import HealedPage
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.screenshot import capture_screenshot
 from app.runner.step_logging import pop_sink, push_sink
@@ -18,7 +18,7 @@ from app.runner.workflow_common import StepExecutionResult, write_log_line
 
 if TYPE_CHECKING:
     from app.automation.ports import AutomationPort
-    from app.healing.engine import SelfHealingEngine
+    from app.contexts.healing.engine import SelfHealingEngine
 
 
 @runtime_checkable

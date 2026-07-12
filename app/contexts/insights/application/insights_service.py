@@ -37,7 +37,7 @@ from app.core.run_models import AnomalyHandling
 from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
-    from app.auth.service import UserService
+    from app.contexts.identity.service import UserService
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import (
         AnomalyHandlingStorePort,
@@ -92,7 +92,7 @@ class InsightsService:
 
     @staticmethod
     def _tz():
-        from app.scheduling.scheduler import _resolve_timezone
+        from app.contexts.scheduling.scheduler import _resolve_timezone
 
         tz, _name = _resolve_timezone()
         return tz

@@ -10,8 +10,8 @@ from app.api.dependencies import (
     get_schedule_repository,
     get_schedule_service,
 )
-from app.auth.dependencies import get_current_user
-from app.auth.models import User
+from app.contexts.identity.dependencies import get_current_user
+from app.contexts.identity.models import User
 from app.contexts.suite.views.view import resolve_suite_request_for_user
 from app.core.requests import (
     CreateScheduleRequest,
@@ -23,8 +23,8 @@ from app.core.requests import (
 from app.core.schedule_models import Schedule
 
 if TYPE_CHECKING:
+    from app.contexts.scheduling.scheduler import SchedulerService
     from app.registry.loader import ModuleRegistry
-    from app.scheduling.scheduler import SchedulerService
     from app.storage.ports import ScheduleRepositoryPort
 
 

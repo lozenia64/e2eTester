@@ -97,7 +97,7 @@ e2eTester/
       routes_otp.py                # SMS 중계 인바운드 OTP (/api/otp/inbound)
       ws_runs.py
       ws_suites.py
-    auth/
+    contexts/identity/             # 인증·사용자(identity) 컨텍스트 (구 app/auth)
       router.py                    # /login, /auth/*, /account/password
       dependencies.py
       jwt.py
@@ -179,7 +179,7 @@ e2eTester/
       job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)
       protocol.py                  # 워커 HTTP 프로토콜 DTO (OpenSession/RunStep/resume-from-step 등)
       run_queue.py                 # RunExecutionQueue(+JobQueue 포트): 감독되는 실행 작업 큐(워커 풀)
-    healing/
+    contexts/healing/              # 자가 치유 컨텍스트
       engine.py                    # SelfHealingEngine: 셀렉터 파싱→DOM 스캔→후보 검증→오버라이드(실행 스레드)
       selector_healer.py           # 순수 스코어러: 깨진 셀렉터 파싱·요소 지문·후보 신뢰도
       page_proxy.py                # HealedPage/HealedFrame: 런타임 오버라이드 적용 프록시
@@ -188,6 +188,7 @@ e2eTester/
       patch_builder.py             # 셀렉터 오토픽스 diff 생성(순수 빌더)
       models.py                    # HealingAttempt/정책·패치 모델 + 기본 신뢰도 임계치
       ports.py                     # HealingRecorderPort (어댑터 → 기록 위임 포트)
+      service.py                   # HealingService: 치유 기록·정책·패치 얇은 I/O 인터프리터
     notifications/
       run_completion_email.py
       report_renderer.py
@@ -205,15 +206,16 @@ e2eTester/
       daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
     contexts/preset/application/
       service.py                   # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
-    orchestrator/                  # 잔여 공유 서비스(run/suite/insights/preset 는 contexts/ 로 이동됨)
-      healing_service.py           # HealingService: 치유 기록·정책·패치 얇은 I/O 인터프리터
+    orchestrator/                  # 공유 CQRS 질의 계층(run/suite/insights/preset/healing 서비스는 contexts/ 로 이동됨)
+      queries/                     # RunQueries / DailyDashboardQueries (읽기 전용 질의 핸들러)
     registry/
       loader.py
-    scheduling/
+    contexts/scheduling/           # 예약 컨텍스트
       cron.py
       scheduler.py
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
+      command_port.py              # ScheduleRunQueryPort 등 스케줄러 의존 포트
     automation/                    # Automation BC (Flow + PageObject 4-layer)
       ports.py                     # AutomationPort / AutomationContext / Flow
       scenario_engine.py           # workflow_step → Flow 디스패치

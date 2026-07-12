@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from app.contexts.scheduling.scheduler import schedule_day_label
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.events import DomainEvent
 from app.domain.summary_fields import run_summary_fields
 from app.eventsourcing.support import SqliteDatabase
-from app.scheduling.scheduler import schedule_day_label
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 PROJECTION_NAMES = (

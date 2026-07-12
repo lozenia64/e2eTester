@@ -44,7 +44,7 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "-c",
         "pyproject.toml",
         "-r",
-        "app/auth",
+        "app/contexts/identity",
         "app/api/routes_trigger.py",
         "app/api/routes_otp.py",
     ],

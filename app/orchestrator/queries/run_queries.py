@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Literal
 
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.views.summary import summarize_row
+from app.contexts.scheduling.scheduler import schedule_today_start_utc
 from app.core.enums import RunStatus
-from app.scheduling.scheduler import schedule_today_start_utc
 from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
 
 if TYPE_CHECKING:

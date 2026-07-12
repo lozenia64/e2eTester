@@ -13,7 +13,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.scheduling.cron import next_run_after
+from app.contexts.scheduling.cron import next_run_after
 
 # 관제 보드 판정 기준(사람이 튜닝하는 정책 값).
 FAILING_MIN_CONSECUTIVE = 2  # 최근 종료 실행이 연달아 이만큼 ERROR/ANOMALY 면 '연속 실패 중'

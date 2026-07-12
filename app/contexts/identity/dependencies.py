@@ -7,11 +7,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from starlette.requests import HTTPConnection
 
-from app.auth.jwt import decode_token
-from app.auth.models import User
+from app.contexts.identity.jwt import decode_token
+from app.contexts.identity.models import User
 
 if TYPE_CHECKING:
-    from app.auth.service import UserService
+    from app.contexts.identity.service import UserService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 

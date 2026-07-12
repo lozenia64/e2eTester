@@ -8,8 +8,8 @@ from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.api.dependencies import get_run_queries, get_run_service, get_suite_service
-from app.auth.dependencies import get_current_user, require_admin
-from app.auth.models import User
+from app.contexts.identity.dependencies import get_current_user, require_admin
+from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 

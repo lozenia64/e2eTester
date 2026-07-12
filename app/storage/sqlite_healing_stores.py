@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from app.healing.models import (
+from app.contexts.healing.models import (
     GLOBAL_POLICY_CODE,
     HealingAction,
     HealingEvent,
