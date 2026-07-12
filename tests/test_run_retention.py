@@ -6,10 +6,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.contexts.run.application.service import RunService
 from app.core.enums import RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import RUN_DAILY_PURGE_STATUSES
-from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager
 from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService

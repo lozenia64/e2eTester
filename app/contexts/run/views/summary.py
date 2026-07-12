@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from app.core.status_labels import run_status_label
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_actor import ActorContext
+    from app.contexts.run.views.actor import ActorContext
     from app.storage.query_rows import RunSummaryRow
 
 

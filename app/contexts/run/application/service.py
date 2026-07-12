@@ -5,13 +5,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from app.core.enums import ModuleStatus, RunStatus
-from app.core.logging import get_logger, log_context
-from app.core.run_models import DashboardEvent, Run, RunModule
-from app.domain.events import run_deleted as domain_run_deleted
-from app.domain.execution_policy import module_policy_from_definition
-from app.domain.run_aggregate import RunAggregate
-from app.domain.run_state_machine import (
+from app.contexts.run.application.comparator import RunComparator
+from app.contexts.run.application.planner import RunPlanner
+from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.domain.state_machine import (
     BlockModule,
     CancelRemaining,
     CompleteStep,
@@ -23,11 +20,14 @@ from app.domain.run_state_machine import (
     RetryModule,
     RunStateMachine,
 )
+from app.core.enums import ModuleStatus, RunStatus
+from app.core.logging import get_logger, log_context
+from app.core.run_models import DashboardEvent, Run, RunModule
+from app.domain.events import run_deleted as domain_run_deleted
+from app.domain.execution_policy import module_policy_from_definition
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.execution.session_checkpoint import SessionCheckpoint, SessionCheckpointStorePort
-from app.orchestrator.run_comparator import RunComparator
-from app.orchestrator.run_planner import RunPlanner
 from app.realtime.ports import RealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager

@@ -6,6 +6,8 @@ import socket
 
 import uvicorn
 
+from app.contexts.run.application.comparator import RunComparator
+from app.contexts.run.application.service import RunService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.events.bus import EventBus
@@ -17,8 +19,6 @@ from app.execution.redis_session_registry import RedisSessionRegistry
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.healing.engine import SelfHealingEngine
 from app.orchestrator.healing_service import HealingService
-from app.orchestrator.run_comparator import RunComparator
-from app.orchestrator.run_service import RunService
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
 from app.runner.artifact_manager import ArtifactManager

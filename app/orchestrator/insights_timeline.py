@@ -26,8 +26,8 @@ from app.orchestrator.insights_common import (
 )
 
 if TYPE_CHECKING:
+    from app.contexts.run.views.actor import ActorContext
     from app.core.system_models import SystemDefinition
-    from app.orchestrator.run_actor import ActorContext
 
 TRIGGER_LABELS = {"manual": "수동", "schedule": "예약", "suite": "Suite"}
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.run_models import FailureAnalysis, FailureAnalysisRequest, Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.core.system_models import ModuleDefinition
-from app.domain.run_aggregate import RunAggregate
 from app.events.bus import EventBus, RunFinished
 
 

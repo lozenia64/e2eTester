@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from app.contexts.run.views.actor import load_actor_context
 from app.core.enums import AnomalyState
 from app.core.run_models import AnomalyHandling
 from app.orchestrator.insights_anomalies import (
@@ -33,7 +34,6 @@ from app.orchestrator.insights_common import (
 )
 from app.orchestrator.insights_health import build_system_health
 from app.orchestrator.insights_timeline import build_system_timeline
-from app.orchestrator.run_actor import load_actor_context
 from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:

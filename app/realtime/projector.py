@@ -13,12 +13,12 @@ Run 상태 변경 이벤트는 ``run_summary`` 섹션(``RunView`` 계약)을, �
 
 from __future__ import annotations
 
+from app.contexts.run.views.view import RunView
 from app.contexts.suite.views.view import SuiteView
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.run_models import DashboardEvent
 from app.core.suite_models import SuiteEvent
 from app.domain.events import DomainEvent
-from app.orchestrator.run_view import RunView
 from app.realtime.ports import RealtimeNotificationPort, SuiteRealtimeNotificationPort
 
 # module_* WS 이벤트를 만드는 Run 이벤트 → 와이어 이벤트 타입.

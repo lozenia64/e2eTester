@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.run.domain import commands as c
+from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.domain.decider import decide, evolve, is_terminal, rebuild_state
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
-from app.domain import run_commands as c
-from app.domain.run_aggregate import RunAggregate
-from app.domain.run_decider import decide, evolve, is_terminal, rebuild_state
 
 
 def _run(run_id: str = "run_dec") -> Run:

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from app.contexts.run.application.planner import RunPlanner
 from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 from app.orchestrator.preset_service import PresetService
-from app.orchestrator.run_planner import RunPlanner
 from app.registry.loader import ModuleRegistry
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 

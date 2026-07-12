@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
+from app.contexts.run.application.service import RunService
 from app.core.logging import get_logger
 from app.execution.job_queue_port import RunJobDescriptor
 from app.execution.redis_job_queue import RedisJobQueue
-from app.orchestrator.run_service import RunService
 
 logger = get_logger(__name__)
 

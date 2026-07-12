@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.domain.run_aggregate import RunAggregate
 
 
 def _module(

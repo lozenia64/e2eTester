@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.dependencies import get_run_queries, get_run_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.contexts.run.views.view import RunView
 from app.core.requests import StartRunRequest, SubmitOtpRequest
-from app.orchestrator.run_view import RunView
 
 if TYPE_CHECKING:
+    from app.contexts.run.application.service import RunService
     from app.orchestrator.queries import RunQueries
-    from app.orchestrator.run_service import RunService
 
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])

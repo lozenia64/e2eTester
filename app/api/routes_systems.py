@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from app.api.dependencies import get_run_service
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
+    from app.contexts.run.application.service import RunService
 
 
 router = APIRouter(prefix="/api/systems", tags=["systems"])

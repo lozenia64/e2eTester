@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.run_state_machine import (
+from app.contexts.run.domain.state_machine import (
     ReplayFromLogin,
     ResumeFromCheckpoint,
     RunStateMachine,

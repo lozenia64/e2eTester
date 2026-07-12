@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.api.dependencies import get_run_queries, get_run_service
 from app.auth.jwt import decode_token
-from app.orchestrator.run_view import RunView
+from app.contexts.run.views.view import RunView
 
 if TYPE_CHECKING:
+    from app.contexts.run.application.service import RunService
     from app.orchestrator.queries import RunQueries
-    from app.orchestrator.run_service import RunService
 
 
 router = APIRouter(tags=["ws"])

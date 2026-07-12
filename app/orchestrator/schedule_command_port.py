@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.orchestrator.run_command_port import RunCommandPort
+from app.contexts.run.application.command_port import RunCommandPort
 from app.storage.query_rows import RunSummaryRow
 
 

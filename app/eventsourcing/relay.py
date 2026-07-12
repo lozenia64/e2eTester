@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 
+from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.logging import get_logger
 from app.domain.events import DomainEvent
-from app.domain.run_aggregate import RunAggregate
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
 from app.eventsourcing.outbox import SqliteOutbox
 from app.projections.handlers import ProjectionHandlers

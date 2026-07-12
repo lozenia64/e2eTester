@@ -20,15 +20,15 @@ from app.api.dependencies import (
 )
 from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
+from app.contexts.run.views.actor import load_actor_context
 from app.core.stats_models import ModuleSettings
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
-from app.orchestrator.run_actor import load_actor_context
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
+    from app.contexts.run.application.service import RunService
     from app.orchestrator.ops_service import OpsService
     from app.orchestrator.queries import RunQueries
-    from app.orchestrator.run_service import RunService
     from app.orchestrator.stats_service import StatsService
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort

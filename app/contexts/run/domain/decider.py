@@ -184,8 +184,8 @@ def decide(command, state: RunSnapshot):
     append(events)`` 패턴으로 이 함수를 호출한다.
     """
     # 순환 import 회피(run_aggregate → 이 모듈을 import 하지 않지만, 계층 명확화를 위해 지연).
-    from app.domain import run_commands as c
-    from app.domain.run_aggregate import RunAggregate
+    from app.contexts.run.domain import commands as c
+    from app.contexts.run.domain.aggregate import RunAggregate
 
     aggregate = RunAggregate(state.to_run())
 

@@ -10,17 +10,17 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Literal
 
+from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.views.summary import summarize_row
 from app.core.enums import RunStatus
-from app.domain.run_aggregate import RunAggregate
-from app.orchestrator.run_summary import summarize_row
 from app.scheduling.scheduler import schedule_today_start_utc
 from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
 
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from app.contexts.run.views.actor import ActorContext
     from app.core.run_models import Run
-    from app.orchestrator.run_actor import ActorContext
     from app.storage.ports import (
         RunLogStorePort,
         RunSummaryQueryPort,

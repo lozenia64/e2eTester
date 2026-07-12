@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.domain.run_aggregate import RunAggregate
 from app.eventsourcing.snapshot_rebuild import rebuild_run_snapshots
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.storage.records import RunRecord

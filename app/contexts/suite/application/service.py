@@ -4,6 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from app.contexts.run.application.command_port import RunCommandPort
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.contexts.suite.domain.state_machine import (
     CancelSuite,
@@ -23,7 +24,6 @@ from app.core.status_labels import (
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.core.system_models import SystemDefinition
 from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
-from app.orchestrator.run_command_port import RunCommandPort
 from app.realtime.ports import SuiteRealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import (

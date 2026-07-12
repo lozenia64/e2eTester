@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from app.contexts.run.views.actor import load_actor_context
 from app.core.enums import ModuleStatus
 from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
-from app.orchestrator.run_actor import load_actor_context
 from app.orchestrator.stats_charts import build_usage_charts
 from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
 from app.storage.ports import (

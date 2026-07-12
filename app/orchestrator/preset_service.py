@@ -9,7 +9,7 @@ from app.core.preset_models import AuthPreset
 from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
+    from app.contexts.run.application.service import RunService
     from app.storage.ports import PresetRepositoryPort
 
 logger = get_logger(__name__)

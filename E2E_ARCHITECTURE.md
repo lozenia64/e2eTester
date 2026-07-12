@@ -118,6 +118,23 @@ e2eTester/
       settings.py                  # E2ESettings (환경변수 기반 설정)
       status_labels.py             # 상태 라벨·집계 분류(정상/이상징후/점검실패) SSOT
     contexts/                      # 바운디드 컨텍스트(WP-B1) — 컨텍스트별 domain/application/views
+      run/
+        domain/
+          aggregate.py             # RunAggregate: Run 상태 전이 규칙·불변식(순수, I/O 무지)
+          state_machine.py         # RunStateMachine: Run 실행 결정 전이표 + decide_rehydration(순수)
+          decider.py               # Run Decider: decide/evolve/rebuild_state (순수, 이벤트=진실)
+          commands.py              # RunCommand 군(decide 입력 의도)
+        application/
+          service.py               # RunService: 실행 순서·부작용 오케스트레이션(결정=StateMachine, 변경=Aggregate 위임)
+          comparator.py            # RunComparator: 직전 Run 대비 비교(저장소 의존)
+          planner.py               # RunPlanner: 선택 모듈·실행 순서 계획
+          command_port.py          # RunCommandPort: suite saga 가 의존하는 Run 커맨드 포트(Protocol)
+          event_publisher.py       # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
+        views/
+          view.py                  # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
+          summary.py               # summarize_row: 최근 Run 요약 뷰(행 기반)
+          actor.py                 # resolve_run_actor: 표시·집계용 실행자(user) 해석
+          module_view.py           # ModuleView: 모듈 읽기 모델 프로젝션
       suite/
         domain/
           aggregate.py             # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
@@ -128,13 +145,11 @@ e2eTester/
           service.py               # SuiteService: 이벤트 기반 Saga(결정=StateMachine, 변경=Aggregate 위임)
         views/
           view.py                  # SuiteView: Suite 읽기 모델 프로젝션(RunView 와 동일 규율)
-    domain/
-      run_aggregate.py             # RunAggregate: Run 상태 전이 규칙·불변식(순수 도메인, I/O 무지)
-      run_state_machine.py         # RunStateMachine: Run 실행 결정 전이표(순수)
-      run_decider.py               # Run Decider: decide/evolve/rebuild_state (순수, 이벤트=진실)
-      run_commands.py              # RunCommand 군(decide 입력 의도)
+    domain/                        # 공유 도메인 커널(run+suite 공용)
+      events.py                    # 도메인 이벤트 카탈로그(Run/Suite/RunImported)
       execution_policy.py          # ModuleExecutionPolicy / SystemExecutionPolicy (재시도·부분재실행·execution_profile)
       snapshots.py                 # RunSnapshot / SuiteSnapshot (frozen, aggregate.to_snapshot())
+      summary_fields.py            # run_summary_fields / suite_summary_fields (fat event 요약)
     composition/
       container.py                 # AppContainer — 컴포지션 루트(저장소·게이트웨이·OutboxRelay·서비스 배선)
     eventsourcing/
@@ -176,15 +191,7 @@ e2eTester/
     notifications/
       run_completion_email.py
       report_renderer.py
-    orchestrator/
-      run_service.py               # RunService: 실행 순서·부작용 조율(규칙은 RunAggregate 에 위임)
-      run_command_port.py          # RunCommandPort: 사가→하위 Run 명령 포트(의존성 역전; RunService 가 구조적 만족)
-      run_planner.py               # RunPlanner: 요청 검증 + 모듈 실행 계획(순수)
-      run_comparator.py            # RunComparator: 직전 Run 대비 비교(저장소 의존)
-      run_event_publisher.py       # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
-      run_view.py                  # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
-      run_summary.py               # summarize_run: 최근 Run 요약 뷰
-      run_actor.py                 # resolve_run_actor: 표시·집계용 실행자(user) 해석
+    orchestrator/                  # 잔여 공유·타 컨텍스트 서비스(run/suite 는 contexts/ 로 이동됨)
       daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
       preset_service.py            # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
       stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
