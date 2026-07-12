@@ -17,9 +17,10 @@ RUN_JOBS_GROUP = "e2e-workers"
 class RedisJobQueue:
     """Redis Streams 기반 Run 작업 브로커(API 프로세스 측 생산자).
 
-    ``enqueue_run_job`` 으로 직렬화 가능한 작업 설명자를 스트림에 적재하고,
-    별도 워커 프로세스(``worker/job_consumer``)가 소비한다. 코루틴 팩토리는
-    프로세스 경계를 넘길 수 없으므로 ``submit`` 은 원격 모드에서 지원하지 않는다.
+    ``enqueue_run_job`` 으로 직렬화 가능한 작업 설명자를 스트림에 적재하고, API 측
+    ``ProfilePartitionedRunQueue`` 워커가 소비해 인터프리터를 in-process 로 구동한다(브라우저
+    스텝만 ``WorkerExecutionGateway`` 로 씬 워커에 위임 — Run 오케스트레이션은 API 소유).
+    코루틴 팩토리는 프로세스 경계를 넘길 수 없으므로 ``submit`` 은 원격 모드에서 지원하지 않는다.
     """
 
     def __init__(self, redis_url: str, *, stream_key: str = RUN_JOBS_STREAM) -> None:
