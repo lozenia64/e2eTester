@@ -527,10 +527,8 @@ class RunService:
         assert isinstance(decision, ResumeFromModule)
         aggregate = RunAggregate(run)
         aggregate.prepare_partial_rerun(decision.from_index, ordered_modules)
-        if user_id is not None:
-            run.created_by_user_id = user_id
-        if user_name is not None:
-            run.created_by_user_name = user_name
+        # 귀속 사용자 갱신도 애그리거트(유일 변이자)를 거친다(직접 run.X= 금지).
+        aggregate.reassign_owner(user_id, user_name)
         await self._persist(run, aggregate)
         await self._run_queue.enqueue_run_job(
             RunJobDescriptor(
