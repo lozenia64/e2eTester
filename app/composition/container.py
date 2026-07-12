@@ -28,7 +28,6 @@ from app.eventsourcing.relay import OutboxRelay
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
-from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.execution.worker_gateway import WorkerExecutionGateway
@@ -125,7 +124,7 @@ class AppContainer:
     artifact_manager: ArtifactManager = field(init=False)
     system_codes: list[str] = field(init=False)
     session_registry: RedisSessionRegistry | None = field(init=False, default=None)
-    run_queue: ProfilePartitionedRunQueue | RedisJobQueue = field(init=False)
+    run_queue: ProfilePartitionedRunQueue = field(init=False)
     healing_engine: SelfHealingEngine | None = field(init=False, default=None)
     healing_service: HealingService = field(init=False)
     execution_gateway: CompositeExecutionGateway = field(init=False)
@@ -212,24 +211,21 @@ class AppContainer:
         self.artifact_manager = ArtifactManager()
         self.system_codes = [system.system_code for system in self.registry.list_systems()]
 
-        if self.settings.execution_mode == "remote":
-            self.session_registry = RedisSessionRegistry(
-                self.settings.redis_url, self.settings.session_lease_ttl
-            )
-            redis_queue = RedisJobQueue(self.settings.redis_url)
-            self.run_queue = ProfilePartitionedRunQueue(
-                heavy_workers=self.settings.run_concurrency_heavy,
-                light_workers=self.settings.run_concurrency_light,
-                interactive_workers=self.settings.run_concurrency_interactive,
-                redis_queue=redis_queue,
-            )
-        else:
-            self.session_registry = None
-            self.run_queue = ProfilePartitionedRunQueue(
-                heavy_workers=self.settings.run_concurrency_heavy,
-                light_workers=self.settings.run_concurrency_light,
-                interactive_workers=self.settings.run_concurrency_interactive,
-            )
+        # 실행 평면 분리(Model B): Run 오케스트레이션 인터프리터는 **항상 API 프로세스에서
+        # in-process** 로 돈다(ProfilePartitionedRunQueue). 원격 모드에서도 Redis 로 Run 잡을
+        # 분배하지 않는다 — 씬 워커에는 Run 을 소비할 RunService/RunJobConsumer 가 없기 때문이다.
+        # 브라우저 스텝만 WorkerExecutionGateway 로 워커에 위임하고, Redis 는 워커 세션 리스
+        # (session_registry)·실시간 팬아웃·체크포인트에만 쓴다.
+        self.session_registry = (
+            RedisSessionRegistry(self.settings.redis_url, self.settings.session_lease_ttl)
+            if self.settings.execution_mode == "remote"
+            else None
+        )
+        self.run_queue = ProfilePartitionedRunQueue(
+            heavy_workers=self.settings.run_concurrency_heavy,
+            light_workers=self.settings.run_concurrency_light,
+            interactive_workers=self.settings.run_concurrency_interactive,
+        )
 
         # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
         # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
