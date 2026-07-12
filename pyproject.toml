@@ -75,3 +75,16 @@ name = "Domain/orchestrator do not import Playwright"
 type = "forbidden"
 source_modules = ["app.domain", "app.orchestrator"]
 forbidden_modules = ["playwright"]
+
+# 바운디드 컨텍스트 격리(WP-B1): 컨텍스트는 전달 계층(api/web)을 import 하지 않고,
+# Run/Suite 도메인은 서로의 내부를 import 하지 않는다.
+[[tool.importlinter.contracts]]
+name = "Contexts do not import API/web delivery layer"
+type = "forbidden"
+source_modules = ["app.contexts"]
+forbidden_modules = ["app.api", "app.web"]
+
+[[tool.importlinter.contracts]]
+name = "Run and Suite domains are mutually independent"
+type = "independence"
+modules = ["app.contexts.run.domain", "app.contexts.suite.domain"]
