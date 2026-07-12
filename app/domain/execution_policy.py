@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition, SystemDefinition
+from app.core.system_models import ModuleDefinition, SystemDefinition
 
 ExecutionProfile = Literal["heavy", "light", "interactive"]
 

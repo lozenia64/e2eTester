@@ -14,7 +14,7 @@ import threading
 import pytest
 
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.execution import local_gateway as lg
 from app.runner.workflow_common import StepExecutionResult
 

@@ -9,7 +9,7 @@ from typing import Any
 
 import plotly.graph_objects as go
 
-from app.core.models import SystemUsageStat, UsageStats, UserUsageStat
+from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 
 FONT_FAMILY = "Pretendard Variable, Pretendard, Noto Sans KR, sans-serif"
 COLORWAY = [

@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import FailureAnalysis, Run, RunComparison, RunModule
+from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
 from app.domain import run_commands as c
 from app.domain.run_aggregate import RunAggregate
 from app.domain.run_decider import decide, evolve, is_terminal, rebuild_state
@@ -146,7 +146,7 @@ def test_evolve_reconstructs_seal_interrupted():
 
 def test_evolve_reconstructs_comparison_and_failure_analysis():
     aggregate, events = _drive_full_run(ModuleStatus.ANOMALY)
-    from app.core.models import RunComparison
+    from app.core.run_models import RunComparison
 
     aggregate.attach_comparison(
         RunComparison(has_baseline=True, baseline_run_id="run_prev", newly_failed=["로그인"])

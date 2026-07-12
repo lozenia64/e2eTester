@@ -26,7 +26,7 @@ from app.orchestrator.insights_common import (
 )
 
 if TYPE_CHECKING:
-    from app.core.models import SystemDefinition
+    from app.core.system_models import SystemDefinition
 
 
 def _as_utc(moment: datetime) -> datetime:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.core.models import ModuleSettings
+from app.core.stats_models import ModuleSettings
 
 
 class ModuleSettingsRepositoryPort(Protocol):

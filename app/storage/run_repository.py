@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.models import DashboardEvent, Run
+from app.core.run_models import DashboardEvent, Run
 from app.domain.events import DomainEvent
 from app.storage.listener_registry import ListenerRegistry
 from app.storage.records import RunRecord

@@ -12,14 +12,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from app.core.models import (
-    AnomalyHandling,
-    AuthPreset,
-    PendingExecution,
-    Run,
-    Schedule,
-    SuiteRun,
-)
+from app.core.preset_models import AuthPreset
+from app.core.run_models import AnomalyHandling, PendingExecution, Run
+from app.core.schedule_models import Schedule
+from app.core.suite_models import SuiteRun
 from app.domain.events import DomainEvent
 from app.healing.models import HealingEvent, HealingPatch, HealingPolicy
 from app.storage.query_rows import (

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.healing.engine import SelfHealingEngine
 from app.healing.models import HealingAction, ResolvedHealingPolicy
 from app.healing.page_proxy import HealedPage

@@ -16,7 +16,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import FailureAnalysis, RunComparison
+from app.core.run_models import FailureAnalysis, RunComparison
 from app.domain.events import DomainEvent
 from app.domain.snapshots import ModuleSnapshot, RunSnapshot
 

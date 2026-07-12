@@ -9,8 +9,9 @@ payload 에 싣는다**. 여기 함수들은 순수(시계·I/O 없음)하며 JS
 from __future__ import annotations
 
 from app.core.enums import ModuleStatus
-from app.core.models import Run, SuiteRun
+from app.core.run_models import Run
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
+from app.core.suite_models import SuiteRun
 
 
 def run_summary_fields(run: Run) -> dict:

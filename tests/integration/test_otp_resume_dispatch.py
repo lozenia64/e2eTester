@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.job_queue_port import RunJobDescriptor

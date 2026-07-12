@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.core.enums import RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.core.status_labels import RUN_DAILY_PURGE_STATUSES
 from app.orchestrator.run_service import RunService
 from app.registry.loader import ModuleRegistry

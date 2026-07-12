@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.domain.events import DomainEvent
 from app.domain.run_aggregate import RunAggregate
 from app.eventsourcing.event_store import SqliteEventStore

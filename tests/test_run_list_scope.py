@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.enums import RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.orchestrator.queries import RunQueries
 from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_log_store import InMemoryRunLogStore

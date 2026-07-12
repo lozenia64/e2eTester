@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.models import SuiteRun
+from app.core.suite_models import SuiteRun
 from app.storage.records import SuiteRecord
 
 

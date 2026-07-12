@@ -8,7 +8,7 @@ import os
 import pytest
 
 from app.core.enums import RunStatus
-from app.core.models import DashboardEvent
+from app.core.run_models import DashboardEvent
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.realtime.redis_fanout import RedisRealtimeFanOut
 

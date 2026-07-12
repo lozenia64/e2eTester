@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
-from app.core.models import DashboardEvent, Run, RunModule
+from app.core.run_models import DashboardEvent, Run, RunModule
 from app.domain.events import run_deleted as domain_run_deleted
 from app.domain.execution_policy import module_policy_from_definition
 from app.domain.run_aggregate import RunAggregate

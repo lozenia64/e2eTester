@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from app.core.models import SuiteRun
+from app.core.suite_models import SuiteRun
 from app.domain.events import DomainEvent
 from app.eventsourcing.outbox import SqliteOutbox
 from app.eventsourcing.support import SqliteDatabase

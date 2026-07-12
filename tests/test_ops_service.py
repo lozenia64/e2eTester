@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import RunStatus, SuiteStatus
-from app.core.models import Schedule
+from app.core.schedule_models import Schedule
 from app.core.settings import E2ESettings
 from app.execution.run_queue import RunExecutionQueue
 from app.orchestrator.ops_service import OpsService

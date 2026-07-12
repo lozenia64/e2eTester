@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.eventsourcing.blob_migration import migrate_run_blobs
 from app.eventsourcing.snapshot_rebuild import rebuild_run_snapshots
 from app.eventsourcing.support import SqliteDatabase, ensure_schema

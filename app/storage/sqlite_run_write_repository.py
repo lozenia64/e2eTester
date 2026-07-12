@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from app.core.models import Run
+from app.core.run_models import Run
 from app.domain.events import DomainEvent
 from app.eventsourcing.event_store import SqliteEventStore
 from app.eventsourcing.outbox import SqliteOutbox

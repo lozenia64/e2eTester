@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.dependencies import get_run_queries, get_run_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.models import StartRunRequest, SubmitOtpRequest
+from app.core.requests import StartRunRequest, SubmitOtpRequest
 from app.orchestrator.run_view import RunView
 
 if TYPE_CHECKING:

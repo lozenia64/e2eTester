@@ -16,7 +16,8 @@ from fastapi import HTTPException
 
 from app.api.routes_trigger import fire_trigger, submit_trigger_otp, trigger_status
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
-from app.core.models import CreateScheduleRequest, Schedule, SubmitOtpRequest
+from app.core.requests import CreateScheduleRequest, SubmitOtpRequest
+from app.core.schedule_models import Schedule
 from app.scheduling.scheduler import SchedulerService
 
 

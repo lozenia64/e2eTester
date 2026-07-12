@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol
 
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.healing.models import HealingAction, HealingAttempt, ResolvedHealingPolicy
 from app.healing.selector_healer import extract_hints, parse_broken_selector, score_candidates
 

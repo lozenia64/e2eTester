@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.core.enums import RunStatus
-from app.core.models import Run, RunComparison, RunModule
+from app.core.run_models import Run, RunComparison, RunModule
 from app.core.status_labels import run_status_label
 from app.domain.snapshots import RunSnapshot
 

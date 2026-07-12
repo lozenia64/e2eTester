@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
-from app.core.models import Run, RunComparison
+from app.core.run_models import Run, RunComparison
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 
 if TYPE_CHECKING:

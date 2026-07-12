@@ -20,7 +20,7 @@ from app.api.dependencies import (
 )
 from app.auth.dependencies import get_user_service, require_admin
 from app.auth.models import CreateUserRequest, User, UserPublic
-from app.core.models import ModuleSettings
+from app.core.stats_models import ModuleSettings
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 from app.orchestrator.run_actor import load_actor_context
 

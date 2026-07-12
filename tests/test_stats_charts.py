@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.core.models import SystemUsageStat, UsageStats, UserUsageStat
+from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 from app.orchestrator.stats_charts import build_usage_charts
 
 

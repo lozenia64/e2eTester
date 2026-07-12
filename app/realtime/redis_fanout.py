@@ -103,7 +103,7 @@ def serialize_dashboard_event(event) -> str:
 
 
 def deserialize_dashboard_event(data: str):
-    from app.core.models import DashboardEvent
+    from app.core.run_models import DashboardEvent
 
     return DashboardEvent.model_validate(json.loads(data))
 
@@ -113,6 +113,6 @@ def serialize_suite_event(event) -> str:
 
 
 def deserialize_suite_event(data: str):
-    from app.core.models import SuiteEvent
+    from app.core.suite_models import SuiteEvent
 
     return SuiteEvent.model_validate(json.loads(data))

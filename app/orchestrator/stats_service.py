@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.core.enums import ModuleStatus
-from app.core.models import SystemUsageStat, UsageStats, UserUsageStat
+from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.orchestrator.run_actor import load_actor_context
 from app.orchestrator.stats_charts import build_usage_charts

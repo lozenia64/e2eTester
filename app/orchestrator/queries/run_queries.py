@@ -19,7 +19,7 @@ from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from app.core.models import Run
+    from app.core.run_models import Run
     from app.orchestrator.run_actor import ActorContext
     from app.storage.ports import (
         RunLogStorePort,

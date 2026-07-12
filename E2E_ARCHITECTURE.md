@@ -107,7 +107,13 @@ e2eTester/
       enums.py                     # RunStatus/SuiteStatus/ModuleStatus (PASSED/ANOMALY/ERROR/...)
       env_utils.py
       logging.py                   # 구조적 로거 + 로그 컨텍스트 바인딩
-      models.py
+      system_models.py             # ModuleDefinition/SystemDefinition/RunForm* (매니페스트 정적 구조)
+      run_models.py                # Run/RunModule/FailureAnalysis/RunComparison/PendingExecution/DashboardEvent
+      suite_models.py              # SuiteRun/SuiteStep/SuiteEvent
+      schedule_models.py           # Schedule/ScheduleChangeEntry (+ record_change/to_summary/to_detail)
+      preset_models.py             # AuthPreset (+ to_public)
+      stats_models.py              # UsageStats/SystemUsageStat/UserUsageStat/ModuleSettings
+      requests.py                  # HTTP 요청 DTO (StartRunRequest 등 — 공유 커널, api 역방향 의존 회피)
       ops_buffer.py                # 최근 운영 이벤트 링 버퍼(관리자 운영 관측)
       settings.py                  # E2ESettings (환경변수 기반 설정)
       status_labels.py             # 상태 라벨·집계 분류(정상/이상징후/점검실패) SSOT

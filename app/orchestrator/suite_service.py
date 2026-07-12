@@ -6,17 +6,14 @@ from uuid import uuid4
 
 from app.core.enums import SuiteStatus
 from app.core.logging import get_logger
-from app.core.models import (
-    Run,
-    StartSuiteRequest,
-    SuiteRun,
-    SuiteStep,
-    SystemDefinition,
-)
+from app.core.requests import StartSuiteRequest
+from app.core.run_models import Run
 from app.core.status_labels import (
     SUITE_ANOMALY_STATUSES,
     SUITE_ERROR_STATUSES,
 )
+from app.core.suite_models import SuiteRun, SuiteStep
+from app.core.system_models import SystemDefinition
 from app.domain.suite_aggregate import SuiteAggregate
 from app.domain.suite_state_machine import (
     CancelSuite,

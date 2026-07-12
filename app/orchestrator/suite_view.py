@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 
 from app.auth.models import User
 from app.core.enums import SuiteStatus
-from app.core.models import StartSuiteRequest, SuiteEvent, SuiteRun, SuiteStep
+from app.core.requests import StartSuiteRequest
 from app.core.status_labels import suite_status_label
+from app.core.suite_models import SuiteEvent, SuiteRun, SuiteStep
 from app.domain.snapshots import SuiteSnapshot
 
 

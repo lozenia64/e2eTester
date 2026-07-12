@@ -5,11 +5,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from app.core.logging import get_logger
-from app.core.models import (
-    AuthPreset,
-    CreatePresetRequest,
-    UpdatePresetRequest,
-)
+from app.core.preset_models import AuthPreset
+from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 
 if TYPE_CHECKING:
     from app.orchestrator.run_service import RunService

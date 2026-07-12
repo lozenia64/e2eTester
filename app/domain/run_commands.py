@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import FailureAnalysis, RunComparison
+from app.core.run_models import FailureAnalysis, RunComparison
 
 
 @dataclass(frozen=True)

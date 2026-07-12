@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 
 
 class OpenSessionRequest(BaseModel):

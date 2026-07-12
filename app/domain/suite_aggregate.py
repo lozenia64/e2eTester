@@ -4,8 +4,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.core.enums import SuiteStatus
-from app.core.models import SuiteRun, SuiteStep
 from app.core.status_labels import SUITE_ANOMALY_STATUSES, SUITE_ERROR_STATUSES
+from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain import events as domain_events
 from app.domain.events import DomainEvent
 from app.domain.snapshots import SuiteSnapshot

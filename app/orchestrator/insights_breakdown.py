@@ -27,7 +27,7 @@ from app.orchestrator.insights_common import (
 )
 
 if TYPE_CHECKING:
-    from app.core.models import SystemDefinition
+    from app.core.system_models import SystemDefinition
 
 _RECENT_RUNS = 40
 _MAX_SHOTS = 6

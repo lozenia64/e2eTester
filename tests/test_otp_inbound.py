@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from app.api.routes_otp import DEFAULT_OTP_RELAY_REGEX, _extract_code, submit_inbound_otp
 from app.core.enums import RunStatus
-from app.core.models import InboundOtpRequest
+from app.core.requests import InboundOtpRequest
 from app.orchestrator.run_service import RunService
 
 

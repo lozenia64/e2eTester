@@ -10,7 +10,7 @@ import pytest
 import uvicorn
 
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.execution.remote_gateway import RemoteExecutionGateway
 from app.runner.workflow_common import StepExecutionResult
 from tests.test_local_gateway_session import _FakeExecutor, _module

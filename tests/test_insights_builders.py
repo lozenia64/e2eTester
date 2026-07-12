@@ -6,12 +6,8 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.enums import AnomalyState, ModuleStatus, RunStatus
-from app.core.models import (
-    AnomalyHandling,
-    FailureAnalysis,
-    ModuleDefinition,
-    SystemDefinition,
-)
+from app.core.run_models import AnomalyHandling, FailureAnalysis
+from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.orchestrator.insights_anomalies import build_anomaly_items
 from app.orchestrator.insights_breakdown import build_module_breakdown
 from app.orchestrator.insights_common import (

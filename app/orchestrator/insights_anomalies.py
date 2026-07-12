@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from app.core.enums import AnomalyState
-from app.core.models import AnomalyHandling
+from app.core.run_models import AnomalyHandling
 from app.core.status_labels import (
     anomaly_state_label,
     module_status_badge_tone,
@@ -29,7 +29,7 @@ from app.orchestrator.insights_common import (
 )
 
 if TYPE_CHECKING:
-    from app.core.models import SystemDefinition
+    from app.core.system_models import SystemDefinition
     from app.storage.query_rows import AnomalyInboxRow
 
 

@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from app.core.enums import AnomalyState
-from app.core.models import AnomalyHandling
+from app.core.run_models import AnomalyHandling
 from app.orchestrator.insights_anomalies import (
     AnomalyModuleEnrichment,
     build_anomaly_items_from_index,

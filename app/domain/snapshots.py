@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
-from app.core.models import FailureAnalysis, Run, RunComparison, RunModule, SuiteRun, SuiteStep
+from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
+from app.core.suite_models import SuiteRun, SuiteStep
 
 
 @dataclass(frozen=True)

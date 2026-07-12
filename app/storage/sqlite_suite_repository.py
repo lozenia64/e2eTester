@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.models import SuiteRun
+from app.core.suite_models import SuiteRun
 from app.storage.records import SuiteRecord
 from app.storage.sqlite_support import JsonTableStore
 

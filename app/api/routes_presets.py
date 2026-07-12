@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.dependencies import get_preset_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.models import CreatePresetRequest, UpdatePresetRequest
+from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 
 if TYPE_CHECKING:
     from app.orchestrator.preset_service import PresetService

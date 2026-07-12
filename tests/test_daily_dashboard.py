@@ -8,7 +8,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import ModuleDefinition, Run, RunModule, SystemDefinition
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.orchestrator.daily_dashboard import build_daily_dashboard
 
 GEN_AT = datetime(2026, 7, 8, 3, 0, tzinfo=UTC)

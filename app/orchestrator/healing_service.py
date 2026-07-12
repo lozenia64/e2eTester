@@ -18,7 +18,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from app.core.logging import get_logger
-from app.core.models import ModuleDefinition, Run, RunModule
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition
 from app.healing.durability import build_durability_map
 from app.healing.metrics import build_healing_metrics
 from app.healing.models import (

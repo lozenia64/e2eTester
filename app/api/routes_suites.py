@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.dependencies import get_registry, get_suite_service
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.core.models import StartSuiteRequest, SubmitOtpRequest
+from app.core.requests import StartSuiteRequest, SubmitOtpRequest
 from app.orchestrator.suite_view import (
     SuiteView,
     filter_suite_for_user,

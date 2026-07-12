@@ -9,18 +9,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.logging import get_logger
-from app.core.models import (
-    SUITE_SCHEDULE_SYSTEM_CODE,
-    SUITE_SCHEDULE_SYSTEM_NAME,
+from app.core.requests import (
     CreateScheduleRequest,
     CreateSuiteScheduleRequest,
-    Run,
-    Schedule,
     StartSuiteRequest,
-    SuiteRun,
     UpdateScheduleRequest,
 )
+from app.core.run_models import Run
+from app.core.schedule_models import (
+    SUITE_SCHEDULE_SYSTEM_CODE,
+    SUITE_SCHEDULE_SYSTEM_NAME,
+    Schedule,
+)
 from app.core.settings import get_settings
+from app.core.suite_models import SuiteRun
 from app.orchestrator.schedule_command_port import ScheduleCommandPort, ScheduleRunQueryPort
 from app.scheduling.cron import next_run_after, parse_cron
 from app.scheduling.schedule_center import (

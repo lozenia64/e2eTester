@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from app.auth.service import UserService
-    from app.core.models import Schedule
+    from app.core.schedule_models import Schedule
     from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
     from app.storage.query_rows import SuiteSummaryRow
 

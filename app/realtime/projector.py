@@ -14,7 +14,8 @@ Run 상태 변경 이벤트는 ``run_summary`` 섹션(``RunView`` 계약)을, �
 from __future__ import annotations
 
 from app.core.enums import RunStatus, SuiteStatus
-from app.core.models import DashboardEvent, SuiteEvent
+from app.core.run_models import DashboardEvent
+from app.core.suite_models import SuiteEvent
 from app.domain.events import DomainEvent
 from app.orchestrator.run_view import RunView
 from app.orchestrator.suite_view import SuiteView

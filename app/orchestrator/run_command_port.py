@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.core.models import Run
+from app.core.run_models import Run
 
 
 class RunCommandPort(Protocol):

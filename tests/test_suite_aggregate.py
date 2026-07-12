@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import SuiteStatus
-from app.core.models import SuiteRun, SuiteStep
+from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain.suite_aggregate import SuiteAggregate
 
 

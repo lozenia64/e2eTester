@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.core.models import ModuleDefinition, Run, RunModule
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition
 from app.healing.models import HealingAttempt
 
 

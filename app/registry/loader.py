@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from app.core.models import ModuleDefinition, RunFormField, SystemDefinition
+from app.core.system_models import ModuleDefinition, RunFormField, SystemDefinition
 from app.domain.execution_policy import system_policy_from_definition
 
 

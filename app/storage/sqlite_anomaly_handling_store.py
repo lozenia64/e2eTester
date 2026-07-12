@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.core.enums import AnomalyState
-from app.core.models import AnomalyHandling
+from app.core.run_models import AnomalyHandling
 
 
 class SqliteAnomalyHandlingStore:

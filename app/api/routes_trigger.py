@@ -20,7 +20,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.api.dependencies import get_schedule_service
-from app.core.models import Schedule, SubmitOtpRequest
+from app.core.requests import SubmitOtpRequest
+from app.core.schedule_models import Schedule
 
 if TYPE_CHECKING:
     from app.scheduling.scheduler import SchedulerService

@@ -20,7 +20,7 @@ from app.storage.query_rows import (
 )
 
 if TYPE_CHECKING:
-    from app.core.models import Run
+    from app.core.run_models import Run
     from app.storage.run_repository import InMemoryRunRepository
 
 _TERMINAL_FOR_BASELINE = {

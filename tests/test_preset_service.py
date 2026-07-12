@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.models import CreatePresetRequest, UpdatePresetRequest
+from app.core.requests import CreatePresetRequest, UpdatePresetRequest
 from app.orchestrator.preset_service import PresetService
 from app.orchestrator.run_planner import RunPlanner
 from app.registry.loader import ModuleRegistry

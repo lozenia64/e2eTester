@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.models import Schedule
+from app.core.schedule_models import Schedule
 from app.storage.sqlite_support import JsonTableStore
 
 

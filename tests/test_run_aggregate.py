@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.domain.run_aggregate import RunAggregate
 
 
@@ -196,7 +196,7 @@ def test_note_module_message_updates_message_via_aggregate():
 
 
 def test_attach_failure_analysis_via_aggregate():
-    from app.core.models import FailureAnalysis
+    from app.core.run_models import FailureAnalysis
 
     module = _module("a", 0, status=ModuleStatus.ERROR)
     analysis = FailureAnalysis(
@@ -212,7 +212,7 @@ def test_attach_failure_analysis_via_aggregate():
 
 
 def test_attach_comparison_via_aggregate():
-    from app.core.models import RunComparison
+    from app.core.run_models import RunComparison
 
     run = _run([_module("a", 0, status=ModuleStatus.PASSED)])
     comparison = RunComparison(

@@ -8,7 +8,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import ModuleDefinition, Run, RunModule, SystemDefinition
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.orchestrator.stats_service import StatsService
 from app.storage.in_memory_stats_query import InMemoryStatsQuery
 from app.storage.run_repository import InMemoryRunRepository

@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
-from app.core.models import FailureAnalysis, Run, RunModule, SuiteRun, SuiteStep
+from app.core.run_models import FailureAnalysis, Run, RunModule
+from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain.events import run_deleted
 from app.domain.run_aggregate import RunAggregate
 from app.domain.suite_aggregate import SuiteAggregate

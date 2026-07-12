@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.api.dependencies import get_otp_relay_regex, get_otp_relay_token, get_run_service
-from app.core.models import InboundOtpRequest
+from app.core.requests import InboundOtpRequest
 
 if TYPE_CHECKING:
     from app.orchestrator.run_service import RunService

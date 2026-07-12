@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.core.enums import RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 
 
 class ModuleView(BaseModel):

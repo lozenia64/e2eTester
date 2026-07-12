@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.runner.workflow_common import StepExecutionResult
 
 # 단계 실행 도중 흘러나오는 로그 한 줄을 오케스트레이터로 되돌려 주는 비동기 콜백.

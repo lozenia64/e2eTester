@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.healing.models import HealingAttempt
 from app.healing.page_proxy import HealedPage
 from app.runner.artifact_manager import ArtifactManager

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from app.core.models import ModuleDefinition
+from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.runner.artifact_manager import ArtifactManager
 from app.runner.workflow_common import StepExecutionResult

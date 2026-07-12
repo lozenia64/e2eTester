@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.models import DashboardEvent, Run, RunModule
+from app.core.run_models import DashboardEvent, Run, RunModule
 from app.orchestrator.module_view import ModuleView
 from app.orchestrator.run_view import RunView
 from app.realtime.ports import RealtimeNotificationPort

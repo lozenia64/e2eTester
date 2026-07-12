@@ -24,7 +24,7 @@ from app.core.env_utils import (
     load_dotenv_file,
     resolve_env_with_source,
 )
-from app.core.models import FailureAnalysis, FailureAnalysisRequest
+from app.core.run_models import FailureAnalysis, FailureAnalysisRequest
 from app.core.settings import get_settings
 
 
