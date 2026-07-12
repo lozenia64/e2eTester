@@ -175,7 +175,7 @@ e2eTester/
       session_checkpoint.py        # SessionCheckpointStorePort + SessionCheckpoint (모듈 경계 내구 체크포인트)
       composite_gateway.py         # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       local_gateway.py             # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
-      remote_gateway.py            # RemoteExecutionGateway: worker/ HTTP API 클라이언트
+      worker_gateway.py            # WorkerExecutionGateway: worker/ HTTP API 클라이언트(원격 실행 위임)
       simulated_gateway.py         # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
       profile_queue.py             # ProfilePartitionedRunQueue: execution_profile 별 JobQueue 라우팅
       job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)

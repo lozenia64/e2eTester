@@ -4,7 +4,7 @@
 이상 구조에서는 실행 평면이 분리돼(API 에는 Playwright/실행 스레드가 없다) Redis 가 전 모드
 필수 인프라가 된다. 이 스크립트는 같은 머신에서 (1) uvicorn API 와 (2) ``python -m worker.main``
 워커를 동시에 기동하고 수명을 함께 관리한다(한쪽이 죽으면 다른 쪽도 정리). 실행 모드는
-``E2E_EXECUTION_MODE=remote`` 로 강제해 API 가 ``RemoteExecutionGateway`` 로 워커에 위임하게 한다.
+``E2E_EXECUTION_MODE=remote`` 로 강제해 API 가 ``WorkerExecutionGateway`` 로 워커에 위임하게 한다.
 
 사용:
     python3 scripts/run_local.py                 # API :2222 + worker :8100 (Redis 필요)

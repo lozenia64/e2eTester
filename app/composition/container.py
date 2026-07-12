@@ -31,8 +31,8 @@ from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
-from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway
+from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import DailyDashboardQueries, RunQueries
 from app.platform.artifact_manager import ArtifactManager
@@ -247,7 +247,7 @@ class AppContainer:
 
         if self.settings.execution_mode == "remote":
             gateways = [
-                RemoteExecutionGateway(self.settings.worker_base_url, self.session_registry),
+                WorkerExecutionGateway(self.settings.worker_base_url, self.session_registry),
                 SimulatedExecutionGateway(),
             ]
         else:

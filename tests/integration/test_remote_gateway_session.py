@@ -1,4 +1,4 @@
-"""RemoteExecutionGateway ↔ 워커 HTTP 프로토콜 통합 테스트."""
+"""WorkerExecutionGateway ↔ 워커 HTTP 프로토콜 통합 테스트."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import uvicorn
 
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
-from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.results import StepExecutionResult
+from app.execution.worker_gateway import WorkerExecutionGateway
 from tests.test_local_gateway_session import _FakeExecutor, _module
 from worker.http_server import create_http_app
 from worker.session_server import SessionServer
@@ -51,7 +51,7 @@ def remote_gateway(monkeypatch):
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     _wait_for_server("127.0.0.1", port)
-    gateway = RemoteExecutionGateway(f"http://127.0.0.1:{port}")
+    gateway = WorkerExecutionGateway(f"http://127.0.0.1:{port}")
     yield gateway, fake, session_server
     server.should_exit = True
     thread.join(timeout=3)

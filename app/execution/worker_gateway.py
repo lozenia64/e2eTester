@@ -26,7 +26,7 @@ from app.execution.results import StepExecutionResult
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"
 
 
-class RemoteExecutionGateway(ExecutionGateway):
+class WorkerExecutionGateway(ExecutionGateway):
     """원격 워커 HTTP API 를 호출하는 ExecutionGateway 클라이언트.
 
     API 프로세스의 오케스트레이터가 브라우저 실행을 워커 프로세스에 위임할 때 쓴다.
