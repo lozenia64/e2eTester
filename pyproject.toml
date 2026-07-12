@@ -88,3 +88,11 @@ forbidden_modules = ["app.api", "app.web"]
 name = "Run and Suite domains are mutually independent"
 type = "independence"
 modules = ["app.contexts.run.domain", "app.contexts.suite.domain"]
+
+# 실행 평면 분리(WP-C4): 오케스트레이션(contexts)·전달(api)은 실행 평면(runner/automation/
+# systems = Playwright 구동)을 import 하지 않는다. 실행 결과 계약은 app.execution.results 가 소유.
+[[tool.importlinter.contracts]]
+name = "Contexts and API do not import the execution plane"
+type = "forbidden"
+source_modules = ["app.contexts", "app.api"]
+forbidden_modules = ["app.runner", "app.automation", "app.systems"]

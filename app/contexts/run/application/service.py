@@ -28,9 +28,9 @@ from app.domain.execution_policy import module_policy_from_definition
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.execution.session_checkpoint import SessionCheckpoint, SessionCheckpointStorePort
+from app.platform.artifact_manager import ArtifactManager
 from app.realtime.ports import RealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.ports import (
     RunControlStorePort,
     RunInputStorePort,

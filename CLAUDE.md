@@ -23,7 +23,7 @@ python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 python3 scripts/ci/run_all_gates.py --profile full   # SSOT: all standard gates (same as CI)
 # Or individually:
 python3 scripts/check_docs_consistency.py   # docs ↔ source consistency guard
-python3 scripts/check_architecture_gates.py # architecture policy (AG-001~008)
+python3 scripts/check_architecture_gates.py # architecture policy (AG-001~009)
 python3 -m importlinter.cli lint            # import 경계 계약 (도메인 순수성·코어 무-Playwright)
 python3 scripts/rebuild_projections.py --validate  # 이벤트 재생 == 라이브 projection (결정성)
 python3 scripts/rebuild_snapshots.py --validate    # 이벤트 폴드 == aggregate_snapshots (이벤트=진실)

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.runner.workflow_engine import BaseWorkflowExecutor, StepContext, StepHandler
 

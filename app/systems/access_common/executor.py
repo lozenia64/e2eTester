@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.step_outcome import StepCompleted, StepOutcome
 from app.runner.workflow_engine import BaseWorkflowExecutor, StepContext, StepHandler
 from app.systems.access_common import browser, main_access

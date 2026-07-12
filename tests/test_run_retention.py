@@ -11,8 +11,8 @@ from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRete
 from app.core.enums import RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import RUN_DAILY_PURGE_STATUSES
+from app.platform.artifact_manager import ArtifactManager
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_control_store import InMemoryRunControlStore
 from app.storage.run_input_store import InMemoryRunInputStore

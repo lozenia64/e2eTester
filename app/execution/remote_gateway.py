@@ -20,7 +20,7 @@ from app.execution.protocol import (
     SubmitInputRequest,
 )
 from app.execution.redis_session_registry import RedisSessionRegistry
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
 
 # 원격 게이트웨이가 지원하는 워크플로 실행 모드 접미사.
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"

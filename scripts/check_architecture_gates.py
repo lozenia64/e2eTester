@@ -12,6 +12,8 @@
   AG-007  *QueryPort 프로토콜은 Run/SuiteRun 반환 금지 (화면형 Row DTO 만 — blob 재수화 봉쇄)
   AG-008  오케스트레이터 서비스에서 run/suite/step/module 필드 직접 변이 금지
           (애그리거트가 유일한 상태 변이자 — 서비스가 우회 변이하는 이중 권위 차단)
+  AG-009  contexts/api 에서 실행 평면(app.runner/automation/systems) import 금지
+          (실행 평면 분리 — 오케스트레이션은 Playwright 구동을 모른다; 결과 계약=app.execution.results)
 """
 
 from __future__ import annotations
@@ -200,6 +202,29 @@ DIRECT_MUTATION_PATTERN = re.compile(
 )
 
 
+# AG-009: 오케스트레이션(contexts)·전달(api)은 실행 평면(runner/automation/systems =
+# Playwright 구동)을 import 하지 않는다(실행 평면 분리, WP-C4). 실행 결과 계약은
+# app.execution.results 가 소유하므로 오케스트레이션이 runner 를 알 필요가 없다.
+AG009_SOURCE_DIRS = ("app/contexts", "app/api")
+EXEC_PLANE_IMPORT_PATTERN = re.compile(
+    r"^\s*(?:from|import)\s+app\.(?:runner|automation|systems)\b"
+)
+
+
+def check_ag009_no_execution_plane_in_orchestration() -> list[str]:
+    violations: list[str] = []
+    for dir_rel in AG009_SOURCE_DIRS:
+        base = ROOT / dir_rel
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.py"):
+            rel = _rel(path)
+            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                if EXEC_PLANE_IMPORT_PATTERN.match(line):
+                    violations.append(f"{rel}:{line_no}: {line.strip()}")
+    return violations
+
+
 def check_ag008_service_no_direct_entity_mutation() -> list[str]:
     violations: list[str] = []
     for base in _application_dirs():
@@ -273,6 +298,11 @@ RULES: list[tuple[str, str, Callable[[], list[str]]]] = [
         "AG-008",
         "direct entity mutation in orchestrator services (aggregate is the sole mutator)",
         check_ag008_service_no_direct_entity_mutation,
+    ),
+    (
+        "AG-009",
+        "execution plane (runner/automation/systems) imported by contexts/api",
+        check_ag009_no_execution_plane_in_orchestration,
     ),
 ]
 

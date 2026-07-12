@@ -35,12 +35,12 @@ from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import DailyDashboardQueries, RunQueries
+from app.platform.artifact_manager import ArtifactManager
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
 from app.realtime.redis_fanout import RedisRealtimeFanOut
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
 from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
 from app.storage.run_history_backfill import backfill_run_history_index

@@ -10,7 +10,7 @@ import argparse
 from collections.abc import Mapping
 from dataclasses import replace
 
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.workflow_engine import BaseWorkflowExecutor, StepHandler
 from app.scenarios.rep_homepage.channel import ChannelProfile
 from app.scenarios.rep_homepage.runtime import RepHomepageRuntime

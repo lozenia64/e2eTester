@@ -19,9 +19,9 @@ from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
 from app.execution.simulated_gateway import SimulatedExecutionGateway
+from app.platform.artifact_manager import ArtifactManager
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,

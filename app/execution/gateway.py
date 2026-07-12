@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from app.core.system_models import ModuleDefinition
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
 
 # 단계 실행 도중 흘러나오는 로그 한 줄을 오케스트레이터로 되돌려 주는 비동기 콜백.
 # 실행 스레드 ↔ 이벤트 루프 사이의 브리지는 게이트웨이 어댑터가 책임지므로,

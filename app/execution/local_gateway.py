@@ -9,8 +9,8 @@ from uuid import uuid4
 
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
-from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
+from app.platform.artifact_manager import ArtifactManager
 from app.systems.loader import load_workflow_executors
 
 

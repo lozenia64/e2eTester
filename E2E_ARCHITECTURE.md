@@ -171,6 +171,8 @@ e2eTester/
         email_notification.py      # EmailNotificationSubscriber (종료 메일)
     execution/
       gateway.py                   # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
+      results.py                   # StepExecutionResult: 실행 결과 계약(WP-C4 — runner 에서 이관)
+      session_checkpoint.py        # SessionCheckpointStorePort + SessionCheckpoint (모듈 경계 내구 체크포인트)
       composite_gateway.py         # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       local_gateway.py             # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
       remote_gateway.py            # RemoteExecutionGateway: worker/ HTTP API 클라이언트
@@ -244,11 +246,12 @@ e2eTester/
         rep_homepage/
           constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
       fixtures/                    # 계약 테스트용 최소 HTML
-    runner/
-      artifact_manager.py
+    platform/                      # 공유 인프라·기술 유틸(특정 컨텍스트 무소속)
+      artifact_manager.py          # 아티팩트 경로·파일 관리(실행 평면 아님 — 오케스트레이션이 경로 계산)
+    runner/                        # 실행 평면(Playwright 구동 — contexts/api 는 import 금지, AG-009)
       screenshot.py                # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
       step_outcome.py              # StepOutcome 타입드 결과 (StepCompleted/StepNeedsInput)
-      workflow_common.py
+      workflow_common.py           # write_log_line + StepExecutionResult 재노출(계약은 execution/results.py)
       workflow_engine.py           # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
     scenarios/
       rep_homepage/                # 대표홈페이지(PC·모바일) 공용 시나리오 (채널 무관 1벌)

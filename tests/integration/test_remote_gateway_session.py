@@ -12,7 +12,7 @@ import uvicorn
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
 from app.execution.remote_gateway import RemoteExecutionGateway
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
 from tests.test_local_gateway_session import _FakeExecutor, _module
 from worker.http_server import create_http_app
 from worker.session_server import SessionServer

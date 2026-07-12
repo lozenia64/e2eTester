@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
 
 
 class SimulatedExecutionGateway(ExecutionGateway):

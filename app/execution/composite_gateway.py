@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
-from app.runner.workflow_common import StepExecutionResult
+from app.execution.results import StepExecutionResult
 
 
 class CompositeExecutionGateway(ExecutionGateway):

@@ -10,7 +10,7 @@ from app.contexts.healing.models import HealingAttempt
 from app.contexts.healing.page_proxy import HealedPage
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.screenshot import capture_screenshot
 from app.runner.step_logging import pop_sink, push_sink
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome

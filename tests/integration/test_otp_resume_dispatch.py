@@ -14,9 +14,9 @@ from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.job_queue_port import RunJobDescriptor
 from app.execution.simulated_gateway import SimulatedExecutionGateway
+from app.platform.artifact_manager import ArtifactManager
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.run_control_store import InMemoryRunControlStore
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.run_log_store import InMemoryRunLogStore
