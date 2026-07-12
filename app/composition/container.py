@@ -179,7 +179,7 @@ class AppContainer:
         )
 
         self.suite_write_repo = SqliteSuiteWriteRepository(self.es_db)
-        self.suite_repository = SqliteSuiteRepository(self.db_path)
+        self.suite_repository = SqliteSuiteRepository(self.es_db)
         self.schedule_repository = SqliteScheduleRepository(self.db_path)
         self.suite_control_store = SqliteSuiteControlStore(self.db_path)
         self.suite_input_store = EncryptedSqliteSuiteInputStore(self.es_db, encryption_secret)

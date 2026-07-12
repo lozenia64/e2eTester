@@ -68,9 +68,12 @@ async def test_migration_normalizes_failed_and_creates_stream(tmp_path: Path) ->
     assert [e["event_type"] for e in events] == ["RunImported"]
     assert events[0]["stream_position"] == 1
 
-    # blob 이 정규화됐다(FAILED→ANOMALY).
-    row = await db.fetchone("SELECT data FROM runs WHERE id = ?", ("run_legacy",))
-    migrated_run = RunRecord.deserialize(row["data"])
+    # 마이그레이션 결과(스냅샷 — 유일 상태 저장소)가 정규화됐다(FAILED→ANOMALY).
+    # 레거시 runs blob 은 마이그레이션 입력일 뿐 더 이상 갱신/조회되지 않는다(WP-B6).
+    snap = await db.fetchone(
+        "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", ("Run:run_legacy",)
+    )
+    migrated_run = RunRecord.deserialize(snap["state_json"])
     assert migrated_run.status == RunStatus.ANOMALY
     assert migrated_run.modules[0].status == ModuleStatus.ANOMALY
 

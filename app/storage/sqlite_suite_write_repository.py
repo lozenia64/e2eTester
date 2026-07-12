@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 
 from app.core.suite_models import SuiteRun
@@ -32,16 +31,17 @@ class SqliteSuiteWriteRepository:
         return suite
 
     async def get_suite(self, suite_id: str) -> SuiteRun:
-        row = await self._db.fetchone("SELECT data FROM suites WHERE id = ?", (suite_id,))
+        # 스냅샷(이벤트 폴드 파생 캐시)이 유일한 상태 저장소다(suites blob 폐기, WP-B6).
+        row = await self._db.fetchone(
+            "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?",
+            (f"Suite:{suite_id}",),
+        )
         if row is None:
             raise KeyError(suite_id)
-        data = row["data"]
-        if isinstance(data, str) and data.startswith('"'):
-            data = json.loads(data)
-        return SuiteRecord.deserialize(data)
+        return SuiteRecord.deserialize(row["state_json"])
 
     async def append_events(self, events: list[DomainEvent]) -> None:
-        """상태 blob 없이 이벤트·아웃박스만 적재(로그 핫패스 등)."""
+        """상태 스냅샷 없이 이벤트·아웃박스만 적재."""
         if not events:
             return
         async with await self._db.transaction() as tx:
@@ -50,16 +50,9 @@ class SqliteSuiteWriteRepository:
     async def _persist(self, suite: SuiteRun, events: list[DomainEvent]) -> None:
         payload = SuiteRecord.serialize(suite)
         async with await self._db.transaction() as tx:
-            tx.execute(
-                """
-                INSERT INTO suites (id, data) VALUES (?, ?)
-                ON CONFLICT(id) DO UPDATE SET data = excluded.data
-                """,
-                (suite.suite_id, payload),
-            )
             if events:
                 self._append_events_sync(tx, events)
-            # 스냅샷 = 이벤트 폴드의 파생 캐시(Run 쓰기 경로와 동형).
+            # 스냅샷 = 이벤트 폴드의 파생 캐시(유일 상태 저장소, Run 쓰기 경로와 동형).
             version = self._current_stream_position(tx, "Suite", suite.suite_id)
             tx.execute(
                 """
