@@ -132,7 +132,9 @@ def evolve(state: RunSnapshot | None, event: DomainEvent) -> RunSnapshot:
     base = state if state is not None else _EMPTY
     payload = event.payload
 
-    if event.event_type == "RunCreated":
+    # RunImported(레거시 마이그레이션 genesis)는 RunCreated 와 동일하게 빈 상태에서 최종 상태를
+    # 초기화한다 — run_summary 로 런레벨, all_modules 로 모듈 전체를 세운다.
+    if event.event_type in ("RunCreated", "RunImported"):
         base = replace(_EMPTY, run_id=event.aggregate_id)
         summary = payload.get("run_summary")
         if summary is not None:

@@ -65,7 +65,8 @@ FastAPI app
 - AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
 - 하나의 Run 안에서는 공유 브라우저 세션을 유지한 채 단계형 모듈을 순차 실행한다.
 - **Suite** 는 시스템 단위로 Run을 순차 생성한다. 각 시스템 Run은 별도 브라우저 세션을 갖고, Suite는 시스템 간 OTP 대기(`WAITING_INPUT`)를 중계한다.
-- 모듈 로그와 상태 이벤트는 **OutboxRelay → RealtimeProjector** 단일 파이프라인을 통해 WebSocket에 전파된다(오케스트레이터가 저장소 리스너에 직접 publish 하지 않음).
+- **상태 전이 이벤트**는 **OutboxRelay → RealtimeProjector** 단일 파이프라인을 통해 WebSocket에 전파된다(오케스트레이터가 저장소 리스너에 직접 publish 하지 않음). **모듈 로그는 예외다(WP-B5)**: 로그는 도메인 이벤트가 아니라 유실 허용 가능한 고빈도 스트림이므로, 이벤트 스토어·아웃박스·프로젝션을 경유하지 않고 `RunService._handle_module_log` 가 `RunLogStorePort`(영속)와 실시간 채널(`module_log` DashboardEvent)에 **직접** 넣는다.
+- **이벤트 = 진실의 원천(WP-B2/B3)**: Run 상태는 `domain_events` 스트림에서 유도된다. `app/domain/run_decider.py` 의 순수 함수 `decide(cmd, state) → events` / `evolve(state, event) → state` 가 커맨드를 이벤트로, 이벤트를 상태로 접는다(`rebuild_state` = 스트림 전체 폴드). 각 이벤트는 스트림 내 단조 `stream_position`(낙관적 동시성 좌표, `UNIQUE(aggregate_type, aggregate_id, stream_position)`)을 갖고, `aggregate_snapshots` 테이블은 이 폴드의 **파생 캐시**일 뿐이다 — `scripts/rebuild_snapshots.py --validate`(CI `snapshot_validate` 게이트)가 "이벤트 폴드 == 라이브 스냅샷"을 상시 실증한다. 레거시 blob 은 `scripts/migrate_blob_to_events.py` 가 `RunImported` genesis 이벤트 + 스냅샷으로 1회 이관한다(FAILED→ANOMALY 정규화 포함).
 
 ## 4. 현재 폴더 구조
 

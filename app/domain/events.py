@@ -264,6 +264,28 @@ def module_failure_analysis_attached(
     )
 
 
+def run_imported(
+    run_id: str,
+    *,
+    run_summary: dict,
+    all_modules: list[dict],
+) -> DomainEvent:
+    """레거시 blob → 이벤트 스트림 1회성 마이그레이션의 genesis 이벤트(WP-B6).
+
+    합성 가능한 세부 전이를 일일이 재구성하는 대신, 종료된 Run 의 **최종 상태 전체**
+    (run_summary + 모든 모듈 와이어)를 한 이벤트에 담는다. ``evolve`` 는 이를 ``RunCreated`` 와
+    동일하게 접어(빈 상태에서 초기화) 권위 있는 스냅샷을 재구성한다 — 이후 프로젝션 리빌드가
+    이 스트림에서 결정적으로 파생된다. ``schema_version`` 으로 합성 출처를 표기한다.
+    """
+    return DomainEvent.create(
+        "Run",
+        run_id,
+        "RunImported",
+        {"run_summary": run_summary, "all_modules": all_modules},
+        schema_version=2,
+    )
+
+
 def run_deleted(run_id: str) -> DomainEvent:
     """Run 삭제(보존 정리·수동 삭제) — 프로젝션이 파생 행을 함께 정리하도록 발행한다.
 
