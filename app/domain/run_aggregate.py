@@ -77,6 +77,7 @@ class RunAggregate:
                 run.run_id,
                 run.system_code,
                 run.triggered_by,
+                all_modules=aggregate._all_modules_wire(),
             )
         )
         return aggregate
@@ -107,6 +108,10 @@ class RunAggregate:
         wire = module.model_dump(mode="json")
         wire.pop("logs", None)
         return wire
+
+    def _all_modules_wire(self) -> list[dict]:
+        """현재 전체 모듈의 와이어 스냅샷(벌크 전이 이벤트용 — evolve 완전성)."""
+        return [self._module_wire(module) for module in self._state.modules]
 
     # --- 조회(규칙/판정) --------------------------------------------------
 
@@ -324,6 +329,7 @@ class RunAggregate:
             domain_events.run_partial_rerun_started(
                 self._state.run_id,
                 from_module_id,
+                all_modules=self._all_modules_wire(),
             )
         )
 
@@ -420,7 +426,11 @@ class RunAggregate:
             if module.status in _MODULE_ACTIVE:
                 module.status = ModuleStatus.CANCELLED
                 module.message = "서버 재시작으로 중단됨"
-        self._emit(domain_events.run_sealed_interrupted(self._state.run_id))
+        self._emit(
+            domain_events.run_sealed_interrupted(
+                self._state.run_id, all_modules=self._all_modules_wire()
+            )
+        )
         self._emit_run_finished()
         return True
 

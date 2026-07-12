@@ -47,12 +47,24 @@ class DomainEvent:
 # --- Run events -----------------------------------------------------------
 
 
-def run_created(run_id: str, system_code: str, triggered_by: str) -> DomainEvent:
+def run_created(
+    run_id: str,
+    system_code: str,
+    triggered_by: str,
+    *,
+    all_modules: list[dict] | None = None,
+) -> DomainEvent:
+    # 이벤트를 진실의 원천으로 만드는 evolve 폴드가 빈 상태에서 초기 Run 을 재구성할 수 있도록
+    # 초기 모듈 전체 스냅샷을 싣는다. 런레벨 초기 필드는 _emit 이 주입하는 run_summary 가 담는다.
     return DomainEvent.create(
         "Run",
         run_id,
         "RunCreated",
-        {"system_code": system_code, "triggered_by": triggered_by},
+        {
+            "system_code": system_code,
+            "triggered_by": triggered_by,
+            "all_modules": all_modules or [],
+        },
     )
 
 
@@ -218,8 +230,12 @@ def run_comparison_attached(
     )
 
 
-def run_sealed_interrupted(run_id: str) -> DomainEvent:
-    return DomainEvent.create("Run", run_id, "RunSealedInterrupted", {})
+def run_sealed_interrupted(run_id: str, *, all_modules: list[dict] | None = None) -> DomainEvent:
+    # 봉인은 여러 모듈을 한 번에 CANCELLED 로 바꾸므로, evolve 완전성을 위해 전체 모듈
+    # 스냅샷을 싣는다(개별 module_finished 이벤트를 내지 않는 벌크 전이).
+    return DomainEvent.create(
+        "Run", run_id, "RunSealedInterrupted", {"all_modules": all_modules or []}
+    )
 
 
 def run_module_retried(
@@ -233,12 +249,16 @@ def run_module_retried(
     )
 
 
-def run_partial_rerun_started(run_id: str, from_module_id: str) -> DomainEvent:
+def run_partial_rerun_started(
+    run_id: str, from_module_id: str, *, all_modules: list[dict] | None = None
+) -> DomainEvent:
+    # 부분 재실행은 from_index 이후 모듈들을 한 번에 초기화하므로, evolve 완전성을 위해
+    # 전체 모듈 스냅샷을 싣는다(개별 모듈 리셋 이벤트를 내지 않는 벌크 전이).
     return DomainEvent.create(
         "Run",
         run_id,
         "RunPartialRerunStarted",
-        {"from_module_id": from_module_id},
+        {"from_module_id": from_module_id, "all_modules": all_modules or []},
     )
 
 
