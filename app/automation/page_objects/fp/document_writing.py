@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 
-from playwright.sync_api import Page
+from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.runner.step_logging import log
@@ -12,10 +12,8 @@ from app.systems.access_common import browser
 CONTRACT_WRITE_PAGE_PATH = "/fp/loan/sales02.do"
 DOCUMENT_COMPLETE_PAGE_PATH = "/fp/loan/sales03.do"
 
-ROW8_FORM_VIEW_BUTTON = "#btnGroup8"
-ROW8_STATUS_CELL = "#check8"
-ROW8_FORM_LABEL = "(신)정보보호서약서_설계사대리점"
-ROW8_COMPLETE_TEXT = "작성완료"
+INFORMATION_SECURITY_PLEDGE_FORM_LABEL = "(신)정보보호서약서_설계사대리점"
+FORM_COMPLETE_TEXT = "작성완료"
 
 AUTH_BUTTON = "#btnSaveCert"
 SMS_REQUEST_LINK = "#btnSendAuth"
@@ -189,16 +187,34 @@ def _draw_circle_signature(popup: Page) -> None:
     _verify_oz_signature_registered(popup)
 
 
+def _resolve_information_security_pledge_row(page: Page) -> tuple[Locator, Locator]:
+    """양식명으로 계약서 작성 목록 행을 찾고 양식보기·상태 셀을 반환한다."""
+    log(f"[step] Find form row by label: {INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r}")
+    row = page.locator("tr").filter(has_text=INFORMATION_SECURITY_PLEDGE_FORM_LABEL)
+    row.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    if row.count() == 0:
+        raise RuntimeError(f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 양식 행을 찾지 못했습니다.")
+    target_row = row.first
+    view_button = target_row.locator("[id^='btnGroup']")
+    status_cell = target_row.locator("[id^='check']")
+    view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    status_cell.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    btn_id = view_button.get_attribute("id") or ""
+    check_id = status_cell.get_attribute("id") or ""
+    log(f"[wait] Resolved form row controls: view={btn_id!r}, status={check_id!r}")
+    return view_button, status_cell
+
+
 def _open_and_submit_information_security_pledge(page: Page) -> None:
-    log(f"[step] Open row-8 form view: {ROW8_FORM_LABEL!r}")
-    view_button = page.locator(ROW8_FORM_VIEW_BUTTON)
+    view_button, _ = _resolve_information_security_pledge_row(page)
+    log(f"[step] Open form view: {INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r}")
     view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
 
     with page.context.expect_page(timeout=OZ_POPUP_TIMEOUT_MS) as popup_info:
         view_button.click()
     popup = popup_info.value
     popup.wait_for_load_state("domcontentloaded", timeout=OZ_POPUP_TIMEOUT_MS)
-    log(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
+    log(f"[wait] Settle after form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
     popup.wait_for_timeout(OZ_POPUP_OPEN_SETTLE_MS)
     if OZ_POPUP_URL_FRAGMENT not in popup.url:
         raise RuntimeError(f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}")
@@ -222,16 +238,17 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
                 pass
 
 
-def _wait_for_row8_complete(page: Page) -> None:
+def _wait_for_form_complete(page: Page) -> None:
     log(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
     page.wait_for_timeout(FORM_SUBMIT_SETTLE_MS)
-    status = page.locator(ROW8_STATUS_CELL)
+    _, status = _resolve_information_security_pledge_row(page)
     status.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     text = (status.text_content() or "").strip()
-    log(f"[step] Verify row-8 status cell: {text!r}")
-    if ROW8_COMPLETE_TEXT not in text:
+    log(f"[step] Verify form status cell: {text!r}")
+    if FORM_COMPLETE_TEXT not in text:
         raise RuntimeError(
-            f"순번 8 정보보호서약서 상태가 {ROW8_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
+            f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 상태가 "
+            f"{FORM_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
         )
 
 
@@ -303,7 +320,7 @@ def request_otp(
     browser.maybe_close_popup(page)
     _ensure_contract_write_page(page, base_url)
     _open_and_submit_information_security_pledge(page)
-    _wait_for_row8_complete(page)
+    _wait_for_form_complete(page)
     _open_phone_auth_section(page, dialog_messages)
     _request_sms_code(page, dialog_messages)
     return "휴대폰 인증문자 발송 성공"
