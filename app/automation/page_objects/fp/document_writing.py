@@ -247,9 +247,7 @@ def _wait_for_pledge_complete(page: Page) -> None:
     text = (status.text_content() or "").strip()
     log(f"[step] Verify pledge form status cell: {text!r}")
     if PLEDGE_COMPLETE_TEXT not in text:
-        raise RuntimeError(
-            f"정보보호서약서 상태가 {PLEDGE_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
-        )
+        raise RuntimeError(f"정보보호서약서 상태가 {PLEDGE_COMPLETE_TEXT!r} 가 아닙니다: {text!r}")
 
 
 def _open_phone_auth_section(page: Page, dialog_messages: list[str]) -> None:
