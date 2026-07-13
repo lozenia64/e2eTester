@@ -252,14 +252,17 @@ def _wait_for_form_complete(page: Page) -> None:
     log(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
     page.wait_for_timeout(FORM_SUBMIT_SETTLE_MS)
     _, status = _resolve_information_security_pledge_row(page)
-    status.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    text = (status.text_content() or "").strip()
-    log(f"[step] Verify form status cell: {text!r}")
-    if FORM_COMPLETE_TEXT not in text:
+    completed = status.filter(has_text=FORM_COMPLETE_TEXT)
+    try:
+        completed.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    except PlaywrightTimeoutError:
+        text = (status.text_content() or "").strip()
         raise RuntimeError(
             f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 상태가 "
             f"{FORM_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
-        )
+        ) from None
+    text = (completed.text_content() or "").strip()
+    log(f"[step] Verify form status cell: {text!r}")
 
 
 def _open_phone_auth_section(page: Page, dialog_messages: list[str]) -> None:
