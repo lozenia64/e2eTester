@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from collections import defaultdict
 from pathlib import Path
+
+from app.platform.sqlite_connection import connect_sqlite
 
 
 class SqliteRunLogStore:
@@ -19,11 +20,7 @@ class SqliteRunLogStore:
     """
 
     def __init__(self, db_path: str | Path) -> None:
-        path = Path(db_path)
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn = connect_sqlite(db_path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS run_logs ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "

@@ -21,18 +21,21 @@ from app.eventsourcing.support import SqliteDatabase, ensure_schema
 
 async def main_async(db_path: str, *, validate: bool) -> int:
     db = SqliteDatabase(db_path)
-    await ensure_schema(db)
-    report = await rebuild_all_snapshots(db, verify_only=validate)
-    if validate:
-        if not report.ok:
-            print("snapshot validation failed:")
-            for aggregate_id in report.mismatches:
-                print(f"  - {aggregate_id} live snapshot != event fold")
-            return 1
-        print(f"snapshot validation passed ({report.rebuilt} streams)")
+    try:
+        await ensure_schema(db)
+        report = await rebuild_all_snapshots(db, verify_only=validate)
+        if validate:
+            if not report.ok:
+                print("snapshot validation failed:")
+                for aggregate_id in report.mismatches:
+                    print(f"  - {aggregate_id} live snapshot != event fold")
+                return 1
+            print(f"snapshot validation passed ({report.rebuilt} streams)")
+            return 0
+        print(f"rebuilt {report.rebuilt} snapshots from domain events")
         return 0
-    print(f"rebuilt {report.rebuilt} snapshots from domain events")
-    return 0
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

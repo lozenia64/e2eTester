@@ -6,6 +6,7 @@ import redis.asyncio as redis
 
 from app.core.logging import get_logger
 from app.execution.job_queue_port import Job, RunJobDescriptor
+from app.platform.redis_client import connect_redis_async
 
 logger = get_logger(__name__)
 
@@ -69,7 +70,7 @@ class RedisJobQueue:
 
     async def _get_client(self) -> redis.Redis:
         if self._client is None:
-            self._client = redis.from_url(self._redis_url, decode_responses=True)
+            self._client = connect_redis_async(self._redis_url, decode_responses=True)
         return self._client
 
     async def submit(self, job: Job, *, label: str) -> None:

@@ -33,28 +33,18 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.platform.stdio_utf8 import configure_stdio_utf8
+
+configure_stdio_utf8()
+
 
 def _configure_stdio_utf8() -> None:
-    """Windows PowerShell/콘솔에서 한글 stdout이 깨지지 않도록 UTF-8로 맞춘다."""
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            kernel32 = ctypes.windll.kernel32
-            kernel32.SetConsoleOutputCP(65001)
-            kernel32.SetConsoleCP(65001)
-        except Exception:
-            pass
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            try:
-                reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
-
-
-_configure_stdio_utf8()
+    """Backward-compatible alias for scripts that still reference the old name."""
+    configure_stdio_utf8()
 
 
 try:

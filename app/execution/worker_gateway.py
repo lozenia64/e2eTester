@@ -26,6 +26,17 @@ from app.execution.results import StepExecutionResult
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"
 
 
+def _format_remote_error(code: int, detail: str) -> str:
+    lowered = detail.lower()
+    if "6379" in detail or ("connecting to" in lowered and "redis" in lowered):
+        return (
+            f"인프라 오류 {code}: Redis 에 연결할 수 없습니다. "
+            "scripts/run_local.py 로 기동하거나 Redis 를 먼저 실행하세요. "
+            f"상세: {detail}"
+        )
+    return f"원격 실행 오류 {code}: {detail}"
+
+
 class WorkerExecutionGateway(ExecutionGateway):
     """원격 워커 HTTP API 를 호출하는 ExecutionGateway 클라이언트.
 
@@ -179,7 +190,7 @@ class WorkerExecutionGateway(ExecutionGateway):
                     data = json.loads(raw)
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", errors="replace")
-                raise RuntimeError(f"원격 실행 오류 {exc.code}: {detail}") from exc
+                raise RuntimeError(_format_remote_error(exc.code, detail)) from exc
             if response_type is dict:
                 return data
             return response_type.model_validate(data)

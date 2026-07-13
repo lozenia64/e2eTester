@@ -34,12 +34,7 @@ python3 -m playwright install chromium
 # 4) 관리자 계정·비밀 값 설정
 cp .env.example .env               # .env 를 열어 관리자 계정·JWT 비밀값을 바꾸세요
 
-# 5) Redis 실행 (미설치라면 Docker 가 가장 쉬움)
-mkdir -p redis-data
-docker run -d --name e2e-redis -p 6379:6379 \
-  -v "$(pwd)/redis-data:/data" redis:7 redis-server --dir /data
-
-# 6) 앱 실행 (API + 워커를 함께 기동)
+# 5) 앱 실행 (Redis 미기동 시 run_local.py 가 자동으로 띄움 — redis-server 또는 Docker 필요)
 python3 scripts/run_local.py
 ```
 
@@ -51,7 +46,7 @@ python3 scripts/run_local.py
 
 이 앱은 **웹/오케스트레이션(API)** 과 **브라우저 실행(워커)** 을 분리해서 돕니다. API 프로세스에는 브라우저가 없고, 실제 Playwright 브라우저는 별도 **워커 프로세스**가 구동합니다. 둘은 Redis 를 통해 세션 리스·실시간 알림을 공유합니다. 그래서 실제 점검을 돌리려면 **API + 워커 + Redis** 세 가지가 필요합니다.
 
-`scripts/run_local.py` 가 이 API·워커 두 프로세스를 **한 번에 띄우고 함께 종료**해 주므로, 로컬에서는 이 스크립트 하나만 실행하면 됩니다. (내부적으로 `E2E_EXECUTION_MODE=remote` 로 API가 워커에 위임하도록 설정합니다.)
+`scripts/run_local.py` 가 **Redis(미기동 시 자동 기동) + API + 워커** 세 프로세스를 **한 번에 띄우고 함께 종료**해 주므로, 로컬에서는 이 스크립트 하나만 실행하면 됩니다. (내부적으로 `E2E_EXECUTION_MODE=remote` 로 API가 워커에 위임하도록 설정합니다.)
 
 ---
 
@@ -70,6 +65,9 @@ python3 scripts/run_local.py
 Redis 가 없다면 아래 중 하나로 준비합니다(가장 쉬운 건 Docker).
 
 ```bash
+# Windows — winget install Redis.Redis (설치 시 Windows 서비스가 6379 에 자동 기동)
+# → 별도 run_redis.py 없이 python3 scripts/run_local.py 만 실행하면 됩니다.
+
 # Docker (권장 — OS 무관, dump.rdb → redis-data/)
 mkdir -p redis-data
 docker run -d --name e2e-redis -p 6379:6379 \
@@ -154,7 +152,7 @@ E2E_ADMIN_PASSWORD=admin1234
 
 ### 5. 실행 — `scripts/run_local.py`
 
-가상환경이 활성화된 상태에서(그리고 Redis 가 떠 있는 상태에서) 아래 한 줄이면 API 와 워커가 함께 뜹니다.
+가상환경이 활성화된 상태에서 아래 한 줄이면 Redis(필요 시)·API·워커가 함께 뜹니다.
 
 ```bash
 python3 scripts/run_local.py
@@ -162,6 +160,7 @@ python3 scripts/run_local.py
 
 - API 대시보드: `http://127.0.0.1:2222`
 - 워커 HTTP: `http://127.0.0.1:8100` (내부 통신용 — 직접 접속할 필요 없음)
+- Redis 를 별도로 관리한다면: `python3 scripts/run_local.py --no-start-redis`
 - 포트를 바꾸려면: `python3 scripts/run_local.py --api-port 3000 --worker-port 8200`
 - 실제로 띄우지 않고 실행될 명령만 확인하려면(점검용): `python3 scripts/run_local.py --print`
 
@@ -311,7 +310,7 @@ API 요청 시 `selected_system_codes`를 생략하면 기존과 같이 전체 �
 
 추가로 아래 사항을 알아두면 됩니다.
 
-- Run/Suite 실행 이력·상태와 cron 예약은 **SQLite 파일에 영속**되어 서버를 재시작해도 남습니다. 저장 경로는 환경변수 `E2E_DB_PATH`(미설정 시 `data/e2etester.db`)로 지정합니다.
+- Run/Suite 실행 이력·상태와 cron 예약은 **SQLite 파일에 영속**되어 서버를 재시작해도 남습니다. 저장 경로는 환경변수 `E2E_DB_PATH`(미설정 시 `data/e2etester.db`)로 지정합니다. 동일 DB에 여러 연결이 쓰기할 때 락 대기 시간은 `E2E_SQLITE_BUSY_TIMEOUT_MS`(기본 `5000`, 밀리초)로 조정합니다.
 - Run 실행은 **감독되는 작업 큐**의 워커 풀이 소비합니다. 동시에 실행할 Run 수는 매니페스트 `execution_profile` 별로 `E2E_RUN_CONCURRENCY_HEAVY`(기본 2)·`E2E_RUN_CONCURRENCY_LIGHT`(4)·`E2E_RUN_CONCURRENCY_INTERACTIVE`(2)로 조정합니다. 레거시 전역 상한은 `E2E_RUN_CONCURRENCY`(미설정 시 4)입니다.
 - 운영 로그는 **structlog** 로 출력합니다. `E2E_LOG_LEVEL`(기본 `INFO`)과 `E2E_LOG_FORMAT`(`console` 또는 `json`)으로 조정합니다. Run/Suite/스케줄 생명주기 이벤트는 관리자 **운영 관측** 페이지(`/admin/ops`)에서도 확인할 수 있습니다.
 - 다만 서버를 내릴 때 **진행 중이던 Run/Suite**(RUNNING·OTP 대기)는 브라우저 세션이 함께 사라지므로 이어받을 수 없습니다. 재기동 시 자동으로 `CANCELLED` 로 정리되며, 필요하면 해당 Run을 **재실행(rerun)** 하면 됩니다. (OTP 대기는 **휴대폰인증** Run에서, manifest 에 `requires_user_input` 으로 선언된 모듈에서만 발생합니다 — 대부분 본인인증/로그인 단계이며, FP 는 본인인증과 서류작성 두 단계가 해당합니다.)

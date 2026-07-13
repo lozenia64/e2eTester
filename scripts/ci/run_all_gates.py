@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.platform.stdio_utf8 import configure_stdio_utf8  # noqa: E402
 from scripts.ci.gates import (  # noqa: E402
     resolve_gates,
     run_gates,
@@ -20,6 +21,7 @@ from scripts.ci.gates import (  # noqa: E402
 
 
 def main() -> int:
+    configure_stdio_utf8()
     parser = argparse.ArgumentParser(description="Run e2eTester CI gates (SSOT)")
     parser.add_argument(
         "--workspace",

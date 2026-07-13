@@ -12,6 +12,11 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.core.settings import get_settings
+from app.platform.browser_profiles import (
+    normalize_workspace_for_hash,
+    playwright_mcp_profiles_root,
+    resolve_legacy_profile,
+)
 from app.runner.step_logging import log
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
@@ -23,10 +28,7 @@ DEFAULT_USER_DATA_ROOT: Final[Path] = Path.home() / ".e2etester"
 MOBILE_DEVICE_NAME: Final[str] = "iPhone 14 Pro"
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 
-# Playwright MCP(@playwright/mcp) persistent profile root — %LOCALAPPDATA%/ms-playwright-mcp
-PLAYWRIGHT_MCP_PROFILES_ROOT: Final[Path] = (
-    Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ms-playwright-mcp"
-)
+PLAYWRIGHT_MCP_PROFILES_ROOT: Final[Path] = playwright_mcp_profiles_root()
 PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE: Final[str] = "--disable-blink-features=AutomationControlled"
 
 # Playwright 가 Chrome 실행 시 끄는 기본 feature 들. 로컬 네트워크 차단 해제를 위해
@@ -95,10 +97,9 @@ def resolve_user_data_dir(profile_name: str) -> Path:
     override = get_settings().user_data_dir or os.environ.get("E2E_USER_DATA_DIR")
     if override:
         target = Path(override).expanduser() / profile_name
-    else:
-        target = DEFAULT_USER_DATA_ROOT / profile_name
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    return resolve_legacy_profile(profile_name, override=None)
 
 
 def resolve_workspace_dir() -> Path:
@@ -125,7 +126,7 @@ def resolve_playwright_mcp_user_data_dir(
         target = Path(override).expanduser()
     else:
         workspace = workspace_dir or resolve_workspace_dir()
-        token = hashlib.sha256(str(workspace).encode()).hexdigest()[:7]
+        token = hashlib.sha256(normalize_workspace_for_hash(workspace).encode()).hexdigest()[:7]
         target = PLAYWRIGHT_MCP_PROFILES_ROOT / f"mcp-{channel}-{token}"
     target.mkdir(parents=True, exist_ok=True)
     return target

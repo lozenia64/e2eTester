@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
+
+from app.platform.sqlite_connection import connect_sqlite
 
 DEFAULT_DB_PATH = "data/e2etester.db"
 
@@ -20,11 +21,7 @@ class JsonTableStore:
 
     def __init__(self, db_path: str | Path, table: str) -> None:
         self._table = table
-        path = Path(db_path)
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn = connect_sqlite(db_path, check_same_thread=False)
         self._conn.execute(
             f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
         )

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.run_models import FailureAnalysis, FailureAnalysisRequest, Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.core.system_models import ModuleDefinition
 from app.events.bus import EventBus, RunFinished
+from app.platform.artifact_manager import ArtifactManager
 
 
 class FailureAnalysisSubscriber:
@@ -95,7 +95,8 @@ class FailureAnalysisSubscriber:
 
     @staticmethod
     def _screenshot_path(module: RunModule) -> str | None:
+        manager = ArtifactManager()
         for artifact in module.artifacts:
             if artifact.lower().endswith(".png"):
-                return str(Path(artifact.lstrip("/")))
+                return str(manager.path_from_relative(artifact))
         return None

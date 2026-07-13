@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.platform.sqlite_connection import connect_sqlite
+
 DEFAULT_DB_PATH = "data/e2etester.db"
 
 
@@ -16,12 +18,8 @@ class SqliteDatabase:
     """Shared SQLite connection with WAL mode and async lock."""
 
     def __init__(self, db_path: str | Path) -> None:
-        path = Path(db_path)
-        if path.parent and not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._conn = connect_sqlite(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
         self._lock = asyncio.Lock()
 
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
@@ -52,6 +50,10 @@ class SqliteDatabase:
         async with self._lock:
             return await asyncio.to_thread(self._fetchone_sync, sql, params)
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection (required before deleting DB files on Windows)."""
+        self._conn.close()
+
     def _fetchone_sync(self, sql: str, params: tuple[Any, ...]) -> sqlite3.Row | None:
         cursor = self._conn.execute(sql, params)
         return cursor.fetchone()
@@ -70,7 +72,7 @@ class _Transaction:
 
     async def __aenter__(self) -> _Transaction:
         await self._lock.acquire()
-        await asyncio.to_thread(self._db._conn.execute, "BEGIN")
+        await asyncio.to_thread(self._db._conn.execute, "BEGIN IMMEDIATE")
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:

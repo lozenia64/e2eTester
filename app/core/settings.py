@@ -54,6 +54,11 @@ class E2ESettings(BaseSettings):
 
     # 영속 저장소·실행
     db_path: str = Field(default="data/e2etester.db", validation_alias="E2E_DB_PATH")
+    sqlite_busy_timeout_ms: int = Field(
+        default=5000,
+        ge=0,
+        validation_alias="E2E_SQLITE_BUSY_TIMEOUT_MS",
+    )
     run_concurrency: int = Field(default=4, ge=1, validation_alias="E2E_RUN_CONCURRENCY")
     run_concurrency_heavy: int = Field(
         default=2, ge=1, validation_alias="E2E_RUN_CONCURRENCY_HEAVY"

@@ -16,15 +16,11 @@ from app.contexts.healing.models import (
     PatchStatus,
     ResolvedHealingPolicy,
 )
+from app.platform.sqlite_connection import connect_sqlite
 
 
 def _connect(db_path: str | Path) -> sqlite3.Connection:
-    path = Path(db_path)
-    if path.parent and not path.parent.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    return connect_sqlite(db_path, check_same_thread=False)
 
 
 def _iso(moment: datetime | None) -> str | None:

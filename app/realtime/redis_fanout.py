@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 import redis.asyncio as redis
 
 from app.core.logging import get_logger
+from app.platform.redis_client import connect_redis_async
 
 logger = get_logger(__name__)
 
@@ -30,7 +31,7 @@ class RedisRealtimeFanOut:
         """Redis 연결·pubsub 준비. 수신 루프는 첫 ``subscribe`` 이후에만 시작한다."""
         if self._running:
             return
-        self._client = redis.from_url(self._redis_url, decode_responses=True)
+        self._client = connect_redis_async(self._redis_url, decode_responses=True)
         await self._client.ping()
         self._pubsub = self._client.pubsub()
         self._running = True
