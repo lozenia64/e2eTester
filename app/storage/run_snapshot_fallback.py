@@ -23,6 +23,13 @@ _ACTIVE_MODULE_STATUSES = frozenset(
         ModuleStatus.WAITING_INPUT,
     }
 )
+_ACTIVE_RUN_STATUSES = frozenset(
+    {
+        RunStatus.PENDING,
+        RunStatus.RUNNING,
+        RunStatus.WAITING_INPUT,
+    }
+)
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -36,7 +43,7 @@ def is_incomplete_snapshot(run: Run) -> bool:
     """스냅샷이 상세 화면에 쓸 수 없을 정도로 비어 있으면 True."""
     if not run.modules:
         return True
-    if run.status in _ACTIVE_MODULE_STATUSES:
+    if run.status in _ACTIVE_RUN_STATUSES:
         has_terminal_module = any(
             module.status not in _ACTIVE_MODULE_STATUSES for module in run.modules
         )

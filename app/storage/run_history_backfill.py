@@ -12,9 +12,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+if __name__ == "__main__":
+    _REPO_ROOT = Path(__file__).resolve().parents[2]
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
 
 from app.domain.summary_fields import run_summary_fields
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
