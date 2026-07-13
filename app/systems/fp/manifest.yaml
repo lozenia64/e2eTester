@@ -97,7 +97,7 @@ modules:
 - module_id: fp.document.writing
   system_code: fp
   name: 서류작성
-  description: 계약서 작성 화면에서 정보보호서약서(순번 8) 전자서명·휴대폰 인증 후 작성완료 화면까지 진행합니다.
+  description: 계약서 작성 화면에서 정보보호서약서 양식 전자서명·휴대폰 인증 후 작성완료 화면까지 진행합니다.
   group: workflow
   order: 30
   depends_on:

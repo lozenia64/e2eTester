@@ -35,7 +35,9 @@ python3 -m playwright install chromium
 cp .env.example .env               # .env 를 열어 관리자 계정·JWT 비밀값을 바꾸세요
 
 # 5) Redis 실행 (미설치라면 Docker 가 가장 쉬움)
-docker run -d --name e2e-redis -p 6379:6379 redis:7
+mkdir -p redis-data
+docker run -d --name e2e-redis -p 6379:6379 \
+  -v "$(pwd)/redis-data:/data" redis:7 redis-server --dir /data
 
 # 6) 앱 실행 (API + 워커를 함께 기동)
 python3 scripts/run_local.py
@@ -68,15 +70,25 @@ python3 scripts/run_local.py
 Redis 가 없다면 아래 중 하나로 준비합니다(가장 쉬운 건 Docker).
 
 ```bash
-# Docker (권장 — OS 무관)
-docker run -d --name e2e-redis -p 6379:6379 redis:7
+# Docker (권장 — OS 무관, dump.rdb → redis-data/)
+mkdir -p redis-data
+docker run -d --name e2e-redis -p 6379:6379 \
+  -v "$(pwd)/redis-data:/data" redis:7 redis-server --dir /data
 
-# macOS (Homebrew)
-brew install redis && brew services start redis
+# macOS/Linux — redis-server 직접 실행 (dump.rdb → redis-data/)
+brew install redis   # macOS
+python3 scripts/run_redis.py --daemonize yes
 
-# Ubuntu/Debian
+# Ubuntu/Debian (시스템 서비스 — 기본 경로는 /var/lib/redis)
 sudo apt-get install -y redis-server && sudo service redis-server start
 ```
+
+| 로컬 폴더 | 용도 | git 추적 |
+|-----------|------|----------|
+| `data/` | SQLite 앱 DB (`E2E_DB_PATH`, 기본 `data/e2etester.db`) | 아니오 |
+| `redis-data/` | Redis 영속 파일 (`dump.rdb`) — 세션·큐 캐시, 삭제해도 앱 DB는 유지 | 아니오 |
+
+Redis 영속 파일은 **git 에 올리지 않습니다**. 프로젝트 루트에 `dump.rdb` 가 생겼다면 Redis 를 작업 폴더에서 직접 띄운 경우이니, 위 Docker/`run_redis.py` 방식을 쓰거나 루트 파일은 삭제해도 됩니다.
 
 Redis 주소가 기본값(`redis://127.0.0.1:6379/0`)과 다르면 `.env` 의 `E2E_REDIS_URL` 로 바꿉니다.
 

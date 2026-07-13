@@ -5,6 +5,8 @@ artifacts/
 .env
 .playwright-mcp/
 data/
+redis-data/
+dump.rdb
 *.db
 *.db-wal
 *.db-shm
