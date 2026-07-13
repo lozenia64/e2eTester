@@ -190,15 +190,25 @@ def _draw_circle_signature(popup: Page) -> None:
 def _resolve_information_security_pledge_row(page: Page) -> tuple[Locator, Locator]:
     """양식명으로 계약서 작성 목록 행을 찾고 양식보기·상태 셀을 반환한다."""
     log(f"[step] Find form row by label: {INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r}")
-    row = page.locator("tr").filter(has_text=INFORMATION_SECURITY_PLEDGE_FORM_LABEL)
-    row.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    if row.count() == 0:
-        raise RuntimeError(f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 양식 행을 찾지 못했습니다.")
-    target_row = row.first
-    view_button = target_row.locator("[id^='btnGroup']")
-    status_cell = target_row.locator("[id^='check']")
-    view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    status_cell.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    target_row = page.locator("tr").filter(has_text=INFORMATION_SECURITY_PLEDGE_FORM_LABEL).first
+    try:
+        target_row.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    except PlaywrightTimeoutError:
+        raise RuntimeError(
+            f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 양식 행을 찾지 못했습니다."
+        ) from None
+
+    view_button = target_row.locator("[id^='btnGroup']").first
+    status_cell = target_row.locator("[id^='check']").first
+    try:
+        view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+        status_cell.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    except PlaywrightTimeoutError:
+        raise RuntimeError(
+            f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 행에서 "
+            "양식보기 버튼 또는 상태 셀을 찾지 못했습니다."
+        ) from None
+
     btn_id = view_button.get_attribute("id") or ""
     check_id = status_cell.get_attribute("id") or ""
     log(f"[wait] Resolved form row controls: view={btn_id!r}, status={check_id!r}")
