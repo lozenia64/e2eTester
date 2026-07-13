@@ -41,7 +41,7 @@ Browser
           -> CQRS 조회 포트(app/orchestrator/queries/ 질의 핸들러가 소비): RunSummaryQueryPort / ModuleHistoryQueryPort / SuiteSummaryQueryPort / AnomalyInboxQueryPort / DailyStatusQueryPort / StatsQueryPort (projection 테이블, blob 미접근)
           -> ExecutionGateway PORT    (app/execution/gateway.py — 오케스트레이션 ↔ 실행 경계)
               -> CompositeExecutionGateway (execution_mode 로 어댑터 라우팅)
-                  -> LocalExecutionGateway / RemoteExecutionGateway / SimulatedExecutionGateway
+                  -> WorkerExecutionGateway (→ 워커 SessionServer) / SimulatedExecutionGateway
                       -> WorkflowExecutor + app/automation/ (Flow + PageObject — systems/*/steps/ 삭제됨)
                           -> Shared Playwright browser session → Site
           -> SqliteRunWriteRepository + transactional outbox
@@ -60,7 +60,7 @@ FastAPI app
 현재 구조의 핵심 특징:
 
 - 웹 요청과 실행 orchestration은 같은 프로세스에 있다. 단, **오케스트레이션(상태머신)과 브라우저 실행(부작용)은 `ExecutionGateway` 포트(`app/execution/gateway.py`)로 분리**되어 있다. `RunService` 는 불투명하고 **직렬화 가능한** `ExecutionHandle`(frozen `execution_mode` + `session_id` 토큰, 라이브 런타임 참조 없음)만 들고 `open_session`/`run_step`/`submit_input`/`close_session` 을 호출할 뿐, Playwright 도 스레드 풀도 직접 다루지 않는다. 라이브 런타임은 게이트웨이 내부 세션 레지스트리(`_sessions`, `session_id` 키)에만 있어 오케스트레이터/`PendingOtpState` 로 새지 않는다.
-- 포트의 현재 구현은 in-process 어댑터 `LocalExecutionGateway`(`app/execution/local_gateway.py`)다. 이 어댑터가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close 호출이 모두 이 스레드에서 돈다. **이 스레드 풀은 게이트웨이의 `_Session`(명시적 "워커 경계" 객체)이 소유한다 — 과거처럼 `runtime.executor` 로 도메인 런타임에 몽키패치하지 않는다.** 예전에는 모든 시스템 런타임 dataclass 와 `WorkflowRuntime` Protocol 이 오직 게이트웨이를 위해 `executor` 필드를 들고 있어야 했다(인프라 관심사가 도메인 런타임으로 누수). 이제 풀은 세션에만 있고, `close_session` 이 세션이 소유한 풀을 정리한다. 실행 스레드 → 이벤트 루프 로그 브리지는 **논블로킹**이다: 실행 스레드는 `loop.call_soon_threadsafe(queue.put_nowait, line)` 로 큐에 넣기만 하고(즉시 반환, 이벤트 루프 완료를 기다리지 않음), `run_step` 안의 async 드레인 태스크가 `asyncio.Queue` 를 FIFO 로 비우며 로그 콜백을 순서대로 호출한다(느린 이벤트 루프가 더는 브라우저 스레드를 라인 단위로 막지 못함; 센티넬로 드레인 완료를 await 하므로 순서·"`module_finished` 이전 로그 flush" 불변식은 유지). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
+- 포트의 실 브라우저 구현은 워커 프로세스의 세션 호스트 `SessionServer`(`worker/session_server.py`)이며, API 는 `WorkerExecutionGateway`(`app/execution/worker_gateway.py`)로 HTTP 위임한다(실행 평면 분리 — API 프로세스에는 Playwright·실행 스레드가 없다; 구 in-process `LocalExecutionGateway` 는 폐기). `SessionServer` 가 워크플로 실행기를 `execution_mode` 기준으로 `app/systems/loader.py` 로 로드하고, 실제 Playwright sync API 실행을 **세션마다 만든 단일 스레드 `ThreadPoolExecutor`(`max_workers=1`)** 에서 수행한다. 같은 세션의 build/step/submit_input/close/capture_storage_state 호출이 모두 이 스레드에서 돈다. **이 스레드 풀은 세션의 `_Session`(명시적 "워커 경계" 객체)이 소유한다 — 과거처럼 `runtime.executor` 로 도메인 런타임에 몽키패치하지 않는다.** 예전에는 모든 시스템 런타임 dataclass 와 `WorkflowRuntime` Protocol 이 오직 게이트웨이를 위해 `executor` 필드를 들고 있어야 했다(인프라 관심사가 도메인 런타임으로 누수). 이제 풀은 세션에만 있고, `close_session` 이 세션이 소유한 풀을 정리한다. 실행 스레드 → 이벤트 루프 로그 브리지는 **논블로킹**이다: 실행 스레드는 `loop.call_soon_threadsafe(queue.put_nowait, line)` 로 큐에 넣기만 하고(즉시 반환, 이벤트 루프 완료를 기다리지 않음), `run_step` 안의 async 드레인 태스크가 `asyncio.Queue` 를 FIFO 로 비우며 로그 콜백을 순서대로 호출한다(느린 이벤트 루프가 더는 브라우저 스레드를 라인 단위로 막지 못함; 센티넬로 드레인 완료를 await 하므로 순서·"`module_finished` 이전 로그 flush" 불변식은 유지). HOM·MHM 은 같은 대표홈페이지 시나리오를 공유하므로 공용 `RepHomepageExecutor` 한 클래스에 채널 프로파일(`PC_CHANNEL` / `MOBILE_CHANNEL`)만 주입해 만든다.
 - 이 포트가 곧 "워커 경계"의 in-process 구현이다. 동일 포트로 별도 워커 프로세스/Playwright MCP 구현체를 끼우면 오케스트레이터를 손대지 않고 실행을 격리할 수 있다.
 - **세션 체크포인트(Phase C)**: 라이브 브라우저 세션은 프로세스-로컬이라 재기동/워커 교체 시 소실된다. `ExecutionGateway.capture_storage_state`(기본 no-op, 지원 어댑터만 구현)로 모듈 경계·OTP 일시정지 시 Playwright `storage_state`(쿠키+localStorage)를 캡처해 `SessionCheckpointStorePort`(암호화 SQLite `session_checkpoints`)에 저장한다. 재기동 시 `RunService.reconcile_interrupted_runs` 는 체크포인트가 있는 Run 을 봉인하지 않고 이어받는다(WAITING_INPUT 은 그대로 두어 `submit_otp` 가 재개, 그 외는 재개 잡 재발행). 복원 상태가 무효(로그인 만료)면 `RunStateMachine.decide_rehydration` 이 로그인 모듈부터 재실행하도록 결정한다(순수 규칙). 로컬 통합 기동은 `scripts/run_local.py`(API + 워커 동시 기동, `E2E_EXECUTION_MODE=remote`, Redis 필수).
 - AI 실패 분석·종료 메일 같은 **부수 관심사는 `EventBus`(`app/events/bus.py`) 구독자로 분리**되어 있다. 오케스트레이터는 Run/Suite 종료 시 `RunFinished`/`SuiteFinished` 도메인 이벤트만 발행하고, Gemini/SMTP 의 존재를 모른다.
@@ -174,8 +174,7 @@ e2eTester/
       results.py                   # StepExecutionResult: 실행 결과 계약(WP-C4 — runner 에서 이관)
       session_checkpoint.py        # SessionCheckpointStorePort + SessionCheckpoint (모듈 경계 내구 체크포인트)
       composite_gateway.py         # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
-      local_gateway.py             # LocalExecutionGateway: in-process 어댑터(스레드 풀·런타임 수명·로그 브리지)
-      worker_gateway.py            # WorkerExecutionGateway: worker/ HTTP API 클라이언트(원격 실행 위임)
+      worker_gateway.py            # WorkerExecutionGateway: worker/ HTTP API 클라이언트(실 브라우저 실행을 워커 SessionServer 로 위임)
       simulated_gateway.py         # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
       profile_queue.py             # ProfilePartitionedRunQueue: execution_profile 별 JobQueue 라우팅
       job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)
@@ -358,7 +357,7 @@ e2eTester/
   worker/
     main.py                        # out-of-process 브라우저 워커 진입점
     http_server.py                 # ExecutionGateway HTTP surface (resume-from-step 포함)
-    session_server.py              # Playwright 세션 수명 (LocalExecutionGateway 동형)
+    session_server.py              # SessionServer: 유일한 in-process Playwright 세션 호스트(스레드 풀·런타임 수명·로그 브리지·storage_state 캡처/복원)
   docs/
     DOCS_GOVERNANCE.md             # 문서 SSOT 매트릭스·PR 체크리스트
     CI.md                          # GitHub Actions·게이트 계층·branch protection 운영
@@ -699,8 +698,7 @@ manifest 에 들어 있는 정보:
 현재 구현:
 
 - `app/execution/composite_gateway.py` (`CompositeExecutionGateway` — 여러 어댑터를 `execution_mode` 로 라우팅하는 합성 게이트웨이. 어댑터 목록 배선은 컴포지션 루트 `app/composition/container.py`(`AppContainer`)가 소유)
-- `app/execution/local_gateway.py` (`LocalExecutionGateway` — in-process 어댑터)
-- `app/execution/remote_gateway.py` (`RemoteExecutionGateway` — `worker/` HTTP API, `resume-from-step` 포함)
+- `app/execution/worker_gateway.py` (`WorkerExecutionGateway` — `worker/` HTTP API 클라이언트, `resume-from-step`·`storage-state` 포함; 실 브라우저는 워커 `SessionServer` 가 구동)
 - `app/execution/simulated_gateway.py` (`SimulatedExecutionGateway` — simulated 테스트 더블)
 - `app/execution/profile_queue.py` (`ProfilePartitionedRunQueue` — manifest `execution_profile` 별 큐 라우팅)
 - `app/automation/` — Automation BC (Scenario → Flow → PageObject). **site automation은 `app/systems/*/steps/` 가 아니라 여기**에 있다(6시스템 전부 이전 완료).
@@ -1012,8 +1010,7 @@ Suite (`/ws/suites/{suite_id}`):
 ### 10.1 아직 구현되지 않은 것
 
 - Postgres 등 다중 프로세스/원격 영구 저장소 (SQLite 단일 파일 영속은 **구현됨** — 포트로 분리돼 있어 어댑터만 추가하면 됨)
-- 별도 worker process (단, `ExecutionGateway` 포트로 **교체 지점은 이미 마련됨** — `LocalExecutionGateway` 를 out-of-process 구현체로 바꾸면 됨)
-- Playwright MCP 게이트웨이 구현체 (포트는 `ExecutionGateway` 로 이미 존재)
+- Playwright MCP 게이트웨이 구현체 (포트는 `ExecutionGateway` 로 이미 존재; 현재는 워커 `SessionServer` 구현이 유일)
 - 병렬 실행 스케줄러 (실행 큐의 프로필별 워커 수로 동시 Run 수는 제한되지만, 동일 `execution_profile` 내 순차 전제는 유지)
 
 과거 이 목록에 있었으나 이후 **구현이 완료된 것**:
@@ -1033,7 +1030,7 @@ Suite (`/ws/suites/{suite_id}`):
 - **저장소 포트-어댑터 분리 + SQLite 영속** (`app/storage/ports.py` + `Sqlite*Repository`; Run/Suite/예약이 재시작 후에도 유지, 진행 중 실행은 기동 시 정리)
 - 모놀리식 스크립트의 단계 모듈 분리
 - 로그인 세션 공유형 워크플로우
-- **오케스트레이션 ↔ 브라우저 실행 분리** (`ExecutionGateway` 포트 + `LocalExecutionGateway` 어댑터; 워커 경계의 in-process 구현)
+- **오케스트레이션 ↔ 브라우저 실행 분리** (`ExecutionGateway` 포트 + `WorkerExecutionGateway` 어댑터 → 워커 `SessionServer`; API 프로세스에 브라우저 없음)
 - **부수 관심사(AI 분석·메일) 이벤트 구독자 분리** (`EventBus` + 구독자)
 - **상태머신 단위 테스트 가능** (`RunService` 가 Playwright/스레드/Gemini/SMTP 비의존)
 
@@ -1067,9 +1064,9 @@ Suite (`/ws/suites/{suite_id}`):
 
 ### Phase 3. 런타임 추상화 — ✅ 완료
 
-- ✅ `ExecutionGateway` 포트 (`LocalExecutionGateway` / `SimulatedExecutionGateway` / `RemoteExecutionGateway`)
-- ✅ sync API·스레드 모델·런타임 수명을 gateway 뒤로 이동
-- ✅ `E2E_EXECUTION_MODE=remote` 시 `RemoteExecutionGateway` + Redis job broker
+- ✅ `ExecutionGateway` 포트 (`WorkerExecutionGateway` → 워커 `SessionServer` / `SimulatedExecutionGateway`)
+- ✅ sync API·스레드 모델·런타임 수명을 워커 `SessionServer` 뒤로 이동(API 프로세스에 브라우저 없음)
+- ✅ `E2E_EXECUTION_MODE=remote` 시 Redis job broker + 워커 세션 리스
 
 ### Phase 4. 실행 분리 — ✅ 완료
 
@@ -1129,7 +1126,7 @@ Backend
 이 목표 구조로 가면 아래가 가능해진다.
 
 - 서버 재시작 후 Run 상태 유지 (✅ SQLite + encrypted input store)
-- 실행 격리 (✅ `worker/` 프로세스 + `RemoteExecutionGateway`)
+- 실행 격리 (✅ `worker/` 프로세스 `SessionServer` + `WorkerExecutionGateway`)
 - 병렬도 제어 (✅ `RedisJobQueue` + `E2E_RUN_CONCURRENCY`)
 - 테스트 모듈과 브라우저 구현 분리 (✅ `ExecutionGateway` + `app/automation/` BC)
 - Playwright MCP 기반 이관 (worker HTTP surface 준비; MCP 어댑터는 후속)

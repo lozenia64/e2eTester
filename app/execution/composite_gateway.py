@@ -10,9 +10,9 @@ from app.execution.results import StepExecutionResult
 class CompositeExecutionGateway(ExecutionGateway):
     """여러 ``ExecutionGateway`` 어댑터를 ``execution_mode`` 로 라우팅하는 합성 게이트웨이.
 
-    오케스트레이터는 단일 포트만 보고, 실제 실행(``LocalExecutionGateway``)과
-    시뮬레이션(``SimulatedExecutionGateway``)을 한 인터페이스로 다룬다. 어느 어댑터가
-    어떤 모드를 담당하는지는 컴포지션 루트(``app/main.py``)가 어댑터 목록 순서로 정한다.
+    오케스트레이터는 단일 포트만 보고, 실제 실행(``WorkerExecutionGateway`` → 워커
+    ``SessionServer``)과 시뮬레이션(``SimulatedExecutionGateway``)을 한 인터페이스로 다룬다.
+    어느 어댑터가 어떤 모드를 담당하는지는 컴포지션 루트(``AppContainer``)가 어댑터 목록 순서로 정한다.
 
     - ``supports`` / ``open_session`` 은 ``execution_mode`` 인자로 담당 어댑터를 고른다.
     - 세션 수명 메서드(``run_step`` / ``submit_input`` / ``close_session``)는 핸들이 들고

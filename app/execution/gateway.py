@@ -39,8 +39,9 @@ class ExecutionGateway(ABC):
         ``open_session`` → (``run_step`` | ``submit_input``)* → ``close_session``
 
     한 Run 의 모든 단계는 같은 핸들(같은 브라우저 세션)을 공유하며, OTP 대기로 일시정지한
-    뒤에도 같은 핸들로 재개한다. 현재 구현은 in-process(``LocalExecutionGateway``)지만,
-    동일 포트로 별도 워커 프로세스/Playwright MCP 구현체로 교체할 수 있다.
+    뒤에도 같은 핸들로 재개한다. 실제 브라우저 구현은 워커 프로세스의 ``SessionServer``
+    (``WorkerExecutionGateway`` 가 HTTP 로 호출)이며, 동일 포트로 다른 워커/Playwright MCP
+    구현체로 교체할 수 있다.
     """
 
     @abstractmethod

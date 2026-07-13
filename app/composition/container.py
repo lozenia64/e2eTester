@@ -229,8 +229,8 @@ class AppContainer:
 
         # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
         # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
-        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. LocalExecutionGateway(in-process
-        # 브라우저)는 워커 전용이 되어 API 컴포지션에서 인스턴스화하지 않는다.
+        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. in-process 브라우저 호스트는
+        # 워커의 SessionServer 하나뿐이다(구 LocalExecutionGateway 는 폐기).
         self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
 
         self.healing_service = HealingService(

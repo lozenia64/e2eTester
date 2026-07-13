@@ -38,8 +38,9 @@ class _Session:
 class SessionServer:
     """Playwright 세션을 워커 프로세스 안에서 관리한다.
 
-    ``LocalExecutionGateway`` 와 동일한 스레드 어피니티·로그 브리지 규약을 따르며,
-    원격 HTTP API(``worker/http_server``)가 이 클래스를 호출한다. 자가 치유 엔진은
+    Playwright sync 객체의 스레드 어피니티(세션 전용 단일 스레드 풀)와 스레드↔이벤트 루프
+    로그 브리지 규약을 따르는 **유일한 in-process 브라우저 호스트**다(구 ``LocalExecutionGateway``
+    폐기). 원격 HTTP API(``worker/http_server``)가 이 클래스를 호출하며, 자가 치유 엔진은
     원격 모드에서 워커에만 부착된다.
     """
 

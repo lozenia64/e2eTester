@@ -29,7 +29,7 @@ class WorkflowRuntime(Protocol):
     각 시스템의 구체 런타임 dataclass 는 이 외에 시스템 전용 필드(config, base_url 등)를
     자유롭게 추가한다.
 
-    **인프라 관심사는 여기 없다.** 실행 스레드 풀은 게이트웨이 세션(`LocalExecutionGateway`)이
+    **인프라 관심사는 여기 없다.** 실행 스레드 풀은 워커 세션 호스트(`SessionServer`)의 세션이
     소유하며, 더 이상 런타임에 ``executor`` 로 매달리지 않는다(도메인 런타임은 자기 브라우저
     상태만 안다).
     """
