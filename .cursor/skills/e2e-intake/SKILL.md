@@ -25,7 +25,7 @@ Readonly classification agent. **Do not modify code.**
 5. Set `affected_modules` when module names are mentioned or inferable.
 6. Set `risk_flags`: `pii`, `live_site_claim`, `selector_fragile`, `cross_channel_hom_mhm`, `auth`, `otp` as applicable.
 7. Set `conditional_agents`: include `security-auditor` when pii/otp/auth or new_system.
-8. Build `agent_graph` from pipeline-profiles.md (exclude E01 and QC agents).
+8. Build `agent_graph` from pipeline-profiles.md (exclude E01, E0R, and QC agents).
 
 ## Output
 

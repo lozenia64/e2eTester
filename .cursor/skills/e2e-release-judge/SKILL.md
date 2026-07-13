@@ -8,11 +8,20 @@ disable-model-invocation: true
 
 # e2e Release Judge (E09)
 
-Readonly verdict. **Do not modify code.**
+Readonly semantic verdict. **Do not modify code.**
+
+## Prerequisite (mechanical)
+
+**Do not run** unless `<run_dir>/mechanical-verdict.json` has `"passed": true`.
+If mechanical verdict failed, the manager must backtrack — do not emit a passing release verdict.
 
 ## Inputs
 
+- `<run_dir>/mechanical-verdict.json` (must be passed)
 - `<run_dir>/gates-report.json`
+- `<run_dir>/preflight-report.json`
+- `<run_dir>/planning-gate-report.json`
+- `<run_dir>/research-gate-report.json` (if present)
 - `<run_dir>/review-report.json` (if present)
 - `<run_dir>/security-report.json` (if present)
 - `<run_dir>/implementation-notes.md`
@@ -30,7 +39,7 @@ Readonly verdict. **Do not modify code.**
 
 ## Task
 
-1. Aggregate gate and QC results.
+1. Confirm mechanical-verdict passed (all T0–T3 gates + QC reports).
 2. Check e2e-specific invariants against implementation-notes and diff scope.
 3. Emit pass/fail with actionable feedback.
 

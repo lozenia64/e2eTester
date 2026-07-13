@@ -14,6 +14,8 @@ Readonly review of changes since orchestration run started.
 
 - `<run_dir>/implementation-notes.md`
 - `<run_dir>/intake.json`
+- `<run_dir>/gates-report.json` (prioritize files with lint findings)
+- `<run_dir>/preflight-report.json`
 - Git diff of changed files
 - `.cursor/skills/e2e-orchestrator/domain-context.md`
 
@@ -25,6 +27,7 @@ Review for:
 2. Selector durability (id/name/role preferred)
 3. Scope creep beyond intake scope
 4. Missing scenario doc updates when manifest changed
+5. **Cross-check** any `findings` in gates-report / preflight-report — high-severity lint in changed files → `passed: false`
 
 ## Output
 
@@ -37,4 +40,4 @@ Write `<run_dir>/review-report.json`:
 }
 ```
 
-Set `passed: false` for high-severity invariant violations.
+Set `passed: false` for high-severity invariant violations or unresolved gate findings in changed files.

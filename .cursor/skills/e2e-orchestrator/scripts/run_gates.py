@@ -34,6 +34,18 @@ def main() -> int:
         default=None,
         help="Pipeline profile (reads from run.json if omitted)",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=True,
+        help="Stop after first failing tier (default: true)",
+    )
+    parser.add_argument(
+        "--no-fail-fast",
+        action="store_false",
+        dest="fail_fast",
+        help="Run all gates even after tier failure",
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
@@ -45,6 +57,11 @@ def main() -> int:
     run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
     workspace = Path(run_data["workspace"])
     profile = args.profile or run_data.get("pipeline_profile")
+    if not profile:
+        intake_path = run_dir / "intake.json"
+        if intake_path.is_file():
+            intake = json.loads(intake_path.read_text(encoding="utf-8"))
+            profile = intake.get("pipeline_profile")
     if not profile:
         print(json.dumps({"error": "pipeline_profile missing; run intake first or pass --profile"}))
         return 1
@@ -63,15 +80,20 @@ def main() -> int:
         print(json.dumps({"error": msg}))
         return 1
 
-    results: dict[str, dict] = {}
-    for name in gate_names:
-        results[name] = gates_mod.run_gate(name, workspace)
-
+    changed_files = gates_mod.resolve_changed_files(workspace)
+    results = gates_mod.run_gates(
+        gate_names,
+        workspace,
+        stop_on_tier_failure=args.fail_fast,
+        changed_files=changed_files,
+    )
     passed = all(r["passed"] for r in results.values()) if results else True
     report = {
         "passed": passed,
         "profile": profile,
         "risk_flags": risk_flags,
+        "changed_files": changed_files,
+        "fail_fast": args.fail_fast,
         "gates": results,
         "ran_at": datetime.now(UTC).isoformat(),
     }

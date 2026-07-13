@@ -10,6 +10,7 @@ from pathlib import Path
 
 STEP_FIX_GRAPH = [
     "e2e-intake",
+    "e2e-researcher",
     "e2e-domain-scout",
     "e2e-scenario-analyst",
     "e2e-selector-healer",
@@ -22,13 +23,37 @@ STEP_FIX_GRAPH = [
 SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
+def _sample_research_brief() -> str:
+    return """## 요약
+Playwright role-based locators preferred for HOM login fix.
+
+## 조사 질문
+- Best locator strategy for auth buttons?
+
+## 핵심 발견
+Playwright recommends get_by_role over brittle CSS selectors.
+See https://playwright.dev/docs/locators and https://playwright.dev/docs/best-practices.
+Role-based locators survive label and class changes better than XPath.
+
+## e2eTester 적용 권장
+Update hom login step to use get_by_role for 인증요청 button.
+
+## 불확실성 / 추가 확인 필요
+Live site label must be verified manually.
+
+## 참고 URL
+- https://playwright.dev/docs/locators
+- https://playwright.dev/docs/best-practices
+"""
+
+
 def write_samples(run_dir: Path) -> None:
     intake = {
         "pipeline_profile": "step_fix",
         "system_code": "hom",
         "layer": "steps",
         "touch_surfaces": ["selector"],
-        "affected_modules": ["login"],
+        "affected_modules": ["hom.login"],
         "risk_flags": ["selector_fragile", "auth"],
         "conditional_agents": [],
         "agent_graph": [
@@ -43,10 +68,13 @@ def write_samples(run_dir: Path) -> None:
         json.dumps(intake, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
+    (run_dir / "research-brief.md").write_text(_sample_research_brief(), encoding="utf-8")
+
     (run_dir / "context-map.md").write_text(
         """## 관련 파일
-- `app/systems/hom/steps/phone_login.py` — phone login selectors
-- `app/systems/hom/steps/login_common.py` — shared login patterns
+- `app/systems/hom/manifest.yaml` — module manifest
+- `app/systems/hom/executor.py` — workflow executor
+- `docs/scenarios/hom.md` — scenario SSOT
 
 ## 계층
 - steps
@@ -62,7 +90,7 @@ def write_samples(run_dir: Path) -> None:
 - hom (PC channel)
 
 ## 모듈 영향
-- login module, workflow_step login
+- hom.login module, workflow_step login
 
 ## 시나리오 문서
 - `docs/scenarios/hom.md` login section if behavior changes
@@ -90,13 +118,15 @@ def write_samples(run_dir: Path) -> None:
         encoding="utf-8",
     )
 
-    gates = {
-        "passed": True,
-        "profile": "step_fix",
-        "gates": {},
-        "ran_at": "smoke-test",
+    gate_reports = {
+        "research-gate-report.json": {"passed": True},
+        "planning-gate-report.json": {"passed": True},
+        "preflight-report.json": {"passed": True, "skipped": True},
+        "gates-report.json": {"passed": True, "profile": "step_fix", "gates": {}},
+        "mechanical-verdict.json": {"passed": True, "checks": []},
     }
-    (run_dir / "gates-report.json").write_text(json.dumps(gates, indent=2) + "\n", encoding="utf-8")
+    for filename, payload in gate_reports.items():
+        (run_dir / filename).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     (run_dir / "review-report.json").write_text(
         json.dumps({"passed": True, "issues": []}, indent=2) + "\n", encoding="utf-8"
