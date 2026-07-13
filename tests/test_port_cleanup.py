@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from app.platform.port_cleanup import _WIN_LISTEN_RE, find_listening_pids, free_port
 
@@ -15,11 +16,13 @@ def test_windows_netstat_line_parsing() -> None:
     assert int(match.group("pid")) == 2216
 
 
-def test_find_listening_pids_skips_current_process(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "app.platform.port_cleanup._pids_listening_on_port_windows",
-        lambda port: [os.getpid()],
+def test_find_listening_pids_returns_discovered_pids(monkeypatch) -> None:
+    target = (
+        "app.platform.port_cleanup._pids_listening_on_port_windows"
+        if sys.platform == "win32"
+        else "app.platform.port_cleanup._pids_listening_on_port_unix"
     )
+    monkeypatch.setattr(target, lambda port: [os.getpid()])
     assert find_listening_pids(8100) == [os.getpid()]
 
 

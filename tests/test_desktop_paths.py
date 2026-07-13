@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from app.platform.desktop_paths import resolve_desktop_dir
 
@@ -14,6 +17,7 @@ def test_resolve_desktop_dir_returns_existing_directory(monkeypatch, tmp_path: P
     assert resolve_desktop_dir() == desktop
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="OneDrive Desktop redirect is Windows-only")
 def test_resolve_desktop_dir_prefers_onedrive_when_plain_missing(
     monkeypatch, tmp_path: Path
 ) -> None:
