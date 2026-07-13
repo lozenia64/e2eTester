@@ -155,7 +155,7 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 2222
 
 > **(개발/CI) API+worker 분리 실행** — `remote` 모드 검증용. Redis 필요. Windows 배포 경로가 아닙니다.
 > ```bash
-> python3 scripts/run_desktop.py
+> python3 scripts/run_local.py
 > ```
 > 또는 터미널 2개:
 > ```bash
