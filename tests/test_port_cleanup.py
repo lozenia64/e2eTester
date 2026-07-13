@@ -47,7 +47,9 @@ def test_kill_pid_windows_exits_after_graceful(monkeypatch) -> None:
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr("app.platform.port_cleanup._pid_exists", lambda pid: next(alive_checks, False))
+    monkeypatch.setattr(
+        "app.platform.port_cleanup._pid_exists", lambda pid: next(alive_checks, False)
+    )
     monkeypatch.setattr("app.platform.port_cleanup.time.sleep", lambda _: None)
 
     from app.platform.port_cleanup import _kill_pid_windows
