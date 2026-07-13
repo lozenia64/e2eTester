@@ -68,17 +68,51 @@ def find_listening_pids(port: int) -> list[int]:
     return _pids_listening_on_port_unix(port)
 
 
+def _pid_exists(pid: int) -> bool:
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        return str(pid) in (result.stdout or "")
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _kill_pid_windows(pid: int) -> bool:
+    subprocess.run(
+        ["taskkill", "/PID", str(pid)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    for _ in range(20):
+        if not _pid_exists(pid):
+            return True
+        time.sleep(0.1)
+    force = subprocess.run(
+        ["taskkill", "/F", "/PID", str(pid)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return force.returncode == 0
+
+
 def _kill_pid(pid: int) -> bool:
     if pid <= 0 or pid == os.getpid():
         return False
     if sys.platform == "win32":
-        proc = subprocess.run(
-            ["taskkill", "/F", "/PID", str(pid)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return proc.returncode == 0
+        return _kill_pid_windows(pid)
 
     try:
         os.kill(pid, signal.SIGTERM)

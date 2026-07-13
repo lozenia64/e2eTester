@@ -5,8 +5,8 @@ Redis 를 작업 디렉터리에서 그대로 실행하면 프로젝트 루트�
 SQLite 앱 DB(`data/e2etester.db`)와 분리하기 위해 redis-data/ 를 사용한다.
 
 사용:
-    python scripts/run_redis.py              # 포그라운드 (Ctrl+C 종료)
-    python scripts/run_redis.py --daemonize yes   # 백그라운드 (redis-server 옵션 전달)
+    python3 scripts/run_redis.py              # 포그라운드 (Ctrl+C 종료)
+    python3 scripts/run_redis.py --daemonize yes   # 백그라운드 (redis-server 옵션 전달)
 
 Docker 를 쓰는 경우 README 의 docker run 예시를 참고하세요.
 """
