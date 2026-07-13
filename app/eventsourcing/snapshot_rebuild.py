@@ -118,6 +118,76 @@ async def _rebuild_streams(
         )
 
 
+async def rebuild_missing_run_snapshots(db: SqliteDatabase) -> int:
+    """이벤트는 있으나 스냅샷이 없는 Run 스트림만 폴드해 upsert 한다(시작 시 안전망)."""
+    rows = await db.fetchall(
+        """
+        SELECT DISTINCT e.aggregate_id
+        FROM domain_events e
+        LEFT JOIN aggregate_snapshots s ON s.stream_id = 'Run:' || e.aggregate_id
+        WHERE e.aggregate_type = 'Run' AND s.stream_id IS NULL
+        """
+    )
+    now = datetime.now(UTC).isoformat()
+    count = 0
+    for row in rows:
+        aggregate_id = row["aggregate_id"]
+        events = await _events(db, "Run", aggregate_id)
+        state_json = snapshot_state_json(aggregate_id, events)
+        if state_json is None:
+            continue
+        version = await _stream_position(db, "Run", aggregate_id)
+        await db.execute(
+            """
+            INSERT INTO aggregate_snapshots
+                (stream_id, aggregate_type, version, state_json, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(stream_id) DO UPDATE SET
+                version = excluded.version,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at
+            """,
+            (f"Run:{aggregate_id}", "Run", version, state_json, now),
+        )
+        count += 1
+    return count
+
+
+async def repair_incomplete_run_snapshots(db: SqliteDatabase) -> int:
+    """폴드 결과가 비어 있는 스냅샷을 레거시 blob·프로젝션으로 수리한다."""
+    from app.storage.records import RunRecord
+    from app.storage.run_snapshot_fallback import is_incomplete_snapshot, resolve_run_snapshot
+
+    rows = await db.fetchall(
+        """
+        SELECT substr(stream_id, 5) AS run_id, state_json
+        FROM aggregate_snapshots
+        WHERE aggregate_type = 'Run'
+        """
+    )
+    now = datetime.now(UTC).isoformat()
+    count = 0
+    for row in rows:
+        run_id = row["run_id"]
+        snapshot = RunRecord.deserialize(row["state_json"])
+        if not is_incomplete_snapshot(snapshot):
+            continue
+        repaired = await resolve_run_snapshot(db, run_id, snapshot)
+        if not repaired.modules or repaired is snapshot:
+            continue
+        payload = RunRecord.serialize(repaired)
+        await db.execute(
+            """
+            UPDATE aggregate_snapshots
+            SET state_json = ?, updated_at = ?
+            WHERE stream_id = ?
+            """,
+            (payload, now, f"Run:{run_id}"),
+        )
+        count += 1
+    return count
+
+
 async def rebuild_run_snapshots(db: SqliteDatabase, *, verify_only: bool = False) -> RebuildReport:
     """모든 Run 스트림을 폴드해 ``aggregate_snapshots`` 를 재구성/검증한다.
 

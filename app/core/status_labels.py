@@ -10,8 +10,10 @@ RUN_ERROR_STATUSES = frozenset({RunStatus.ERROR})
 RUN_TERMINAL_OUTCOME_STATUSES = frozenset(
     {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}
 )
-# 관리자 대시보드·사용량 통계에 노출할 Run (점검실패 제외)
+# 사용량 통계에 노출할 Run (정상·이상징후; 점검실패·취소 제외)
 ADMIN_VISIBLE_RUN_STATUSES = frozenset({RunStatus.PASSED, *RUN_ANOMALY_STATUSES})
+# 관리자 대시보드 Run 목록·삭제 관리 대상 (종료 결과 전체 + 취소)
+ADMIN_DASHBOARD_RUN_STATUSES = frozenset({*RUN_TERMINAL_OUTCOME_STATUSES, RunStatus.CANCELLED})
 # 일일 보존 정리 배치에서 삭제할 Run (점검실패·취소; 정상·이상징후는 유지)
 RUN_DAILY_PURGE_STATUSES = frozenset({RunStatus.ERROR, RunStatus.CANCELLED})
 SUITE_ANOMALY_STATUSES = frozenset({SuiteStatus.ANOMALY, SuiteStatus.FAILED})

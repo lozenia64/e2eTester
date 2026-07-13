@@ -9,7 +9,11 @@ from app.contexts.scheduling.scheduler import schedule_day_label
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.events import DomainEvent
-from app.domain.summary_fields import run_summary_fields
+from app.domain.summary_fields import (
+    MODULE_HISTORY_STATUSES,
+    module_history_fields_from_wire,
+    run_summary_fields,
+)
 from app.eventsourcing.support import SqliteDatabase
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
@@ -46,6 +50,42 @@ ON CONFLICT(projection_name) DO UPDATE SET
     last_sequence_id = excluded.last_sequence_id,
     updated_at = excluded.updated_at
 """
+
+
+def _module_history_upsert(run_id: str, run_summary: dict, fields: dict) -> Mutation:
+    """이벤트·스냅샷 backfill 공용 — ``module_history_index`` 한 행 upsert."""
+    return (
+        """
+        INSERT OR REPLACE INTO module_history_index
+            (run_id, module_id, system_code, module_name, status, message,
+             started_at, ended_at, duration_ms, current_url, artifacts,
+             ai_category, ai_summary, ai_action, suite_id, schedule_id, triggered_by,
+             requested_at, created_by_user_id, created_by_user_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            fields["module_id"],
+            fields["system_code"],
+            fields.get("module_name"),
+            fields["status"],
+            fields.get("message"),
+            fields.get("started_at"),
+            fields.get("ended_at"),
+            fields.get("duration_ms"),
+            fields.get("current_url"),
+            json.dumps(fields.get("artifacts", []), ensure_ascii=False),
+            fields.get("ai_category"),
+            fields.get("ai_summary"),
+            fields.get("ai_action"),
+            fields.get("suite_id"),
+            fields.get("schedule_id"),
+            run_summary.get("triggered_by"),
+            run_summary.get("requested_at"),
+            fields.get("created_by_user_id"),
+            run_summary.get("created_by_user_name"),
+        ),
+    )
 
 
 def _run_history_upsert(run_id: str, summary: dict) -> Mutation:
@@ -259,43 +299,37 @@ class ProjectionHandlers:
                     ),
                 )
             ]
+        if event.event_type == "RunImported":
+            run_summary = event.payload.get("run_summary") or {}
+            mutations: list[Mutation] = []
+            for wire in event.payload.get("all_modules", []):
+                if ModuleStatus(wire["status"]) not in MODULE_HISTORY_STATUSES:
+                    continue
+                fields = module_history_fields_from_wire(run_summary, wire)
+                mutations.append(_module_history_upsert(event.aggregate_id, run_summary, fields))
+            return mutations
         if event.event_type != "ModuleFinished":
             return []
         payload = event.payload
         if "module_name" not in payload:
             return []  # 구(thin) 이벤트 — 마이그레이션 재합성 전까지 모듈 이력은 채우지 않는다.
         run_summary = payload.get("run_summary") or {}
-        return [
-            (
-                """
-                INSERT OR REPLACE INTO module_history_index
-                    (run_id, module_id, system_code, module_name, status, message,
-                     started_at, ended_at, duration_ms, current_url, artifacts,
-                     ai_category, ai_summary, ai_action, suite_id, schedule_id, triggered_by,
-                     requested_at, created_by_user_id, created_by_user_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event.aggregate_id,
-                    payload["module_id"],
-                    payload["system_code"],
-                    payload.get("module_name"),
-                    payload["status"],
-                    payload.get("message"),
-                    payload.get("started_at"),
-                    payload.get("ended_at"),
-                    payload.get("duration_ms"),
-                    payload.get("current_url"),
-                    json.dumps(payload.get("artifacts", []), ensure_ascii=False),
-                    payload.get("suite_id"),
-                    payload.get("schedule_id"),
-                    run_summary.get("triggered_by"),
-                    run_summary.get("requested_at"),
-                    payload.get("created_by_user_id"),
-                    run_summary.get("created_by_user_name"),
-                ),
-            )
-        ]
+        fields = {
+            "module_id": payload["module_id"],
+            "system_code": payload["system_code"],
+            "module_name": payload.get("module_name"),
+            "status": payload["status"],
+            "message": payload.get("message"),
+            "started_at": payload.get("started_at"),
+            "ended_at": payload.get("ended_at"),
+            "duration_ms": payload.get("duration_ms"),
+            "current_url": payload.get("current_url"),
+            "artifacts": payload.get("artifacts", []),
+            "suite_id": payload.get("suite_id"),
+            "schedule_id": payload.get("schedule_id"),
+            "created_by_user_id": payload.get("created_by_user_id"),
+        }
+        return [_module_history_upsert(event.aggregate_id, run_summary, fields)]
 
     # --- anomaly_inbox_index ------------------------------------------------
 

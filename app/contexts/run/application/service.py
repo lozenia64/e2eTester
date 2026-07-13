@@ -23,7 +23,6 @@ from app.contexts.run.domain.state_machine import (
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.run_models import DashboardEvent, Run, RunModule
-from app.domain.events import run_deleted as domain_run_deleted
 from app.domain.execution_policy import module_policy_from_definition
 from app.events.bus import EventBus
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
@@ -145,17 +144,21 @@ class RunService:
         RunAggregate(run).hydrate_logs(logs_by_module)
 
     async def delete_run(self, run_id: str) -> None:
-        run = await self._write_repo.get_run(run_id)
-        if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
-            raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
         if await self._control_store.get_pending(run_id) is not None:
             raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
+        try:
+            run = await self._write_repo.get_run(run_id)
+        except KeyError:
+            pass
+        else:
+            if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
+                raise ValueError("진행 중인 Run은 삭제할 수 없습니다. 먼저 취소해 주세요.")
 
+        await self._purge_run_storage(run_id)
+
+    async def _purge_run_storage(self, run_id: str) -> None:
         await self._log_store.delete_by_run_id(run_id)
         await self._write_repo.delete_run(run_id)
-        # 프로젝션의 파생 행(이력 인덱스·이상건 인박스 등)도 함께 정리되도록 삭제 사실을
-        # 이벤트로 발행한다(아웃박스 경유 — 리빌드 재생 시에도 같은 순서로 재적용된다).
-        await self._write_repo.append_events([domain_run_deleted(run_id)])
         self._artifact_manager.delete_run_artifacts(run_id)
         await self._input_store.delete(run_id)
         await self._control_store.delete(run_id)
@@ -186,12 +189,7 @@ class RunService:
         for run_id in run_ids:
             if await self._control_store.get_pending(run_id) is not None:
                 continue
-            await self._log_store.delete_by_run_id(run_id)
-            await self._write_repo.delete_run(run_id)
-            await self._write_repo.append_events([domain_run_deleted(run_id)])
-            self._artifact_manager.delete_run_artifacts(run_id)
-            await self._input_store.delete(run_id)
-            await self._control_store.delete(run_id)
+            await self._purge_run_storage(run_id)
             deleted.append(run_id)
         return deleted
 

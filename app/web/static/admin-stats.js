@@ -13,15 +13,6 @@ const PLOTLY_CONFIG = {
     locale: 'ko',
 };
 
-function fmtDuration(ms) {
-    if (!ms) return '—';
-    const s = Math.round(ms / 1000);
-    if (s < 60) return `${s}초`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}분 ${rem}초`;
-}
-
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text ?? '';
@@ -31,6 +22,11 @@ function escapeHtml(text) {
 function fmtSavedSeconds(seconds) {
     const s = Math.round(seconds || 0);
     if (s < 60) return `${s}초`;
+    if (s >= 3600) {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        return `${h}시간 ${String(m).padStart(2, '0')}분`;
+    }
     const m = Math.floor(s / 60);
     const rem = s % 60;
     return `${m}분 ${rem}초`;
@@ -41,11 +37,19 @@ function toLocalDatetimeValue(date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function setDefaultDates() {
+function setThisMonthDates() {
     const now = new Date();
     const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0);
     document.getElementById('filter-from').value = toLocalDatetimeValue(firstOfMonth);
     document.getElementById('filter-to').value = toLocalDatetimeValue(now);
+}
+
+function setLastMonthDates() {
+    const now = new Date();
+    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0);
+    const lastOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59);
+    document.getElementById('filter-from').value = toLocalDatetimeValue(firstOfLastMonth);
+    document.getElementById('filter-to').value = toLocalDatetimeValue(lastOfLastMonth);
 }
 
 function fmtPeriodLabel(iso) {
@@ -124,7 +128,7 @@ function renderCharts(data) {
 function renderUserTable(data) {
     const userTbody = document.getElementById('user-stats-tbody');
     if (!data.by_user || data.by_user.length === 0) {
-        userTbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
+        userTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
         return;
     }
     userTbody.innerHTML = data.by_user.map((u) => `<tr class="hover:bg-gray-50">
@@ -132,7 +136,6 @@ function renderUserTable(data) {
         <td class="px-4 py-3 text-right">${u.total_runs}</td>
         <td class="px-4 py-3 text-right text-green-700">${u.total_modules_passed}</td>
         <td class="px-4 py-3 text-right text-red-600">${u.total_modules_failed}</td>
-        <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(u.total_duration_ms)}</td>
         <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(u.manual_seconds_saved)}</td>
     </tr>`).join('');
 }
@@ -140,7 +143,7 @@ function renderUserTable(data) {
 function renderSystemTable(data) {
     const sysTbody = document.getElementById('sys-stats-tbody');
     if (!data.by_system || data.by_system.length === 0) {
-        sysTbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
+        sysTbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">데이터 없음</td></tr>';
         return;
     }
     sysTbody.innerHTML = data.by_system.map((s) => `<tr class="hover:bg-gray-50">
@@ -148,7 +151,6 @@ function renderSystemTable(data) {
         <td class="px-4 py-3 text-right">${s.runs}</td>
         <td class="px-4 py-3 text-right text-green-700">${s.modules_passed}</td>
         <td class="px-4 py-3 text-right text-red-600">${s.modules_failed}</td>
-        <td class="px-4 py-3 text-right text-gray-500">${fmtDuration(s.total_duration_ms)}</td>
         <td class="px-4 py-3 text-right font-semibold text-green-700">${fmtSavedSeconds(s.manual_seconds_saved)}</td>
     </tr>`).join('');
 }
@@ -193,8 +195,12 @@ async function loadStats() {
 }
 
 document.getElementById('btn-load').addEventListener('click', loadStats);
-document.getElementById('btn-reset').addEventListener('click', () => {
-    setDefaultDates();
+document.getElementById('btn-last-month').addEventListener('click', () => {
+    setLastMonthDates();
+    loadStats();
+});
+document.getElementById('btn-this-month').addEventListener('click', () => {
+    setThisMonthDates();
     loadStats();
 });
 document.getElementById('btn-csv').addEventListener('click', () => {
@@ -206,5 +212,5 @@ document.getElementById('btn-csv').addEventListener('click', () => {
     window.location.href = '/api/admin/stats/savings/csv?' + params.toString();
 });
 
-setDefaultDates();
+setThisMonthDates();
 loadStats();

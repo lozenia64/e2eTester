@@ -40,13 +40,26 @@ class SqliteRunWriteRepository:
 
     async def get_run(self, run_id: str) -> Run:
         # 이벤트 폴드의 파생 캐시(aggregate_snapshots)가 유일한 상태 저장소다(runs blob 폐기).
+        # 단, thin-event·불완전 폴드 스냅샷은 레거시 blob/프로젝션으로 복원한다(상세 화면).
+        from app.storage.run_snapshot_fallback import (
+            is_incomplete_snapshot,
+            load_run_without_snapshot,
+            resolve_run_snapshot,
+        )
+
         row = await self._db.fetchone(
             "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?",
             (f"Run:{run_id}",),
         )
         if row is None:
-            raise KeyError(run_id)
-        return RunRecord.deserialize(row["state_json"])
+            fallback = await load_run_without_snapshot(self._db, run_id)
+            if fallback is None:
+                raise KeyError(run_id)
+            return fallback
+        run = RunRecord.deserialize(row["state_json"])
+        if is_incomplete_snapshot(run):
+            return await resolve_run_snapshot(self._db, run_id, run)
+        return run
 
     async def append_events(self, events: list[DomainEvent]) -> None:
         """상태 스냅샷 없이 이벤트·아웃박스만 적재."""
@@ -56,9 +69,19 @@ class SqliteRunWriteRepository:
             self._append_events_sync(tx, events)
 
     async def delete_run(self, run_id: str) -> None:
+        """Run 스트림·스냅샷·프로젝션·레거시 blob 을 한 트랜잭션으로 영구 삭제한다."""
         async with await self._db.transaction() as tx:
+            tx.execute(
+                "DELETE FROM outbox WHERE aggregate_type = 'Run' AND aggregate_id = ?",
+                (run_id,),
+            )
+            tx.execute(
+                "DELETE FROM domain_events WHERE aggregate_type = 'Run' AND aggregate_id = ?",
+                (run_id,),
+            )
             tx.execute("DELETE FROM aggregate_snapshots WHERE stream_id = ?", (f"Run:{run_id}",))
             tx.execute("DELETE FROM run_history_index WHERE run_id = ?", (run_id,))
+            tx.execute("DELETE FROM module_history_index WHERE run_id = ?", (run_id,))
             tx.execute("DELETE FROM run_comparison_cache WHERE run_id = ?", (run_id,))
             tx.execute(
                 "DELETE FROM anomaly_inbox_index WHERE run_id = ?",
@@ -68,6 +91,40 @@ class SqliteRunWriteRepository:
                 "DELETE FROM schedule_execution_history WHERE run_id = ?",
                 (run_id,),
             )
+            tx.execute("DELETE FROM session_checkpoints WHERE run_id = ?", (run_id,))
+            self._delete_from_table_if_exists(
+                tx,
+                "outbox_dead_letter",
+                "DELETE FROM outbox_dead_letter WHERE aggregate_type = 'Run' AND aggregate_id = ?",
+                (run_id,),
+            )
+            self._delete_from_table_if_exists(
+                tx,
+                "runs",
+                "DELETE FROM runs WHERE id = ?",
+                (run_id,),
+            )
+            self._delete_from_table_if_exists(
+                tx,
+                "healing_events",
+                "DELETE FROM healing_events WHERE run_id = ?",
+                (run_id,),
+            )
+            self._delete_from_table_if_exists(
+                tx,
+                "healing_patches",
+                "DELETE FROM healing_patches WHERE run_id = ?",
+                (run_id,),
+            )
+
+    @staticmethod
+    def _delete_from_table_if_exists(tx, table: str, sql: str, params: tuple) -> None:
+        row = tx.fetchone(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+            (table,),
+        )
+        if row is not None:
+            tx.execute(sql, params)
 
     async def _persist(self, run: Run, events: list[DomainEvent]) -> None:
         payload = RunRecord.serialize(run)

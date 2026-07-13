@@ -26,7 +26,8 @@
         <input id="filter-to" type="datetime-local" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
     </div>
     <button id="btn-load" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
-    <button id="btn-reset" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
+    <button id="btn-last-month" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">지난달</button>
+    <button id="btn-this-month" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">이번달</button>
     <button id="btn-csv" type="button" class="rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100">CSV보내기</button>
 </div>
 
@@ -148,12 +149,11 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Run 수</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</th>
                 </tr>
             </thead>
             <tbody id="user-stats-tbody" class="divide-y divide-gray-100">
-                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
             </tbody>
         </table>
     </div>
@@ -174,12 +174,11 @@
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Run 수</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">통과 모듈</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실패 모듈</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">실행 시간</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-green-600">절감 시간</th>
                 </tr>
             </thead>
             <tbody id="sys-stats-tbody" class="divide-y divide-gray-100">
-                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">조회 버튼을 눌러 데이터를 불러오세요.</td></tr>
             </tbody>
         </table>
     </div>
