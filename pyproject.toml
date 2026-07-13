@@ -39,9 +39,60 @@ testpaths = ["tests"]
 # 테스트는 일부 import 미사용/픽스처 패턴을 허용
 "tests/*" = ["F401", "F811"]
 # Plotly 차트 설정은 dict(...) 형태가 관용적(공식 예제 스타일) — 리터럴 강제 제외
-"app/orchestrator/stats_charts.py" = ["C408"]
-"app/orchestrator/insights_charts.py" = ["C408"]
+"app/contexts/insights/application/stats_charts.py" = ["C408"]
+"app/contexts/insights/application/insights_charts.py" = ["C408"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "research", "artifacts", "data", ".cursor"]
 skips = ["B101"]  # assert in tests is fine; tests dir excluded anyway
+
+# 아키텍처 경계를 import 그래프로 강제(정규식 게이트 AG-002/003 을 계약으로 보강).
+# 전체 바운디드 컨텍스트(contexts/) 재편은 후속이며, 여기서는 이미 성립하는 두 계약을 고정한다:
+# (1) 도메인 순수성 — app.domain 은 저장소/실행/API/오케스트레이터 등 I/O·인프라를 import 하지 않음,
+# (2) 코어 무-Playwright — app.domain/app.orchestrator 는 playwright 를 import 하지 않음.
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure (no I/O/infra imports)"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = [
+    "app.storage",
+    "app.execution",
+    "app.api",
+    "app.orchestrator",
+    "app.eventsourcing",
+    "app.web",
+    "app.composition",
+    "app.projections",
+    "app.realtime",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain/orchestrator do not import Playwright"
+type = "forbidden"
+source_modules = ["app.domain", "app.orchestrator"]
+forbidden_modules = ["playwright"]
+
+# 바운디드 컨텍스트 격리(WP-B1): 컨텍스트는 전달 계층(api/web)을 import 하지 않고,
+# Run/Suite 도메인은 서로의 내부를 import 하지 않는다.
+[[tool.importlinter.contracts]]
+name = "Contexts do not import API/web delivery layer"
+type = "forbidden"
+source_modules = ["app.contexts"]
+forbidden_modules = ["app.api", "app.web"]
+
+[[tool.importlinter.contracts]]
+name = "Run and Suite domains are mutually independent"
+type = "independence"
+modules = ["app.contexts.run.domain", "app.contexts.suite.domain"]
+
+# 실행 평면 분리(WP-C4): 오케스트레이션(contexts)·전달(api)은 실행 평면(runner/automation/
+# systems = Playwright 구동)을 import 하지 않는다. 실행 결과 계약은 app.execution.results 가 소유.
+[[tool.importlinter.contracts]]
+name = "Contexts and API do not import the execution plane"
+type = "forbidden"
+source_modules = ["app.contexts", "app.api"]
+forbidden_modules = ["app.runner", "app.automation", "app.systems"]

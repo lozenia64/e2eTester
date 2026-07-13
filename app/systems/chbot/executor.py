@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import StepHandler
+from app.platform.artifact_manager import ArtifactManager
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 
 DEFAULT_BASE_URL = "https://chbot.hwgeneralins.com/P29GCdKMTnbsy0PRr"
@@ -23,9 +21,13 @@ class ChbotRuntime(AccessRuntime):
 
 class ChbotWorkflowExecutor(AccessWorkflowExecutor):
     def build_runtime(
-        self, input_data: dict[str, str], run_id: str, module_id: str
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
     ) -> ChbotRuntime:
-        runtime = super().build_runtime(input_data, run_id, module_id)
+        runtime = super().build_runtime(input_data, run_id, module_id, storage_state)
         return ChbotRuntime(
             base_url=runtime.base_url,
             mobile=runtime.mobile,
@@ -41,9 +43,6 @@ class ChbotWorkflowExecutor(AccessWorkflowExecutor):
             phone_number=(input_data.get("phone_number") or "").strip(),
             otp_code=(input_data.get("otp_code") or "").strip(),
         )
-
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        return {}
 
     def update_otp_code(self, runtime: ChbotRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

@@ -6,6 +6,8 @@ from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
+
 from . import login_common as common
 
 PROOF_TAB_SELECTOR = '[id="05000000"]'
@@ -139,7 +141,7 @@ def _click_gnb_item(page, selector: str, log_label: str, timeout_ms: int) -> Non
         common.click_with_log(locator, log_label)
         return
     except Exception as exc:
-        print(f"[warn] {log_label} 일반 클릭 실패: {exc}")
+        log(f"[warn] {log_label} 일반 클릭 실패: {exc}")
 
     clicked = page.evaluate(
         """
@@ -156,11 +158,11 @@ def _click_gnb_item(page, selector: str, log_label: str, timeout_ms: int) -> Non
         selector,
     )
     if clicked:
-        print(f"[click] {log_label} (JS fallback)")
+        log(f"[click] {log_label} (JS fallback)")
         common.wait_timeout_with_log(page, 400, f"{log_label} 후 안정화")
         return
 
-    print(f"[warn] {log_label} JS 클릭 실패, force 클릭 재시도")
+    log(f"[warn] {log_label} JS 클릭 실패, force 클릭 재시도")
     locator.click(force=True, timeout=min(timeout_ms, 5000))
     common.wait_timeout_with_log(page, 400, f"{log_label} 후 안정화")
 
@@ -215,7 +217,7 @@ def _select_first_contract(page, timeout_ms: int) -> str:
     confirm = dialog.get_by_role("button", name="확인", exact=True).first
     common.click_with_log(confirm, "계약 선택 시트 확인")
     common.wait_timeout_with_log(page, 400, "계약 선택 반영 대기")
-    print(f"[step] Selected contract for certificate issue: {policy_number}")
+    log(f"[step] Selected contract for certificate issue: {policy_number}")
     return policy_number
 
 
@@ -258,7 +260,7 @@ def _wait_for_issue_result(
                 page.locator(ALERT_DIALOG_SELECTOR).filter(has_text=SUCCESS_DIALOG_TEXT).first
             )
             if success_dialog.is_visible(timeout=400):
-                print("[step] PDF download success alert detected")
+                log("[step] PDF download success alert detected")
                 return
         except Exception:
             pass
@@ -266,7 +268,7 @@ def _wait_for_issue_result(
         for message in dialog_messages[start_index:]:
             normalized = _normalize_text(message)
             if SUCCESS_DIALOG_TEXT.search(normalized):
-                print(f"[step] Download success dialog detected: {normalized}")
+                log(f"[step] Download success dialog detected: {normalized}")
                 return
             for pattern in FAILURE_DIALOG_PATTERNS:
                 if pattern in normalized:
@@ -288,9 +290,9 @@ def _issue_certificate(
         with page.expect_download(timeout=timeout_ms) as download_info:
             common.click_with_log(issue_button, "증명서 발급 버튼 클릭")
         download = download_info.value
-        print(f"[step] Playwright download event captured: {download.suggested_filename}")
+        log(f"[step] Playwright download event captured: {download.suggested_filename}")
     except PlaywrightTimeoutError as exc:
-        print(f"[warn] Playwright download event 미포착, UI 알림 기반으로 검증 계속: {exc}")
+        log(f"[warn] Playwright download event 미포착, UI 알림 기반으로 검증 계속: {exc}")
 
     _wait_for_issue_result(page, dialog_messages, dialog_index, timeout_ms)
 
@@ -303,13 +305,13 @@ def _issue_certificate(
             timeout_ms,
         )
     except Exception as exc:
-        print(f"[warn] PDF 다운로드 완료 UI 알림 닫기 실패: {exc}")
+        log(f"[warn] PDF 다운로드 완료 UI 알림 닫기 실패: {exc}")
 
     if download is not None:
         filename = download.suggested_filename or "long_term_policy_certificate.pdf"
         target_path = artifact_dir / filename
         download.save_as(str(target_path))
-        print(f"[artifact] Download saved to {target_path}")
+        log(f"[artifact] Download saved to {target_path}")
         return filename
 
     return "browser-managed download"

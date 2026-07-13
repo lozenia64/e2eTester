@@ -12,30 +12,33 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from app.core.models import (
-    AnomalyHandling,
-    AuthPreset,
-    PendingExecution,
-    Run,
-    Schedule,
-    SuiteRun,
-)
+from app.contexts.healing.models import HealingEvent, HealingPatch, HealingPolicy
+from app.core.preset_models import AuthPreset
+from app.core.run_models import AnomalyHandling, PendingExecution, Run
+from app.core.schedule_models import Schedule
+from app.core.suite_models import SuiteRun
 from app.domain.events import DomainEvent
-from app.healing.models import HealingEvent, HealingPatch, HealingPolicy
-from app.realtime.ports import RealtimeNotificationPort
 from app.storage.query_rows import (
     AnomalyInboxRow,
     DailyRunSummaryRow,
     DailyStatusRow,
+    ModuleHistoryRow,
+    Page,
+    RunComparisonRow,
+    RunSummaryFilter,
+    RunSummaryRow,
     StatsRollupRow,
+    SuiteSummaryRow,
 )
 
 
 class RunWriteRepositoryPort(Protocol):
     """Run 상태(state) 집합체의 **쓰기** 영속 경계.
 
-    create/save/get/delete 만 담당한다. 이력 조회·WebSocket fan-out 은 각각
-    ``RunHistoryQueryPort``·``RealtimeNotificationPort`` 가 소유한다.
+    create/save/get/delete 만 담당한다. 목록/집계 조회는 ``RunSummaryQueryPort`` ·
+    ``ModuleHistoryQueryPort``(프로젝션 행), WebSocket fan-out 은
+    ``RealtimeNotificationPort`` 가 소유한다. ``get_run`` 단건 로드는 쓰기 경로와
+    상세 화면에서만 합법이다.
     """
 
     async def create_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run: ...
@@ -45,38 +48,46 @@ class RunWriteRepositoryPort(Protocol):
     async def delete_run(self, run_id: str) -> None: ...
 
 
-class RunHistoryQueryPort(Protocol):
-    """Run 이력·집계용 **읽기** 쿼리 경계(인덱스/프로젝션 기반).
+class RunSummaryQueryPort(Protocol):
+    """Run 요약 목록 **읽기** 쿼리 경계 — ``run_history_index`` 프로젝션 전용.
 
-    전체 ``runs`` 테이블 스캔 대신 ``run_history_index`` 등 프로젝션을 조회한다.
+    화면 모양(screen-shaped) 행만 반환한다. 도메인 엔티티(``Run``)는 반환하지 않는다 —
+    필터·정렬·페이지는 전부 SQL 로 수행되고(단일 SELECT), blob 재수화는 타입 수준에서
+    불가능하다. 단건 애그리거트 로드가 필요한 상세/쓰기 경로는 ``RunWriteRepositoryPort``
+    를 쓴다.
     """
 
-    async def list_all_runs(self) -> list[Run]: ...
-    async def get_run(self, run_id: str) -> Run: ...
-    async def list_runs_by_user(self, user_id: str) -> list[Run]: ...
-    async def list_runs_by_system(self, system_code: str) -> list[Run]: ...
-    async def list_runs_by_schedule(self, schedule_id: str, limit: int = 30) -> list[Run]: ...
-    async def list_schedule_tagged_runs(self) -> list[Run]: ...
-    async def list_runs_since(self, since: datetime) -> list[Run]: ...
-    async def list_runs_with_statuses(self, statuses: frozenset) -> list[Run]: ...
-    async def list_waiting_input_runs(self) -> list[Run]: ...
+    async def list_summaries(self, query: RunSummaryFilter, page: Page) -> list[RunSummaryRow]: ...
+    async def count(self, query: RunSummaryFilter) -> int: ...
+    async def counts_by_status(self) -> dict[str, int]: ...
+    async def list_run_ids(self, query: RunSummaryFilter) -> list[str]: ...
     async def last_finished_at_by_system(self) -> dict[str, datetime]: ...
-    async def find_previous_finished_run(self, run: Run) -> Run | None: ...
+    async def find_previous_finished_run_id(
+        self, system_code: str, before: datetime, exclude_run_id: str
+    ) -> str | None: ...
+    async def list_comparisons(self, run_ids: list[str]) -> dict[str, RunComparisonRow]: ...
 
 
-class RunRepositoryPort(
-    RunWriteRepositoryPort, RunHistoryQueryPort, RealtimeNotificationPort, Protocol
-):
-    """Run 저장소 **복합 포트**(하위 호환 · **deprecated**).
+class ModuleHistoryQueryPort(Protocol):
+    """모듈 실행 이력 **읽기** 쿼리 경계 — ``module_history_index`` 프로젝션 전용.
 
-    쓰기(``RunWriteRepositoryPort``)·이력 조회(``RunHistoryQueryPort``)·실시간 알림
-    (``RealtimeNotificationPort``)를 한 타입으로 묶는다.
-
-    .. deprecated::
-        프로덕션 코드는 ``RunWriteRepositoryPort`` + ``RunHistoryQueryPort`` +
-        ``RealtimeNotificationPort`` 를 각각 주입받는다. 이 복합 포트는 기존 테스트·
-        ``CompositeRunRepository`` 하위 호환용으로만 유지한다.
+    인사이트(헬스/타임라인/딥다이브)·사용량 통계·일간 소요시간이 소비한다.
     """
+
+    async def list_for_system(
+        self, system_code: str, *, limit: int | None = None
+    ) -> list[ModuleHistoryRow]: ...
+    async def list_for_runs(self, run_ids: list[str]) -> list[ModuleHistoryRow]: ...
+    async def list_between(
+        self, since: datetime | None, until: datetime | None
+    ) -> list[ModuleHistoryRow]: ...
+
+
+class SuiteSummaryQueryPort(Protocol):
+    """Suite 요약 목록 **읽기** 쿼리 경계 — ``suite_history_index`` 프로젝션 전용."""
+
+    async def list_summaries(self, *, limit: int | None = None) -> list[SuiteSummaryRow]: ...
+    async def counts_by_status(self) -> dict[str, int]: ...
 
 
 class RunLogStorePort(Protocol):
@@ -240,7 +251,11 @@ class DailyStatusQueryPort(Protocol):
 
 
 class StatsQueryPort(Protocol):
-    """사용량 통계 **읽기** 쿼리 — ``stats_rollup`` + 이력 인덱스 기반 Run 조립."""
+    """사용량 통계 **읽기** 쿼리 — ``stats_rollup`` + run/module 이력 인덱스 행.
+
+    통계는 Run 엔티티(blob)를 받지 않는다: Run 단위 귀속은 ``RunSummaryRow``,
+    모듈 단위 집계(통과/실패/소요/절감시간)는 ``ModuleHistoryRow`` 로 계산한다.
+    """
 
     async def rollup_between(
         self,
@@ -250,11 +265,17 @@ class StatsQueryPort(Protocol):
         system_codes: list[str] | None = None,
     ) -> list[StatsRollupRow]: ...
 
-    async def list_usage_runs(
+    async def list_usage_run_rows(
         self,
         from_dt: datetime | None,
         to_dt: datetime | None,
-    ) -> list[Run]: ...
+    ) -> list[RunSummaryRow]: ...
+
+    async def list_usage_module_rows(
+        self,
+        from_dt: datetime | None,
+        to_dt: datetime | None,
+    ) -> list[ModuleHistoryRow]: ...
 
 
 class HealingEventStorePort(Protocol):

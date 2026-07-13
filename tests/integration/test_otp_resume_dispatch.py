@@ -7,16 +7,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.contexts.run.application.service import RunService
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.job_queue_port import RunJobDescriptor
 from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.orchestrator.run_service import RunService
+from app.platform.artifact_manager import ArtifactManager
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
 from app.storage.run_control_store import InMemoryRunControlStore
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.run_log_store import InMemoryRunLogStore
@@ -67,7 +67,7 @@ async def test_submit_otp_keeps_pending_until_resume_dispatch(tmp_path):
     service = RunService(
         registry=ModuleRegistry(),
         write_repo=write_repo,
-        history_query=AsyncMock(),
+        summary_query=AsyncMock(),
         realtime=RealtimeNotificationAdapter(),
         log_store=InMemoryRunLogStore(),
         execution_gateway=CompositeExecutionGateway([SimulatedExecutionGateway()]),

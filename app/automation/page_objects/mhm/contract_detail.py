@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.runner.step_logging import log
+
 from . import contract_list
 from . import login_common as common
 
@@ -43,7 +45,7 @@ def _normalize_text(value: str) -> str:
 def _find_first_contract_card(page):
     cards = page.locator(CONTRACT_CARD_SELECTOR)
     card_count = cards.count()
-    print(f"[step] Contract cards found: {card_count}")
+    log(f"[step] Contract cards found: {card_count}")
 
     for index in range(card_count):
         card = cards.nth(index)

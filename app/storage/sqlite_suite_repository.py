@@ -1,24 +1,34 @@
 from __future__ import annotations
 
-from app.core.models import SuiteRun
+from app.core.suite_models import SuiteRun
+from app.eventsourcing.support import SqliteDatabase
 from app.storage.records import SuiteRecord
-from app.storage.sqlite_support import JsonTableStore
 
 
 class SqliteSuiteRepository:
-    """SuiteRun 을 SQLite 에 영속하는 ``SuiteReadRepositoryPort`` 어댑터."""
+    """``SuiteReadRepositoryPort`` 어댑터 — 스냅샷(이벤트 폴드 파생 캐시)에서 읽는다.
 
-    def __init__(self, db_path: str) -> None:
-        self._store = JsonTableStore(db_path, "suites")
+    WP-B6 로 ``suites`` blob 테이블이 폐기됐으므로, Suite 상태의 유일한 저장소인
+    ``aggregate_snapshots``(``stream_id = 'Suite:{id}'``)에서 SuiteRun 을 재구성한다.
+    """
+
+    def __init__(self, db: SqliteDatabase) -> None:
+        self._db = db
 
     async def get_suite(self, suite_id: str) -> SuiteRun:
-        data = await self._store.get(suite_id)
-        if data is None:
+        row = await self._db.fetchone(
+            "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?",
+            (f"Suite:{suite_id}",),
+        )
+        if row is None:
             raise KeyError(suite_id)
-        return SuiteRecord.deserialize(data)
+        return SuiteRecord.deserialize(row["state_json"])
 
     async def list_suites(self) -> list[SuiteRun]:
-        return [SuiteRecord.deserialize(data) for data in await self._store.list_all()]
+        rows = await self._db.fetchall(
+            "SELECT state_json FROM aggregate_snapshots WHERE aggregate_type = 'Suite'"
+        )
+        return [SuiteRecord.deserialize(row["state_json"]) for row in rows]
 
     async def list_suites_by_user(self, user_id: str) -> list[SuiteRun]:
         return [suite for suite in await self.list_suites() if suite.created_by_user_id == user_id]

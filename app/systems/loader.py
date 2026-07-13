@@ -5,10 +5,10 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from app.automation.wiring import build_engine_for_execution_mode
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 
 if TYPE_CHECKING:
-    from app.healing.engine import SelfHealingEngine
+    from app.contexts.healing.engine import SelfHealingEngine
 
 
 def load_workflow_executors(

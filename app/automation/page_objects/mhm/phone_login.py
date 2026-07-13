@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.runner.step_logging import log
+
 from . import login_common as common
 
 LOGIN_TYPE_SELECT_URL_FRAGMENT = "/lin/fid/LginTyp"
@@ -122,7 +124,7 @@ def open_phone_login_page(page) -> None:
         return
 
     if LOGIN_TYPE_SELECT_URL_FRAGMENT not in page.url:
-        print(
+        log(
             f"[warn] 로그인 방법 선택 URL이 아닐 수 있음 "
             f"(기대: …{LOGIN_TYPE_SELECT_URL_FRAGMENT}): {page.url}"
         )
@@ -152,7 +154,7 @@ def _compute_jumin2_digit(config: common.LoginConfig) -> str:
 
 def fill_mobile_phone_form(page, config: common.LoginConfig) -> None:
     """모바일 휴대폰인증 페이지(LginTypSlc1020)에 사용자 정보를 입력한다."""
-    print("[step] Fill mobile phone auth form")
+    log("[step] Fill mobile phone auth form")
     root = _phone_form_root(page)
 
     name_field = root.locator("#customerName")
@@ -188,7 +190,7 @@ def fill_mobile_phone_form(page, config: common.LoginConfig) -> None:
 
 def dismiss_sms_sent_alert(page, timeout_ms: int) -> None:
     """인증요청 성공 후 뜨는 '인증번호가 발송되었습니다.' 알림을 닫는다."""
-    print("[step] 휴대폰 인증번호 발송 알림 닫기")
+    log("[step] 휴대폰 인증번호 발송 알림 닫기")
     alert_confirm = page.locator(SMS_SENT_ALERT_CONFIRM_SELECTOR).first
     try:
         common.wait_locator_visible_with_log(alert_confirm, timeout_ms, "인증번호 발송 알림")
@@ -200,11 +202,11 @@ def dismiss_sms_sent_alert(page, timeout_ms: int) -> None:
             "인증번호 발송 알림 닫힘",
         )
     except Exception as exc:
-        print(f"[warn] 인증번호 발송 알림을 찾지 못했거나 이미 닫힘: {exc}")
+        log(f"[warn] 인증번호 발송 알림을 찾지 못했거나 이미 닫힘: {exc}")
 
 
 def request_mobile_sms_code(page, dialog_messages: list[str], timeout_ms: int) -> None:
-    print("[step] Request mobile SMS verification code")
+    log("[step] Request mobile SMS verification code")
     dialog_index = len(dialog_messages)
     root = _phone_form_root(page)
     common.scroll_to_page_bottom(page)
@@ -239,7 +241,7 @@ def submit_mobile_otp(
     *,
     post_login_fragment: str = POST_LOGIN_MAIN_URL_FRAGMENT,
 ) -> None:
-    print("[step] Submit mobile OTP")
+    log("[step] Submit mobile OTP")
     dialog_index = len(dialog_messages)
     dismiss_sms_sent_alert(page, min(timeout_ms, 5000))
     root = _phone_form_root(page)
@@ -264,9 +266,9 @@ def submit_mobile_otp(
     common.wait_timeout_with_log(page, 1000, "Post-mobile-OTP-submit settle delay")
     common.ensure_no_failure_dialogs(dialog_messages, dialog_index, "mobile OTP submission")
 
-    print(f"[wait] Start post-OTP login redirect wait: {post_login_fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start post-OTP login redirect wait: {post_login_fragment} ({timeout_ms} ms)")
     common.wait_for_main_page(page, post_login_fragment, timeout_ms)
-    print(f"[wait] End post-OTP login redirect wait -> {page.url}")
+    log(f"[wait] End post-OTP login redirect wait -> {page.url}")
 
 
 def request_sms(page, config: common.LoginConfig, dialog_messages: list[str]) -> str:

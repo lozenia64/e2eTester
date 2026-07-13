@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from app.core.models import ModuleDefinition
-from app.runner.workflow_common import StepExecutionResult
+from app.core.system_models import ModuleDefinition
+from app.execution.results import StepExecutionResult
 
 # 단계 실행 도중 흘러나오는 로그 한 줄을 오케스트레이터로 되돌려 주는 비동기 콜백.
 # 실행 스레드 ↔ 이벤트 루프 사이의 브리지는 게이트웨이 어댑터가 책임지므로,
@@ -39,8 +39,9 @@ class ExecutionGateway(ABC):
         ``open_session`` → (``run_step`` | ``submit_input``)* → ``close_session``
 
     한 Run 의 모든 단계는 같은 핸들(같은 브라우저 세션)을 공유하며, OTP 대기로 일시정지한
-    뒤에도 같은 핸들로 재개한다. 현재 구현은 in-process(``LocalExecutionGateway``)지만,
-    동일 포트로 별도 워커 프로세스/Playwright MCP 구현체로 교체할 수 있다.
+    뒤에도 같은 핸들로 재개한다. 실제 브라우저 구현은 워커 프로세스의 ``SessionServer``
+    (``WorkerExecutionGateway`` 가 HTTP 로 호출)이며, 동일 포트로 다른 워커/Playwright MCP
+    구현체로 교체할 수 있다.
     """
 
     @abstractmethod
@@ -54,8 +55,14 @@ class ExecutionGateway(ABC):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
-        """브라우저 세션을 열고 핸들을 돌려준다. (실패 시 예외 전파)"""
+        """브라우저 세션을 열고 핸들을 돌려준다. (실패 시 예외 전파)
+
+        ``storage_state`` 가 주어지면(내구 체크포인트 재개, Phase C) 새 브라우저 컨텍스트를
+        그 Playwright ``storage_state``(쿠키+localStorage)로 복원해 로그인 상태를 이어받는다.
+        지원하지 않는 어댑터는 무시하고 새 세션으로 시작한다(재수화 무효 시 재로그인 폴백).
+        """
 
     @abstractmethod
     async def run_step(
@@ -83,3 +90,12 @@ class ExecutionGateway(ABC):
         workflow_step: str,
     ) -> None:
         """부분 재실행 시 세션의 재개 지점을 기록한다(브라우저 상태는 세션에 유지)."""
+
+    async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
+        """세션의 Playwright ``storage_state``(쿠키+localStorage)를 직렬화해 돌려준다(Phase C).
+
+        모듈 경계·OTP 일시정지 시 호출해 내구 체크포인트에 저장하면, 재기동/워커 교체 후 임의
+        워커가 세션을 복원할 수 있다. 체크포인트를 지원하지 않는 어댑터는 기본 ``None`` 을
+        돌려준다(추상 아님 — 기존 어댑터 무변경). 실제 캡처는 세션 스레드에서 수행해야 한다.
+        """
+        return None

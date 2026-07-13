@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from app.runner.step_logging import log
+
 from . import login_common as common
 
 CONTRACT_LIST_URL_FRAGMENT = "/fplaza/inquiry/contract01.do"
@@ -26,7 +28,7 @@ def _open_myhanwha_menu(page, timeout_ms: int) -> None:
             menu = candidate.first
             if not menu.is_visible(timeout=2000):
                 continue
-            print("[step] Open MY한화 GNB menu")
+            log("[step] Open MY한화 GNB menu")
             try:
                 menu.hover(timeout=timeout_ms)
             except Exception:
@@ -68,14 +70,14 @@ def _navigate_to_contract_list(page, timeout_ms: int) -> None:
         raise RuntimeError("개인계약 조회 메뉴를 찾지 못했습니다.")
 
     common.click_with_log(contract_link, "Navigate to personal contract inquiry list")
-    print(f"[wait] Start URL contains wait: {CONTRACT_LIST_URL_FRAGMENT} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {CONTRACT_LIST_URL_FRAGMENT} ({timeout_ms} ms)")
     page.wait_for_function(
         "fragment => window.location.href.includes(fragment)",
         arg=CONTRACT_LIST_URL_FRAGMENT,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {CONTRACT_LIST_URL_FRAGMENT} -> {page.url}")
+    log(f"[wait] End URL contains wait: {CONTRACT_LIST_URL_FRAGMENT} -> {page.url}")
     assert_inquiry_page_available(page, context="계약목록 조회")
 
 

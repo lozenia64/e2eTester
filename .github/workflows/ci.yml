@@ -42,7 +42,7 @@ jobs:
               - '!docs/**'
               - '!**/*.md'
             security:
-              - 'app/auth/**'
+              - 'app/contexts/identity/**'
               - 'app/api/routes_trigger.py'
               - 'app/api/routes_otp.py'
               - 'app/storage/*input*'
@@ -150,5 +150,5 @@ jobs:
 
       - name: SAST (bandit — auth/OTP/trigger surfaces)
         run: >-
-          python3 -m bandit -c pyproject.toml -r app/auth
+          python3 -m bandit -c pyproject.toml -r app/contexts/identity
           app/api/routes_trigger.py app/api/routes_otp.py

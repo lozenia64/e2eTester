@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+from app.runner.step_logging import log
 
 from . import compensation_result_common as result_common
 from . import login_common as common
@@ -63,7 +64,7 @@ def _assert_receipt_absent_in_processing(page, timeout_ms: int, receipt_number: 
                 present = True
                 break
         if not present:
-            print(f"[step] 진행중 탭에서 취소된 접수번호 제거 확인: {receipt_number}")
+            log(f"[step] 진행중 탭에서 취소된 접수번호 제거 확인: {receipt_number}")
             return
         common.wait_timeout_with_log(page, 400, "진행중 탭 반영 대기")
     raise RuntimeError(f"진행중 탭에 취소된 접수번호가 여전히 남아 있습니다: {receipt_number}")

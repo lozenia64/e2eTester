@@ -47,7 +47,7 @@ from app.core.env_utils import (
     resolve_env_value,
     resolve_env_with_source,
 )
-from app.core.models import Run, SuiteRun
+from app.core.run_models import Run
 from app.core.status_labels import (
     MODULE_ANOMALY_STATUSES,
     RUN_ANOMALY_STATUSES,
@@ -58,8 +58,9 @@ from app.core.status_labels import (
     run_status_label,
     suite_status_label,
 )
+from app.core.suite_models import SuiteRun
 from app.notifications.report_renderer import render_run_report_html, render_suite_report_html
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465

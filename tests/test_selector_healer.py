@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.healing.selector_healer import (
+from app.contexts.healing.selector_healer import (
     build_candidate_selector,
     extract_hints,
     parse_broken_selector,

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from app.core.models import ModuleDefinition
-from app.healing.engine import SelfHealingEngine
-from app.healing.models import HealingAction, ResolvedHealingPolicy
-from app.healing.page_proxy import HealedPage
+from app.contexts.healing.engine import SelfHealingEngine
+from app.contexts.healing.models import HealingAction, ResolvedHealingPolicy
+from app.contexts.healing.page_proxy import HealedPage
+from app.core.system_models import ModuleDefinition
 
 
 class FakeLocator:

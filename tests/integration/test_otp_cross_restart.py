@@ -6,15 +6,16 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.contexts.run.application.service import RunService
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import Run, RunModule
+from app.core.run_models import Run, RunModule
 from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.orchestrator.run_service import RunService
+from app.platform.artifact_manager import ArtifactManager
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
+from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_control_store import InMemoryRunControlStore
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.run_log_store import InMemoryRunLogStore
@@ -27,17 +28,6 @@ class _FakeSessionRegistry:
 
     async def is_alive(self, session_id: str) -> bool:
         return session_id in self._alive
-
-
-class _FakeHistoryQuery:
-    def __init__(self, runs: list[Run]) -> None:
-        self._runs = runs
-
-    async def list_all_runs(self) -> list[Run]:
-        return list(self._runs)
-
-    async def list_runs_with_statuses(self, statuses: frozenset) -> list[Run]:
-        return [run for run in self._runs if run.status in statuses]
 
 
 class _NoopQueue:
@@ -76,14 +66,13 @@ async def test_reconcile_preserves_waiting_input_when_session_alive(tmp_path):
     run = _waiting_run("sess-alive")
     control = InMemoryRunControlStore()
     await control.set_pending("run_wait", "sess-alive", "hom_workflow_step", 1, "login")
-    history = _FakeHistoryQuery([run])
     write_repo = InMemoryRunRepository()
     await write_repo.create_run(run)
 
     service = RunService(
         registry=ModuleRegistry(),
         write_repo=write_repo,
-        history_query=history,
+        summary_query=InMemoryRunSummaryQuery(write_repo),
         realtime=RealtimeNotificationAdapter(),
         log_store=InMemoryRunLogStore(),
         execution_gateway=CompositeExecutionGateway([SimulatedExecutionGateway()]),
@@ -108,14 +97,13 @@ async def test_reconcile_seals_waiting_input_when_session_dead(tmp_path):
     run = _waiting_run("sess-dead")
     control = InMemoryRunControlStore()
     await control.set_pending("run_wait", "sess-dead", "hom_workflow_step", 1, "login")
-    history = _FakeHistoryQuery([run])
     write_repo = InMemoryRunRepository()
     await write_repo.create_run(run)
 
     service = RunService(
         registry=ModuleRegistry(),
         write_repo=write_repo,
-        history_query=history,
+        summary_query=InMemoryRunSummaryQuery(write_repo),
         realtime=RealtimeNotificationAdapter(),
         log_store=InMemoryRunLogStore(),
         execution_gateway=CompositeExecutionGateway([SimulatedExecutionGateway()]),

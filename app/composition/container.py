@@ -7,7 +7,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
-from app.auth.service import UserService
+from app.contexts.healing.engine import SelfHealingEngine
+from app.contexts.healing.service import HealingService
+from app.contexts.identity.service import UserService
+from app.contexts.insights.application.insights_service import InsightsService
+from app.contexts.insights.application.ops_service import OpsService
+from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.preset.application.service import PresetService
+from app.contexts.run.application.service import RunService
+from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
+from app.contexts.scheduling.scheduler import SchedulerService
+from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
 from app.events.bus import EventBus
@@ -17,29 +27,18 @@ from app.eventsourcing.outbox import SqliteOutbox
 from app.eventsourcing.relay import OutboxRelay
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
-from app.execution.local_gateway import LocalExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
-from app.execution.redis_job_queue import RedisJobQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
-from app.execution.remote_gateway import RemoteExecutionGateway
 from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.healing.engine import SelfHealingEngine
+from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.healing_service import HealingService
-from app.orchestrator.insights_service import InsightsService
-from app.orchestrator.ops_service import OpsService
-from app.orchestrator.preset_service import PresetService
-from app.orchestrator.run_service import RunService
-from app.orchestrator.stats_service import StatsService
-from app.orchestrator.suite_service import SuiteService
+from app.orchestrator.queries import DailyDashboardQueries, RunQueries
+from app.platform.artifact_manager import ArtifactManager
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
 from app.realtime.redis_fanout import RedisRealtimeFanOut
 from app.registry.loader import ModuleRegistry
-from app.runner.artifact_manager import ArtifactManager
-from app.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
-from app.scheduling.scheduler import SchedulerService
 from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
 from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
 from app.storage.run_history_backfill import backfill_run_history_index
@@ -49,19 +48,24 @@ from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
-    SqliteHealingPolicyReader,
     SqliteHealingPolicyStore,
 )
+from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
-from app.storage.sqlite_run_history_query import SqliteRunHistoryQuery
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
+from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
+from app.storage.sqlite_session_checkpoint_store import (
+    SqliteSessionCheckpointStore,
+    StorageStateCipher,
+)
 from app.storage.sqlite_stats_query import SqliteStatsQuery
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
+from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 from app.storage.sqlite_support import DEFAULT_DB_PATH
 from app.storage.sqlite_user_repository import SqliteUserRepository
@@ -94,10 +98,13 @@ class AppContainer:
     user_repository: SqliteUserRepository = field(init=False)
     user_service: UserService = field(init=False)
     run_write_repo: SqliteRunWriteRepository = field(init=False)
-    run_history_query: SqliteRunHistoryQuery = field(init=False)
+    run_summary_query: SqliteRunSummaryQuery = field(init=False)
+    module_history_query: SqliteModuleHistoryQuery = field(init=False)
+    suite_summary_query: SqliteSuiteSummaryQuery = field(init=False)
     run_log_store: SqliteRunLogStore = field(init=False)
     run_control_store: SqliteRunControlStore = field(init=False)
     run_input_store: EncryptedSqliteRunInputStore = field(init=False)
+    session_checkpoint_store: SqliteSessionCheckpointStore = field(init=False)
     suite_write_repo: SqliteSuiteWriteRepository = field(init=False)
     suite_repository: SqliteSuiteRepository = field(init=False)
     schedule_repository: SqliteScheduleRepository = field(init=False)
@@ -117,13 +124,15 @@ class AppContainer:
     artifact_manager: ArtifactManager = field(init=False)
     system_codes: list[str] = field(init=False)
     session_registry: RedisSessionRegistry | None = field(init=False, default=None)
-    run_queue: ProfilePartitionedRunQueue | RedisJobQueue = field(init=False)
+    run_queue: ProfilePartitionedRunQueue = field(init=False)
     healing_engine: SelfHealingEngine | None = field(init=False, default=None)
     healing_service: HealingService = field(init=False)
     execution_gateway: CompositeExecutionGateway = field(init=False)
 
     event_bus: EventBus = field(init=False)
     run_service: RunService = field(init=False)
+    run_queries: RunQueries = field(init=False)
+    daily_queries: DailyDashboardQueries = field(init=False)
     suite_service: SuiteService = field(init=False)
     preset_service: PresetService = field(init=False)
 
@@ -156,14 +165,20 @@ class AppContainer:
         self.user_service = UserService(self.user_repository)
 
         self.run_write_repo = SqliteRunWriteRepository(self.es_db)
-        self.run_history_query = SqliteRunHistoryQuery(self.es_db, self.run_write_repo)
+        self.run_summary_query = SqliteRunSummaryQuery(self.es_db)
+        self.module_history_query = SqliteModuleHistoryQuery(self.es_db)
+        self.suite_summary_query = SqliteSuiteSummaryQuery(self.es_db)
         self.run_log_store = SqliteRunLogStore(self.db_path)
         self.run_control_store = SqliteRunControlStore(self.db_path)
         encryption_secret = self.settings.jwt_secret.get_secret_value()
         self.run_input_store = EncryptedSqliteRunInputStore(self.es_db, encryption_secret)
+        # Phase C: 세션 storage_state 를 입력 스토어와 동일 비밀로 암호화해 보관하는 체크포인트 스토어.
+        self.session_checkpoint_store = SqliteSessionCheckpointStore(
+            self.es_db, cipher=StorageStateCipher(encryption_secret)
+        )
 
         self.suite_write_repo = SqliteSuiteWriteRepository(self.es_db)
-        self.suite_repository = SqliteSuiteRepository(self.db_path)
+        self.suite_repository = SqliteSuiteRepository(self.es_db)
         self.schedule_repository = SqliteScheduleRepository(self.db_path)
         self.suite_control_store = SqliteSuiteControlStore(self.db_path)
         self.suite_input_store = EncryptedSqliteSuiteInputStore(self.es_db, encryption_secret)
@@ -173,7 +188,7 @@ class AppContainer:
         self.anomaly_handling_store = SqliteAnomalyHandlingStore(self.db_path)
         self.anomaly_inbox_query = SqliteAnomalyInboxQuery(self.es_db)
         self.daily_status_query = SqliteDailyStatusQuery(self.es_db)
-        self.stats_query = SqliteStatsQuery(self.es_db, self.run_write_repo)
+        self.stats_query = SqliteStatsQuery(self.es_db)
 
     def wire_realtime(self) -> None:
         use_redis_fanout = self._should_use_redis_fanout()
@@ -196,29 +211,27 @@ class AppContainer:
         self.artifact_manager = ArtifactManager()
         self.system_codes = [system.system_code for system in self.registry.list_systems()]
 
-        if self.settings.execution_mode == "remote":
-            self.session_registry = RedisSessionRegistry(
-                self.settings.redis_url, self.settings.session_lease_ttl
-            )
-            redis_queue = RedisJobQueue(self.settings.redis_url)
-            self.run_queue = ProfilePartitionedRunQueue(
-                heavy_workers=self.settings.run_concurrency_heavy,
-                light_workers=self.settings.run_concurrency_light,
-                interactive_workers=self.settings.run_concurrency_interactive,
-                redis_queue=redis_queue,
-            )
-        else:
-            self.session_registry = None
-            self.run_queue = ProfilePartitionedRunQueue(
-                heavy_workers=self.settings.run_concurrency_heavy,
-                light_workers=self.settings.run_concurrency_light,
-                interactive_workers=self.settings.run_concurrency_interactive,
-            )
+        # 실행 평면 분리(Model B): Run 오케스트레이션 인터프리터는 **항상 API 프로세스에서
+        # in-process** 로 돈다(ProfilePartitionedRunQueue). 원격 모드에서도 Redis 로 Run 잡을
+        # 분배하지 않는다 — 씬 워커에는 Run 을 소비할 RunService/RunJobConsumer 가 없기 때문이다.
+        # 브라우저 스텝만 WorkerExecutionGateway 로 워커에 위임하고, Redis 는 워커 세션 리스
+        # (session_registry)·실시간 팬아웃·체크포인트에만 쓴다.
+        self.session_registry = (
+            RedisSessionRegistry(self.settings.redis_url, self.settings.session_lease_ttl)
+            if self.settings.execution_mode == "remote"
+            else None
+        )
+        self.run_queue = ProfilePartitionedRunQueue(
+            heavy_workers=self.settings.run_concurrency_heavy,
+            light_workers=self.settings.run_concurrency_light,
+            interactive_workers=self.settings.run_concurrency_interactive,
+        )
 
-        if self.settings.execution_mode == "local":
-            self.healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(self.db_path))
-        else:
-            self.healing_engine = None
+        # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
+        # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
+        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. in-process 브라우저 호스트는
+        # 워커의 SessionServer 하나뿐이다(구 LocalExecutionGateway 는 폐기).
+        self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
 
         self.healing_service = HealingService(
             event_store=SqliteHealingEventStore(self.db_path),
@@ -227,19 +240,12 @@ class AppContainer:
             registry=self.registry,
         )
 
-        if self.settings.execution_mode == "remote":
-            gateways = [
-                RemoteExecutionGateway(self.settings.worker_base_url, self.session_registry),
+        self.execution_gateway = CompositeExecutionGateway(
+            [
+                WorkerExecutionGateway(self.settings.worker_base_url, self.session_registry),
                 SimulatedExecutionGateway(),
             ]
-        else:
-            gateways = [
-                LocalExecutionGateway(
-                    self.artifact_manager, self.system_codes, healing_engine=self.healing_engine
-                ),
-                SimulatedExecutionGateway(),
-            ]
-        self.execution_gateway = CompositeExecutionGateway(gateways)
+        )
 
     def wire_orchestration(self) -> None:
         self.event_bus = EventBus()
@@ -252,7 +258,7 @@ class AppContainer:
         self.run_service = RunService(
             registry=self.registry,
             write_repo=self.run_write_repo,
-            history_query=self.run_history_query,
+            summary_query=self.run_summary_query,
             realtime=self.realtime,
             log_store=self.run_log_store,
             execution_gateway=self.execution_gateway,
@@ -263,10 +269,16 @@ class AppContainer:
             artifact_manager=self.artifact_manager,
             healing_recorder=self.healing_service,
             session_registry=self.session_registry,
-            daily_status_query=self.daily_status_query,
+            session_checkpoint_store=self.session_checkpoint_store,
         )
         if isinstance(self.run_queue, ProfilePartitionedRunQueue):
             self.run_queue.set_run_job_handler(self.run_service.dispatch_run_job)
+
+        # 읽기 전용 질의 핸들러(CQRS query side) — 라우트가 직접 주입받는다.
+        self.run_queries = RunQueries(
+            self.run_summary_query, self.run_write_repo, self.run_log_store
+        )
+        self.daily_queries = DailyDashboardQueries(self.registry, self.daily_status_query)
 
         self.preset_service = PresetService(
             repository=self.preset_repository,
@@ -282,6 +294,7 @@ class AppContainer:
             event_bus=self.event_bus,
             cancel_store=self.suite_control_store,
             input_store=self.suite_input_store,
+            summary_query=self.suite_summary_query,
         )
         self.suite_service.register(self.event_bus)
 
@@ -289,6 +302,7 @@ class AppContainer:
             run_commands=self.run_service,
             suite_service=self.suite_service,
             repository=self.schedule_repository,
+            run_queries=self.run_queries,
         )
         realtime_projector = RealtimeProjector(
             self.realtime,
@@ -313,25 +327,26 @@ class AppContainer:
     def wire_read_models(self) -> None:
         self.stats_service = StatsService(
             stats_query=self.stats_query,
-            suite_repo=self.suite_repository,
+            suite_summary_query=self.suite_summary_query,
             registry=self.registry,
             module_settings_repo=self.module_settings_repository,
             user_service=self.user_service,
             schedule_repo=self.schedule_repository,
         )
         self.insights_service = InsightsService(
-            run_repo=self.run_history_query,
+            run_summary_query=self.run_summary_query,
+            module_history_query=self.module_history_query,
             registry=self.registry,
             anomaly_store=self.anomaly_handling_store,
             anomaly_query=self.anomaly_inbox_query,
             user_service=self.user_service,
-            suite_repo=self.suite_repository,
+            suite_summary_query=self.suite_summary_query,
             schedule_repo=self.schedule_repository,
         )
         self.ops_service = OpsService(
             settings=self.settings,
-            run_repo=self.run_history_query,
-            suite_repo=self.suite_repository,
+            run_summary_query=self.run_summary_query,
+            suite_summary_query=self.suite_summary_query,
             schedule_repo=self.schedule_repository,
             run_queue=self.run_queue,
             scheduler=self.scheduler,
@@ -344,6 +359,9 @@ class AppContainer:
         app.state.module_settings_repo = self.module_settings_repository
         app.state.preset_service = self.preset_service
         app.state.run_service = self.run_service
+        app.state.run_queries = self.run_queries
+        app.state.daily_queries = self.daily_queries
+        app.state.suite_summary_query = self.suite_summary_query
         app.state.suite_service = self.suite_service
         app.state.run_queue = self.run_queue
         app.state.registry = self.registry

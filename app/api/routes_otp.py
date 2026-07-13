@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.api.dependencies import get_otp_relay_regex, get_otp_relay_token, get_run_service
-from app.core.models import InboundOtpRequest
+from app.core.requests import InboundOtpRequest
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
+    from app.contexts.run.application.service import RunService
 
 # SMS 원문에서 OTP 를 뽑을 기본 정규식: 연속된 4~8 자리 숫자의 첫 매치.
 # 회사 SMS 형식에 맞춰 E2E_OTP_RELAY_REGEX 로 재정의할 수 있다(첫 캡처 그룹 사용).

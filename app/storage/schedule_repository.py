@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.models import Schedule
+from app.core.schedule_models import Schedule
 
 
 class InMemoryScheduleRepository:

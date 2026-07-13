@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.core.enums import SuiteStatus
-from app.core.models import SuiteRun, SuiteStep
-from app.domain.suite_aggregate import SuiteAggregate
+from app.core.suite_models import SuiteRun, SuiteStep
 
 
 def _step(system_code: str, order: int, status: SuiteStatus = SuiteStatus.PENDING) -> SuiteStep:

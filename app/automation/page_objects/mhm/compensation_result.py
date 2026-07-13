@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT
+from app.runner.step_logging import log
 
 from . import compensation_result_common as result_common
 from . import login_common as common
@@ -108,7 +109,7 @@ def _read_active_slide_title(page) -> str:
 
 def _wait_for_active_slide_image(page, timeout_ms: int) -> dict:
     wait_ms = max(timeout_ms, PREVIEW_IMAGE_LOAD_TIMEOUT_MS)
-    print(f"[wait] Start active slide image load wait ({wait_ms} ms)")
+    log(f"[wait] Start active slide image load wait ({wait_ms} ms)")
     page.wait_for_function(
         """
         () => {
@@ -174,7 +175,7 @@ def _wait_for_active_slide_image(page, timeout_ms: int) -> dict:
     )
     if not preview_meta:
         raise RuntimeError("제출 서류 확인 시트에서 활성 슬라이드 이미지를 확인하지 못했습니다.")
-    print(
+    log(
         "[wait] End active slide image load wait: "
         f"{preview_meta.get('alt') or '(제목 없음)'} "
         f"({preview_meta['naturalWidth']}x{preview_meta['naturalHeight']})"
@@ -232,12 +233,12 @@ def _verify_preview_slides(page, timeout_ms: int) -> None:
                 f"{title} ({preview_meta['naturalWidth']}x{preview_meta['naturalHeight']})"
             )
         verified_titles.append(title)
-        print(
+        log(
             f"[step] 제출 서류 슬라이드 {slide_index + 1}/{slide_count} 확인: "
             f"{title} ({preview_meta['naturalWidth']}x{preview_meta['naturalHeight']})"
         )
 
-    print(f"[step] 제출 서류 미리보기 슬라이드 {len(verified_titles)}건 검증 완료")
+    log(f"[step] 제출 서류 미리보기 슬라이드 {len(verified_titles)}건 검증 완료")
 
 
 def _verify_preview_sheet(page, timeout_ms: int) -> None:
@@ -260,10 +261,10 @@ def _verify_preview_sheet(page, timeout_ms: int) -> None:
     try:
         common.click_with_log(confirm, "제출 서류 확인 시트 닫기")
     except Exception as exc:
-        print(f"[warn] 제출 서류 확인 시트 닫기 일반 클릭 실패: {exc}")
+        log(f"[warn] 제출 서류 확인 시트 닫기 일반 클릭 실패: {exc}")
         confirm.click(force=True, timeout=3000)
     common.wait_timeout_with_log(page, 400, "제출 서류 확인 시트 닫힘 대기")
-    print("[step] 제출 서류 확인 시트 검증 완료")
+    log("[step] 제출 서류 확인 시트 검증 완료")
 
 
 def run(page, config: common.LoginConfig) -> str:

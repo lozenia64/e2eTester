@@ -1,22 +1,23 @@
-"""``stats_rollup`` / ``run_history_index`` 통계 읽기 어댑터."""
+"""``stats_rollup`` / run·module 이력 인덱스 통계 읽기 어댑터(blob 미접근)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from app.core.models import Run
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
 from app.eventsourcing.support import SqliteDatabase
-from app.storage.query_rows import StatsRollupRow
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.storage.query_rows import ModuleHistoryRow, RunSummaryRow, StatsRollupRow
+from app.storage.sqlite_module_history_query import _SELECT_COLUMNS as _MODULE_COLUMNS
+from app.storage.sqlite_module_history_query import _row_to_history
+from app.storage.sqlite_run_summary_query import _SELECT_COLUMNS as _RUN_COLUMNS
+from app.storage.sqlite_run_summary_query import _row_to_summary
 
 
 class SqliteStatsQuery:
     """``StatsQueryPort`` SQLite 어댑터."""
 
-    def __init__(self, db: SqliteDatabase, write_repo: SqliteRunWriteRepository) -> None:
+    def __init__(self, db: SqliteDatabase) -> None:
         self._db = db
-        self._write_repo = write_repo
 
     async def rollup_between(
         self,
@@ -62,11 +63,8 @@ class SqliteStatsQuery:
             for row in rows
         ]
 
-    async def list_usage_runs(
-        self,
-        from_dt: datetime | None,
-        to_dt: datetime | None,
-    ) -> list[Run]:
+    @staticmethod
+    def _period_where(from_dt: datetime | None, to_dt: datetime | None) -> tuple[str, list]:
         clauses = [f"status IN ({','.join('?' for _ in ADMIN_VISIBLE_RUN_STATUSES)})"]
         params: list[object] = [status.value for status in ADMIN_VISIBLE_RUN_STATUSES]
         if from_dt is not None:
@@ -75,19 +73,52 @@ class SqliteStatsQuery:
         if to_dt is not None:
             clauses.append("requested_at <= ?")
             params.append(to_dt.isoformat())
-        where = " AND ".join(clauses)
+        return " AND ".join(clauses), params
+
+    async def list_usage_run_rows(
+        self,
+        from_dt: datetime | None,
+        to_dt: datetime | None,
+    ) -> list[RunSummaryRow]:
+        where, params = self._period_where(from_dt, to_dt)
         rows = await self._db.fetchall(
             f"""
-            SELECT run_id FROM run_history_index
+            SELECT {_RUN_COLUMNS}
+            FROM run_history_index
             WHERE {where}
             ORDER BY requested_at DESC
             """,
             tuple(params),
         )
-        runs: list[Run] = []
-        for row in rows:
-            try:
-                runs.append(await self._write_repo.get_run(row["run_id"]))
-            except KeyError:
-                continue
-        return runs
+        return [_row_to_summary(row) for row in rows]
+
+    async def list_usage_module_rows(
+        self,
+        from_dt: datetime | None,
+        to_dt: datetime | None,
+    ) -> list[ModuleHistoryRow]:
+        # 모듈 이력 행은 종료된 모듈만 존재한다 — 통과/실패/소요 집계에 충분하며,
+        # Run 상태 필터는 run_history_index 조인으로 동일 기준을 적용한다.
+        clauses = [
+            "m.requested_at IS NOT NULL",
+            f"r.status IN ({','.join('?' for _ in ADMIN_VISIBLE_RUN_STATUSES)})",
+        ]
+        params: list[object] = [status.value for status in ADMIN_VISIBLE_RUN_STATUSES]
+        if from_dt is not None:
+            clauses.append("m.requested_at >= ?")
+            params.append(from_dt.isoformat())
+        if to_dt is not None:
+            clauses.append("m.requested_at <= ?")
+            params.append(to_dt.isoformat())
+        where = " AND ".join(clauses)
+        columns = ", ".join(f"m.{col.strip()}" for col in _MODULE_COLUMNS.split(","))
+        rows = await self._db.fetchall(
+            f"""
+            SELECT {columns}
+            FROM module_history_index m
+            JOIN run_history_index r ON r.run_id = m.run_id
+            WHERE {where}
+            """,
+            tuple(params),
+        )
+        return [_row_to_history(row) for row in rows]

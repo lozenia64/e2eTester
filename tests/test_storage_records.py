@@ -12,14 +12,8 @@ import json
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
-from app.core.models import (
-    FailureAnalysis,
-    Run,
-    RunComparison,
-    RunModule,
-    SuiteRun,
-    SuiteStep,
-)
+from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
+from app.core.suite_models import SuiteRun, SuiteStep
 from app.storage.records import RunModuleRecord, RunRecord, SuiteRecord
 
 

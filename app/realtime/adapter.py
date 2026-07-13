@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.models import DashboardEvent, SuiteEvent
+from app.core.run_models import DashboardEvent
+from app.core.suite_models import SuiteEvent
 from app.realtime.ports import RealtimeFanOutPort
 from app.realtime.redis_fanout import (
     deserialize_dashboard_event,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.models import AuthPreset
+from app.core.preset_models import AuthPreset
 from app.storage.sqlite_support import JsonTableStore
 
 

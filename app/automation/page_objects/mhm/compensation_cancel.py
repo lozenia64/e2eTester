@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+from app.runner.step_logging import log
 
 from . import compensation_result_common as result_common
 from . import login_common as common
@@ -61,11 +62,11 @@ def _assert_receipt_absent_in_processing(page, timeout_ms: int, receipt_number: 
             try:
                 empty_message = page.get_by_text(result_common.EMPTY_PROCESSING_MESSAGE).first
                 if empty_message.is_visible(timeout=400):
-                    print(f"[step] 진행중 탭 빈 목록 확인 (접수번호 {receipt_number} 없음)")
+                    log(f"[step] 진행중 탭 빈 목록 확인 (접수번호 {receipt_number} 없음)")
                     return
             except Exception:
                 pass
-            print(f"[step] 진행중 탭에서 취소된 접수번호 제거 확인: {receipt_number}")
+            log(f"[step] 진행중 탭에서 취소된 접수번호 제거 확인: {receipt_number}")
             return
 
         common.wait_timeout_with_log(page, 400, "진행중 탭 반영 대기")
@@ -97,7 +98,7 @@ def _assert_cancelled_detail(page, timeout_ms: int) -> None:
         timeout_ms,
         "취소된 청구 상세 동일내용 다시청구",
     )
-    print("[step] 취소된 청구 상세 화면 검증 완료")
+    log("[step] 취소된 청구 상세 화면 검증 완료")
 
 
 def _assert_cancelled_in_finished_tab(page, timeout_ms: int, receipt_number: str) -> None:

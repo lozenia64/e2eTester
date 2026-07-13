@@ -14,9 +14,9 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.routes_otp import DEFAULT_OTP_RELAY_REGEX, _extract_code, submit_inbound_otp
+from app.contexts.run.application.service import RunService
 from app.core.enums import RunStatus
-from app.core.models import InboundOtpRequest
-from app.orchestrator.run_service import RunService
+from app.core.requests import InboundOtpRequest
 
 
 # --------------------------------------------------------------------------- #
@@ -140,17 +140,15 @@ async def test_route_maps_no_waiting_run_to_404():
 # --------------------------------------------------------------------------- #
 # 3. RunService.submit_otp_to_waiting — 대기 Run 자동 탐색 선택 로직
 # --------------------------------------------------------------------------- #
-class _FakeRepo:
+class _FakeSummaryQuery:
+    """``RunSummaryQueryPort.list_summaries`` 흉내 — 상태 필터만 지원(테스트 전용)."""
+
     def __init__(self, runs):
         self._runs = runs
 
-    async def list_runs(self):
-        return list(self._runs)
-
-    async def list_waiting_input_runs(self):
-        from app.core.enums import RunStatus
-
-        return [run for run in self._runs if run.status == RunStatus.WAITING_INPUT]
+    async def list_summaries(self, query, page):
+        rows = [run for run in self._runs if query.statuses is None or run.status in query.statuses]
+        return rows[: page.limit]
 
 
 class _FakeControl:
@@ -178,7 +176,7 @@ def _run(run_id, status, minutes_ago=0):
 
 def _service(runs, pending_ids, recorder):
     svc = RunService.__new__(RunService)
-    svc._history_query = _FakeRepo(runs)
+    svc._summary_query = _FakeSummaryQuery(runs)
     svc._control_store = _FakeControl(pending_ids)
 
     async def fake_submit_otp(run_id, code):

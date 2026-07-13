@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.logging import get_logger
-from app.core.models import Run, SuiteRun
+from app.core.run_models import Run
+from app.core.suite_models import SuiteRun
 
 logger = get_logger(__name__)
 

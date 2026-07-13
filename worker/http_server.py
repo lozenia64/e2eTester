@@ -39,6 +39,7 @@ def create_http_app(
                 body.input_data,
                 body.run_id,
                 body.module_id,
+                body.storage_state,
             )
             if heartbeat_manager is not None:
                 await heartbeat_manager.register(
@@ -109,6 +110,16 @@ def create_http_app(
         except Exception as exc:
             return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
 
+    async def capture_storage_state(request: Request) -> JSONResponse:
+        session_id = request.path_params["session_id"]
+        try:
+            # 알 수 없는 세션은 예외가 아니라 storage_state=None 을 돌려준다(체크포인트 생략).
+            # API 측 게이트웨이도 이를 "캡처할 상태 없음"으로 읽어 실행을 막지 않는다.
+            storage_state = await session_server.capture_storage_state(session_id)
+            return JSONResponse({"storage_state": storage_state})
+        except Exception as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
+
     async def heartbeat(request: Request) -> JSONResponse:
         body = HeartbeatRequest.model_validate(await request.json())
         ok = False
@@ -128,6 +139,11 @@ def create_http_app(
             Route(
                 "/sessions/{session_id}/resume-from-step",
                 resume_from_step,
+                methods=["POST"],
+            ),
+            Route(
+                "/sessions/{session_id}/storage-state",
+                capture_storage_state,
                 methods=["POST"],
             ),
             Route("/sessions/close", close_session, methods=["POST"]),

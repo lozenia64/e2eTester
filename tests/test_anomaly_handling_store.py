@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import AnomalyState
-from app.core.models import AnomalyHandling
+from app.core.run_models import AnomalyHandling
 from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 
 

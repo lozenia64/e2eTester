@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_insights_service
-from app.auth.dependencies import get_current_user
-from app.auth.models import User
+from app.contexts.identity.dependencies import get_current_user
+from app.contexts.identity.models import User
 
 if TYPE_CHECKING:
-    from app.orchestrator.insights_service import InsightsService
+    from app.contexts.insights.application.insights_service import InsightsService
 
 
 router = APIRouter(prefix="/api/systems", tags=["insights"])

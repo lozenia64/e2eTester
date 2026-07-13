@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from app.contexts.healing.models import HealingAttempt
+from app.contexts.healing.page_proxy import HealedPage
 from app.core.enums import ModuleStatus
-from app.core.models import ModuleDefinition
-from app.healing.models import HealingAttempt
-from app.healing.page_proxy import HealedPage
-from app.runner.artifact_manager import ArtifactManager
+from app.core.system_models import ModuleDefinition
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.screenshot import capture_screenshot
+from app.runner.step_logging import pop_sink, push_sink
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
-from app.runner.workflow_common import LineWriter, StepExecutionResult, write_log_line
+from app.runner.workflow_common import StepExecutionResult, write_log_line
 
 if TYPE_CHECKING:
     from app.automation.ports import AutomationPort
-    from app.healing.engine import SelfHealingEngine
+    from app.contexts.healing.engine import SelfHealingEngine
 
 
 @runtime_checkable
@@ -29,7 +29,7 @@ class WorkflowRuntime(Protocol):
     각 시스템의 구체 런타임 dataclass 는 이 외에 시스템 전용 필드(config, base_url 등)를
     자유롭게 추가한다.
 
-    **인프라 관심사는 여기 없다.** 실행 스레드 풀은 게이트웨이 세션(`LocalExecutionGateway`)이
+    **인프라 관심사는 여기 없다.** 실행 스레드 풀은 워커 세션 호스트(`SessionServer`)의 세션이
     소유하며, 더 이상 런타임에 ``executor`` 로 매달리지 않는다(도메인 런타임은 자기 브라우저
     상태만 안다).
     """
@@ -51,19 +51,21 @@ class StepContext:
     - ``page`` / ``dialog_messages`` : 모든 런타임이 만족하는 ``WorkflowRuntime`` 계약을 통해
       노출되는 공통 능력(핸들러가 ``ctx.runtime`` 을 구체 타입으로 캐스팅하지 않아도 된다).
     - ``log``                        : 단계 로그 한 줄을 흘려보내는 **명시적 로깅 능력**.
-      과거에는 단계가 ``print()`` 하면 엔진이 stdout 을 가로채는 **암묵적 계약**이었다. 이제
-      엔진이 로그 싱크를 주입하므로 단계는 ``ctx.log(...)`` 로 의도를 명시한다(기존 ``print``
-      경로도 호환을 위해 그대로 stdout 리다이렉트로 수집된다).
+      과거에는 단계가 ``print()`` 하면 엔진이 **프로세스 전역** stdout 을 가로채는 암묵적
+      계약이었고, 이는 동시 실행 스텝 스레드 사이에서 경합했다. 이제 엔진이 스텝별 로그 싱크를
+      ``StepContext.log`` 로 주입하고, PageObject 는 ``print()`` 대신 컨텍스트-로컬
+      ``app.runner.step_logging.log`` 를 호출한다(둘 다 같은 싱크로 모인다, 전역 stdout 미접촉).
     - ``artifact_dir``               : 다운로드 등 파일 산출물이 필요한 단계만 사용.
 
     ``runtime`` 은 시스템 전용 상태(config 등)가 필요한 핸들러를 위해 그대로 노출하되, 공통
-    능력은 위 접근자로 쓰는 것을 권장한다.
+    능력은 위 접근자로 쓰는 것을 권장한다. ``log`` 는 엔진이 **필수 주입**한다(기본값 없음 —
+    싱크 없는 로그 유실을 타입 수준에서 막는다).
     """
 
     runtime: WorkflowRuntime
     module: ModuleDefinition
     artifact_dir: Path
-    log: Callable[[str], None] = print
+    log: Callable[[str], None]
 
     @property
     def page(self) -> object:
@@ -163,19 +165,20 @@ class BaseWorkflowExecutor(ABC):
         if self._healing is not None:
             runtime.page = HealedPage(real_page, selector_overrides)
 
-        # 단계 실행 → 모듈 종료 시 스크린샷까지 모두 로그 리다이렉트 안에서 처리해
-        # 캡처 과정의 로그도 execution.log / WebSocket 으로 함께 흘려보낸다.
+        # 단계 실행 → 모듈 종료 스크린샷까지 컨텍스트-로컬 로그 싱크 안에서 처리해, 캡처 과정의
+        # 로그도 execution.log / WebSocket 으로 함께 흘려보낸다. 전역 stdout 은 건드리지 않는다:
+        # ``ctx.log`` 와 PageObject 의 ``step_logging.log`` 가 모두 이 싱크로 모인다(스레드 격리).
         try:
             with log_path.open("w", encoding="utf-8") as log_file:
-                # 명시적 로깅 능력(ctx.log)과 stdout print() 모두 같은 싱크(파일+WebSocket)로 모은다.
+
                 def sink(line: str) -> None:
                     write_log_line(line, emit_log, log_file)
 
-                tee = LineWriter(sink)
                 context = StepContext(
                     runtime=runtime, module=module, artifact_dir=artifact_dir, log=sink
                 )
-                with contextlib.redirect_stdout(tee), contextlib.redirect_stderr(tee):
+                token = push_sink(sink)
+                try:
                     try:
                         # 매직 문자열 파싱이 아니라 타입드 결과 매칭으로 제어 전이를 만든다.
                         match self._dispatch_with_healing(
@@ -191,12 +194,12 @@ class BaseWorkflowExecutor(ABC):
                         status = ModuleStatus.ANOMALY
                         message = str(exc)
                         last_error = str(exc)
-                        print(f"[error] {exc}")
+                        sink(f"[error] {exc}")
                     except Exception as exc:
                         status = ModuleStatus.ERROR
                         message = str(exc)
                         last_error = str(exc)
-                        print(f"[error] {exc}")
+                        sink(f"[error] {exc}")
 
                     # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
                     # 입력 대기(WAITING_INPUT)는 모듈 종료가 아니라 일시정지이므로 건너뛴다.
@@ -205,7 +208,8 @@ class BaseWorkflowExecutor(ABC):
                         and self._should_capture_module_screenshot(runtime, module)
                     ):
                         capture_screenshot(real_page, screenshot_path)
-                    tee.flush()
+                finally:
+                    pop_sink(token)
         finally:
             runtime.page = real_page
 
@@ -319,20 +323,29 @@ class BaseWorkflowExecutor(ABC):
 
     @abstractmethod
     def build_runtime(
-        self, input_data: dict[str, str], run_id: str, module_id: str
-    ) -> WorkflowRuntime: ...
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
+    ) -> WorkflowRuntime:
+        """브라우저 런타임을 기동한다.
 
-    @abstractmethod
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        """workflow_step → 단계 핸들러 매핑을 돌려준다(if/elif 디스패치 대체).
-
-        핸들러는 ``StepContext`` 를 받아 ``StepOutcome`` 을 돌려준다. ``StepContext.artifact_dir``
-        은 해당 모듈의 아티팩트 디렉터리(`artifacts/{run_id}/{module_id}`)이며, 다운로드 등
-        파일 산출물이 필요한 단계만 사용한다. 스크린샷은 공용 엔진이 책임지므로 핸들러에
-        스크린샷 경로를 넘기지 않는다. 서브클래스는 ``super().build_step_registry()`` 와 병합해
-        부모가 제공하는 단계(예: ``main_access``)를 물려받거나 덮어쓸 수 있다.
+        ``storage_state`` 가 주어지면(내구 체크포인트 재개, Phase C) 새 브라우저 컨텍스트에
+        그 Playwright ``storage_state``(쿠키 등)를 복원해 로그인 세션을 이어받는다.
         """
         ...
+
+    def build_step_registry(self) -> Mapping[str, StepHandler]:
+        """workflow_step → 단계 핸들러 매핑(레거시 in-process 디스패치). **기본은 빈 매핑**이다.
+
+        실 시스템은 Automation Flow BC(``attach_automation``)가 전 workflow_step 을 커버하므로
+        (계약 테스트 ``tests/contract/test_scenario_manifest_alignment.py`` 가 매니페스트의 모든
+        workflow_step 에 Flow 가 등록됨을 증명) 이 레지스트리를 재정의하지 않는다 — 디스패치는
+        Flow 단일 경로다. 이 훅은 Flow 를 쓰지 않는 테스트/특수 실행기가 핸들러를 직접 등록할
+        때만 재정의한다(``_dispatch_step`` 은 Flow 우선, 없으면 이 레지스트리로 폴백).
+        """
+        return {}
 
     @abstractmethod
     def _shutdown_browser(self, runtime: WorkflowRuntime) -> None: ...

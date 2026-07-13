@@ -7,15 +7,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
-from app.api.dependencies import get_run_service, get_suite_service
-from app.auth.dependencies import get_current_user, require_admin
-from app.auth.models import User
+from app.api.dependencies import get_run_queries, get_run_service, get_suite_service
+from app.contexts.identity.dependencies import get_current_user, require_admin
+from app.contexts.identity.models import User
+from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.suite_view import filter_suite_for_user
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
-    from app.orchestrator.suite_service import SuiteService
+    from app.contexts.run.application.service import RunService
+    from app.contexts.suite.application.service import SuiteService
+    from app.orchestrator.queries import RunQueries
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -284,12 +285,12 @@ async def run_dashboard(
     request: Request,
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
     try:
-        run = await run_service.get_run(run_id)
+        run = await run_queries.get_run_detail(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return templates.TemplateResponse(

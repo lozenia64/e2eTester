@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.auth.models import User
+from app.contexts.identity.models import User
 from app.storage.sqlite_support import JsonTableStore
 
 

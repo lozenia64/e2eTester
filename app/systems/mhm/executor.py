@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from app.runner.artifact_manager import ArtifactManager
+from app.platform.artifact_manager import ArtifactManager
 from app.scenarios.rep_homepage.executor import RepHomepageExecutor
 from app.systems.mhm.channel import MOBILE_CHANNEL
 

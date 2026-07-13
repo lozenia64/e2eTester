@@ -6,6 +6,8 @@ from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
+
 from . import login_common as common
 
 PROOF_LIST_FRAGMENT = "/fplaza/proof/list.do"
@@ -29,14 +31,14 @@ def _normalize_text(value: str) -> str:
 
 
 def _wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "fragment => window.location.href.includes(fragment)",
         arg=fragment,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def _first_visible_candidate(candidates, description: str):
@@ -80,12 +82,12 @@ def _open_proof_menu(page, timeout_ms: int) -> None:
         "증명서 발급 GNB 메뉴",
     )
 
-    print("[step] Open 증명서 발급 GNB menu")
+    log("[step] Open 증명서 발급 GNB menu")
     try:
         menu.hover(timeout=timeout_ms)
         common.wait_timeout_with_log(page, 600, "증명서 발급 메뉴 펼침 대기")
     except Exception as exc:
-        print(f"[warn] 증명서 발급 메뉴 hover 실패, 목록 페이지 직접 이동으로 대체: {exc}")
+        log(f"[warn] 증명서 발급 메뉴 hover 실패, 목록 페이지 직접 이동으로 대체: {exc}")
 
 
 def _navigate_to_long_term_policy(page, config: common.LoginConfig) -> None:
@@ -96,7 +98,7 @@ def _navigate_to_long_term_policy(page, config: common.LoginConfig) -> None:
         try:
             _open_proof_menu(page, config.timeout_ms)
         except Exception as exc:
-            print(f"[warn] 증명서 발급 메뉴 접근 실패: {exc}")
+            log(f"[warn] 증명서 발급 메뉴 접근 실패: {exc}")
         policy_link = _find_long_term_policy_link(page)
 
     if policy_link is None:
@@ -136,7 +138,7 @@ def _find_visible_table_by_caption(page, caption_text: str, description: str):
 def _click_radio_with_fallback(page, radio, description: str, timeout_ms: int) -> None:
     radio_id = radio.get_attribute("id") or ""
     try:
-        print(f"[click] {description}: input 직접 클릭")
+        log(f"[click] {description}: input 직접 클릭")
         radio.click(force=True, timeout=timeout_ms)
     except Exception as exc:
         if not radio_id:
@@ -148,7 +150,7 @@ def _click_radio_with_fallback(page, radio, description: str, timeout_ms: int) -
                 f"{description} 클릭에 실패했고 연결된 라벨도 찾지 못했습니다: {exc}"
             ) from exc
 
-        print(f"[warn] {description}: input 클릭 실패, 라벨 클릭으로 재시도: {exc}")
+        log(f"[warn] {description}: input 클릭 실패, 라벨 클릭으로 재시도: {exc}")
         common.click_with_log(label, f"{description} 라벨 클릭")
 
 
@@ -156,7 +158,7 @@ def _select_first_contract(page, timeout_ms: int) -> str:
     table = _find_visible_table_by_caption(page, POLICY_TABLE_CAPTION, "보험계약 선택 표")
     rows = table.locator("tbody tr")
     row_count = rows.count()
-    print(f"[step] 보험계약 선택 표 행 수: {row_count}")
+    log(f"[step] 보험계약 선택 표 행 수: {row_count}")
     if row_count < 1:
         raise RuntimeError("보험계약 선택 테이블에 발급 가능한 항목이 없습니다.")
 
@@ -164,7 +166,7 @@ def _select_first_contract(page, timeout_ms: int) -> str:
     policy_value = radio.get_attribute("value") or ""
     policy_name = radio.get_attribute("name") or "contract_no"
 
-    print(f"[step] Select first contract for certificate issue: {policy_value}")
+    log(f"[step] Select first contract for certificate issue: {policy_value}")
     _click_radio_with_fallback(page, radio, "보험계약 선택 라디오", timeout_ms)
     page.wait_for_function(
         """
@@ -187,7 +189,7 @@ def _select_download_method(page, timeout_ms: int) -> None:
         ],
         "다운로드 발급방법 라디오",
     )
-    print("[step] Select download issue method")
+    log("[step] Select download issue method")
     _click_radio_with_fallback(page, radio, "다운로드 발급방법 라디오", timeout_ms)
     page.wait_for_function(
         """
@@ -215,10 +217,10 @@ def _wait_for_download_trigger(page, timeout_ms: int) -> bool:
             arg={"selector": DOWNLOAD_IFRAME_SELECTOR, "fragment": DOWNLOAD_IFRAME_FRAGMENT},
             timeout=timeout_ms,
         )
-        print("[step] Hidden iframe download trigger detected")
+        log("[step] Hidden iframe download trigger detected")
         return True
     except PlaywrightTimeoutError:
-        print("[warn] Hidden iframe download trigger를 확인하지 못했습니다.")
+        log("[warn] Hidden iframe download trigger를 확인하지 못했습니다.")
         return False
 
 
@@ -231,7 +233,7 @@ def _wait_for_issue_dialog(
         for message in dialog_messages[start_index:]:
             normalized = _normalize_text(message)
             if SUCCESS_DIALOG_TEXT in normalized:
-                print(f"[step] Download success dialog detected: {normalized}")
+                log(f"[step] Download success dialog detected: {normalized}")
                 return normalized
             for pattern in FAILURE_DIALOG_PATTERNS:
                 if pattern in normalized:
@@ -258,9 +260,9 @@ def _issue_certificate(
         with page.expect_download(timeout=timeout_ms) as download_info:
             common.click_with_log(issue_button, "증명서발급 버튼 클릭")
         download = download_info.value
-        print(f"[step] Playwright download event captured: {download.suggested_filename}")
+        log(f"[step] Playwright download event captured: {download.suggested_filename}")
     except PlaywrightTimeoutError as exc:
-        print(f"[warn] Playwright download event 미포착, DOM/알림 기반으로 검증 계속: {exc}")
+        log(f"[warn] Playwright download event 미포착, DOM/알림 기반으로 검증 계속: {exc}")
 
     iframe_detected = _wait_for_download_trigger(page, timeout_ms)
     _wait_for_issue_dialog(page, dialog_messages, dialog_index, timeout_ms)
@@ -269,7 +271,7 @@ def _issue_certificate(
         filename = download.suggested_filename or "long_term_policy_certificate.pdf"
         target_path = artifact_dir / filename
         download.save_as(str(target_path))
-        print(f"[artifact] Download saved to {target_path}")
+        log(f"[artifact] Download saved to {target_path}")
         return filename
 
     if iframe_detected:

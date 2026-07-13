@@ -5,8 +5,7 @@
 
 from __future__ import annotations
 
-from app.core.enums import ModuleStatus
-from app.domain.run_state_machine import (
+from app.contexts.run.domain.state_machine import (
     BlockModule,
     CancelRemaining,
     CompleteStep,
@@ -18,6 +17,7 @@ from app.domain.run_state_machine import (
     RetryModule,
     RunStateMachine,
 )
+from app.core.enums import ModuleStatus
 
 # --- 모듈 진입 결정 ----------------------------------------------------------
 

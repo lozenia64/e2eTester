@@ -5,6 +5,7 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 SALES_PAGE_PATH = "/fp/loan/sales01.do"
@@ -282,27 +283,27 @@ def _ensure_ssn2_keypad_focusable(page: Page) -> None:
 def _open_nfilter_keypad(page: Page) -> None:
     keypad_main = page.locator(NFILTER_KEYPAD_MAIN)
     if keypad_main.is_visible():
-        print("[wait] nfilter keypad already open")
+        log("[wait] nfilter keypad already open")
         return
     ssn2 = page.locator(SSN2_INPUT)
     ssn2.scroll_into_view_if_needed()
-    print("[step] Focus resident registration number back field (open nfilter keypad)")
+    log("[step] Focus resident registration number back field (open nfilter keypad)")
     _ensure_ssn2_keypad_focusable(page)
     try:
         ssn2.click(timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
-        print("[warn] ssn2 click blocked (disabled); blur via name field and JS focus")
+        log("[warn] ssn2 click blocked (disabled); blur via name field and JS focus")
         page.locator(NAME_INPUT).click()
         page.wait_for_timeout(200)
         page.evaluate(NFILTER_FOCUS_SSN2_JS)
     try:
         keypad_main.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
-        print("[warn] nfilter keypad not visible after first focus; force click ssn2")
+        log("[warn] nfilter keypad not visible after first focus; force click ssn2")
         _ensure_ssn2_keypad_focusable(page)
         ssn2.click(force=True)
         keypad_main.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-    print("[wait] nfilter keypad ready")
+    log("[wait] nfilter keypad ready")
 
 
 def _visible_ssn_back_from_decode(result: str, ssn_front: str) -> str:
@@ -431,7 +432,7 @@ def _refine_digit_map_with_full_decode(
     if _decode_prefix_matches(visible, ssn_back):
         return refined
 
-    print(
+    log(
         "[step] Refine nfilter digit map via full-entry decode "
         f"(visible={visible!r}, expected prefix={ssn_back[: len(visible) or 1]!r})"
     )
@@ -446,7 +447,7 @@ def _refine_digit_map_with_full_decode(
                 page, ssn_front=ssn_front, ssn_back=ssn_back, digit_map=trial
             )
             if _decode_prefix_matches(visible, ssn_back):
-                print(f"[step] nfilter decode refine: digit {digit} -> {area_id[:4]}")
+                log(f"[step] nfilter decode refine: digit {digit} -> {area_id[:4]}")
                 refined = trial
                 if visible == ssn_back:
                     return refined
@@ -460,7 +461,7 @@ def _refine_digit_map_with_full_decode(
 
 
 def _probe_nfilter_digit_map(page: Page, *, ssn_front: str, ssn_back: str) -> dict[str, str]:
-    print("[step] Probe scrambled nfilter keypad (pixel match + Hungarian)")
+    log("[step] Probe scrambled nfilter keypad (pixel match + Hungarian)")
     pairs = _probe_nfilter_digit_pairs(page)
     digit_map = _assign_digit_map_from_pairs(pairs)
     refined = _refine_digit_map_with_full_decode(
@@ -496,12 +497,12 @@ def _verify_decoded_ssn_back(page: Page, *, ssn_front: str, ssn_back: str) -> No
             f"기대 {expected!r}, decode {visible!r} (result={result!r})"
         )
     if len(visible) < len(ssn_back):
-        print(
+        log(
             f"[wait] decode-ssn-register verified {len(visible)}/{len(ssn_back)} "
             f"visible digit(s) of ssn back (masked response)"
         )
     else:
-        print(f"[wait] decode-ssn-register verified all {len(ssn_back)} digit(s) of ssn back")
+        log(f"[wait] decode-ssn-register verified all {len(ssn_back)} digit(s) of ssn back")
 
 
 def _click_nfilter_digit(page: Page, digit: str, *, digit_map: dict[str, str]) -> None:
@@ -522,22 +523,22 @@ def _type_ssn_back_digits(page: Page, ssn_back: str, *, digit_map: dict[str, str
             after = _ssn2_display_length(page)
             if after > before:
                 break
-            print(f"[warn] nfilter digit {digit!r} retry {attempt}/{NFILTER_KEY_CLICK_RETRY_MAX}")
+            log(f"[warn] nfilter digit {digit!r} retry {attempt}/{NFILTER_KEY_CLICK_RETRY_MAX}")
         else:
             raise RuntimeError(f"nfilter 숫자 {digit!r} 입력에 실패했습니다.")
 
 
 def _fill_ssn_back_via_nfilter(page: Page, *, ssn_front: str, ssn_back: str) -> None:
-    print("[step] Fill resident registration number back via nfilter")
+    log("[step] Fill resident registration number back via nfilter")
     _open_nfilter_keypad(page)
     last_error: RuntimeError | None = None
     for attempt in range(1, NFILTER_FILL_ATTEMPTS_MAX + 1):
         if attempt > 1:
-            print(f"[warn] nfilter ssn back refill attempt {attempt}/{NFILTER_FILL_ATTEMPTS_MAX}")
+            log(f"[warn] nfilter ssn back refill attempt {attempt}/{NFILTER_FILL_ATTEMPTS_MAX}")
             _clear_nfilter_ssn2(page)
         digit_map = _probe_nfilter_digit_map(page, ssn_front=ssn_front, ssn_back=ssn_back)
         sample = " ".join(f"{digit}->{digit_map[digit][:4]}" for digit in ssn_back)
-        print(f"[step] nfilter digit map for input: {sample}")
+        log(f"[step] nfilter digit map for input: {sample}")
         _type_ssn_back_digits(page, ssn_back, digit_map=digit_map)
 
         entered_len = _ssn2_display_length(page)
@@ -565,7 +566,7 @@ def _close_nfilter_keypad(page: Page) -> None:
     keypad = page.locator(NFILTER_KEYPAD_MAIN)
     if not keypad.is_visible():
         return
-    print("[step] Confirm nfilter keypad (enter)")
+    log("[step] Confirm nfilter keypad (enter)")
     page.evaluate(
         """() => {
             const enter = document.querySelector('#nfilter_num_content #nfilter_enter_num');
@@ -574,7 +575,7 @@ def _close_nfilter_keypad(page: Page) -> None:
     )
     page.wait_for_timeout(200)
     if keypad.is_visible():
-        print("[warn] nfilter keypad still open; blur via name field")
+        log("[warn] nfilter keypad still open; blur via name field")
         page.locator(NAME_INPUT).click()
     try:
         keypad.wait_for(state="hidden", timeout=browser.MAX_TIMEOUT_MS)
@@ -582,7 +583,7 @@ def _close_nfilter_keypad(page: Page) -> None:
         if keypad.is_visible():
             raise RuntimeError("nfilter 키패드를 닫지 못했습니다.")
     _ensure_ssn2_keypad_focusable(page)
-    print("[wait] nfilter keypad closed")
+    log("[wait] nfilter keypad closed")
 
 
 def _verify_nfilter_sec_registered(page: Page, *, expected_digits: int) -> None:
@@ -668,21 +669,21 @@ def _resolve_otp_code(otp_code: str) -> str:
 
 def _ensure_sales_page(page: Page, base_url: str) -> None:
     if SALES_PAGE_PATH in page.url:
-        print(f"[wait] Reuse contract page: {page.url}")
+        log(f"[wait] Reuse contract page: {page.url}")
         return
     target = f"{browser.normalize_base_url(base_url, base_url)}{SALES_PAGE_PATH}"
-    print(f"[step] Open sales contract page: {target}")
+    log(f"[step] Open sales contract page: {target}")
     link = page.locator(CONTRACT_WRITE_LINK)
     if link.count() > 0 and link.first.is_visible():
         link.first.click()
     else:
         page.goto(target, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     page.wait_for_url(lambda url: SALES_PAGE_PATH in url, timeout=browser.MAX_TIMEOUT_MS)
-    print(f"[wait] Contract page ready: {page.url}")
+    log(f"[wait] Contract page ready: {page.url}")
 
 
 def _verify_privacy_consent_heading(page: Page) -> None:
-    print(f"[step] Verify heading: {PRIVACY_CONSENT_HEADING!r}")
+    log(f"[step] Verify heading: {PRIVACY_CONSENT_HEADING!r}")
     page.get_by_role("heading", name=PRIVACY_CONSENT_HEADING, exact=True).wait_for(
         state="visible",
         timeout=browser.MAX_TIMEOUT_MS,
@@ -692,26 +693,26 @@ def _verify_privacy_consent_heading(page: Page) -> None:
 def _agree_all_terms(page: Page) -> None:
     checkbox = page.locator("#agreeAll")
     if checkbox.is_checked():
-        print("[step] Terms already fully agreed")
+        log("[step] Terms already fully agreed")
         return
-    print("[step] Agree to all privacy terms (label click; span overlays checkbox)")
+    log("[step] Agree to all privacy terms (label click; span overlays checkbox)")
     page.locator(AGREE_ALL_LABEL).click()
     if not checkbox.is_checked():
         raise RuntimeError("개인정보처리동의 전체동의 선택에 실패했습니다.")
 
 
 def _fill_identity_fields(page: Page, *, name: str, ssn_front: str, ssn_back: str) -> None:
-    print("[step] Fill name and resident registration number")
+    log("[step] Fill name and resident registration number")
     page.locator(NAME_INPUT).fill(name)
     page.locator(SSN1_INPUT).fill(ssn_front)
     _fill_ssn_back_via_nfilter(page, ssn_front=ssn_front, ssn_back=ssn_back)
 
 
 def _select_phone_auth(page: Page) -> None:
-    print("[step] Select phone authentication")
+    log("[step] Select phone authentication")
     phone_radio = page.locator("#name_cert02")
     if phone_radio.is_checked():
-        print("[step] Phone auth already selected")
+        log("[step] Phone auth already selected")
     else:
         page.locator(PHONE_RADIO_LABEL).click()
     page.get_by_role("heading", name=PHONE_AUTH_HEADING, exact=True).wait_for(
@@ -728,7 +729,7 @@ def _fill_phone_fields(
     phone_middle: str,
     phone_last: str,
 ) -> None:
-    print("[step] Fill carrier and phone number")
+    log("[step] Fill carrier and phone number")
     page.locator(CARRIER_SELECT).select_option(carrier_code)
     page.locator(PHONE_PREFIX_SELECT).select_option(phone_prefix)
     page.locator(PHONE_MIDDLE_INPUT).fill(phone_middle)
@@ -736,10 +737,10 @@ def _fill_phone_fields(
 
 
 def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     dialog_index = len(dialog_messages)
     timeout_ms = browser.MAX_TIMEOUT_MS
-    print(f"[wait] Start response wait: {DECODE_SSN_REGISTER_PATH} ({timeout_ms} ms)")
+    log(f"[wait] Start response wait: {DECODE_SSN_REGISTER_PATH} ({timeout_ms} ms)")
     with page.expect_response(
         lambda response: DECODE_SSN_REGISTER_PATH in response.url,
         timeout=timeout_ms,
@@ -751,7 +752,7 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
             page.locator(SMS_REQUEST_LINK).click()
 
     decode_response = decode_info.value
-    print(
+    log(
         f"[wait] End response wait: {DECODE_SSN_REGISTER_PATH} -> "
         f"{decode_response.status} {decode_response.url}"
     )
@@ -764,7 +765,7 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
         raise RuntimeError(f"주민등록번호 서버 등록 실패({DECODE_SSN_REGISTER_PATH}): {detail}")
 
     sms_response = sms_info.value
-    print(
+    log(
         f"[wait] End response wait: {HP_SMS_REQUEST_PATH} -> "
         f"{sms_response.status} {sms_response.url}"
     )
@@ -783,16 +784,16 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     if not otp_input.is_enabled():
         raise RuntimeError("인증번호 입력란이 비활성 상태입니다. SMS 발급을 다시 시도해 주세요.")
-    print("[wait] SMS auth input ready")
+    log("[wait] SMS auth input ready")
 
 
 def _wait_for_contract_write_page(page: Page) -> None:
-    print(f"[wait] Start contract write page wait: {CONTRACT_WRITE_PAGE_PATH}")
+    log(f"[wait] Start contract write page wait: {CONTRACT_WRITE_PAGE_PATH}")
     page.wait_for_url(
         lambda url: CONTRACT_WRITE_PAGE_PATH in url,
         timeout=browser.MAX_TIMEOUT_MS,
     )
-    print(f"[wait] Contract write page ready: {page.url}")
+    log(f"[wait] Contract write page ready: {page.url}")
 
 
 def request_otp(
@@ -848,14 +849,14 @@ def submit_otp_and_complete(
         )
 
     resolved = _resolve_otp_code(otp_code)
-    print("[step] Submit SMS verification code")
+    log("[step] Submit SMS verification code")
     otp_input = page.locator(OTP_INPUT)
     otp_input.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     otp_input.fill(resolved)
     page.locator(OTP_CONFIRM_BUTTON).click()
     page.wait_for_timeout(1000)
 
-    print("[step] Submit contract signing")
+    log("[step] Submit contract signing")
     dialog_index = len(dialog_messages)
     page.locator(SUBMIT_CONTRACT_BUTTON).click()
 

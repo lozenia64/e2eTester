@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from app.core.models import ModuleDefinition
-from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_common import StepExecutionResult
+from app.core.system_models import ModuleDefinition
+from app.execution.results import StepExecutionResult
+from app.platform.artifact_manager import ArtifactManager
 from app.systems.loader import load_workflow_executors
+
+
+def _storage_state_of(runtime: Any) -> str | None:
+    """세션 스레드에서 실행: runtime.page.context.storage_state() → JSON(없으면 None)."""
+    page = getattr(runtime, "page", None)
+    context = getattr(page, "context", None)
+    if context is None:
+        return None
+    return json.dumps(context.storage_state())
 
 
 @dataclass
@@ -28,8 +38,9 @@ class _Session:
 class SessionServer:
     """Playwright 세션을 워커 프로세스 안에서 관리한다.
 
-    ``LocalExecutionGateway`` 와 동일한 스레드 어피니티·로그 브리지 규약을 따르며,
-    원격 HTTP API(``worker/http_server``)가 이 클래스를 호출한다. 자가 치유 엔진은
+    Playwright sync 객체의 스레드 어피니티(세션 전용 단일 스레드 풀)와 스레드↔이벤트 루프
+    로그 브리지 규약을 따르는 **유일한 in-process 브라우저 호스트**다(구 ``LocalExecutionGateway``
+    폐기). 원격 HTTP API(``worker/http_server``)가 이 클래스를 호출하며, 자가 치유 엔진은
     원격 모드에서 워커에만 부착된다.
     """
 
@@ -53,6 +64,7 @@ class SessionServer:
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> str:
         executor = self._require_executor(execution_mode)
         prefix = execution_mode.replace("_workflow_step", "")
@@ -66,6 +78,7 @@ class SessionServer:
                 input_data,
                 run_id,
                 module_id,
+                storage_state,
             )
         except Exception:
             thread_pool.shutdown(wait=False, cancel_futures=True)
@@ -146,6 +159,19 @@ class SessionServer:
                 )
         finally:
             session.executor.shutdown(wait=True, cancel_futures=True)
+
+    async def capture_storage_state(self, session_id: str) -> str | None:
+        """세션 브라우저 컨텍스트의 Playwright ``storage_state``(쿠키+localStorage) JSON(Phase C).
+
+        Playwright sync API 는 세션 스레드에서만 호출 가능하므로 세션 전용 풀에서 실행한다.
+        모듈 경계·OTP 일시정지 시 API 가 이 값을 받아 내구 체크포인트에 암호화 저장한다.
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None
+        return await self._run_on_session_thread(
+            session.executor, _storage_state_of, session.runtime
+        )
 
     def get_session_run_id(self, session_id: str) -> str | None:
         session = self._sessions.get(session_id)

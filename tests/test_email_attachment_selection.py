@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.enums import RunStatus
-from app.core.models import Run
+from app.core.run_models import Run
 from app.notifications.run_completion_email import (
     EmailNotificationConfig,
     RunArtifact,

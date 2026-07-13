@@ -3,11 +3,12 @@ from __future__ import annotations
 from playwright.sync_api import Page
 
 from app.automation.page_objects.hrp import salvage_bid_inquiry_common as common
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 
 def _open_first_receipt_detail(page: Page, receipt_number: str) -> None:
-    print(f"[step] Open bid detail for receipt: {receipt_number}")
+    log(f"[step] Open bid detail for receipt: {receipt_number}")
     frame = common.list_frame(page)
     receipt_cell = (
         common.first_list_row(frame).get_by_role("cell").filter(has_text=receipt_number).first
@@ -18,7 +19,7 @@ def _open_first_receipt_detail(page: Page, receipt_number: str) -> None:
         state="visible",
         timeout=browser.MAX_TIMEOUT_MS,
     )
-    print("[step] Bid detail screen opened")
+    log("[step] Bid detail screen opened")
 
 
 def _verify_bid_detail(page: Page) -> None:
@@ -28,7 +29,7 @@ def _verify_bid_detail(page: Page) -> None:
     for heading in common.DETAIL_SECTION_HEADINGS:
         section = frame.get_by_role("heading", name=heading, level=3)
         section.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
-        print(f"[step] Detail section confirmed: {heading}")
+        log(f"[step] Detail section confirmed: {heading}")
 
 
 def run(page: Page, *, base_url: str) -> str:

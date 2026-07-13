@@ -4,14 +4,15 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.dependencies import get_run_service
-from app.auth.dependencies import get_current_user
-from app.auth.models import User
-from app.core.models import StartRunRequest, SubmitOtpRequest
-from app.orchestrator.run_view import RunView
+from app.api.dependencies import get_run_queries, get_run_service
+from app.contexts.identity.dependencies import get_current_user
+from app.contexts.identity.models import User
+from app.contexts.run.views.view import RunView
+from app.core.requests import StartRunRequest, SubmitOtpRequest
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
+    from app.contexts.run.application.service import RunService
+    from app.orchestrator.queries import RunQueries
 
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -22,10 +23,10 @@ async def list_runs(
     scope: Literal["today", "before_today"] | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
 ):
     user_id_filter = None if current_user.role == "admin" else current_user.user_id
-    return await run_service.list_run_summaries(
+    return await run_queries.list_run_summaries(
         limit=limit,
         user_id=user_id_filter,
         scope=scope,
@@ -110,10 +111,10 @@ async def rerun_run(
 async def get_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
 ):
     try:
-        run = await run_service.get_run(run_id)
+        run = await run_queries.get_run_detail(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return RunView.dump(run)
@@ -123,10 +124,10 @@ async def get_run(
 async def get_run_nodes(
     run_id: str,
     current_user: User = Depends(get_current_user),
-    run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
 ):
     try:
-        run = await run_service.get_run(run_id)
+        run = await run_queries.get_run_detail(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     return [module.model_dump(mode="json") for module in run.modules]

@@ -13,8 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.core.models import ModuleDefinition
-from app.runner.artifact_manager import ArtifactManager
+from app.core.system_models import ModuleDefinition
+from app.platform.artifact_manager import ArtifactManager
 from app.runner.step_outcome import StepCompleted, StepOutcome
 from app.runner.workflow_engine import BaseWorkflowExecutor, StepContext
 
@@ -43,15 +43,24 @@ def _module(step: str = "s") -> ModuleDefinition:
 
 def test_context_exposes_common_capabilities_without_runtime_cast():
     runtime = _FakeRuntime(page="PAGE", dialog_messages=["d1"])
-    ctx = StepContext(runtime=runtime, module=_module(), artifact_dir=Path("."))
+    ctx = StepContext(
+        runtime=runtime, module=_module(), artifact_dir=Path("."), log=lambda _line: None
+    )
     assert ctx.page == "PAGE"
     assert ctx.dialog_messages == ["d1"]
 
 
-def test_log_defaults_to_print(capsys):
-    ctx = StepContext(runtime=_FakeRuntime(page=None), module=_module(), artifact_dir=Path("."))
-    ctx.log("hello-default")
-    assert "hello-default" in capsys.readouterr().out
+def test_log_is_required_injected_sink_not_global_stdout():
+    # log 는 엔진이 **필수 주입**한다(기본값 없음). 전역 stdout 대신 주입된 싱크로만 흐른다.
+    captured: list[str] = []
+    ctx = StepContext(
+        runtime=_FakeRuntime(page=None),
+        module=_module(),
+        artifact_dir=Path("."),
+        log=captured.append,
+    )
+    ctx.log("hello-sink")
+    assert captured == ["hello-sink"]
 
 
 def test_no_executor_capability_leaks_into_runtime_protocol():
@@ -64,7 +73,9 @@ def test_no_executor_capability_leaks_into_runtime_protocol():
 class _LoggingExecutor(BaseWorkflowExecutor):
     execution_mode = "fake"
 
-    def build_runtime(self, input_data, run_id, module_id):  # pragma: no cover - 미사용
+    def build_runtime(
+        self, input_data, run_id, module_id, storage_state=None
+    ):  # pragma: no cover - 미사용
         raise NotImplementedError
 
     def _shutdown_browser(self, runtime):  # pragma: no cover - 미사용

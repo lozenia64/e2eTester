@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from app.core.models import PendingExecution
+from app.core.run_models import PendingExecution
 
 
 class InMemoryRunControlStore:

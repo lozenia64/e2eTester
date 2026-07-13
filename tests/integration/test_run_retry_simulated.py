@@ -7,16 +7,18 @@ from uuid import uuid4
 
 import pytest
 
+from app.contexts.run.application.service import RunService
+from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
-from app.core.models import ModuleDefinition, Run, RunModule, SystemDefinition
-from app.domain.run_aggregate import RunAggregate
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.events.bus import EventBus
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.in_memory_job_queue import InMemoryJobQueue
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.orchestrator.run_service import RunService
 from app.realtime.adapter import RealtimeNotificationAdapter
+from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.run_log_store import InMemoryRunLogStore
 from app.storage.run_repository import InMemoryRunRepository
@@ -87,7 +89,7 @@ async def test_simulated_gateway_retry_succeeds_on_second_attempt(tmp_path):
     service = RunService(
         registry=_FakeRegistry(system),
         write_repo=write_repo,
-        history_query=write_repo,
+        summary_query=InMemoryRunSummaryQuery(write_repo),
         realtime=RealtimeNotificationAdapter(),
         log_store=InMemoryRunLogStore(),
         execution_gateway=CompositeExecutionGateway([SimulatedExecutionGateway()]),

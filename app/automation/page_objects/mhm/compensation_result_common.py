@@ -5,6 +5,7 @@ from datetime import date
 
 # 청구 식별 문구는 charge→result→cancel 을 결합하는 도메인 규칙이므로 시나리오 계층(SSOT)에서 가져온다.
 from app.automation.scenarios.rep_homepage.constants import TARGET_CLAIM_TEXT_TRUNCATED
+from app.runner.step_logging import log
 
 from . import login_common as common
 
@@ -26,14 +27,14 @@ EMPTY_PROCESSING_MESSAGE = re.compile(r"진행\s*중인\s*보험금청구\s*내�
 
 
 def wait_url_contains(page, fragment: str, timeout_ms: int) -> None:
-    print(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
+    log(f"[wait] Start URL contains wait: {fragment} ({timeout_ms} ms)")
     page.wait_for_function(
         "f => window.location.href.includes(f)",
         arg=fragment,
         timeout=timeout_ms,
     )
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
-    print(f"[wait] End URL contains wait: {fragment} -> {page.url}")
+    log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
 def normalize_text(value: str) -> str:
@@ -119,7 +120,7 @@ def goto_result01(page, config: common.LoginConfig) -> None:
         _ensure_result_list_page(page, config.timeout_ms)
         return
     except Exception as exc:
-        print(f"[warn] 메뉴로 결과 조회 진입 실패, 직접 URL 시도: {exc}")
+        log(f"[warn] 메뉴로 결과 조회 진입 실패, 직접 URL 시도: {exc}")
 
     common.open_url(page, f"{config.base_url.rstrip('/')}{RESULT_INTRO_URL_FRAGMENT}")
     wait_url_contains(page, RESULT_INTRO_URL_FRAGMENT, config.timeout_ms)
@@ -146,11 +147,11 @@ def select_results_tab(page, selector: str, label: str, timeout_ms: int) -> None
 
     status = label if label in {"진행중", "완료"} else ""
     if not status:
-        print(f"[step] {label} 탭 선택 생략(모바일 목록 기본 필터 사용)")
+        log(f"[step] {label} 탭 선택 생략(모바일 목록 기본 필터 사용)")
         return
 
     if _current_filter_status(page) == status:
-        print(f"[step] {label} 필터 이미 선택됨")
+        log(f"[step] {label} 필터 이미 선택됨")
         return
 
     filter_button = page.locator("main button.icon_filter").first
@@ -162,7 +163,7 @@ def select_results_tab(page, selector: str, label: str, timeout_ms: int) -> None
     common.click_with_log(dialog.get_by_role("tab", name=status), f"청구 진행 상태 {status}")
     common.click_with_log(dialog.get_by_role("button", name="확인"), f"조회 조건 {status} 확인")
     common.wait_timeout_with_log(page, 600, f"{status} 필터 반영 대기")
-    print(f"[step] {label} 필터 선택 완료")
+    log(f"[step] {label} 필터 선택 완료")
 
 
 def claim_cards(page):
@@ -201,7 +202,7 @@ def find_processing_claim_row(page, timeout_ms: int):
                 continue
             if not PROCESSING_STATUS_HINT.search(card_text):
                 continue
-            print(f"[step] 결과 목록 대상 카드 선택: {card_text}")
+            log(f"[step] 결과 목록 대상 카드 선택: {card_text}")
             return card
         common.wait_timeout_with_log(page, 400, "결과 조회 목록 대상 카드 대기")
     raise RuntimeError("오늘 접수된 취소 대상 보험금청구 결과 카드를 찾지 못했습니다.")

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.runner.artifact_manager import ArtifactManager
-from app.runner.workflow_engine import StepHandler
+from app.platform.artifact_manager import ArtifactManager
 from app.systems.access_common import browser
 from app.systems.access_common.executor import AccessRuntime, AccessWorkflowExecutor
 
@@ -20,7 +18,13 @@ class HwtcRuntime(AccessRuntime):
 
 
 class HwtcWorkflowExecutor(AccessWorkflowExecutor):
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> HwtcRuntime:
+    def build_runtime(
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
+    ) -> HwtcRuntime:
         headless = self._resolve_headless(input_data)
         base_url = browser.normalize_base_url(input_data.get("base_url"), self._base_url)
 
@@ -29,6 +33,7 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
         playwright_manager = sync_playwright()
         playwright = playwright_manager.__enter__()
         context = browser.launch_standard_browser_context(playwright, headless)
+        browser.restore_storage_state_cookies(context, storage_state)
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(browser.MAX_TIMEOUT_MS)
         page.set_default_navigation_timeout(browser.MAX_TIMEOUT_MS)
@@ -47,9 +52,6 @@ class HwtcWorkflowExecutor(AccessWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: HwtcRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
-
-    def build_step_registry(self) -> Mapping[str, StepHandler]:
-        return {}
 
     def update_otp_code(self, runtime: HwtcRuntime, otp_code: str) -> None:
         runtime.otp_code = otp_code.strip()

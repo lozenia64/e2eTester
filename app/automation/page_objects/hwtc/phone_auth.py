@@ -6,6 +6,7 @@ import time
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 LOGIN_FORM_PATH = "/login/loginForm.do"
@@ -49,14 +50,14 @@ def _ensure_login_page(page: Page, base_url: str, *, reload: bool = True) -> Non
     if not reload and LOGIN_FORM_PATH in page.url:
         try:
             if page.locator(USER_ID_SELECTOR).is_visible(timeout=500):
-                print(f"[wait] Reuse login form: {page.url}")
+                log(f"[wait] Reuse login form: {page.url}")
                 return
         except PlaywrightTimeoutError:
             pass
     login_url = login_entry_url(base_url)
-    print(f"[wait] Navigate to login form: {login_url}")
+    log(f"[wait] Navigate to login form: {login_url}")
     page.goto(login_url, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
-    print(f"[wait] Login form ready: {page.url}")
+    log(f"[wait] Login form ready: {page.url}")
     _wait_for_login_form_ready(page)
 
 
@@ -65,7 +66,7 @@ def _wait_for_login_form_ready(page: Page) -> None:
     while time.monotonic() < deadline:
         try:
             if page.locator(USER_ID_SELECTOR).is_visible(timeout=500):
-                print("[wait] Login form fields ready")
+                log("[wait] Login form fields ready")
                 return
         except PlaywrightTimeoutError:
             pass
@@ -110,7 +111,7 @@ def _maybe_confirm_popup(page: Page, *, heading_contains: str | None = None) -> 
     heading = _popup_heading_text(page)
     if heading_contains and heading_contains not in heading:
         return False
-    print(f"[step] Confirm alert popup: {heading or '(no heading)'}")
+    log(f"[step] Confirm alert popup: {heading or '(no heading)'}")
     _click_popup_confirm(page)
     return True
 
@@ -135,18 +136,18 @@ def _submit_credentials(
 ) -> None:
     """MCP browser_run_code 와 동일: settle → fill → click (dialog 는 런타임 핸들러가 accept)."""
     if _past_login_form(page):
-        print("[step] Skip login form submit (already past login)")
+        log("[step] Skip login form submit (already past login)")
         return
 
     start_dialog_count = len(dialog_messages)
-    print("[step] Fill login credentials")
+    log("[step] Fill login credentials")
     page.wait_for_timeout(LOGIN_FORM_SETTLE_MS)
 
     deadline = time.monotonic() + LOGIN_FORM_SUBMIT_TIMEOUT_MS / 1000
     filled = False
     while time.monotonic() < deadline:
         if _past_login_form(page):
-            print("[step] Login form submit skipped (navigation detected)")
+            log("[step] Login form submit skipped (navigation detected)")
             return
 
         blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
@@ -166,9 +167,9 @@ def _submit_credentials(
             "로그인 화면에서 아이디·비밀번호 입력에 실패했습니다. (개발자도구 차단 alert 반복)"
         )
 
-    print("[step] Submit login form")
+    log("[step] Submit login form")
     page.locator(LOGIN_BUTTON_SELECTOR).click(timeout=LOGIN_FIELD_ACTION_TIMEOUT_MS)
-    print("[step] Login form submitted")
+    log("[step] Login form submitted")
 
     page.wait_for_timeout(500)
     blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
@@ -178,7 +179,7 @@ def _submit_credentials(
     nav_deadline = time.monotonic() + browser.MAX_TIMEOUT_MS / 1000
     while time.monotonic() < nav_deadline:
         if _past_login_form(page):
-            print(f"[wait] Left login form: {page.url}")
+            log(f"[wait] Left login form: {page.url}")
             return
         blocked = _latest_security_block_message(dialog_messages[start_dialog_count:])
         if blocked:
@@ -197,7 +198,7 @@ def _submit_credentials(
     try:
         page.locator(".wrap-loading").wait_for(state="hidden", timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
-        print("[warn] Login loading indicator did not hide in time")
+        log("[warn] Login loading indicator did not hide in time")
 
 
 def _ensure_sms_form(page: Page) -> None:
@@ -205,23 +206,23 @@ def _ensure_sms_form(page: Page) -> None:
         return
 
     if _maybe_confirm_popup(page, heading_contains=LONG_IDLE_LOGIN_HEADING):
-        print("[step] Confirmed long-idle login popup")
+        log("[step] Confirmed long-idle login popup")
     elif _maybe_confirm_popup(page):
-        print("[step] Confirmed post-login popup")
+        log("[step] Confirmed post-login popup")
 
     try:
         page.wait_for_url(f"**{SMS_FORM_PATH}", timeout=browser.MAX_TIMEOUT_MS)
-        print(f"[wait] SMS auth form ready: {page.url}")
+        log(f"[wait] SMS auth form ready: {page.url}")
         return
     except PlaywrightTimeoutError:
         pass
 
     if AUTH_SUCCESS_PATH in page.url:
-        print(f"[step] Already logged in: {page.url}")
+        log(f"[step] Already logged in: {page.url}")
         return
 
     if "/login/" not in page.url:
-        print(f"[step] Already past login flow: {page.url}")
+        log(f"[step] Already past login flow: {page.url}")
         return
 
     raise RuntimeError("휴대폰 인증 화면(/login/loginSmsForm.do)으로 이동하지 못했습니다.")
@@ -230,7 +231,7 @@ def _ensure_sms_form(page: Page) -> None:
 def _dismiss_visible_alert_popup(page: Page) -> bool:
     if not _is_popup_visible(page):
         return False
-    print(f"[step] Dismiss alert popup: {_popup_heading_text(page) or '(no heading)'}")
+    log(f"[step] Dismiss alert popup: {_popup_heading_text(page) or '(no heading)'}")
     _click_popup_confirm(page)
     page.wait_for_timeout(300)
     return True
@@ -245,7 +246,7 @@ def _wait_for_sms_entry_ready(page: Page) -> None:
         submit = page.locator(SUBMIT_OTP_BUTTON_SELECTOR)
         try:
             if certi.is_visible() and submit.is_visible():
-                print("[wait] SMS auth inputs ready")
+                log("[wait] SMS auth inputs ready")
                 return
         except PlaywrightTimeoutError:
             pass
@@ -255,10 +256,10 @@ def _wait_for_sms_entry_ready(page: Page) -> None:
 
 
 def _issue_sms_code(page: Page) -> None:
-    print("[step] Request SMS verification code")
+    log("[step] Request SMS verification code")
     page.locator(SEND_SMS_BUTTON_SELECTOR).click()
     _wait_for_sms_entry_ready(page)
-    print("[step] SMS verification code issued")
+    log("[step] SMS verification code issued")
 
 
 def _resolve_otp_code(otp_code: str) -> str:
@@ -276,7 +277,7 @@ def _wait_for_auth_success(page: Page, dialog_messages: list[str]) -> None:
             raise RuntimeError(f"휴대폰 인증 실패: {dialog_messages[-1]}")
         raise RuntimeError(f"휴대폰 인증 후 메인화면({AUTH_SUCCESS_PATH})으로 이동하지 못했습니다.")
     browser.maybe_close_popup(page)
-    print(f"[step] Phone auth succeeded: {page.url}")
+    log(f"[step] Phone auth succeeded: {page.url}")
 
 
 def request_sms(
@@ -311,7 +312,7 @@ def submit_otp_and_login(
         return f"휴대폰 인증 성공: {page.url}"
 
     resolved = _resolve_otp_code(otp_code)
-    print("[step] Submit SMS verification code")
+    log("[step] Submit SMS verification code")
     _dismiss_visible_alert_popup(page)
     certi = page.locator(CERTI_KEY_SELECTOR)
     certi.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
@@ -323,7 +324,7 @@ def submit_otp_and_login(
     try:
         page.locator(".wrap-loading").wait_for(state="hidden", timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
-        print("[warn] OTP submit loading indicator did not hide in time")
+        log("[warn] OTP submit loading indicator did not hide in time")
 
     _wait_for_auth_success(page, dialog_messages)
     return f"휴대폰 인증 성공: {page.url}"

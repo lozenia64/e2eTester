@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from app.api.dependencies import get_run_service
-from app.auth.jwt import decode_token
-from app.orchestrator.run_view import RunView
+from app.api.dependencies import get_run_queries, get_run_service
+from app.contexts.identity.jwt import decode_token
+from app.contexts.run.views.view import RunView
 
 if TYPE_CHECKING:
-    from app.orchestrator.run_service import RunService
+    from app.contexts.run.application.service import RunService
+    from app.orchestrator.queries import RunQueries
 
 
 router = APIRouter(tags=["ws"])
@@ -20,6 +21,7 @@ async def run_updates(
     websocket: WebSocket,
     run_id: str,
     run_service: RunService = Depends(get_run_service),
+    run_queries: RunQueries = Depends(get_run_queries),
 ):
     token = websocket.cookies.get("access_token")
     if not token:
@@ -37,7 +39,7 @@ async def run_updates(
     await websocket.accept()
     queue = await run_service.subscribe(run_id)
     try:
-        run = await run_service.get_run(run_id)
+        run = await run_queries.get_run_detail(run_id)
         await websocket.send_json(
             {
                 "event_type": "snapshot",

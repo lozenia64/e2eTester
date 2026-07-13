@@ -22,6 +22,8 @@ from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 _PROJECTION_TABLES = (
     "run_history_index",
+    "suite_history_index",
+    "module_history_index",
     "anomaly_inbox_index",
     "daily_system_status",
     "stats_rollup",
@@ -53,13 +55,13 @@ async def rebuild(db_path: str) -> int:
     projections = ProjectionHandlers(db, write_repo)
     event_store = SqliteEventStore(db)
 
-    for table in (*_PROJECTION_TABLES, "projection_checkpoints"):
+    for table in (*_PROJECTION_TABLES, "projection_cursor"):
         await db.execute(f"DELETE FROM {table}")
 
-    events = await event_store.list_all()
-    for event in events:
-        await projections.apply(event)
-    return len(events)
+    entries = await event_store.list_all()
+    for entry in entries:
+        await projections.apply(entry.event, entry.sequence_id)
+    return len(entries)
 
 
 def _backup_db_file(src_path: str, dst_path: str) -> None:
