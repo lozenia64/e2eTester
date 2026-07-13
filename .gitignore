@@ -1,15 +1,67 @@
+# =============================================================================
+# e2eTester — 로컬·런타임 산출물은 추적하지 않는다.
+# 커밋 대상: 앱/워커 코드, tests/, docs/, .cursor/skills/, .env.example
+# README "로컬 폴더" 표(data/, redis-data/, artifacts/)와 동기화 유지.
+# =============================================================================
+
+# --- Python ---
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# --- Test / lint / coverage ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- E2E 런타임 데이터 (SQLite·Redis·Run 산출물) ---
 artifacts/
-.DS_Store
-.vscode/
-.env
-.playwright-mcp/
 data/
 redis-data/
 dump.rdb
 *.db
 *.db-wal
 *.db-shm
-.claude/
-# e2e-orchestrator run state (PII, intermediate artifacts)
+
+# --- 비밀·로컬 환경 ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Cursor: skills 는 커밋, 오케스트레이터 런타임·로컬 리포트는 제외 ---
 .cursor/orchestration/runs/
+.cursor/gates-report.json
+.cursor/plans/
+
+# --- Playwright / MCP 브라우저 프로브 ---
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# --- OS / 에디터 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- 기타 AI 어시스턴트 로컬 상태 ---
+.claude/
