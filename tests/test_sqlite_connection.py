@@ -95,7 +95,6 @@ def test_immediate_write_waits_for_busy_timeout(tmp_path: Path) -> None:
             finished.set()
 
     thread = threading.Thread(target=waiter)
-    time.sleep(0.05)
     thread.start()
     time.sleep(0.25)
     holder.commit()

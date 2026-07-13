@@ -18,6 +18,14 @@ def test_relative_path_uses_web_prefix(tmp_path: Path) -> None:
     assert manager.relative_path(screenshot) == "/artifacts/run-1/login/final.png"
 
 
+def test_relative_path_rejects_escape(tmp_path: Path) -> None:
+    manager = ArtifactManager(root_dir=tmp_path / "artifacts")
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"png")
+    with pytest.raises(ValueError, match="escapes root"):
+        manager.relative_path(outside)
+
+
 @pytest.mark.parametrize(
     "stored",
     [

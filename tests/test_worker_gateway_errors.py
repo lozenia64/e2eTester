@@ -15,3 +15,8 @@ def test_format_remote_error_detects_redis_connection_refused_on_custom_port() -
 def test_format_remote_error_leaves_unrelated_errors_unchanged() -> None:
     detail = '{"detail":"module step timeout"}'
     assert _format_remote_error(500, detail) == f"원격 실행 오류 500: {detail}"
+
+
+def test_format_remote_error_ignores_generic_localhost_connection() -> None:
+    detail = '{"detail":"Failed connecting to localhost:8100/session"}'
+    assert _format_remote_error(500, detail) == f"원격 실행 오류 500: {detail}"

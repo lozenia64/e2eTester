@@ -26,9 +26,10 @@ class ArtifactManager:
         """Return a web-style artifact path (POSIX slashes, optional /artifacts prefix)."""
         try:
             rel = path.resolve().relative_to(self._root_dir.resolve())
-            return "/artifacts/" + rel.as_posix()
-        except ValueError:
-            return "/" + path.as_posix()
+        except ValueError as exc:
+            msg = f"artifact path escapes root: {path!r}"
+            raise ValueError(msg) from exc
+        return "/artifacts/" + rel.as_posix()
 
     def delete_run_artifacts(self, run_id: str) -> None:
         run_dir = self.run_dir(run_id)

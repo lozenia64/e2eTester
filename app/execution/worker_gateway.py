@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -26,15 +27,14 @@ from app.execution.results import StepExecutionResult
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"
 
 
+_REDIS_PY_CONNECT_RE = re.compile(r"error\s+\d+\s+connecting\s+to\s+", re.IGNORECASE)
+
+
 def _looks_like_redis_infra_error(detail: str) -> bool:
     lowered = detail.lower()
     if "redis" in lowered:
         return True
-    if "connecting to" in lowered and ("127.0.0.1" in detail or "localhost" in lowered):
-        return True
-    if "connection refused" in lowered or "connection reset" in lowered:
-        return "127.0.0.1" in detail or "localhost" in lowered or "6379" in detail
-    return "6379" in detail
+    return bool(_REDIS_PY_CONNECT_RE.search(detail))
 
 
 def _format_remote_error(code: int, detail: str) -> str:
