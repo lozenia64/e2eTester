@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.storage.sqlite_pragmas import apply_sqlite_pragmas
+
 DEFAULT_DB_PATH = "data/e2etester.db"
 
 
@@ -21,7 +23,7 @@ class SqliteDatabase:
             path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        apply_sqlite_pragmas(self._conn)
         self._lock = asyncio.Lock()
 
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:

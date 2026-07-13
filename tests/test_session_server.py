@@ -1,7 +1,6 @@
-"""워커 ``SessionServer`` 의 **명시적 세션 = 워커 경계** 단위 테스트(브라우저 없음).
+"""``SessionServer`` 의 **명시적 세션 = 워커 경계** 단위 테스트(브라우저 없음).
 
-실행 평면 분리(Model B) 이후 in-process 브라우저 호스트는 워커의 ``SessionServer`` 하나뿐이다
-(구 ``LocalExecutionGateway`` 는 폐기). 이 테스트는 그 프로덕션 호스트가 다음 불변식을 지키는지
+in-process 브라우저 호스트 SSOT 는 ``app.execution.session_server.SessionServer`` 이다.
 가짜 실행기로 빠르게(HTTP 없이) 검증한다: ①실행 스레드 풀을 세션이 소유(런타임 몽키패치 없음)
 ②build/step/submit/close 가 같은 단일 세션 스레드에서 실행 ③스레드↔이벤트 루프 로그 브리지
 ④종료 시 세션 풀 정리 ⑤storage_state 복원 배선 ⑥capture_storage_state 가 세션 스레드에서 실행.
@@ -17,8 +16,8 @@ import pytest
 
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
+from app.execution import session_server as ss
 from app.execution.results import StepExecutionResult
-from worker import session_server as ss
 
 
 class _FakeContext:

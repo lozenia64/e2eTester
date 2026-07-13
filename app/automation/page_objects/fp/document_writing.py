@@ -12,10 +12,8 @@ from app.systems.access_common import browser
 CONTRACT_WRITE_PAGE_PATH = "/fp/loan/sales02.do"
 DOCUMENT_COMPLETE_PAGE_PATH = "/fp/loan/sales03.do"
 
-ROW8_FORM_VIEW_BUTTON = "#btnGroup8"
-ROW8_STATUS_CELL = "#check8"
-ROW8_FORM_LABEL = "(신)정보보호서약서_설계사대리점"
-ROW8_COMPLETE_TEXT = "작성완료"
+INFO_SECURITY_PLEDGE_LABEL = "(신)정보보호서약서_설계사대리점"
+PLEDGE_COMPLETE_TEXT = "작성완료"
 
 AUTH_BUTTON = "#btnSaveCert"
 SMS_REQUEST_LINK = "#btnSendAuth"
@@ -189,16 +187,36 @@ def _draw_circle_signature(popup: Page) -> None:
     _verify_oz_signature_registered(popup)
 
 
+def _pledge_form_row(page: Page):
+    """양식 목록에서 정보보호서약서 행을 찾는다(순번 1~8 랜덤 배치 대응)."""
+    row = page.get_by_role("row").filter(has_text=INFO_SECURITY_PLEDGE_LABEL).first
+    row.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    return row
+
+
+def _pledge_form_view_button(page: Page):
+    row = _pledge_form_row(page)
+    button = row.locator("[id^='btnGroup']").first
+    button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    return button
+
+
+def _pledge_form_status_cell(page: Page):
+    row = _pledge_form_row(page)
+    status = row.locator("[id^='check']").first
+    status.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    return status
+
+
 def _open_and_submit_information_security_pledge(page: Page) -> None:
-    log(f"[step] Open row-8 form view: {ROW8_FORM_LABEL!r}")
-    view_button = page.locator(ROW8_FORM_VIEW_BUTTON)
-    view_button.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    log(f"[step] Open pledge form view: {INFO_SECURITY_PLEDGE_LABEL!r}")
+    view_button = _pledge_form_view_button(page)
 
     with page.context.expect_page(timeout=OZ_POPUP_TIMEOUT_MS) as popup_info:
         view_button.click()
     popup = popup_info.value
     popup.wait_for_load_state("domcontentloaded", timeout=OZ_POPUP_TIMEOUT_MS)
-    log(f"[wait] Settle after row-8 form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
+    log(f"[wait] Settle after pledge form view open ({OZ_POPUP_OPEN_SETTLE_MS} ms)")
     popup.wait_for_timeout(OZ_POPUP_OPEN_SETTLE_MS)
     if OZ_POPUP_URL_FRAGMENT not in popup.url:
         raise RuntimeError(f"정보보호서약서 양식 탭 URL이 예상과 다릅니다: {popup.url}")
@@ -222,16 +240,15 @@ def _open_and_submit_information_security_pledge(page: Page) -> None:
                 pass
 
 
-def _wait_for_row8_complete(page: Page) -> None:
+def _wait_for_pledge_complete(page: Page) -> None:
     log(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
     page.wait_for_timeout(FORM_SUBMIT_SETTLE_MS)
-    status = page.locator(ROW8_STATUS_CELL)
-    status.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
+    status = _pledge_form_status_cell(page)
     text = (status.text_content() or "").strip()
-    log(f"[step] Verify row-8 status cell: {text!r}")
-    if ROW8_COMPLETE_TEXT not in text:
+    log(f"[step] Verify pledge form status cell: {text!r}")
+    if PLEDGE_COMPLETE_TEXT not in text:
         raise RuntimeError(
-            f"순번 8 정보보호서약서 상태가 {ROW8_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
+            f"정보보호서약서 상태가 {PLEDGE_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
         )
 
 
@@ -303,7 +320,7 @@ def request_otp(
     browser.maybe_close_popup(page)
     _ensure_contract_write_page(page, base_url)
     _open_and_submit_information_security_pledge(page)
-    _wait_for_row8_complete(page)
+    _wait_for_pledge_complete(page)
     _open_phone_auth_section(page, dialog_messages)
     _request_sms_code(page, dialog_messages)
     return "휴대폰 인증문자 발송 성공"

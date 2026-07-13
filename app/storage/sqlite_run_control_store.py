@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.run_models import PendingExecution
+from app.storage.sqlite_pragmas import apply_sqlite_pragmas
 
 
 class SqliteRunControlStore:
@@ -25,7 +26,7 @@ class SqliteRunControlStore:
         if path.parent and not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        apply_sqlite_pragmas(self._conn)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS run_control ("
             "run_id TEXT PRIMARY KEY, "

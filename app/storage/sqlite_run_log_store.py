@@ -5,6 +5,8 @@ import sqlite3
 from collections import defaultdict
 from pathlib import Path
 
+from app.storage.sqlite_pragmas import apply_sqlite_pragmas
+
 
 class SqliteRunLogStore:
     """``RunLogStorePort`` 의 SQLite append-only 어댑터(기본 사용).
@@ -23,7 +25,7 @@ class SqliteRunLogStore:
         if path.parent and not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        apply_sqlite_pragmas(self._conn)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS run_logs ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "

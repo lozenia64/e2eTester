@@ -9,13 +9,13 @@
 - **중간 입력 처리**: 휴대폰 OTP 같은 입력이 필요하면 화면에서 이어서 넣습니다.
 - **결과 보존**: 실행 이력·통계는 SQLite 에, 로그·스크린샷은 `artifacts/` 에 남습니다.
 
-> **누가 쓰나요?** 사내 임직원이면서 본인 PC에 Python·Git·Redis 를 설치할 수 있는 사용자입니다.
+> **누가 쓰나요?** 사내 임직원이면서 본인 Windows PC에 Python·Git을 설치할 수 있는 사용자입니다.
 
 ---
 
 ## ⚡ 빠른 시작 (Quick Start)
 
-이미 **Python 3.11+, Git, Redis** 가 준비돼 있다면 아래 명령을 순서대로 복사·실행하면 됩니다. (각 단계 설명은 [설치하기](#-설치하기) 참고)
+이미 **Python 3.11+, Git** 이 준비돼 있다면 아래 명령을 순서대로 복사·실행하면 됩니다. (각 단계 설명은 [설치하기](#-설치하기) 참고)
 
 ```bash
 # 1) 내려받기
@@ -34,22 +34,31 @@ python3 -m playwright install chromium
 # 4) 관리자 계정·비밀 값 설정
 cp .env.example .env               # .env 를 열어 관리자 계정·JWT 비밀값을 바꾸세요
 
-# 5) Redis 실행 (미설치라면 Docker 가 가장 쉬움)
-docker run -d --name e2e-redis -p 6379:6379 redis:7
-
-# 6) 앱 실행 (API + 워커를 함께 기동)
-python3 scripts/run_local.py
+# 5) 앱 실행 (단일 프로세스 — Redis/worker 불필요)
+python3 scripts/run_desktop.py
 ```
 
 실행 후 브라우저에서 **http://127.0.0.1:2222** 로 접속해 `.env` 의 관리자 계정으로 로그인하면 됩니다.
 
 ---
 
-## 🏗️ 실행 구조 (왜 프로세스가 2개인가)
+## 🏗️ 실행 구조
 
-이 앱은 **웹/오케스트레이션(API)** 과 **브라우저 실행(워커)** 을 분리해서 돕니다. API 프로세스에는 브라우저가 없고, 실제 Playwright 브라우저는 별도 **워커 프로세스**가 구동합니다. 둘은 Redis 를 통해 세션 리스·실시간 알림을 공유합니다. 그래서 실제 점검을 돌리려면 **API + 워커 + Redis** 세 가지가 필요합니다.
+**Windows 데스크탑 배포(기본)** 에서는 `E2E_EXECUTION_MODE=local` 로 **uvicorn 한 프로세스**만 띄웁니다. 웹 대시보드·오케스트레이션·Playwright 브라우저 점검·SQLite 저장이 모두 이 프로세스 안에서 동작합니다. Redis·Docker·별도 DB 서버는 필요 없습니다.
 
-`scripts/run_local.py` 가 이 API·워커 두 프로세스를 **한 번에 띄우고 함께 종료**해 주므로, 로컬에서는 이 스크립트 하나만 실행하면 됩니다. (내부적으로 `E2E_EXECUTION_MODE=remote` 로 API가 워커에 위임하도록 설정합니다.)
+Playwright가 Chromium **자식 프로세스**를 띄우는 것은 정상입니다(브라우저 자동화 특성). 이것은 Redis/worker 같은 **외부 인프라**와는 다릅니다.
+
+`scripts/run_desktop.py` 가 위 구조를 한 줄로 기동합니다. 동일하게 아래도 가능합니다.
+
+```bash
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 2222
+```
+
+**개발/CI용(선택):** `scripts/run_local.py` 는 API+worker 두 프로세스와 Redis 를 쓰는 `remote` 모드 검증용입니다. Windows 배포 경로가 **아닙니다**.
+
+### SQLite · worktree 동시 실행
+
+상태는 `E2E_DB_PATH`(기본 `data/e2etester.db`) 한 파일에 저장됩니다. git worktree 등으로 **인스턴스를 여러 개** 띄울 때는 worktree마다 **서로 다른** `E2E_DB_PATH` 를 지정하세요(예: `data/e2etester-feature-x.db`). 같은 DB 파일을 여러 프로세스가 동시에 쓰면 `SQLITE_BUSY` 가 날 수 있습니다.
 
 ---
 
@@ -57,28 +66,12 @@ python3 scripts/run_local.py
 
 ### 0. 사전 준비물
 
-로컬 PC에 아래 세 가지가 필요합니다.
+로컬 PC에 아래 두 가지가 필요합니다.
 
 | 준비물 | 설명 | 확인 명령 |
 |---|---|---|
 | **Python 3.11 이상** | 앱 실행 런타임 | `python3 --version` |
 | **Git** | 소스 내려받기 | `git --version` |
-| **Redis** | API↔워커 세션 리스·실시간 알림 | `redis-cli ping` → `PONG` |
-
-Redis 가 없다면 아래 중 하나로 준비합니다(가장 쉬운 건 Docker).
-
-```bash
-# Docker (권장 — OS 무관)
-docker run -d --name e2e-redis -p 6379:6379 redis:7
-
-# macOS (Homebrew)
-brew install redis && brew services start redis
-
-# Ubuntu/Debian
-sudo apt-get install -y redis-server && sudo service redis-server start
-```
-
-Redis 주소가 기본값(`redis://127.0.0.1:6379/0`)과 다르면 `.env` 의 `E2E_REDIS_URL` 로 바꿉니다.
 
 ### 1. 프로젝트 내려받기
 
@@ -140,22 +133,31 @@ E2E_ADMIN_PASSWORD=admin1234
 
 나머지 선택 값(AI 분석·메일 알림·OTP 중계 등)은 [선택 기능](#선택-기능-실패-원인-ai-분석) 절을 참고하세요.
 
-### 5. 실행 — `scripts/run_local.py`
+### 5. 실행 — `scripts/run_desktop.py`
 
-가상환경이 활성화된 상태에서(그리고 Redis 가 떠 있는 상태에서) 아래 한 줄이면 API 와 워커가 함께 뜹니다.
+가상환경이 활성화된 상태에서 아래 한 줄이면 됩니다.
 
 ```bash
-python3 scripts/run_local.py
+python3 scripts/run_desktop.py
 ```
 
-- API 대시보드: `http://127.0.0.1:2222`
-- 워커 HTTP: `http://127.0.0.1:8100` (내부 통신용 — 직접 접속할 필요 없음)
-- 포트를 바꾸려면: `python3 scripts/run_local.py --api-port 3000 --worker-port 8200`
-- 실제로 띄우지 않고 실행될 명령만 확인하려면(점검용): `python3 scripts/run_local.py --print`
+- 대시보드: `http://127.0.0.1:2222`
+- 포트 변경: `python3 scripts/run_desktop.py --port 3000`
+- 실행 명령만 확인(점검용): `python3 scripts/run_desktop.py --print`
 
-종료는 터미널에서 `Ctrl+C` — 두 프로세스가 함께 정리됩니다. (한쪽이 죽으면 다른 쪽도 함께 내려갑니다.)
+동일하게 uvicorn 직접 실행도 가능합니다.
 
-> **두 프로세스를 직접 띄우고 싶다면** (터미널 2개):
+```bash
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 2222
+```
+
+종료는 터미널에서 `Ctrl+C` 입니다.
+
+> **(개발/CI) API+worker 분리 실행** — `remote` 모드 검증용. Redis 필요. Windows 배포 경로가 아닙니다.
+> ```bash
+> python3 scripts/run_desktop.py
+> ```
+> 또는 터미널 2개:
 > ```bash
 > # 터미널 A — 워커
 > E2E_EXECUTION_MODE=remote python3 -m worker.main
@@ -183,16 +185,16 @@ http://<PC IP>:2222
 
 > **참고**: 환경에 따라 `python3` 대신 회사 PC 에 설치된 Python 실행 경로(예: `/usr/local/bin/python3`)를 사용해야 할 수 있습니다. 단, venv 를 활성화했다면 `python3` 가 곧 venv 의 Python 이므로 별도 경로를 쓸 필요가 없습니다.
 
-### (선택) Docker Compose 로 실행
+### (선택) Docker Compose — 개발/CI 전용
 
-Python·Redis 를 직접 설치하지 않고 컨테이너로 한 번에 띄우려면, 또는 워커를 여러 대로 늘리려면 Docker Compose 를 씁니다.
+Windows 배포 모델이 **아닙니다**. 컨테이너로 `remote` 모드(API+worker+Redis)를 검증할 때만 사용합니다.
 
 ```bash
 docker compose up --build --scale worker=2      # Redis + API + 워커 2대
 ```
 
 - 대시보드: `http://127.0.0.1:2222`
-- API 는 `E2E_EXECUTION_MODE=remote` 로 워커에 실행을 위임하고, 워커가 Playwright 를 구동합니다.
+- API 는 `E2E_EXECUTION_MODE=remote` 로 워커에 실행을 위임합니다.
 
 ## 사용 흐름
 
@@ -383,7 +385,7 @@ E2E_GEMINI_SSL_VERIFY=true
 설정이 끝나면 평소처럼 실행하면 됩니다(`.env` 값을 자동으로 읽습니다).
 
 ```bash
-python3 scripts/run_local.py
+python3 scripts/run_desktop.py
 ```
 
 터미널에서 일회성으로 값을 덮어쓰고 싶다면 아래처럼 입력할 수 있습니다.
@@ -393,7 +395,7 @@ export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
 export GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview"
 
-python3 scripts/run_local.py
+python3 scripts/run_desktop.py
 ```
 
 한 줄로 실행하고 싶다면 아래처럼 입력할 수도 있습니다.
@@ -402,7 +404,7 @@ python3 scripts/run_local.py
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
 GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview" \
-python3 scripts/run_local.py
+python3 scripts/run_desktop.py
 ```
 
 브라우저에서 아래 주소로 접속하면 됩니다.
@@ -417,7 +419,7 @@ http://127.0.0.1:2222
 - `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
 - 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
 - 회사망 프록시나 사설 인증서 때문에 Gemini API 에서 `CERTIFICATE_VERIFY_FAILED` 가 발생하면 `E2E_GEMINI_SSL_VERIFY=false` 로 SSL 인증서 검증을 우회할 수 있습니다.
-- AI 분석 기능을 사용하지 않을 경우 그냥 `python3 scripts/run_local.py` 만 실행하면 됩니다.
+- AI 분석 기능을 사용하지 않을 경우 그냥 `python3 scripts/run_desktop.py` 만 실행하면 됩니다.
 - 홈 화면에는 AI 분석 상태 카드가 표시되며, 현재 설정값이 유효한지 바로 확인할 수 있습니다.
 - AI 분석 설정이 잘못되어도 앱은 실행되지만, 실패 분석 결과는 생성되지 않을 수 있습니다.
 - 위 명령은 모두 **가상환경(venv)이 활성화된 상태**에서 실행합니다(`source .venv/bin/activate`).

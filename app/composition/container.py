@@ -27,8 +27,10 @@ from app.eventsourcing.outbox import SqliteOutbox
 from app.eventsourcing.relay import OutboxRelay
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
+from app.execution.in_process_gateway import InProcessExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
+from app.execution.session_server import SessionServer
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
@@ -48,6 +50,7 @@ from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
+    SqliteHealingPolicyReader,
     SqliteHealingPolicyStore,
 )
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
@@ -227,12 +230,6 @@ class AppContainer:
             interactive_workers=self.settings.run_concurrency_interactive,
         )
 
-        # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
-        # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
-        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. in-process 브라우저 호스트는
-        # 워커의 SessionServer 하나뿐이다(구 LocalExecutionGateway 는 폐기).
-        self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
-
         self.healing_service = HealingService(
             event_store=SqliteHealingEventStore(self.db_path),
             policy_store=SqliteHealingPolicyStore(self.db_path),
@@ -240,9 +237,26 @@ class AppContainer:
             registry=self.registry,
         )
 
+        if self.settings.execution_mode == "local":
+            # Windows 단일 PC 배포: Playwright·자가치유·SessionServer 모두 API 프로세스 안.
+            self.healing_engine = SelfHealingEngine(SqliteHealingPolicyReader(self.db_path))
+            session_server = SessionServer(
+                self.artifact_manager,
+                self.system_codes,
+                healing_engine=self.healing_engine,
+            )
+            browser_gateway = InProcessExecutionGateway(session_server)
+        else:
+            # aspirational remote: 워커 HTTP + Redis 세션 리스(개발/CI).
+            self.healing_engine = None
+            browser_gateway = WorkerExecutionGateway(
+                self.settings.worker_base_url,
+                self.session_registry,
+            )
+
         self.execution_gateway = CompositeExecutionGateway(
             [
-                WorkerExecutionGateway(self.settings.worker_base_url, self.session_registry),
+                browser_gateway,
                 SimulatedExecutionGateway(),
             ]
         )

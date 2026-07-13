@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.core.enums import AnomalyState
 from app.core.run_models import AnomalyHandling
+from app.storage.sqlite_pragmas import apply_sqlite_pragmas
 
 
 class SqliteAnomalyHandlingStore:
@@ -23,7 +24,7 @@ class SqliteAnomalyHandlingStore:
         if path.parent and not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        apply_sqlite_pragmas(self._conn)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS anomaly_handling ("
             "module_run_id TEXT PRIMARY KEY, "

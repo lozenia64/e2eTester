@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An internal web-triggered E2E test platform (Korean-language UI/docs). A FastAPI server serves a JWT-protected dashboard where employees launch Playwright-based browser tests against the Hanwha General Insurance websites, watch live module status/logs over WebSocket, and submit OTP codes mid-run. Two full 대표홈페이지 systems ship by default: **HOM** (PC web, `대표홈페이지(PC)`, `www.hwgeneralins.com`) and **MHM** (mobile web, `대표홈페이지(모바일)`, `m.hwgeneralins.com`). Four additional business systems run multi-module scenarios with phone OTP where required: **FP** (`영업가족 위촉서류 등록(PC)`, 3 modules: access → identity verification → document writing), **HRP** (`현장출동 홈페이지(PC)`, 4 modules: access → login → salvage bid list/detail), **HWTC** (`연수원(PC)`, 3 modules: access → login → video playback), **CHBOT** (`챗봇(모바일)`, 3 modules: access → simple auth → contract inquiry). Dashboard auth lives in `app/auth/` (JWT cookie, admin user CRUD, `/admin` pages). See `E2E_ARCHITECTURE.md` for the full architecture doc (current state vs. target state). Per-system test scenarios live in `docs/scenarios/{system_code}.md` (one file per system, paired 1:1 with its manifest): `docs/scenarios/hom.md`, `docs/scenarios/mhm.md`, `docs/scenarios/fp.md`, `docs/scenarios/hrp.md`, `docs/scenarios/hwtc.md`, `docs/scenarios/chbot.md`.
 
+
+## 실행 환경 · 배포 제약 (Deployment environment — READ FIRST)
+
+**This product runs as a single program on one Windows desktop PC. There is NO Redis server, NO Docker, and NO external DB server (PostgreSQL/MySQL 등). SQLite (a single local file) is the only datastore.** Every design decision, dependency, and change you make must respect this. Concretely:
+
+- **Persistence is SQLite-only.** State lives in one file (`E2E_DB_PATH`, default `data/e2etester.db`) via the `Sqlite*Repository` adapters. Do **not** add code paths that require a network DB server. The storage ports (`app/storage/ports.py`) exist so adapters are swappable, but the *only* adapters that ship/run here are SQLite (and in-memory for tests). "Postgres 등 다중 프로세스 저장소" is an unimplemented target in `E2E_ARCHITECTURE.md §10`, not the deployment.
+- **No Redis. Run in `local` execution mode.** `E2E_EXECUTION_MODE` defaults to `local`; keep it that way. Only `remote` mode wires `RedisSessionRegistry` and Redis WS fan-out (`AppContainer.wire_execution` / `_should_use_redis_fanout` in `app/composition/container.py`). `E2E_REALTIME_FANOUT` must stay off (single API process needs no cross-instance fan-out). The default job queue is the **in-process** `ProfilePartitionedRunQueue`, never `RedisJobQueue`.
+- **No Docker / docker-compose.** `Dockerfile` and `docker-compose.yml` exist in the tree but are **not** the deployment model — do not treat them as the run path or add compose-based instructions. The app is launched with `scripts/run_desktop.py` or `python3 -m uvicorn app.main:app ...` on the desktop (`E2E_EXECUTION_MODE=local`). `scripts/run_local.py` forces `remote`+Redis and is for dev/CI only.
+- **Local in-process execution (resolved).** `AppContainer.wire_execution` uses `InProcessExecutionGateway` → `SessionServer` when `execution_mode=local`. Real browser runs need no worker HTTP or Redis on the deployment PC. The aspirational `remote` path (`WorkerExecutionGateway` + `worker/` + Redis session lease) remains for integration tests/CI.
+- **SQLite multi-instance:** use distinct `E2E_DB_PATH` per worktree/concurrent instance; connections use WAL + `busy_timeout` via `app/storage/sqlite_pragmas.py`.
+- **Env-optional features stay optional.** AI failure analysis (Gemini) and end-of-run Gmail email are off by default and must keep the app fully working when unset/misconfigured — same spirit as the no-external-infra rule.
+
 ## Commands
 
 ```bash
@@ -17,7 +29,8 @@ python3 -m playwright install chromium   # fallback browser; local Chrome channe
 python3 -m pip install -r requirements-dev.txt
 
 # Run the server (then open http://127.0.0.1:2222 or http://<PC IP>:2222)
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+python3 scripts/run_desktop.py
+# Or: python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 
 # The CI gates GitHub Actions runs on every PR (.github/workflows/ci.yml) — run all before opening a PR
 python3 scripts/ci/run_all_gates.py --profile full   # SSOT: all standard gates (same as CI)
@@ -32,7 +45,7 @@ python3 -m pytest tests/ -q                 # unit tests (pure domain/builders �
 
 # 1회성 데이터 이관(레거시 blob → 이벤트 스트림) 후 프로젝션 리빌드
 python3 scripts/migrate_blob_to_events.py   # runs blob → RunImported genesis + 스냅샷 (FAILED→ANOMALY)
-# 로컬 통합 기동(API + 워커, Redis 필요): python3 scripts/run_local.py
+# 로컬 통합 기동(API + 워커, Redis 필요, dev/CI only): python3 scripts/run_local.py
 
 # Project-local multi-agent orchestration (Cursor): invoke in chat with
 # "e2e-orchestrator 실행: <request>" — see .cursor/skills/e2e-orchestrator/SKILL.md
@@ -44,7 +57,7 @@ Optional features (AI failure analysis via Gemini, end-of-run Gmail notification
 
 ## Architecture
 
-Execution-plane separation (WP-C1): the API process runs the web layer + orchestration only — **no Playwright, no execution threads**. Real browser modules are always delegated to a `worker/` process via `WorkerExecutionGateway` (the API composition root never instantiates the in-process `LocalExecutionGateway`, which is now worker-only); only SIM modules run in-process via `SimulatedExecutionGateway`. This makes a worker (+Redis) required infrastructure for real runs — use `scripts/run_local.py` to start API + worker together. Flow:
+Execution boundary: orchestration talks only to `ExecutionGateway`. **Deployment (`E2E_EXECUTION_MODE=local`, default):** `InProcessExecutionGateway` → `SessionServer` in the API process — no worker HTTP, no Redis. **Aspirational (`remote`, dev/CI):** `WorkerExecutionGateway` → `worker/` HTTP + Redis session lease. SIM modules always use `SimulatedExecutionGateway`. Flow:
 
 ```
 Browser → FastAPI (app/main.py — lifespan only)
@@ -53,7 +66,7 @@ Browser → FastAPI (app/main.py — lifespan only)
       → ProfilePartitionedRunQueue / JobQueuePort — routes jobs by manifest execution_profile (heavy/light/interactive); concurrency via E2E_RUN_CONCURRENCY_{HEAVY,LIGHT,INTERACTIVE}
       → RunAggregate / RunStateMachine — pure domain (to_snapshot() → frozen RunSnapshot)
       → RunView — wire projection from RunSnapshot (never dumps entity / aggregate.run directly)
-      → ExecutionGateway → CompositeExecutionGateway → Local / Remote / Simulated adapters
+      → ExecutionGateway → CompositeExecutionGateway → InProcess / Worker / Simulated adapters
         → app/automation/ (Flow + PageObject BC; app/systems/*/steps/ removed)
       → SqliteRunWriteRepository + transactional outbox
           → OutboxRelay → ProjectionHandlers + EventBus + RealtimeProjector (single WS notification pipeline; no direct repo→WS publish)

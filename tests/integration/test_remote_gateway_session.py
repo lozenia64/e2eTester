@@ -12,10 +12,10 @@ import uvicorn
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
 from app.execution.results import StepExecutionResult
+from app.execution.session_server import SessionServer
 from app.execution.worker_gateway import WorkerExecutionGateway
 from tests.test_session_server import _FakeExecutor, _module
 from worker.http_server import create_http_app
-from worker.session_server import SessionServer
 
 
 def _free_port() -> int:
@@ -40,7 +40,7 @@ def remote_gateway(monkeypatch):
     fake = _FakeExecutor()
     stub = lambda codes, am, **kwargs: {"fake": fake}  # noqa: E731
     monkeypatch.setattr("app.systems.loader.load_workflow_executors", stub)
-    import worker.session_server as ss
+    import app.execution.session_server as ss
 
     monkeypatch.setattr(ss, "load_workflow_executors", stub)
     session_server = SessionServer(artifact_manager=None, system_codes=["x"])
