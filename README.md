@@ -2,95 +2,168 @@
 
 > **문서 소유권(SSOT):** 이 문서는 **설치·실행 방법, 선택 기능(AI/메일/예약) 사용법, 환경변수 카탈로그**의 단일 진실원천입니다. 플랫폼 아키텍처·API 목록은 [E2E_ARCHITECTURE.md](E2E_ARCHITECTURE.md), 시스템별 시나리오는 `docs/scenarios/{code}.md` 가 소유합니다. 문서 거버넌스 규칙과 정합성 가드는 [docs/DOCS_GOVERNANCE.md](docs/DOCS_GOVERNANCE.md) 를 참고하세요.
 
-사내 임직원이 본인 로컬 PC에서 웹 애플리케이션을 점검하기 위해 사용하는 내부용 E2E 테스터입니다.
+사내 임직원이 본인 로컬 PC에서 회사 웹사이트를 자동 점검하기 위해 사용하는 내부용 E2E(End-to-End) 테스터입니다. 내려받아 실행하면 **웹 대시보드**가 뜨고, 그 화면에서 브라우저 기반 점검을 시작·감시하고 로그·스크린샷 결과를 확인할 수 있습니다.
 
-이 프로젝트를 내려받아 실행하면 브라우저 기반 테스트를 웹 화면에서 시작할 수 있고, 실행 상태와 로그를 확인할 수 있습니다.
+- **웹에서 실행**: 시스템(HOM·MHM·FP·HRP·HWTC·CHBOT)을 골라 버튼 한 번으로 점검을 시작합니다.
+- **실시간 감시**: 진행 상태·로그·스크린샷을 화면에서 실시간으로 봅니다.
+- **중간 입력 처리**: 휴대폰 OTP 같은 입력이 필요하면 화면에서 이어서 넣습니다.
+- **결과 보존**: 실행 이력·통계는 SQLite 에, 로그·스크린샷은 `artifacts/` 에 남습니다.
 
-## 프로젝트 소개
+> **누가 쓰나요?** 사내 임직원이면서 본인 PC에 Python·Git·Redis 를 설치할 수 있는 사용자입니다.
 
-이 프로젝트의 목적은 다음과 같습니다.
+---
 
-- 사내 사용자가 직접 로컬 PC에서 웹 애플리케이션 E2E 테스트를 실행
-- 테스트 진행 상태를 웹 화면에서 확인
-- 실행 중 필요한 입력이 있으면 화면에서 이어서 처리
-- 실행 로그와 스크린샷 결과를 로컬에 저장
+## ⚡ 빠른 시작 (Quick Start)
 
-현재 프로젝트는 Python 기반으로 실행되며, 로컬에서 웹 서버를 띄운 뒤 브라우저로 접속해 사용하는 방식입니다.
-
-## 사용 대상
-
-- 사내 임직원
-- 본인 PC에 Python 설치가 가능한 사용자
-- 로컬 환경에서 테스트 실행이 필요한 사용자
-
-## 로컬 PC 실행 방법
-
-### 1. 사전 준비
-
-먼저 로컬 PC에 아래가 준비되어 있어야 합니다.
-
-- Python 3 설치
-- Git 설치
-
-터미널에서 아래 명령으로 설치 여부를 확인할 수 있습니다.
+이미 **Python 3.11+, Git, Redis** 가 준비돼 있다면 아래 명령을 순서대로 복사·실행하면 됩니다. (각 단계 설명은 [설치하기](#-설치하기) 참고)
 
 ```bash
-python3 --version
-git --version
+# 1) 내려받기
+git clone https://github.com/lozenia64/e2eTester.git
+cd e2eTester
+
+# 2) 가상환경(venv) 만들고 활성화
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# 3) 패키지 설치 (venv 안에서)
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
+python3 -m playwright install chromium
+
+# 4) 관리자 계정·비밀 값 설정
+cp .env.example .env               # .env 를 열어 관리자 계정·JWT 비밀값을 바꾸세요
+
+# 5) Redis 실행 (미설치라면 Docker 가 가장 쉬움)
+docker run -d --name e2e-redis -p 6379:6379 redis:7
+
+# 6) 앱 실행 (API + 워커를 함께 기동)
+python3 scripts/run_local.py
 ```
 
-### 2. 프로젝트 내려받기
+실행 후 브라우저에서 **http://127.0.0.1:2222** 로 접속해 `.env` 의 관리자 계정으로 로그인하면 됩니다.
 
-원하는 작업 폴더에서 아래 명령을 실행합니다.
+---
+
+## 🏗️ 실행 구조 (왜 프로세스가 2개인가)
+
+이 앱은 **웹/오케스트레이션(API)** 과 **브라우저 실행(워커)** 을 분리해서 돕니다. API 프로세스에는 브라우저가 없고, 실제 Playwright 브라우저는 별도 **워커 프로세스**가 구동합니다. 둘은 Redis 를 통해 세션 리스·실시간 알림을 공유합니다. 그래서 실제 점검을 돌리려면 **API + 워커 + Redis** 세 가지가 필요합니다.
+
+`scripts/run_local.py` 가 이 API·워커 두 프로세스를 **한 번에 띄우고 함께 종료**해 주므로, 로컬에서는 이 스크립트 하나만 실행하면 됩니다. (내부적으로 `E2E_EXECUTION_MODE=remote` 로 API가 워커에 위임하도록 설정합니다.)
+
+---
+
+## 📦 설치하기
+
+### 0. 사전 준비물
+
+로컬 PC에 아래 세 가지가 필요합니다.
+
+| 준비물 | 설명 | 확인 명령 |
+|---|---|---|
+| **Python 3.11 이상** | 앱 실행 런타임 | `python3 --version` |
+| **Git** | 소스 내려받기 | `git --version` |
+| **Redis** | API↔워커 세션 리스·실시간 알림 | `redis-cli ping` → `PONG` |
+
+Redis 가 없다면 아래 중 하나로 준비합니다(가장 쉬운 건 Docker).
+
+```bash
+# Docker (권장 — OS 무관)
+docker run -d --name e2e-redis -p 6379:6379 redis:7
+
+# macOS (Homebrew)
+brew install redis && brew services start redis
+
+# Ubuntu/Debian
+sudo apt-get install -y redis-server && sudo service redis-server start
+```
+
+Redis 주소가 기본값(`redis://127.0.0.1:6379/0`)과 다르면 `.env` 의 `E2E_REDIS_URL` 로 바꿉니다.
+
+### 1. 프로젝트 내려받기
+
+원하는 작업 폴더에서:
 
 ```bash
 git clone https://github.com/lozenia64/e2eTester.git
 cd e2eTester
 ```
 
-### 3. 필요한 패키지 설치
+### 2. 가상환경(venv) 만들고 활성화
 
-프로젝트 폴더에서 아래 명령을 실행합니다.
+시스템 Python 을 더럽히지 않도록 프로젝트 전용 **가상환경**에 설치합니다.
 
 ```bash
+python3 -m venv .venv
+```
+
+활성화 (터미널을 새로 열 때마다 다시 실행):
+
+```bash
+source .venv/bin/activate          # macOS / Linux
+# Windows PowerShell:  .venv\Scripts\Activate.ps1
+# Windows cmd:         .venv\Scripts\activate.bat
+```
+
+활성화되면 프롬프트 앞에 `(.venv)` 가 붙습니다. 끝낼 때는 `deactivate` 를 입력합니다.
+
+### 3. 패키지 설치 (venv 안에서)
+
+```bash
+python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 python3 -m playwright install chromium
 ```
 
-브라우저 실행 시 코드는 로컬 Chrome 채널을 우선 사용하고, 실행이 어려우면 설치된 Playwright Chromium으로 자동 fallback 합니다.
+브라우저 실행 시 코드는 로컬 Chrome 채널을 우선 사용하고, 실행이 어려우면 방금 설치한 Playwright Chromium 으로 자동 fallback 합니다.
 
-일반 브라우저나 Cursor의 Playwright MCP와 동일하게 보안프로그램(키보드보안/백신류 로컬 에이전트·확장)을 인식시키기 위해, 브라우저를 다음과 같이 띄웁니다.
+> **브라우저 프로파일·보안프로그램 인식**: 일반 브라우저나 Cursor 의 Playwright MCP 와 동일하게 보안프로그램(키보드보안/백신류 로컬 에이전트·확장)을 인식시키기 위해 브라우저를 다음과 같이 띄웁니다.
+>
+> - **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. **HOM·FP·HRP** 는 설치형 보안프로그램 호환을 위해 시스템별 `~/.e2etester/{chrome-profile|fp-chrome-profile|hrp-chrome-profile}` 프로파일과 기존 launch 옵션을 씁니다(`E2E_USER_DATA_DIR` 로 경로 변경 가능). **MHM·HWTC·CHBOT** 등 나머지는 Cursor Playwright MCP 와 동일한 프로파일(`%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`, `E2E_PLAYWRIGHT_MCP_PROFILE_DIR` 로 재정의)을 씁니다. 이때 `{workspace_hash}` 는 프로젝트 폴더 경로로 계산하며, MCP 를 다른 폴더 기준으로 쓰고 있다면 `E2E_WORKSPACE_DIR` 로 그 폴더 경로를 지정해 같은 해시(=같은 프로파일)를 쓰게 할 수 있습니다. 같은 프로파일을 쓰는 Chrome/MCP 창이 떠 있으면 Run 이 실패할 수 있으며, 동시 실행도 같은 프로파일을 공유할 수 없습니다.
+> - **확장 활성화**: Playwright 기본값인 `--disable-extensions`(및 component-extensions) 를 제거해, 보안프로그램의 브라우저 확장이 로드되도록 합니다.
+> - **로컬 네트워크 허용**: 보안프로그램은 로컬 에이전트(loopback/사설망)와 통신합니다. Chrome 의 Local/Private Network Access 차단 기능을 꺼서(일반 브라우저에서 "로컬 네트워크 허용"을 켠 것과 동일) 페이지가 로컬 에이전트에 접근할 수 있게 합니다.
+> - 위 설정에도 보안프로그램이 인식되지 않으면, 해당 보안프로그램(및 그 브라우저 확장)이 실제로 설치되어 있고 `E2E_USER_DATA_DIR` 가 그 확장이 설치된 프로파일을 가리키는지 확인하세요.
 
-- **영속 프로파일(persistent context)**: 시크릿 일회용 컨텍스트가 아니라 영속 프로파일로 실행해 확장/인증서/권한 상태가 유지됩니다. **HOM·FP·HRP**는 설치형 보안프로그램 호환을 위해 시스템별 `~/.e2etester/{chrome-profile|fp-chrome-profile|hrp-chrome-profile}` 프로파일과 기존 launch 옵션을 씁니다(`E2E_USER_DATA_DIR`로 경로 변경 가능). **MHM·HWTC·CHBOT** 등 나머지는 Cursor Playwright MCP와 동일한 프로파일(`%LOCALAPPDATA%/ms-playwright-mcp/mcp-chrome-{workspace_hash}`, `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`로 재정의)을 씁니다. 이때 `{workspace_hash}` 는 프로젝트 폴더 경로로 계산하며, MCP 를 다른 폴더 기준으로 쓰고 있다면 `E2E_WORKSPACE_DIR` 로 그 폴더 경로를 지정해 같은 해시(=같은 프로파일)를 쓰게 할 수 있습니다. 같은 프로파일을 쓰는 Chrome/MCP 창이 떠 있으면 Run이 실패할 수 있으며, 동시 실행도 같은 프로파일을 공유할 수 없습니다.
-- **확장 활성화**: Playwright 기본값인 `--disable-extensions`(및 component-extensions) 를 제거해, 보안프로그램의 브라우저 확장이 로드되도록 합니다.
-- **로컬 네트워크 허용**: 보안프로그램은 로컬 에이전트(loopback/사설망)와 통신합니다. Chrome의 Local/Private Network Access 차단 기능을 꺼서(일반 브라우저에서 "로컬 네트워크 허용"을 켠 것과 동일) 페이지가 로컬 에이전트에 접근할 수 있게 합니다.
+### 4. 관리자 계정·비밀 값 설정
 
-> 참고: 위 설정에도 보안프로그램이 인식되지 않으면, 해당 보안프로그램(및 그 브라우저 확장)이 실제로 설치되어 있고, `E2E_USER_DATA_DIR` 가 그 확장이 설치된 프로파일을 가리키는지 확인하세요.
-
-환경에 따라 `python3` 대신 회사 PC에 설치된 Python 실행 경로를 사용해야 할 수 있습니다.
-
-예:
-
-```bash
-/usr/local/bin/python3 -m pip install -r requirements.txt
-/usr/local/bin/python3 -m playwright install chromium
-```
-
-### 4. 웹 서버 실행
-
-프로젝트 폴더에서 아래 명령을 실행합니다.
+`.env.example` 을 복사해 `.env` 를 만들고, 최소한 아래 세 값을 채웁니다. (대시보드 최초 관리자 계정이 서버 기동 시 이 값으로 시드됩니다.)
 
 ```bash
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+cp .env.example .env
 ```
-
-예:
 
 ```bash
-/usr/local/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+E2E_JWT_SECRET=change-me-in-production   # 운영에서는 반드시 무작위 값으로 변경
+E2E_ADMIN_EMAIL=admin@example.com
+E2E_ADMIN_PASSWORD=admin1234
 ```
 
-### 5. 브라우저에서 접속
+나머지 선택 값(AI 분석·메일 알림·OTP 중계 등)은 [선택 기능](#선택-기능-실패-원인-ai-분석) 절을 참고하세요.
+
+### 5. 실행 — `scripts/run_local.py`
+
+가상환경이 활성화된 상태에서(그리고 Redis 가 떠 있는 상태에서) 아래 한 줄이면 API 와 워커가 함께 뜹니다.
+
+```bash
+python3 scripts/run_local.py
+```
+
+- API 대시보드: `http://127.0.0.1:2222`
+- 워커 HTTP: `http://127.0.0.1:8100` (내부 통신용 — 직접 접속할 필요 없음)
+- 포트를 바꾸려면: `python3 scripts/run_local.py --api-port 3000 --worker-port 8200`
+- 실제로 띄우지 않고 실행될 명령만 확인하려면(점검용): `python3 scripts/run_local.py --print`
+
+종료는 터미널에서 `Ctrl+C` — 두 프로세스가 함께 정리됩니다. (한쪽이 죽으면 다른 쪽도 함께 내려갑니다.)
+
+> **두 프로세스를 직접 띄우고 싶다면** (터미널 2개):
+> ```bash
+> # 터미널 A — 워커
+> E2E_EXECUTION_MODE=remote python3 -m worker.main
+> # 터미널 B — API
+> E2E_EXECUTION_MODE=remote python3 -m uvicorn app.main:app --host 0.0.0.0 --port 2222
+> ```
+
+### 6. 브라우저 접속 + 로그인
 
 웹 브라우저에서 아래 주소로 접속합니다.
 
@@ -98,27 +171,28 @@ python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
 http://127.0.0.1:2222
 ```
 
-같은 PC가 아닌 다른 기기(휴대폰 SMS 중계기 등)에서 접속할 때는 PC의 IP 주소를 사용합니다. 서버는 `--host 0.0.0.0`으로 모든 네트워크 인터페이스에서 수신합니다.
+`/login` 화면에서 `.env` 의 `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` 로 로그인합니다.
+
+같은 PC 가 아닌 다른 기기(휴대폰 SMS 중계기 등)에서 접속할 때는 PC 의 IP 주소를 사용합니다. 서버는 `--host 0.0.0.0` 으로 모든 네트워크 인터페이스에서 수신합니다.
 
 ```text
 http://<PC IP>:2222
 ```
 
-예: PC IP가 `219.251.153.96`이면 `http://219.251.153.96:2222`
+예: PC IP 가 `219.251.153.96` 이면 `http://219.251.153.96:2222`. Windows 방화벽에서 TCP 2222 인바운드를 허용해야 할 수 있습니다.
 
-Windows 방화벽에서 TCP 2222 인바운드를 허용해야 할 수 있습니다.
+> **참고**: 환경에 따라 `python3` 대신 회사 PC 에 설치된 Python 실행 경로(예: `/usr/local/bin/python3`)를 사용해야 할 수 있습니다. 단, venv 를 활성화했다면 `python3` 가 곧 venv 의 Python 이므로 별도 경로를 쓸 필요가 없습니다.
 
-### Docker Compose (원격 실행 모드)
+### (선택) Docker Compose 로 실행
 
-Redis + API + 워커(2대)로 분리 실행하려면:
+Python·Redis 를 직접 설치하지 않고 컨테이너로 한 번에 띄우려면, 또는 워커를 여러 대로 늘리려면 Docker Compose 를 씁니다.
 
 ```bash
-docker compose up --build --scale worker=2
+docker compose up --build --scale worker=2      # Redis + API + 워커 2대
 ```
 
 - 대시보드: `http://127.0.0.1:2222`
-- `E2E_EXECUTION_MODE=remote` 로 API는 Redis 에 Run 작업을 적재하고, 워커가 Playwright 를 실행합니다.
-- 로컬 개발(단일 프로세스)은 `E2E_EXECUTION_MODE=local`(기본값)을 사용하세요.
+- API 는 `E2E_EXECUTION_MODE=remote` 로 워커에 실행을 위임하고, 워커가 Playwright 를 구동합니다.
 
 ## 사용 흐름
 
@@ -306,34 +380,29 @@ GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gem
 E2E_GEMINI_SSL_VERIFY=true
 ```
 
-설정이 끝나면 아래처럼 바로 서버를 실행하면 됩니다.
+설정이 끝나면 평소처럼 실행하면 됩니다(`.env` 값을 자동으로 읽습니다).
 
 ```bash
-cd e2eTester
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+python3 scripts/run_local.py
 ```
 
 터미널에서 일회성으로 값을 덮어쓰고 싶다면 아래처럼 입력할 수 있습니다.
 
 ```bash
-cd e2eTester
-
 export E2E_FAILURE_ANALYZER_ENABLED=true
 export GEMINI_API_KEY="실제_발급받은_API_KEY"
 export GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview"
 
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+python3 scripts/run_local.py
 ```
 
 한 줄로 실행하고 싶다면 아래처럼 입력할 수도 있습니다.
 
 ```bash
-cd e2eTester
-
 E2E_FAILURE_ANALYZER_ENABLED=true \
 GEMINI_API_KEY="실제_발급받은_API_KEY" \
 GEMINI_MODELS="gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview" \
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
+python3 scripts/run_local.py
 ```
 
 브라우저에서 아래 주소로 접속하면 됩니다.
@@ -348,17 +417,10 @@ http://127.0.0.1:2222
 - `export`로 설정한 환경 변수는 해당 터미널 창을 닫으면 사라집니다.
 - 터미널 환경 변수와 `.env` 파일에 같은 항목이 모두 있으면 터미널 환경 변수가 우선합니다.
 - 회사망 프록시나 사설 인증서 때문에 Gemini API 에서 `CERTIFICATE_VERIFY_FAILED` 가 발생하면 `E2E_GEMINI_SSL_VERIFY=false` 로 SSL 인증서 검증을 우회할 수 있습니다.
-- AI 분석 기능을 사용하지 않을 경우 기존처럼 `python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222`만 실행하면 됩니다.
+- AI 분석 기능을 사용하지 않을 경우 그냥 `python3 scripts/run_local.py` 만 실행하면 됩니다.
 - 홈 화면에는 AI 분석 상태 카드가 표시되며, 현재 설정값이 유효한지 바로 확인할 수 있습니다.
 - AI 분석 설정이 잘못되어도 앱은 실행되지만, 실패 분석 결과는 생성되지 않을 수 있습니다.
-
-환경에 따라 `python3` 대신 회사 PC에 설치된 Python 실행 경로를 사용해야 할 수 있습니다.
-
-예:
-
-```bash
-/usr/local/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 2222
-```
+- 위 명령은 모두 **가상환경(venv)이 활성화된 상태**에서 실행합니다(`source .venv/bin/activate`).
 
 옵션 설명:
 
