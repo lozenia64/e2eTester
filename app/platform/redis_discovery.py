@@ -40,14 +40,11 @@ def redis_not_found_message() -> str:
     lines = [
         "redis-server 를 찾을 수 없습니다.",
         "",
-        "Windows (권장 — Docker):",
-        "  mkdir redis-data",
-        '  docker run -d --name e2e-redis -p 6379:6379 -v "${PWD}/redis-data:/data" redis:7 redis-server --dir /data',
-        "",
-        "Windows (네이티브): winget install Redis.Redis 또는 Memurai 설치 후 PATH 등록",
-        "",
+        "Windows: winget install Redis.Redis 또는 Memurai 설치 후 PATH 등록",
         "macOS: brew install redis",
+        "Linux: sudo apt-get install redis-server",
         "",
-        "또는 --executable 로 redis-server 경로를 직접 지정하세요.",
+        "또는 python3 scripts/run_redis.py 로 기동하거나",
+        "--executable 로 redis-server 경로를 직접 지정하세요.",
     ]
     return "\n".join(lines)

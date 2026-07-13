@@ -34,7 +34,7 @@ python3 -m playwright install chromium
 # 4) 관리자 계정·비밀 값 설정
 cp .env.example .env               # .env 를 열어 관리자 계정·JWT 비밀값을 바꾸세요
 
-# 5) 앱 실행 (Redis 미기동 시 run_local.py 가 자동으로 띄움 — redis-server 또는 Docker 필요)
+# 5) 앱 실행 (Redis 미기동 시 run_local.py 가 자동으로 띄움 — redis-server 필요)
 python3 scripts/run_local.py
 ```
 
@@ -62,19 +62,14 @@ python3 scripts/run_local.py
 | **Git** | 소스 내려받기 | `git --version` |
 | **Redis** | API↔워커 세션 리스·실시간 알림 | `redis-cli ping` → `PONG` |
 
-Redis 가 없다면 아래 중 하나로 준비합니다(가장 쉬운 건 Docker).
+Redis 가 없다면 아래 중 하나로 준비합니다.
 
 ```bash
 # Windows — winget install Redis.Redis (설치 시 Windows 서비스가 6379 에 자동 기동)
 # → 별도 run_redis.py 없이 python3 scripts/run_local.py 만 실행하면 됩니다.
 
-# Docker (권장 — OS 무관, dump.rdb → redis-data/)
-mkdir -p redis-data
-docker run -d --name e2e-redis -p 6379:6379 \
-  -v "$(pwd)/redis-data:/data" redis:7 redis-server --dir /data
-
-# macOS/Linux — redis-server 직접 실행 (dump.rdb → redis-data/)
-brew install redis   # macOS
+# macOS — brew install redis
+# → python3 scripts/run_local.py 가 자동 기동하거나, 별도 터미널에서:
 python3 scripts/run_redis.py --daemonize yes
 
 # Ubuntu/Debian (시스템 서비스 — 기본 경로는 /var/lib/redis)
@@ -86,7 +81,7 @@ sudo apt-get install -y redis-server && sudo service redis-server start
 | `data/` | SQLite 앱 DB (`E2E_DB_PATH`, 기본 `data/e2etester.db`) | 아니오 |
 | `redis-data/` | Redis 영속 파일 (`dump.rdb`) — 세션·큐 캐시, 삭제해도 앱 DB는 유지 | 아니오 |
 
-Redis 영속 파일은 **git 에 올리지 않습니다**. 프로젝트 루트에 `dump.rdb` 가 생겼다면 Redis 를 작업 폴더에서 직접 띄운 경우이니, 위 Docker/`run_redis.py` 방식을 쓰거나 루트 파일은 삭제해도 됩니다.
+Redis 영속 파일은 **git 에 올리지 않습니다**. 프로젝트 루트에 `dump.rdb` 가 생겼다면 Redis 를 작업 폴더에서 직접 띄운 경우이니, `run_redis.py` 방식을 쓰거나 루트 파일은 삭제해도 됩니다.
 
 Redis 주소가 기본값(`redis://127.0.0.1:6379/0`)과 다르면 `.env` 의 `E2E_REDIS_URL` 로 바꿉니다.
 
@@ -193,17 +188,6 @@ http://<PC IP>:2222
 예: PC IP 가 `219.251.153.96` 이면 `http://219.251.153.96:2222`. Windows 방화벽에서 TCP 2222 인바운드를 허용해야 할 수 있습니다.
 
 > **참고**: 환경에 따라 `python3` 대신 회사 PC 에 설치된 Python 실행 경로(예: `/usr/local/bin/python3`)를 사용해야 할 수 있습니다. 단, venv 를 활성화했다면 `python3` 가 곧 venv 의 Python 이므로 별도 경로를 쓸 필요가 없습니다.
-
-### (선택) Docker Compose 로 실행
-
-Python·Redis 를 직접 설치하지 않고 컨테이너로 한 번에 띄우려면, 또는 워커를 여러 대로 늘리려면 Docker Compose 를 씁니다.
-
-```bash
-docker compose up --build --scale worker=2      # Redis + API + 워커 2대
-```
-
-- 대시보드: `http://127.0.0.1:2222`
-- API 는 `E2E_EXECUTION_MODE=remote` 로 워커에 실행을 위임하고, 워커가 Playwright 를 구동합니다.
 
 ## 사용 흐름
 

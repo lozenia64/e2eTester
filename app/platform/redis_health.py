@@ -65,7 +65,7 @@ def ensure_redis_ready(
     if not start_if_missing:
         msg = (
             f"Redis 에 연결할 수 없습니다 ({redis_url}). "
-            "scripts/run_redis.py 를 먼저 실행하거나 Docker Redis 를 기동하세요."
+            "scripts/run_redis.py 를 먼저 실행하거나 redis-server 를 설치하세요."
         )
         raise RuntimeError(msg)
     if not is_local_redis_url(redis_url):
@@ -88,7 +88,7 @@ def ensure_redis_ready(
         graceful_shutdown(proc)
         msg = (
             f"Redis 가 제한 시간 내에 기동되지 않았습니다 ({redis_url}). "
-            "redis-server 설치·PATH 또는 Docker 설정을 확인하세요."
+            "redis-server 설치·PATH 를 확인하세요."
         )
         raise RuntimeError(msg)
     print(f"started Redis ({redis_url})", file=sys.stderr)

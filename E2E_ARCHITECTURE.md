@@ -1070,7 +1070,7 @@ Suite (`/ws/suites/{suite_id}`):
 
 ### Phase 4. 실행 분리 — ✅ 완료
 
-- ✅ Web 프로세스와 Worker 프로세스 분리 (`worker/` + `docker-compose.yml`)
+- ✅ Web 프로세스와 Worker 프로세스 분리 (`worker/` + `scripts/run_local.py`)
 - ✅ Redis session registry + heartbeat — OTP `WAITING_INPUT` 시 worker 생존이면 API 재기동 후 재개 가능
 - ✅ `RunExecutionQueue` → `JobQueuePort` (`RedisJobQueue` / `InMemoryJobQueue`)
 - 남은 작업: Playwright MCP Gateway 어댑터 (`worker/` HTTP surface 확장), 시스템/계정 단위 동시 실행 제어
@@ -1121,7 +1121,7 @@ Backend
 > - **Execution**: `E2E_EXECUTION_MODE=local`(개발) / `remote`(prod: `worker/` + Redis)
 > - **Automation**: `app/automation/` BC — `systems/*/steps/` 삭제됨
 >
-> **방향 확정(SSOT):** 목표는 (B) out-of-process 워커 — **달성**. `E2E_EXECUTION_MODE=remote` + `docker-compose.yml`. OTP 재개는 worker heartbeat + session lease가 유효할 때 API 재기동 후에도 가능. worker 미가동·lease 만료 시에만 `reconcile_interrupted_runs`가 `CANCELLED` 봉인.
+> **방향 확정(SSOT):** 목표는 (B) out-of-process 워커 — **달성**. `E2E_EXECUTION_MODE=remote` + `scripts/run_local.py` (로컬 Redis). OTP 재개는 worker heartbeat + session lease가 유효할 때 API 재기동 후에도 가능. worker 미가동·lease 만료 시에만 `reconcile_interrupted_runs`가 `CANCELLED` 봉인.
 
 이 목표 구조로 가면 아래가 가능해진다.
 
