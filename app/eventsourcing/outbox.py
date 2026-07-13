@@ -43,6 +43,9 @@ class SqliteOutbox:
         아웃박스 행과 이벤트 스토어 행은 같은 트랜잭션으로 기록되므로 ``event_id`` JOIN 은
         항상 성립하며, 여기서 동봉하는 ``domain_events.sequence_id`` 가 프로젝션 커서의
         정본 좌표가 된다(아웃박스 자체 시퀀스는 배달 순서일 뿐 커서 기준이 아니다).
+        따라서 정렬도 **커서 기준과 동일한 ``de.sequence_id``** 로 한다 — 커서는 단조
+        ``sequence_id <= cursor`` 스킵이므로, 배달 순서가 커서 좌표와 어긋나면 낮은
+        시퀀스를 건너뛰어(커서가 앞질러) 프로젝션이 영구 유실될 수 있다.
         """
         rows = await self._db.fetchall(
             """
@@ -52,7 +55,7 @@ class SqliteOutbox:
             FROM outbox o
             JOIN domain_events de ON de.event_id = o.event_id
             WHERE o.published_at IS NULL
-            ORDER BY o.sequence_id ASC
+            ORDER BY de.sequence_id ASC
             LIMIT ?
             """,
             (limit,),
