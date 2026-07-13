@@ -45,24 +45,26 @@ class _RealtimeSink:
         return None
 
 
-async def _make_service(tmp_path, checkpoint_store):
+def _sim_module(module_id: str, order: int) -> ModuleDefinition:
+    return ModuleDefinition(
+        module_id=module_id,
+        system_code="sim",
+        name=module_id,
+        description="",
+        group="test",
+        order=order,
+        execution_mode="simulated",
+        simulated_duration_ms=1,
+        simulated_outcome="PASSED",
+    )
+
+
+async def _make_service(tmp_path, checkpoint_store, *, module_ids=("sim.mod",)):
     system = SystemDefinition(
         system_code="sim",
         name="Sim",
         description="",
-        modules=[
-            ModuleDefinition(
-                module_id="sim.mod",
-                system_code="sim",
-                name="Mod",
-                description="",
-                group="test",
-                order=10,
-                execution_mode="simulated",
-                simulated_duration_ms=1,
-                simulated_outcome="PASSED",
-            )
-        ],
+        modules=[_sim_module(mid, 10 * (i + 1)) for i, mid in enumerate(module_ids)],
         execution_profile="light",
     )
     run = Run(
@@ -73,10 +75,15 @@ async def _make_service(tmp_path, checkpoint_store):
         requested_at=datetime.now(UTC),
         modules=[
             RunModule(
-                module_id="sim.mod", name="Mod", group="test", order=10, status=ModuleStatus.RUNNING
+                module_id=mid,
+                name=mid,
+                group="test",
+                order=10 * (i + 1),
+                status=ModuleStatus.RUNNING,
             )
+            for i, mid in enumerate(module_ids)
         ],
-        selected_module_ids=["sim.mod"],
+        selected_module_ids=list(module_ids),
     )
     write_repo = InMemoryRunRepository()
     await write_repo.create_run(run, events=RunAggregate.for_new_run(run).pull_events())
@@ -160,6 +167,57 @@ async def test_reconcile_skips_sealing_when_checkpoint_present(tmp_path):
     assert reloaded.status != RunStatus.CANCELLED  # 봉인되지 않고 재개 대상으로 남는다.
     assert [d.kind for d in dispatched] == ["resume"]
     assert dispatched[0].start_index == 1  # checkpoint.module_index + 1
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_resume_restores_storage_state_into_new_session(tmp_path):
+    """재기동 후 체크포인트 재개(pending 없음) → 새 세션을 storage_state 로 복원한다(WP-C2 복원 배선).
+
+    dispatch_run_job(kind="resume") 이 pending 없이 들어오면 라이브 세션이 없는 재기동 재개로
+    보고 handle=None 으로 새 세션을 연다. 이때 체크포인트의 storage_state 가 open_session 을
+    거쳐 게이트웨이까지 흘러야 로그인 세션이 이어진다(SIM 게이트웨이가 수신을 기록).
+    """
+    from app.execution.job_queue_port import RunJobDescriptor
+    from app.execution.session_checkpoint import SessionCheckpoint
+
+    store = InMemorySessionCheckpointStore()
+    service, run = await _make_service(tmp_path, store, module_ids=("sim.first", "sim.second"))
+    await service._input_store.put(run.run_id, {"auth_method": "phone"})
+    marker = '{"cookies": [{"name": "SID", "value": "restored-42"}]}'
+    await store.save(
+        SessionCheckpoint(
+            run_id=run.run_id,
+            system_code=run.system_code,
+            execution_mode="simulated",
+            module_index=0,
+            session_id="dead-session",
+            storage_state=marker,
+        )
+    )
+
+    # 체크포인트 다음 모듈(index 1)부터 재개 — pending 이 없으므로 새 세션 경로.
+    await service.dispatch_run_job(
+        RunJobDescriptor(run_id=run.run_id, kind="resume", start_index=1)
+    )
+
+    # open_session 이 체크포인트 storage_state 를 그대로 게이트웨이까지 전달했다.
+    assert marker in service._gateway.restored_storage_states.values()
+
+
+@pytest.mark.asyncio
+async def test_fresh_run_does_not_restore_storage_state(tmp_path):
+    """start_index==0 신규 실행은 복원할 체크포인트가 없다(restore 배선이 오작동하지 않음)."""
+    from app.execution.job_queue_port import RunJobDescriptor
+
+    store = InMemorySessionCheckpointStore()
+    service, run = await _make_service(tmp_path, store, module_ids=("sim.only",))
+    await service._input_store.put(run.run_id, {"auth_method": "phone"})
+
+    await service.dispatch_run_job(
+        RunJobDescriptor(run_id=run.run_id, kind="execute", start_index=0)
+    )
+
+    assert service._gateway.restored_storage_states == {}
 
 
 async def _noop() -> None:

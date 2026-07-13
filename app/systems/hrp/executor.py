@@ -17,8 +17,14 @@ class HrpRuntime(AccessRuntime):
 
 
 class HrpWorkflowExecutor(AccessWorkflowExecutor):
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> HrpRuntime:
-        base = super().build_runtime(input_data, run_id, module_id)
+    def build_runtime(
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
+    ) -> HrpRuntime:
+        base = super().build_runtime(input_data, run_id, module_id, storage_state)
         return HrpRuntime(
             base_url=base.base_url,
             mobile=base.mobile,

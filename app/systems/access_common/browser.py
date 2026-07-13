@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -183,6 +184,28 @@ def launch_persistent_browser_context(
 
 # 설치형 보안프로그램이 필요한 access 시스템 — 시스템별 ``~/.e2etester/{code}-chrome-profile``
 LEGACY_BROWSER_ACCESS_SYSTEMS: Final[frozenset[str]] = frozenset({"fp", "hrp"})
+
+
+def restore_storage_state_cookies(context, storage_state: str | None) -> bool:
+    """내구 체크포인트 재개 시 저장된 Playwright ``storage_state`` 의 쿠키를 컨텍스트에 복원한다(Phase C).
+
+    persistent context 는 launch 시 ``storage_state`` 인자를 받지 못하므로, 캡처해 둔 상태의
+    쿠키를 ``context.add_cookies`` 로 주입해 로그인 세션을 이어받는다(localStorage 는 Playwright
+    가 persistent 프로필에 이미 보존). 복원 실패는 조용히 무시하고 새 세션으로 진행한다(재수화
+    무효 시 매니페스트 로그인 모듈부터 재로그인하는 ``decide_rehydration`` 폴백이 안전망).
+    반환값은 쿠키를 실제로 주입했는지 여부.
+    """
+    if not storage_state:
+        return False
+    try:
+        state = json.loads(storage_state)
+        cookies = state.get("cookies") or []
+        if cookies:
+            context.add_cookies(cookies)
+            return True
+    except Exception:
+        return False
+    return False
 
 
 def launch_standard_browser_context(playwright, headless: bool):

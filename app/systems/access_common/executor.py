@@ -42,7 +42,11 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
         self._mobile = mobile
 
     def build_runtime(
-        self, input_data: dict[str, str], run_id: str, module_id: str
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
     ) -> AccessRuntime:
         headless = self._resolve_headless(input_data)
         base_url = browser.normalize_base_url(input_data.get("base_url"), self._base_url)
@@ -59,6 +63,7 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
             )
         else:
             context = browser.launch_standard_browser_context(playwright, headless)
+        browser.restore_storage_state_cookies(context, storage_state)
         page = context.pages[0] if context.pages else context.new_page()
         if self._mobile:
             browser.apply_mobile_device_mode(playwright, page)

@@ -21,8 +21,14 @@ class FpRuntime(AccessRuntime):
 
 
 class FpWorkflowExecutor(AccessWorkflowExecutor):
-    def build_runtime(self, input_data: dict[str, str], run_id: str, module_id: str) -> FpRuntime:
-        base = super().build_runtime(input_data, run_id, module_id)
+    def build_runtime(
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
+    ) -> FpRuntime:
+        base = super().build_runtime(input_data, run_id, module_id, storage_state)
         return FpRuntime(
             base_url=base.base_url,
             mobile=base.mobile,

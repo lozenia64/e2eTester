@@ -33,7 +33,8 @@ class _FakeExecutor:
         self.step_thread: int | None = None
         self.closed = False
 
-    def build_runtime(self, input_data, run_id, module_id) -> _FakeRuntime:
+    def build_runtime(self, input_data, run_id, module_id, storage_state=None) -> _FakeRuntime:
+        self.restored_storage_state = storage_state
         return _FakeRuntime()
 
     def execute_step(self, runtime, run_id, module, emit_log) -> StepExecutionResult:

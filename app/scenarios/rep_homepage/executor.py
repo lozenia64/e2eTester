@@ -13,6 +13,7 @@ from app.platform.artifact_manager import ArtifactManager
 from app.runner.workflow_engine import BaseWorkflowExecutor
 from app.scenarios.rep_homepage.channel import ChannelProfile
 from app.scenarios.rep_homepage.runtime import RepHomepageRuntime
+from app.systems.access_common.browser import restore_storage_state_cookies
 
 
 class RepHomepageExecutor(BaseWorkflowExecutor):
@@ -27,7 +28,11 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
         return self._profile.execution_mode
 
     def build_runtime(
-        self, input_data: dict[str, str], run_id: str, module_id: str
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
     ) -> RepHomepageRuntime:
         profile = self._profile
         common = profile.common
@@ -60,6 +65,7 @@ class RepHomepageExecutor(BaseWorkflowExecutor):
         context = common.launch_persistent_browser_context(
             playwright, config.headless, config.slow_mo
         )
+        restore_storage_state_cookies(context, storage_state)
         page = context.pages[0] if context.pages else context.new_page()
         if profile.mobile:
             common.apply_mobile_device_mode(playwright, page)

@@ -37,9 +37,10 @@ class CompositeExecutionGateway(ExecutionGateway):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
         return await self._for_mode(execution_mode).open_session(
-            execution_mode, input_data, run_id, module_id
+            execution_mode, input_data, run_id, module_id, storage_state
         )
 
     async def run_step(

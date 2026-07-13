@@ -39,6 +39,7 @@ def create_http_app(
                 body.input_data,
                 body.run_id,
                 body.module_id,
+                body.storage_state,
             )
             if heartbeat_manager is not None:
                 await heartbeat_manager.register(

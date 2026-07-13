@@ -323,8 +323,18 @@ class BaseWorkflowExecutor(ABC):
 
     @abstractmethod
     def build_runtime(
-        self, input_data: dict[str, str], run_id: str, module_id: str
-    ) -> WorkflowRuntime: ...
+        self,
+        input_data: dict[str, str],
+        run_id: str,
+        module_id: str,
+        storage_state: str | None = None,
+    ) -> WorkflowRuntime:
+        """브라우저 런타임을 기동한다.
+
+        ``storage_state`` 가 주어지면(내구 체크포인트 재개, Phase C) 새 브라우저 컨텍스트에
+        그 Playwright ``storage_state``(쿠키 등)를 복원해 로그인 세션을 이어받는다.
+        """
+        ...
 
     def build_step_registry(self) -> Mapping[str, StepHandler]:
         """workflow_step → 단계 핸들러 매핑(레거시 in-process 디스패치). **기본은 빈 매핑**이다.

@@ -271,20 +271,24 @@ class RunService:
             raise KeyError(f"Run inputs are no longer available: {descriptor.run_id}")
         if descriptor.kind == "resume":
             pending = await self._control_store.get_pending(descriptor.run_id)
-            if pending is None:
-                raise KeyError(f"Run is not waiting for OTP: {descriptor.run_id}")
-            handle = ExecutionHandle(
-                execution_mode=pending.execution_mode,
-                session_id=pending.session_id,
-            )
-            # submit_otp 가 큐에 넣기 전에 pending 을 지우면 워커가 세션을 복원할 수 없다.
-            await self._control_store.clear_pending(descriptor.run_id)
-            await self._execute_run(
-                descriptor.run_id,
-                input_data,
-                pending.resume_index,
-                handle,
-            )
+            if pending is not None:
+                # OTP 제출 재개 — 같은 프로세스에 라이브 세션이 살아 있으면 그 핸들을 물려받는다.
+                handle = ExecutionHandle(
+                    execution_mode=pending.execution_mode,
+                    session_id=pending.session_id,
+                )
+                # submit_otp 가 큐에 넣기 전에 pending 을 지우면 워커가 세션을 복원할 수 없다.
+                await self._control_store.clear_pending(descriptor.run_id)
+                await self._execute_run(
+                    descriptor.run_id,
+                    input_data,
+                    pending.resume_index,
+                    handle,
+                )
+                return
+            # pending 이 없는 재개 = 재기동 후 내구 체크포인트 재개(라이브 세션 없음).
+            # 새 세션을 열고(handle=None) 체크포인트의 storage_state 로 복원해 다음 모듈부터 이어간다.
+            await self._execute_run(descriptor.run_id, input_data, descriptor.start_index, None)
             return
         await self._execute_run(descriptor.run_id, input_data, descriptor.start_index, None)
 
@@ -590,6 +594,10 @@ class RunService:
         definitions = {module.module_id: module for module in system.modules}
         ordered_modules = self._planner.ordered_selected_run_modules(run)
 
+        # Phase C: 재기동/워커 교체 후 재개(start_index>0)면서 라이브 세션이 없을 때(handle is None),
+        # 내구 체크포인트의 storage_state 로 새 브라우저 컨텍스트를 복원해 로그인 세션을 이어받는다.
+        resume_storage_state = await self._load_resume_storage_state(run, start_index, handle)
+
         forced_status: RunStatus | None = None
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
@@ -625,6 +633,7 @@ class RunService:
                             input_data,
                             run.run_id,
                             module.module_id,
+                            resume_storage_state,
                         )
                         if start_index > 0 and index == start_index and definition.workflow_step:
                             await self._gateway.resume_from_step(
@@ -804,6 +813,22 @@ class RunService:
             run_id=run.run_id,
             module_id=module.module_id,
         )
+
+    async def _load_resume_storage_state(
+        self, run: Run, start_index: int, handle: ExecutionHandle | None
+    ) -> str | None:
+        """재개 시 새 세션에 복원할 체크포인트 storage_state 를 읽는다(Phase C).
+
+        라이브 세션을 이미 물려받았거나(handle 존재) 처음 실행(start_index==0)이면 복원할 게
+        없다. 체크포인트가 있으면 그 storage_state(복호화된 평문)를 돌려주고, 없거나 스토어가
+        없으면 ``None``(새 세션으로 시작 — 재수화 무효 시 로그인 모듈부터 재실행이 안전망).
+        """
+        if handle is not None or start_index == 0 or self._session_checkpoint_store is None:
+            return None
+        checkpoint = await self._session_checkpoint_store.get(run.run_id)
+        if checkpoint is None:
+            return None
+        return checkpoint.storage_state
 
     async def _save_checkpoint(
         self, run: Run, *, module_index: int, handle: ExecutionHandle

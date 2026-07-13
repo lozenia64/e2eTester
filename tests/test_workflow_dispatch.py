@@ -37,7 +37,9 @@ class _FakeRuntime:
 class _FakeExecutor(BaseWorkflowExecutor):
     execution_mode = "fake_workflow_step"
 
-    def build_runtime(self, input_data, run_id, module_id):  # pragma: no cover - 미사용
+    def build_runtime(
+        self, input_data, run_id, module_id, storage_state=None
+    ):  # pragma: no cover - 미사용
         return _FakeRuntime()
 
     def _shutdown_browser(self, runtime):  # pragma: no cover - 미사용

@@ -77,6 +77,7 @@ class LocalExecutionGateway(ExecutionGateway):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
         executor = self._require_executor(execution_mode)
         prefix = execution_mode.replace("_workflow_step", "")
@@ -90,6 +91,7 @@ class LocalExecutionGateway(ExecutionGateway):
                 input_data,
                 run_id,
                 module_id,
+                storage_state,
             )
         except Exception:
             thread_pool.shutdown(wait=False, cancel_futures=True)

@@ -54,12 +54,14 @@ class WorkerExecutionGateway(ExecutionGateway):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
         request = OpenSessionRequest(
             execution_mode=execution_mode,
             input_data=input_data,
             run_id=run_id,
             module_id=module_id,
+            storage_state=storage_state,
         )
         response = await self._post_json(
             "/sessions/open", request.model_dump(), OpenSessionResponse

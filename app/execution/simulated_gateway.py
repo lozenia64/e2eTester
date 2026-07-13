@@ -27,6 +27,9 @@ class SimulatedExecutionGateway(ExecutionGateway):
     def __init__(self) -> None:
         self._resume_points: dict[str, tuple[int, str]] = {}
         self._attempt_counts: dict[tuple[str, str], int] = {}
+        # 체크포인트 재개 시 open_session 으로 흘러든 storage_state 를 세션별로 기록한다.
+        # 브라우저가 없어 실제 복원은 못 하지만, 재수화 배선이 끝까지 이어졌음을 테스트가 검증한다.
+        self.restored_storage_states: dict[str, str] = {}
 
     def supports(self, execution_mode: str) -> bool:
         return execution_mode == self.SIMULATED_MODE
@@ -37,9 +40,13 @@ class SimulatedExecutionGateway(ExecutionGateway):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
         # 시뮬레이션은 라이브 런타임이 없다. 포트 계약을 만족하는 토큰만 돌려준다.
-        return ExecutionHandle(execution_mode=execution_mode, session_id=uuid4().hex)
+        session_id = uuid4().hex
+        if storage_state is not None:
+            self.restored_storage_states[session_id] = storage_state
+        return ExecutionHandle(execution_mode=execution_mode, session_id=session_id)
 
     async def run_step(
         self,

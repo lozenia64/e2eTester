@@ -13,6 +13,8 @@ class OpenSessionRequest(BaseModel):
     input_data: dict[str, str]
     run_id: str
     module_id: str
+    # 내구 체크포인트 재개 시 복원할 Playwright storage_state(쿠키+localStorage) JSON(Phase C).
+    storage_state: str | None = None
 
 
 class OpenSessionResponse(BaseModel):

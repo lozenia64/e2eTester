@@ -54,8 +54,14 @@ class ExecutionGateway(ABC):
         input_data: dict[str, str],
         run_id: str,
         module_id: str,
+        storage_state: str | None = None,
     ) -> ExecutionHandle:
-        """브라우저 세션을 열고 핸들을 돌려준다. (실패 시 예외 전파)"""
+        """브라우저 세션을 열고 핸들을 돌려준다. (실패 시 예외 전파)
+
+        ``storage_state`` 가 주어지면(내구 체크포인트 재개, Phase C) 새 브라우저 컨텍스트를
+        그 Playwright ``storage_state``(쿠키+localStorage)로 복원해 로그인 상태를 이어받는다.
+        지원하지 않는 어댑터는 무시하고 새 세션으로 시작한다(재수화 무효 시 재로그인 폴백).
+        """
 
     @abstractmethod
     async def run_step(

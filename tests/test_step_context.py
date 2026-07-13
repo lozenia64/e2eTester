@@ -73,7 +73,9 @@ def test_no_executor_capability_leaks_into_runtime_protocol():
 class _LoggingExecutor(BaseWorkflowExecutor):
     execution_mode = "fake"
 
-    def build_runtime(self, input_data, run_id, module_id):  # pragma: no cover - 미사용
+    def build_runtime(
+        self, input_data, run_id, module_id, storage_state=None
+    ):  # pragma: no cover - 미사용
         raise NotImplementedError
 
     def _shutdown_browser(self, runtime):  # pragma: no cover - 미사용
