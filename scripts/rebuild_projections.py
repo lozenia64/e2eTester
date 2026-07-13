@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -69,7 +70,8 @@ async def rebuild(db_path: str) -> int:
 
 def _backup_db_file(src_path: str, dst_path: str) -> None:
     """WAL 체크포인트를 포함해 라이브 DB를 안전하게 복사한다(원본 미변경)."""
-    src_conn = connect_sqlite(src_path)
+    src_uri = Path(src_path).resolve().as_posix()
+    src_conn = sqlite3.connect(f"file:{src_uri}?mode=ro", uri=True)
     dst_conn = connect_sqlite(dst_path)
     try:
         src_conn.backup(dst_conn)

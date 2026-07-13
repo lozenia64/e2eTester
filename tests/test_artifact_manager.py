@@ -40,3 +40,15 @@ def test_path_from_relative_rejects_escape(tmp_path: Path) -> None:
     manager = ArtifactManager(root_dir=tmp_path / "artifacts")
     with pytest.raises(ValueError, match="escapes root"):
         manager.path_from_relative("/artifacts/../../etc/passwd")
+
+
+def test_path_from_relative_rejects_sibling_prefix_bypass(tmp_path: Path) -> None:
+    root = tmp_path / "artifacts"
+    root.mkdir()
+    sibling = tmp_path / "artifacts2"
+    sibling.mkdir()
+    (sibling / "secret.txt").write_text("leak", encoding="utf-8")
+
+    manager = ArtifactManager(root_dir=root)
+    with pytest.raises(ValueError, match="escapes root"):
+        manager.path_from_relative("/artifacts/../artifacts2/secret.txt")

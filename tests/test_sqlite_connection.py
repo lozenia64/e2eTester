@@ -60,6 +60,8 @@ def test_concurrent_writes_succeed_with_busy_timeout(tmp_path: Path) -> None:
     t2.start()
     t1.join(timeout=10)
     t2.join(timeout=10)
+    assert not t1.is_alive(), "writer thread a did not finish"
+    assert not t2.is_alive(), "writer thread b did not finish"
 
     assert not errors, errors
     verify = connect_sqlite(db_path)

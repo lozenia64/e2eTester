@@ -42,7 +42,9 @@ class ArtifactManager:
             normalized = normalized.removeprefix("artifacts/")
         target = (self._root_dir / normalized).resolve()
         root = self._root_dir.resolve()
-        if not str(target).startswith(str(root)):
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
             msg = f"artifact path escapes root: {relative_path!r}"
-            raise ValueError(msg)
+            raise ValueError(msg) from exc
         return target
