@@ -6,7 +6,7 @@
 <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
     <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">관리자 대시보드</h1>
-    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(성공·이상징후) 이력을 확인합니다.</p>
+    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(정상·이상징후·점검실패·취소) 이력을 확인합니다.</p>
 </div>
 
 <!-- 요약 카드 -->
@@ -31,6 +31,16 @@
         <label for="filter-system" class="mb-1 block text-xs font-medium text-gray-500">시스템</label>
         <select id="filter-system" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="">전체</option>
+        </select>
+    </div>
+    <div>
+        <label for="filter-status" class="mb-1 block text-xs font-medium text-gray-500">상태</label>
+        <select id="filter-status" class="min-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">전체</option>
+            <option value="PASSED">정상</option>
+            <option value="ANOMALY">이상징후</option>
+            <option value="ERROR">점검실패</option>
+            <option value="CANCELLED">취소</option>
         </select>
     </div>
     <div>
@@ -81,11 +91,13 @@ const statusBadgeClasses = {
 };
 
 function buildRunsQuery() {
-    const params = new URLSearchParams({ limit: '50' });
+    const params = new URLSearchParams({ limit: '200' });
     const systemCode = document.getElementById('filter-system').value;
     const userName = document.getElementById('filter-user-name').value.trim();
+    const runStatus = document.getElementById('filter-status').value;
     if (systemCode) params.set('system_code', systemCode);
     if (userName) params.set('user_name', userName);
+    if (runStatus) params.set('status', runStatus);
     return params.toString();
 }
 
@@ -159,6 +171,9 @@ async function loadDashboard() {
     const filterParts = [];
     const selectedSystem = systemSelect.options[systemSelect.selectedIndex];
     if (systemSelect.value) filterParts.push(`시스템: ${selectedSystem.textContent}`);
+    const statusSelect = document.getElementById('filter-status');
+    const selectedStatus = statusSelect.options[statusSelect.selectedIndex];
+    if (statusSelect.value) filterParts.push(`상태: ${selectedStatus.textContent}`);
     const userName = document.getElementById('filter-user-name').value.trim();
     if (userName) filterParts.push(`실행자: ${userName}`);
     document.getElementById('runs-filter-meta').textContent = filterParts.length
@@ -171,6 +186,7 @@ async function loadDashboard() {
 document.getElementById('btn-filter').addEventListener('click', loadDashboard);
 document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('filter-system').value = '';
+    document.getElementById('filter-status').value = '';
     document.getElementById('filter-user-name').value = '';
     loadDashboard();
 });

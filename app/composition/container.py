@@ -25,6 +25,10 @@ from app.events.subscribers.email_notification import EmailNotificationSubscribe
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.eventsourcing.outbox import SqliteOutbox
 from app.eventsourcing.relay import OutboxRelay
+from app.eventsourcing.snapshot_rebuild import (
+    rebuild_missing_run_snapshots,
+    repair_incomplete_run_snapshots,
+)
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
@@ -41,6 +45,8 @@ from app.realtime.redis_fanout import RedisRealtimeFanOut
 from app.registry.loader import ModuleRegistry
 from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
 from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
+from app.storage.legacy_runs_projection_backfill import backfill_from_legacy_runs
+from app.storage.module_history_backfill import backfill_module_history_index
 from app.storage.run_history_backfill import backfill_run_history_index
 from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
@@ -385,7 +391,36 @@ class AppContainer:
         )
 
         await ensure_schema(self.es_db)
+        rebuilt = await rebuild_missing_run_snapshots(self.es_db)
+        if rebuilt:
+            logger.info(
+                "누락 Run 스냅샷 backfill",
+                log_event="startup.snapshot_backfill",
+                count=rebuilt,
+            )
+        repaired = await repair_incomplete_run_snapshots(self.es_db)
+        if repaired:
+            logger.info(
+                "불완전 Run 스냅샷 수리",
+                log_event="startup.snapshot_repair",
+                count=repaired,
+            )
         await backfill_run_history_index(self.es_db, self.run_write_repo)
+        module_rows = await backfill_module_history_index(self.es_db, self.run_write_repo)
+        legacy = await backfill_from_legacy_runs(self.es_db, self.run_write_repo)
+        if module_rows:
+            logger.info(
+                "누락 모듈 이력 backfill",
+                log_event="startup.module_history_backfill",
+                count=module_rows,
+            )
+        if legacy.module_rows or legacy.run_rows:
+            logger.info(
+                "레거시 runs blob 프로젝션 backfill",
+                log_event="startup.legacy_runs_projection_backfill",
+                run_rows=legacy.run_rows,
+                module_rows=legacy.module_rows,
+            )
         if self.redis_fanout is not None:
             try:
                 await self.redis_fanout.start()

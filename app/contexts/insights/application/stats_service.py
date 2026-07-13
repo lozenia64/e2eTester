@@ -82,6 +82,8 @@ class StatsService:
         for run in all_runs:
             run_modules = modules_by_run.get(run.run_id, [])
             passed = sum(1 for m in run_modules if m.status == ModuleStatus.PASSED)
+            if not run_modules and run.module_passed > 0:
+                passed = run.module_passed
             failed = sum(1 for m in run_modules if m.status in MODULE_ANOMALY_STATUSES)
             duration = sum(m.duration_ms or 0 for m in run_modules)
             sys_seconds = module_seconds.get(run.system_code, {})

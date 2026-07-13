@@ -9,6 +9,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
+from pathlib import Path
+
+if __name__ == "__main__":
+    _REPO_ROOT = Path(__file__).resolve().parents[2]
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
 
 from app.domain.summary_fields import run_summary_fields
 from app.eventsourcing.support import SqliteDatabase, ensure_schema
@@ -19,18 +26,33 @@ from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 async def backfill_run_history_index(
     db: SqliteDatabase, write_repo: SqliteRunWriteRepository
 ) -> int:
-    missing = await db.fetchall(
+    """스냅샷 기준 ``run_history_index`` 누락·불일치 행을 upsert 한다."""
+    rows = await db.fetchall(
         """
         SELECT substr(s.stream_id, 5) AS run_id
         FROM aggregate_snapshots s
-        LEFT JOIN run_history_index h ON substr(s.stream_id, 5) = h.run_id
-        WHERE s.aggregate_type = 'Run' AND h.run_id IS NULL
+        WHERE s.aggregate_type = 'Run'
         """
     )
     count = 0
-    for row in missing:
+    for row in rows:
         run = await write_repo.get_run(row["run_id"])
-        sql, params = _run_history_upsert(run.run_id, run_summary_fields(run))
+        if not run.modules:
+            continue
+        summary = run_summary_fields(run)
+        hist = await db.fetchone(
+            "SELECT status, module_passed FROM run_history_index WHERE run_id = ?",
+            (run.run_id,),
+        )
+        if hist is None:
+            needs_update = True
+        else:
+            needs_update = hist["status"] != summary["status"] or (hist["module_passed"] or 0) != (
+                summary.get("module_passed") or 0
+            )
+        if not needs_update:
+            continue
+        sql, params = _run_history_upsert(run.run_id, summary)
         await db.execute(sql, params)
         count += 1
     return count

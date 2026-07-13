@@ -21,8 +21,9 @@ from app.api.dependencies import (
 from app.contexts.identity.dependencies import get_user_service, require_admin
 from app.contexts.identity.models import CreateUserRequest, User, UserPublic
 from app.contexts.run.views.actor import load_actor_context
+from app.core.enums import RunStatus
 from app.core.stats_models import ModuleSettings
-from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
+from app.core.status_labels import ADMIN_DASHBOARD_RUN_STATUSES
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
@@ -49,6 +50,7 @@ async def admin_list_runs(
     limit: int = Query(default=100, ge=1, le=1000),
     system_code: str | None = Query(default=None),
     user_name: str | None = Query(default=None),
+    run_status: list[RunStatus] | None = Query(default=None, alias="status"),
     current_user: User = Depends(require_admin),
     run_queries: RunQueries = Depends(get_run_queries),
     user_service: UserService = Depends(get_user_service),
@@ -60,12 +62,23 @@ async def admin_list_runs(
         suite_summary_query,
         schedule_repo,
     )
+    if run_status:
+        invalid = frozenset(run_status) - ADMIN_DASHBOARD_RUN_STATUSES
+        if invalid:
+            labels = ", ".join(sorted(s.value for s in invalid))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"지원하지 않는 Run 상태입니다: {labels}",
+            )
+        run_statuses = frozenset(run_status)
+    else:
+        run_statuses = ADMIN_DASHBOARD_RUN_STATUSES
     summaries = await run_queries.list_run_summaries(
         limit=limit,
         system_code=system_code,
         user_name_query=user_name,
         actor_context=actor_context,
-        run_statuses=ADMIN_VISIBLE_RUN_STATUSES,
+        run_statuses=run_statuses,
     )
     return summaries
 

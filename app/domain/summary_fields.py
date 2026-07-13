@@ -9,9 +9,21 @@ payload 에 싣는다**. 여기 함수들은 순수(시계·I/O 없음)하며 JS
 from __future__ import annotations
 
 from app.core.enums import ModuleStatus
-from app.core.run_models import Run
+from app.core.run_models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.core.suite_models import SuiteRun
+
+# ``ModuleFinished`` 로 프로젝션에 기록되는 종료 모듈 상태(스냅샷 backfill 과 동일 기준).
+MODULE_HISTORY_STATUSES = frozenset(
+    {
+        ModuleStatus.PASSED,
+        ModuleStatus.ANOMALY,
+        ModuleStatus.ERROR,
+        ModuleStatus.FAILED,
+        ModuleStatus.BLOCKED,
+        ModuleStatus.CANCELLED,
+    }
+)
 
 
 def run_summary_fields(run: Run) -> dict:
@@ -65,6 +77,52 @@ def run_summary_fields(run: Run) -> dict:
         # 실시간 프로젝터가 blob 재수화 없이 run_* WS payload(RunView)를 조립하는 데 필요.
         "selected_module_ids": list(run.selected_module_ids),
         "comparison": run.comparison.model_dump(mode="json") if run.comparison else None,
+    }
+
+
+def module_history_fields(run: Run, module: RunModule) -> dict:
+    """``module_history_index`` 한 행을 만들 수 있는 모듈 종료 필드(PII 없음)."""
+    fa = module.failure_analysis
+    return {
+        "module_id": module.module_id,
+        "system_code": run.system_code,
+        "module_name": module.name,
+        "status": module.status.value,
+        "message": module.message,
+        "started_at": module.started_at.isoformat() if module.started_at else None,
+        "ended_at": module.ended_at.isoformat() if module.ended_at else None,
+        "duration_ms": module.duration_ms,
+        "current_url": module.current_url,
+        "artifacts": list(module.artifacts),
+        "ai_category": fa.category if fa else None,
+        "ai_summary": fa.user_summary if fa else None,
+        "ai_action": fa.recommended_action if fa else None,
+        "suite_id": run.suite_id,
+        "schedule_id": run.schedule_id,
+        "created_by_user_id": run.created_by_user_id,
+    }
+
+
+def module_history_fields_from_wire(run_summary: dict, wire: dict) -> dict:
+    """``RunImported``/벌크 이벤트 와이어 모듈 → ``module_history_index`` 필드."""
+    fa = wire.get("failure_analysis")
+    return {
+        "module_id": wire["module_id"],
+        "system_code": run_summary["system_code"],
+        "module_name": wire.get("name"),
+        "status": wire["status"],
+        "message": wire.get("message"),
+        "started_at": wire.get("started_at"),
+        "ended_at": wire.get("ended_at"),
+        "duration_ms": wire.get("duration_ms"),
+        "current_url": wire.get("current_url"),
+        "artifacts": list(wire.get("artifacts") or []),
+        "ai_category": fa.get("category") if fa else None,
+        "ai_summary": fa.get("user_summary") if fa else None,
+        "ai_action": fa.get("recommended_action") if fa else None,
+        "suite_id": run_summary.get("suite_id"),
+        "schedule_id": run_summary.get("schedule_id"),
+        "created_by_user_id": run_summary.get("created_by_user_id"),
     }
 
 
