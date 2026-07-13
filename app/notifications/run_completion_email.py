@@ -64,6 +64,7 @@ from app.platform.artifact_manager import ArtifactManager
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
+GMAIL_SMTP_TIMEOUT_SECONDS = 60
 KST = ZoneInfo("Asia/Seoul")
 MAX_EMAIL_ATTACHMENT_BYTES = 17_500_000
 MAX_INLINE_EMAIL_IMAGE_BYTES = 2_500_000
@@ -97,7 +98,7 @@ class EmailNotificationConfig:
     enabled: bool = True
     smtp_host: str = GMAIL_SMTP_HOST
     smtp_port: int = GMAIL_SMTP_PORT
-    timeout_seconds: int = 20
+    timeout_seconds: int = GMAIL_SMTP_TIMEOUT_SECONDS
     gemini_timeout_seconds: int = 60
     max_email_attachment_bytes: int = MAX_EMAIL_ATTACHMENT_BYTES
     max_gemini_attachment_bytes: int = MAX_GEMINI_ATTACHMENT_BYTES
