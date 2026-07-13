@@ -17,6 +17,29 @@ def test_resolve_desktop_dir_returns_existing_directory(monkeypatch, tmp_path: P
     assert resolve_desktop_dir() == desktop
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="OneDrive scan is Windows-only")
+def test_resolve_desktop_dir_skips_inaccessible_onedrive_children(
+    monkeypatch, tmp_path: Path
+) -> None:
+    good = tmp_path / "OneDrive"
+    good.mkdir()
+    (good / "Desktop").mkdir()
+
+    class BlockedEntry:
+        name = "OneDrive-Bad"
+
+        def is_dir(self) -> bool:
+            raise OSError("reparse point")
+
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(
+        Path,
+        "iterdir",
+        lambda self: iter([BlockedEntry(), good]) if self == tmp_path else Path.iterdir(self),
+    )
+    assert resolve_desktop_dir() == good / "Desktop"
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="OneDrive Desktop redirect is Windows-only")
 def test_resolve_desktop_dir_prefers_onedrive_when_plain_missing(
     monkeypatch, tmp_path: Path

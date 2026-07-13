@@ -17,8 +17,11 @@ def resolve_desktop_dir() -> Path:
             ]
         )
         for child in home.iterdir():
-            if child.is_dir() and child.name.lower().startswith("onedrive"):
-                candidates.append(child / "Desktop")
+            try:
+                if child.is_dir() and child.name.lower().startswith("onedrive"):
+                    candidates.append(child / "Desktop")
+            except OSError:
+                continue
     for path in candidates:
         if path.is_dir():
             return path

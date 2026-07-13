@@ -26,9 +26,19 @@ from app.execution.results import StepExecutionResult
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"
 
 
-def _format_remote_error(code: int, detail: str) -> str:
+def _looks_like_redis_infra_error(detail: str) -> bool:
     lowered = detail.lower()
-    if "6379" in detail or ("connecting to" in lowered and "redis" in lowered):
+    if "redis" in lowered:
+        return True
+    if "connecting to" in lowered and ("127.0.0.1" in detail or "localhost" in lowered):
+        return True
+    if "connection refused" in lowered or "connection reset" in lowered:
+        return "127.0.0.1" in detail or "localhost" in lowered or "6379" in detail
+    return "6379" in detail
+
+
+def _format_remote_error(code: int, detail: str) -> str:
+    if _looks_like_redis_infra_error(detail):
         return (
             f"인프라 오류 {code}: Redis 에 연결할 수 없습니다. "
             "scripts/run_local.py 로 기동하거나 Redis 를 먼저 실행하세요. "

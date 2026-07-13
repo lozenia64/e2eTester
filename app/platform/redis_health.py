@@ -13,6 +13,7 @@ from app.platform.redis_client import connect_redis
 from app.platform.redis_discovery import redis_not_found_message, resolve_redis_server
 
 DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
+_LOCAL_REDIS_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def redis_url_from_env(env: dict[str, str]) -> str:
@@ -24,6 +25,13 @@ def redis_port_from_url(redis_url: str) -> int:
     if parsed.port is not None:
         return parsed.port
     return 6379
+
+
+def is_local_redis_url(redis_url: str) -> bool:
+    """True when auto-starting a local redis-server could satisfy the URL."""
+    parsed = urlparse(redis_url)
+    host = (parsed.hostname or "127.0.0.1").lower()
+    return host in _LOCAL_REDIS_HOSTS or host.endswith(".localhost")
 
 
 def ping_redis(redis_url: str, *, connect_timeout_sec: float = 1.0) -> bool:
@@ -58,6 +66,13 @@ def ensure_redis_ready(
         msg = (
             f"Redis 에 연결할 수 없습니다 ({redis_url}). "
             "scripts/run_redis.py 를 먼저 실행하거나 Docker Redis 를 기동하세요."
+        )
+        raise RuntimeError(msg)
+    if not is_local_redis_url(redis_url):
+        msg = (
+            f"Redis 에 연결할 수 없습니다 ({redis_url}). "
+            "원격 호스트는 자동 기동을 지원하지 않습니다. "
+            "Redis 서버를 직접 기동하거나 E2E_REDIS_URL 을 localhost 로 설정하세요."
         )
         raise RuntimeError(msg)
     if resolve_redis_server() is None:

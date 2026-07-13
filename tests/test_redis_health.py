@@ -8,6 +8,8 @@ import pytest
 
 from app.platform.redis_health import (
     DEFAULT_REDIS_URL,
+    ensure_redis_ready,
+    is_local_redis_url,
     ping_redis,
     redis_port_from_url,
     redis_url_from_env,
@@ -25,6 +27,27 @@ from app.platform.redis_health import (
 )
 def test_redis_port_from_url(url: str, expected: int) -> None:
     assert redis_port_from_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("redis://127.0.0.1:6379/0", True),
+        ("redis://localhost:6380", True),
+        ("redis://10.0.0.1:6399/1", False),
+    ],
+)
+def test_is_local_redis_url(url: str, expected: bool) -> None:
+    assert is_local_redis_url(url) is expected
+
+
+def test_ensure_redis_ready_rejects_remote_host(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.platform.redis_health.ping_redis", lambda url: False)
+    with pytest.raises(RuntimeError, match="원격 호스트"):
+        ensure_redis_ready(
+            {"E2E_REDIS_URL": "redis://10.0.0.1:6399/1"},
+            root=tmp_path,
+        )
 
 
 def test_redis_url_from_env_default() -> None:
