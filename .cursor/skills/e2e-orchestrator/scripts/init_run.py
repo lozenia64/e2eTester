@@ -58,6 +58,7 @@ def main() -> int:
             "conditional_agents": [],
         },
         "attempts": {},
+        "gate_attempts": {"preflight": 0, "full_ci": 0, "planning": 0, "research": 0},
         "total_iterations": 0,
         "max_retries_per_agent": 2,
         "max_total_iterations": 10,

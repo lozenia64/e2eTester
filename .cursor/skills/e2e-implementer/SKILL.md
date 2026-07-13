@@ -22,12 +22,24 @@ Writes application code. Follow all e2e domain invariants.
 2. Respect invariants: step registry, OTP policy, constants SSOT, RunView projection, PII off blob.
 3. Update `docs/scenarios/{code}.md` when manifest modules change (or defer to docs-checklist).
 4. Do not add dependencies without justification.
-5. Match existing code style; run ruff mentally before finishing.
+5. Match existing code style.
+
+## Preflight gate (required before handoff)
+
+Before writing `implementation-notes.md`, run:
+
+```bash
+python3 .cursor/skills/e2e-orchestrator/scripts/run_preflight_gates.py --run-dir "<run_dir>"
+```
+
+- If `preflight-report.json` has `"passed": false`, fix lint/format issues and re-run until it passes.
+- Do **not** write `implementation-notes.md` until preflight passes.
 
 ## Output
 
 1. Code changes in workspace.
-2. Write `<run_dir>/implementation-notes.md` with `## 변경 요약` listing every file touched and why.
+2. `<run_dir>/preflight-report.json` with `"passed": true`.
+3. Write `<run_dir>/implementation-notes.md` with `## 변경 요약` listing every file touched and why.
 
 ## Warnings
 

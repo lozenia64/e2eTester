@@ -20,6 +20,15 @@ PIPELINE_PROFILES = [
 
 SYSTEM_CODES = {"hom", "mhm", "fp", "hrp", "hwtc", "chbot"}
 
+RESEARCH_SECTIONS = [
+    "## 요약",
+    "## 조사 질문",
+    "## 핵심 발견",
+    "## e2eTester 적용 권장",
+    "## 불확실성 / 추가 확인 필요",
+    "## 참고 URL",
+]
+
 AGENT_ARTIFACTS: dict[str, dict] = {
     "e2e-intake": {
         "file": "intake.json",
@@ -32,6 +41,10 @@ AGENT_ARTIFACTS: dict[str, dict] = {
             "conditional_agents",
             "agent_graph",
         ],
+    },
+    "e2e-researcher": {
+        "file": "research-brief.md",
+        "sections": RESEARCH_SECTIONS,
     },
     "e2e-domain-scout": {
         "file": "context-map.md",
@@ -60,6 +73,7 @@ AGENT_ARTIFACTS: dict[str, dict] = {
     "e2e-implementer": {
         "file": "implementation-notes.md",
         "sections": ["## 변경 요약"],
+        "also_requires": ["preflight-report.json"],
     },
     "e2e-docs-writer": {
         "file": "implementation-notes.md",
@@ -81,6 +95,7 @@ AGENT_ARTIFACTS: dict[str, dict] = {
         "file": "release-verdict.json",
         "required": ["passed"],
         "if_false": ["failed_agent", "feedback"],
+        "requires_mechanical": True,
     },
 }
 
@@ -139,7 +154,34 @@ def validate_intake(data: dict) -> list[str]:
     graph = data.get("agent_graph")
     if not isinstance(graph, list) or len(graph) == 0:
         errors.append("agent_graph must be a non-empty list")
+    if isinstance(graph, list) and "e2e-researcher" in graph:
+        errors.append("agent_graph must not include e2e-researcher (manager runs E0R separately)")
     return errors
+
+
+def validate_preflight(run_dir: Path) -> list[str]:
+    path = run_dir / "preflight-report.json"
+    errors = validate_json(path, ["passed"])
+    if errors:
+        return errors
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("skipped"):
+        return []
+    if data.get("passed") is not True:
+        errors.append("preflight-report.json passed must be true")
+    return errors
+
+
+def validate_mechanical_prerequisite(run_dir: Path) -> list[str]:
+    path = run_dir / "mechanical-verdict.json"
+    if not path.is_file():
+        return [
+            "missing mechanical-verdict.json — run run_mechanical_verdict.py before release judge"
+        ]
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not data.get("passed"):
+        return ["mechanical-verdict.json passed must be true before release judge"]
+    return []
 
 
 def main() -> int:
@@ -177,6 +219,12 @@ def main() -> int:
             errors = [f"missing file: {filename}"]
         elif len(path.read_text(encoding="utf-8").splitlines()) < spec.get("min_lines", 5):
             errors = [f"{filename} too short"]
+
+    if agent == "e2e-implementer":
+        errors.extend(validate_preflight(run_dir))
+
+    if spec.get("requires_mechanical"):
+        errors.extend(validate_mechanical_prerequisite(run_dir))
 
     result = {"valid": len(errors) == 0, "agent": agent, "errors": errors}
     print(json.dumps(result, ensure_ascii=False))

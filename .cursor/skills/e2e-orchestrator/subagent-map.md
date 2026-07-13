@@ -5,6 +5,7 @@ e2e skill contracts delegate to **Cursor built-in subagent types only**. Never m
 | e2e Skill | subagent_type | readonly |
 |-----------|---------------|----------|
 | e2e-intake | generalPurpose | yes |
+| e2e-researcher | generalPurpose | yes |
 | e2e-domain-scout | explore | yes |
 | e2e-scenario-analyst | explore | yes |
 | e2e-manifest-planner | planner | yes |

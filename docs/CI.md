@@ -104,6 +104,29 @@ GitHub 저장소 **Settings → Rules → Rulesets** (또는 Branch protection r
 
 ## e2e-orchestrator 연동
 
+### Orchestrator Verification Tiers (T0–T3)
+
+멀티 에이전트 파이프라인은 PR CI와 동일 SSOT(`scripts/ci/gates.py`)를 사용하되, **4계층 shift-left 검증**으로 lint/format 실패를 QC 전에 차단한다.
+
+| Tier | 스크립트 | 시점 | 산출물 |
+| --- | --- | --- | --- |
+| T0 Research | `run_research_gate.py` | E0R (`e2e-researcher`) 직후 | `research-gate-report.json` |
+| T1 Planning | `run_planning_gate.py` | E08 직전 (마지막 planner 후) | `planning-gate-report.json` |
+| T2 Preflight | `run_preflight_gates.py` | E08 직후 (변경 파일 ruff only) | `preflight-report.json` |
+| T3 Full CI | `run_gates.py --fail-fast` | QC-T | `gates-report.json` |
+| T3 Mechanical | `run_mechanical_verdict.py` | QC 후, E09 전 | `mechanical-verdict.json` |
+
+Preflight 전용 gate: `ruff_changed`, `ruff_format_changed` (변경 `.py` 파일만).
+
+로컬 스모크:
+
+```bash
+python3 .cursor/skills/e2e-orchestrator/scripts/smoke_fixtures.py "$(pwd)"
+python3 -m pytest tests/test_orchestration_gates.py -q
+```
+
+### 프로필별 Full CI gate
+
 | 프로필 | 게이트 |
 | --- | --- |
 | `step_fix`, `new_module`, `platform`, `healing_patch` | Tier 0–2 표준 |
@@ -111,7 +134,7 @@ GitHub 저장소 **Settings → Rules → Rulesets** (또는 Branch protection r
 | `docs_only` | docs + architecture |
 | `risk_flags`: `pii`, `otp`, `auth` | 표준 + Tier 3 security |
 
-QC-T (`e2e-test-runner`)는 `run_gates.py` → `gates-report.json`을 생성한다.
+QC-T (`e2e-test-runner`)는 preflight 통과 확인 후 `run_gates.py --fail-fast` → `gates-report.json`을 생성한다. Release Judge(E09)는 `mechanical-verdict.json` passed 필수.
 
 ## PR Definition of Done
 

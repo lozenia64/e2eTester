@@ -10,7 +10,30 @@ All artifacts live in `<run_dir>`. Paths are relative to run directory.
 | `trace.log` | append_handoff.py, manager | human |
 | `handoffs.jsonl` | append_handoff.py | human |
 
+## Gate reports (mechanical — manager scripts)
+
+| File | Writer | Tier |
+|------|--------|------|
+| `research-gate-report.json` | run_research_gate.py | T0 |
+| `planning-gate-report.json` | run_planning_gate.py | T1 |
+| `preflight-report.json` | run_preflight_gates.py | T2 |
+| `gates-report.json` | run_gates.py | T3 |
+| `mechanical-verdict.json` | run_mechanical_verdict.py | T3 |
+
 ## Per-agent artifacts
+
+### e2e-researcher → `research-brief.md`
+
+Required sections:
+
+- `## 요약`
+- `## 조사 질문`
+- `## 핵심 발견` — ≥ 200 chars, inline URL citations
+- `## e2eTester 적용 권장`
+- `## 불확실성 / 추가 확인 필요`
+- `## 참고 URL` — ≥ 2 distinct URLs
+
+Skipped when `pipeline_profile` is `docs_only`.
 
 ### e2e-intake → `intake.json`
 
@@ -28,7 +51,7 @@ All artifacts live in `<run_dir>`. Paths are relative to run directory.
 }
 ```
 
-Note: `agent_graph` excludes E01 and QC agents; manager expands QC after E08.
+Note: `agent_graph` excludes E01, E0R, and QC agents; manager runs E0R after intake and expands QC after E08 preflight.
 For `system_code`, prefer JSON `null` for platform-wide scope; the validator also accepts the string `"null"` if a subagent emits it literally.
 
 ### e2e-domain-scout → `context-map.md`
@@ -86,11 +109,12 @@ Required sections:
 - `## 수정 대상` — file paths to edit
 - `## 가드 항목` — check_docs_consistency items at risk
 
-### e2e-implementer → `implementation-notes.md`
+### e2e-implementer → `implementation-notes.md` + `preflight-report.json`
 
-Required sections:
+Required:
 
-- `## 변경 요약` — files changed and why
+- `preflight-report.json` with `"passed": true` (from run_preflight_gates.py)
+- `implementation-notes.md` with `## 변경 요약`
 
 Optional:
 
