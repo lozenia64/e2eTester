@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 from app.platform.port_cleanup import free_ports  # noqa: E402
 from app.platform.process_lifecycle import graceful_shutdown, popen_managed  # noqa: E402
 from app.platform.redis_health import ensure_redis_ready  # noqa: E402
+from app.platform.stdio_utf8 import configure_stdio_utf8  # noqa: E402
 
 
 def _build_commands(api_host: str, api_port: int, worker_port: int) -> list[list[str]]:
@@ -55,6 +56,7 @@ def _child_env(worker_port: int) -> dict[str, str]:
 
 
 def main() -> int:
+    configure_stdio_utf8()
     parser = argparse.ArgumentParser(description="Run API + worker locally (WP-C1)")
     parser.add_argument("--api-host", default="0.0.0.0")
     parser.add_argument("--api-port", type=int, default=2222)

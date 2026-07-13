@@ -57,3 +57,25 @@ def test_wait_for_redis_eventually_ready() -> None:
 def test_wait_for_redis_timeout() -> None:
     with patch("app.platform.redis_health.ping_redis", return_value=False):
         assert wait_for_redis("redis://127.0.0.1:6379/0", timeout_sec=0.3) is False
+
+
+def test_ensure_redis_ready_passes_port_from_url(tmp_path, monkeypatch) -> None:
+    from app.platform.redis_health import ensure_redis_ready
+
+    launched: list[list[str]] = []
+
+    def fake_popen(cmd: list[str], **kwargs) -> MagicMock:
+        launched.append(cmd)
+        return MagicMock()
+
+    monkeypatch.setattr("app.platform.redis_health.resolve_redis_server", lambda: "redis-server")
+    monkeypatch.setattr("app.platform.redis_health.ping_redis", lambda url: False)
+    monkeypatch.setattr("app.platform.redis_health.wait_for_redis", lambda url, **kw: True)
+    monkeypatch.setattr("app.platform.redis_health.popen_managed", fake_popen)
+
+    ensure_redis_ready(
+        {"E2E_REDIS_URL": "redis://127.0.0.1:6380/0"},
+        root=tmp_path,
+    )
+    assert launched
+    assert launched[0][-2:] == ["--port", "6380"]

@@ -63,8 +63,9 @@ def ensure_redis_ready(
     if resolve_redis_server() is None:
         raise RuntimeError(redis_not_found_message())
 
+    port = redis_port_from_url(redis_url)
     proc = popen_managed(
-        [sys.executable, str(root / "scripts" / "run_redis.py")],
+        [sys.executable, str(root / "scripts" / "run_redis.py"), "--port", str(port)],
         cwd=str(root),
         env=env,
     )
