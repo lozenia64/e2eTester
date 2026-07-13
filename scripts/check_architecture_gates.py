@@ -24,6 +24,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.platform.stdio_utf8 import configure_stdio_utf8
+
+configure_stdio_utf8()
+
 APP_DIR = ROOT / "app"
 ORCHESTRATOR_DIR = APP_DIR / "orchestrator"
 DOMAIN_DIR = APP_DIR / "domain"

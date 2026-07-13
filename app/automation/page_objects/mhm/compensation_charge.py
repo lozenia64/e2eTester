@@ -471,7 +471,9 @@ def _set_accident_date_one_month_ago(page) -> None:
 
 
 def _pick_random_desktop_screenshot() -> Path:
-    desktop = Path.home() / "Desktop"
+    from app.platform.desktop_paths import resolve_desktop_dir
+
+    desktop = resolve_desktop_dir()
     candidates: list[Path] = []
     for pattern in DESKTOP_SCREENSHOT_GLOB_PATTERNS:
         candidates.extend(path for path in desktop.glob(pattern) if path.is_file())

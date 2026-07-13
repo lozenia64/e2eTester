@@ -4,41 +4,39 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
+
+def _py(*parts: str) -> list[str]:
+    """Build a gate command using the current interpreter (Windows/macOS parity)."""
+    return [sys.executable, *parts]
+
+
 # Gate name → shell command (run from workspace root)
 GATE_COMMANDS: dict[str, list[str]] = {
-    "docs_consistency": ["python3", "scripts/check_docs_consistency.py"],
-    "architecture_gates": ["python3", "scripts/check_architecture_gates.py"],
-    "projection_validate": [
-        "python3",
+    "docs_consistency": _py("scripts/check_docs_consistency.py"),
+    "architecture_gates": _py("scripts/check_architecture_gates.py"),
+    "projection_validate": _py(
         "scripts/rebuild_projections.py",
         "--validate",
         "--db",
         "data/.ci_projection_validate.db",
-    ],
-    "snapshot_validate": [
-        "python3",
+    ),
+    "snapshot_validate": _py(
         "scripts/rebuild_snapshots.py",
         "--validate",
         "--db",
         "data/.ci_snapshot_validate.db",
-    ],
-    "import_contracts": ["python3", "-m", "importlinter.cli", "lint"],
-    "ruff": ["python3", "-m", "ruff", "check", "."],
-    "ruff_format": ["python3", "-m", "ruff", "format", "--check", "."],
-    "pytest": ["python3", "-m", "pytest", "tests/", "-q"],
-    "pip_audit": [
-        "python3",
-        "-m",
-        "pip_audit",
-        "-r",
-        "requirements.txt",
-    ],
-    "bandit_security": [
-        "python3",
+    ),
+    "import_contracts": _py("-m", "importlinter.cli", "lint"),
+    "ruff": _py("-m", "ruff", "check", "."),
+    "ruff_format": _py("-m", "ruff", "format", "--check", "."),
+    "pytest": _py("-m", "pytest", "tests/", "-q"),
+    "pip_audit": _py("-m", "pip_audit", "-r", "requirements.txt"),
+    "bandit_security": _py(
         "-m",
         "bandit",
         "-c",
@@ -47,7 +45,7 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "app/contexts/identity",
         "app/api/routes_trigger.py",
         "app/api/routes_otp.py",
-    ],
+    ),
 }
 
 # Fail-fast tier (lower runs first in sequential local runner; CI jobs run in parallel per tier group)

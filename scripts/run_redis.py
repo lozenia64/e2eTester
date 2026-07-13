@@ -19,13 +19,33 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.platform.redis_discovery import redis_not_found_message, resolve_redis_server  # noqa: E402
+from app.platform.redis_health import ping_redis  # noqa: E402
+from app.platform.stdio_utf8 import configure_stdio_utf8  # noqa: E402
+
 REDIS_DATA_DIR = ROOT / "redis-data"
 DEFAULT_PORT = 6379
 
 
+def _redis_bind_args() -> list[str]:
+    # Windows Redis rejects --bind 127.0.0.1 with "No such file or directory".
+    if sys.platform == "win32":
+        return []
+    return ["--bind", "127.0.0.1"]
+
+
 def main() -> int:
+    configure_stdio_utf8()
     parser = argparse.ArgumentParser(description="Start Redis with persistence under redis-data/")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--executable",
+        default=None,
+        help="redis-server executable path (auto-discovered when omitted)",
+    )
     parser.add_argument(
         "redis_args",
         nargs=argparse.REMAINDER,
@@ -33,18 +53,27 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    redis_url = f"redis://127.0.0.1:{args.port}/0"
+    if ping_redis(redis_url):
+        print(f"Redis already listening on port {args.port}", file=sys.stderr)
+        return 0
+
+    redis_server = resolve_redis_server(override=args.executable)
+    if not redis_server:
+        print(redis_not_found_message(), file=sys.stderr)
+        return 127
+
     REDIS_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "redis-server",
+        redis_server,
         "--dir",
         str(REDIS_DATA_DIR),
         "--dbfilename",
         "dump.rdb",
         "--port",
         str(args.port),
-        "--bind",
-        "127.0.0.1",
+        *_redis_bind_args(),
         *args.redis_args,
     ]
 
@@ -53,11 +82,7 @@ def main() -> int:
     try:
         return subprocess.call(cmd)
     except FileNotFoundError:
-        print(
-            "redis-server 를 찾을 수 없습니다. "
-            "Docker(`docker run ...`) 또는 OS 패키지로 Redis 를 설치하세요.",
-            file=sys.stderr,
-        )
+        print(redis_not_found_message(), file=sys.stderr)
         return 127
 
 

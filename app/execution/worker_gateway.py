@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,6 +25,26 @@ from app.execution.results import StepExecutionResult
 
 # 원격 게이트웨이가 지원하는 워크플로 실행 모드 접미사.
 _WORKFLOW_MODE_SUFFIX = "_workflow_step"
+
+
+_REDIS_PY_CONNECT_RE = re.compile(r"error\s+\d+\s+connecting\s+to\s+", re.IGNORECASE)
+
+
+def _looks_like_redis_infra_error(detail: str) -> bool:
+    lowered = detail.lower()
+    if "redis" in lowered:
+        return True
+    return bool(_REDIS_PY_CONNECT_RE.search(detail))
+
+
+def _format_remote_error(code: int, detail: str) -> str:
+    if _looks_like_redis_infra_error(detail):
+        return (
+            f"인프라 오류 {code}: Redis 에 연결할 수 없습니다. "
+            "scripts/run_local.py 로 기동하거나 Redis 를 먼저 실행하세요. "
+            f"상세: {detail}"
+        )
+    return f"원격 실행 오류 {code}: {detail}"
 
 
 class WorkerExecutionGateway(ExecutionGateway):
@@ -179,7 +200,7 @@ class WorkerExecutionGateway(ExecutionGateway):
                     data = json.loads(raw)
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", errors="replace")
-                raise RuntimeError(f"원격 실행 오류 {exc.code}: {detail}") from exc
+                raise RuntimeError(_format_remote_error(exc.code, detail)) from exc
             if response_type is dict:
                 return data
             return response_type.model_validate(data)

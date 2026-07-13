@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 import redis.asyncio as redis
 
+from app.platform.redis_client import connect_redis_async
+
 # Redis 키 접두사 — 세션 리스 목록/메타데이터.
 _SESSION_KEY_PREFIX = "e2e:session:"
 
@@ -23,7 +25,7 @@ class RedisSessionRegistry:
 
     async def _get_client(self) -> redis.Redis:
         if self._client is None:
-            self._client = redis.from_url(self._redis_url, decode_responses=True)
+            self._client = connect_redis_async(self._redis_url, decode_responses=True)
         return self._client
 
     def _key(self, session_id: str) -> str:
