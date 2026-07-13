@@ -109,6 +109,49 @@ async def test_resolve_run_snapshot_from_module_history(tmp_path: Path) -> None:
     resolved = await resolve_run_snapshot(db, run_id, empty)
     assert len(resolved.modules) == 2
     assert resolved.status == RunStatus.PASSED
+    assert resolved.modules[0].group == "default"
+
+
+@pytest.mark.asyncio
+async def test_module_history_reconstruction_avoids_wrong_group_guess(tmp_path: Path) -> None:
+    """module_id 세그먼트로 group 을 유추하면 manifest 와 불일치할 수 있다."""
+    db = SqliteDatabase(tmp_path / "group.db")
+    await ensure_schema(db)
+    run_id = "run_group"
+    source = Run(
+        run_id=run_id,
+        system_code="hom",
+        system_name="대표홈페이지(PC)",
+        status=RunStatus.PASSED,
+        requested_at=datetime.now(UTC),
+        modules=[
+            RunModule(
+                module_id="hom.main.access",
+                name="메인화면 접속",
+                group="access",
+                order=0,
+                status=ModuleStatus.PASSED,
+            ),
+        ],
+        selected_module_ids=["hom.main.access"],
+    )
+    summary = run_summary_fields(source)
+    await db.execute(*_run_history_upsert(run_id, summary))
+    await db.execute(
+        *_module_history_upsert(run_id, summary, module_history_fields(source, source.modules[0]))
+    )
+
+    shell = Run(
+        run_id=run_id,
+        system_code="hom",
+        system_name="대표홈페이지(PC)",
+        status=RunStatus.PENDING,
+        requested_at=source.requested_at,
+        modules=[],
+    )
+    resolved = await resolve_run_snapshot(db, run_id, shell)
+    assert resolved.modules[0].group == "default"
+    assert resolved.modules[0].group != "main"
 
 
 @pytest.mark.asyncio

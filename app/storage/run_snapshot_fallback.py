@@ -72,8 +72,9 @@ async def _load_legacy_blob(db: SqliteDatabase, run_id: str) -> Run | None:
 
 
 def _module_from_history_row(row, *, order: int) -> RunModule:
-    parts = row["module_id"].split(".")
-    group = parts[-2] if len(parts) >= 2 else "default"
+    # module_history_index 에 group 컬럼이 없으므로 module_id 로 추정하지 않는다
+    # (예: hom.main.access → manifest group 은 access 이지만 parts[-2] 는 main).
+    group = "default"
     artifacts_raw = row["artifacts"] if "artifacts" in row.keys() else "[]"
     if isinstance(artifacts_raw, str):
         artifacts = json.loads(artifacts_raw or "[]")
