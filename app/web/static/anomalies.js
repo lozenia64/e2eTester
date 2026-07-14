@@ -74,7 +74,8 @@
 
   function populateSystemFilter(systems) {
     const sel = $("#inbox-filter-system");
-    const current = sel.value;
+    const urlSystem = new URLSearchParams(location.search).get("system");
+    const current = urlSystem || sel.value;
     sel.innerHTML = '<option value="all">전체 시스템</option>';
     for (const s of systems) {
       const opt = document.createElement("option");
@@ -82,7 +83,12 @@
       opt.textContent = s.system_name;
       sel.appendChild(opt);
     }
-    sel.value = current || "all";
+    if (urlSystem && systems.some((s) => s.system_code === urlSystem)) {
+      state.filterSystem = urlSystem;
+      sel.value = urlSystem;
+    } else {
+      sel.value = current || "all";
+    }
   }
 
   // ── 필터 적용 ────────────────────────────────────────────────────────────

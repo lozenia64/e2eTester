@@ -55,42 +55,84 @@ def _fmt_saved_seconds(seconds: int) -> str:
     return f"{minutes}분 {rem}초"
 
 
+@router.get("/runs/board")
+async def admin_run_history_board(
+    current_user: User = Depends(require_admin),
+    run_queries: RunQueries = Depends(get_run_queries),
+    user_service: UserService = Depends(get_user_service),
+    suite_summary_query: SuiteSummaryQueryPort = Depends(get_suite_summary_query),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+) -> dict[str, Any]:
+    actor_context = await load_actor_context(
+        user_service,
+        suite_summary_query,
+        schedule_repo,
+    )
+    return await run_queries.get_admin_run_history_board(actor_context=actor_context)
+
+
+@router.get("/runs/heatmap")
+async def admin_run_history_heatmap(
+    current_user: User = Depends(require_admin),
+    run_queries: RunQueries = Depends(get_run_queries),
+    registry: ModuleRegistry = Depends(get_registry),
+) -> dict[str, Any]:
+    """최근 7일 실행자×시스템 Run 상태 히트맵(admin 전용, PII 없음)."""
+    systems = [(s.system_code, s.name) for s in registry.list_systems()]
+    return await run_queries.get_admin_run_history_heatmap(systems=systems)
+
+
 @router.get("/runs")
 async def admin_list_runs(
     limit: int = Query(default=100, ge=1, le=1000),
-    system_code: str | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    system_code: list[str] | None = Query(default=None),
     user_name: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+    triggered_by: str | None = Query(default=None),
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    include_total: bool = Query(default=False),
+    run_id: str | None = Query(default=None, min_length=1, description="Run ID 접두 검색"),
     run_status: list[RunStatus] | None = Query(default=None, alias="status"),
     current_user: User = Depends(require_admin),
     run_queries: RunQueries = Depends(get_run_queries),
     user_service: UserService = Depends(get_user_service),
     suite_summary_query: SuiteSummaryQueryPort = Depends(get_suite_summary_query),
     schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | dict[str, Any]:
     actor_context = await load_actor_context(
         user_service,
         suite_summary_query,
         schedule_repo,
     )
     if run_status:
-        invalid = frozenset(run_status) - ADMIN_DASHBOARD_RUN_STATUSES
-        if invalid:
-            labels = ", ".join(sorted(s.value for s in invalid))
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"지원하지 않는 Run 상태입니다: {labels}",
-            )
-        run_statuses = frozenset(run_status)
+        run_statuses = _resolve_admin_run_statuses(run_status)
     else:
         run_statuses = ADMIN_DASHBOARD_RUN_STATUSES
-    summaries = await run_queries.list_run_summaries(
+    if triggered_by is not None and triggered_by not in {"manual", "schedule", "suite"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="triggered_by는 manual, schedule, suite 중 하나여야 합니다.",
+        )
+    single_system, multi_systems = _resolve_system_codes(system_code)
+    page = await run_queries.list_run_summaries_page(
         limit=limit,
-        system_code=system_code,
+        offset=offset,
+        system_code=single_system,
+        system_codes=multi_systems,
+        user_id=user_id,
         user_name_query=user_name,
         actor_context=actor_context,
         run_statuses=run_statuses,
+        requested_since=from_dt,
+        requested_before=to_dt,
+        triggered_by=triggered_by,
+        run_id_query=run_id,
     )
-    return summaries
+    if include_total:
+        return page
+    return page["items"]
 
 
 @router.delete("/runs/{run_id}")
@@ -106,6 +148,171 @@ async def admin_delete_run(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+def _resolve_admin_run_statuses(
+    run_status: list[RunStatus] | None,
+) -> frozenset[RunStatus]:
+    if run_status:
+        invalid = frozenset(run_status) - ADMIN_DASHBOARD_RUN_STATUSES
+        if invalid:
+            labels = ", ".join(sorted(s.value for s in invalid))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"지원하지 않는 Run 상태입니다: {labels}",
+            )
+        return frozenset(run_status)
+    return ADMIN_DASHBOARD_RUN_STATUSES
+
+
+def _resolve_system_codes(
+    system_codes: list[str] | None,
+) -> tuple[str | None, frozenset[str] | None]:
+    if not system_codes:
+        return None, None
+    cleaned = tuple(code.strip() for code in system_codes if code and code.strip())
+    if not cleaned:
+        return None, None
+    if len(cleaned) == 1:
+        return cleaned[0], None
+    return None, frozenset(cleaned)
+
+
+async def _fetch_admin_runs_for_export(
+    run_queries: RunQueries,
+    *,
+    actor_context: Any,
+    run_statuses: frozenset[RunStatus],
+    system_code: str | None,
+    system_codes: frozenset[str] | None,
+    user_id: str | None,
+    user_name: str | None,
+    triggered_by: str | None,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    run_id: str | None,
+    limit_cap: int = 10_000,
+) -> list[dict[str, Any]]:
+    page_size = 500
+    all_items: list[dict[str, Any]] = []
+    offset = 0
+    while len(all_items) < limit_cap:
+        page = await run_queries.list_run_summaries_page(
+            limit=min(page_size, limit_cap - len(all_items)),
+            offset=offset,
+            system_code=system_code,
+            system_codes=system_codes,
+            user_id=user_id,
+            user_name_query=user_name,
+            actor_context=actor_context,
+            run_statuses=run_statuses,
+            requested_since=from_dt,
+            requested_before=to_dt,
+            triggered_by=triggered_by,
+            run_id_query=run_id,
+        )
+        items = page["items"]
+        all_items.extend(items)
+        if len(items) < page_size or len(all_items) >= page["total"]:
+            break
+        offset += page_size
+    return all_items[:limit_cap]
+
+
+@router.get("/runs/export.csv")
+async def admin_export_runs_csv(
+    system_code: list[str] | None = Query(default=None),
+    user_name: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+    triggered_by: str | None = Query(default=None),
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    run_id: str | None = Query(default=None, min_length=1),
+    run_status: list[RunStatus] | None = Query(default=None, alias="status"),
+    current_user: User = Depends(require_admin),
+    run_queries: RunQueries = Depends(get_run_queries),
+    user_service: UserService = Depends(get_user_service),
+    suite_summary_query: SuiteSummaryQueryPort = Depends(get_suite_summary_query),
+    schedule_repo: ScheduleRepositoryPort = Depends(get_schedule_repository),
+) -> StreamingResponse:
+    """현재 필터와 동일한 Run 요약 목록 CSV (최대 1만 건, PII 최소)."""
+    if triggered_by is not None and triggered_by not in {"manual", "schedule", "suite"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="triggered_by는 manual, schedule, suite 중 하나여야 합니다.",
+        )
+    actor_context = await load_actor_context(
+        user_service,
+        suite_summary_query,
+        schedule_repo,
+    )
+    run_statuses = _resolve_admin_run_statuses(run_status)
+    single_system, multi_systems = _resolve_system_codes(system_code)
+    rows = await _fetch_admin_runs_for_export(
+        run_queries,
+        actor_context=actor_context,
+        run_statuses=run_statuses,
+        system_code=single_system,
+        system_codes=multi_systems,
+        user_id=user_id,
+        user_name=user_name,
+        triggered_by=triggered_by,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        run_id=run_id,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "run_id",
+            "system_code",
+            "system_name",
+            "status",
+            "status_label",
+            "module_passed",
+            "module_total",
+            "module_skipped",
+            "failed_module_name",
+            "triggered_by",
+            "created_by_user_name",
+            "requested_at",
+            "started_at",
+            "ended_at",
+            "suite_id",
+            "schedule_id",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.get("run_id", ""),
+                row.get("system_code", ""),
+                row.get("system_name", ""),
+                row.get("status", ""),
+                row.get("status_label", ""),
+                row.get("module_passed", 0),
+                row.get("module_total", 0),
+                row.get("module_skipped", 0),
+                row.get("failed_module_name") or "",
+                row.get("triggered_by", ""),
+                row.get("created_by_user_name") or "",
+                row.get("requested_at") or "",
+                row.get("started_at") or "",
+                row.get("ended_at") or "",
+                row.get("suite_id") or "",
+                row.get("schedule_id") or "",
+            ]
+        )
+
+    date_str = datetime.now().strftime("%Y%m%d")
+    output.seek(0)
+    return StreamingResponse(
+        iter(["\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename=admin_runs_{date_str}.csv"},
+    )
 
 
 @router.get("/ops/snapshot")

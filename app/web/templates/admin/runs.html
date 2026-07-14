@@ -3,77 +3,835 @@
 {% block nav_runs %}bg-red-50 text-red-700 font-semibold{% endblock %}
 
 {% block content %}
-<div>
+<style>
+  .adm-runs {
+    --st-passed: #0ca30c;
+    --st-anomaly: #fab219;
+    --st-error: #d03b3b;
+    --st-cancelled: #9ca3af;
+    --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  }
+  .adm-runs .adm-panel {
+    border-radius: 1rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.04);
+    overflow: hidden;
+  }
+  .adm-runs .adm-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .adm-runs .adm-panel__title { font-size: 0.875rem; font-weight: 700; color: #111827; }
+  .adm-runs .adm-panel__sub { font-size: 0.75rem; color: #9ca3af; margin-top: 0.125rem; }
+  .adm-runs .adm-kpi {
+    border-radius: 0.875rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 1rem 1.125rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+  }
+  .adm-runs .adm-kpi__label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+  }
+  .adm-runs .adm-kpi__value {
+    margin-top: 0.375rem;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+  }
+  .adm-runs .adm-kpi--green { background: #f0fdf4; border-color: #bbf7d0; }
+  .adm-runs .adm-kpi--amber { background: #fffbeb; border-color: #fde68a; }
+  .adm-runs .adm-kpi--red { background: #fef2f2; border-color: #fecaca; }
+  .adm-runs .adm-kpi--slate { background: #f8fafc; border-color: #e2e8f0; }
+  .adm-runs .adm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .adm-runs .adm-chip:hover { border-color: #c7d2fe; background: #eef2ff; color: #4338ca; }
+  .adm-runs .adm-chip.is-active {
+    border-color: #818cf8;
+    background: #eef2ff;
+    color: #4338ca;
+    box-shadow: inset 0 0 0 1px rgb(99 102 241 / 0.15);
+  }
+  .adm-runs .adm-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    background: #f3f4f6;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #374151;
+  }
+  .adm-runs .adm-filter-chip button {
+    color: #9ca3af;
+    line-height: 1;
+    font-size: 0.875rem;
+  }
+  .adm-runs .adm-filter-chip button:hover { color: #ef4444; }
+  .adm-runs .adm-trend {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.375rem;
+    height: 4.5rem;
+    padding-top: 0.5rem;
+  }
+  .adm-runs .adm-trend__col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  .adm-runs .adm-trend__stack {
+    width: 100%;
+    max-width: 2rem;
+    display: flex;
+    flex-direction: column-reverse;
+    border-radius: 0.375rem 0.375rem 0 0;
+    overflow: hidden;
+    min-height: 0.25rem;
+  }
+  .adm-runs .adm-trend__seg { width: 100%; min-height: 2px; }
+  .adm-runs .adm-trend__seg--passed { background: var(--st-passed); }
+  .adm-runs .adm-trend__seg--anomaly { background: var(--st-anomaly); }
+  .adm-runs .adm-trend__seg--error { background: var(--st-error); }
+  .adm-runs .adm-trend__seg--cancelled { background: var(--st-cancelled); }
+  .adm-runs .adm-trend__label { font-size: 0.625rem; color: #9ca3af; white-space: nowrap; }
+  .adm-runs .adm-attention-card {
+    display: block;
+    border-radius: 0.875rem;
+    border: 1px solid #fde68a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+    padding: 0.875rem 1rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .adm-runs .adm-attention-card:hover {
+    border-color: #f59e0b;
+    box-shadow: 0 4px 12px rgb(245 158 11 / 0.12);
+  }
+  .adm-runs .adm-attention-card--error {
+    border-color: #fecaca;
+    background: linear-gradient(180deg, #fef2f2 0%, #fff 100%);
+  }
+  .adm-runs .adm-attention-card--error:hover {
+    border-color: #f87171;
+    box-shadow: 0 4px 12px rgb(239 68 68 / 0.1);
+  }
+  .adm-runs .adm-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(15 23 42 / 0.35);
+    z-index: 40;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .adm-runs .adm-drawer-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .adm-runs .adm-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 50;
+    height: 100%;
+    width: min(28rem, 100vw);
+    background: #fff;
+    box-shadow: -8px 0 24px rgb(15 23 42 / 0.12);
+    transform: translateX(100%);
+    transition: transform 0.25s var(--ease-spring);
+    display: flex;
+    flex-direction: column;
+  }
+  .adm-runs .adm-drawer.is-open { transform: none; }
+  .adm-runs .adm-drawer__body { flex: 1; overflow-y: auto; padding: 1.25rem; }
+  .adm-runs .adm-drawer-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.25rem);
+    z-index: 20;
+    min-width: 8rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.25rem 0;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+  }
+  .adm-runs .adm-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(15 23 42 / 0.45);
+    z-index: 60;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+  .adm-runs .adm-modal-backdrop.is-open { display: flex; }
+  .adm-runs .adm-progress {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: #f3f4f6;
+    overflow: hidden;
+  }
+  .adm-runs .adm-progress__fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #6366f1, #818cf8);
+  }
+  .adm-runs .adm-trend-chart-wrap {
+    position: relative;
+    height: 11rem;
+  }
+  .adm-runs .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .adm-runs .adm-index-bar {
+    padding: 1rem 1.25rem 0.875rem;
+    border-bottom: 1px solid #f3f4f6;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 55%);
+  }
+  .adm-runs .adm-index-bar__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .adm-runs .adm-search-wrap {
+    flex: 1;
+    min-width: min(100%, 18rem);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .adm-runs .adm-search-wrap:focus-within {
+    border-color: #a5b4fc;
+    box-shadow: 0 0 0 3px rgb(99 102 241 / 0.12);
+  }
+  .adm-runs .adm-search-wrap input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.8125rem;
+    color: #111827;
+    outline: none;
+  }
+  .adm-runs .adm-search-wrap input::placeholder { color: #9ca3af; }
+  .adm-runs .adm-search-divider {
+    width: 1px;
+    height: 1.125rem;
+    background: #e5e7eb;
+    flex-shrink: 0;
+  }
+  .adm-runs .adm-index-bar__presets-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.875rem;
+  }
+  .adm-runs .adm-index-bar__saved {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .adm-runs .adm-index-bar__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.875rem;
+  }
+  .adm-runs .adm-filter-group { position: relative; }
+  .adm-runs .adm-filter-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .adm-runs .adm-filter-trigger:hover {
+    border-color: #c7d2fe;
+    background: #f8fafc;
+    color: #4338ca;
+  }
+  .adm-runs .adm-filter-trigger.has-value,
+  .adm-runs .adm-filter-trigger.is-open {
+    border-color: #818cf8;
+    background: #eef2ff;
+    color: #4338ca;
+    box-shadow: inset 0 0 0 1px rgb(99 102 241 / 0.12);
+  }
+  .adm-runs .adm-filter-trigger--ghost {
+    border-style: dashed;
+    background: transparent;
+    color: #6b7280;
+  }
+  .adm-runs .adm-filter-popover {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    left: 0;
+    z-index: 30;
+    min-width: 12.5rem;
+    max-width: min(18rem, 92vw);
+    max-height: 16rem;
+    overflow-y: auto;
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.625rem;
+    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+  }
+  .adm-runs .adm-filter-popover__title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
+  }
+  .adm-runs .adm-filter-option-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+    color: #374151;
+    cursor: pointer;
+  }
+  .adm-runs .adm-filter-option-row:hover { background: #f9fafb; }
+  .adm-runs .adm-filter-option-row input { accent-color: #6366f1; }
+  .adm-runs .adm-segment {
+    display: inline-flex;
+    padding: 0.125rem;
+    border-radius: 0.625rem;
+    background: #f3f4f6;
+    gap: 0.125rem;
+  }
+  .adm-runs .adm-segment button {
+    border-radius: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #6b7280;
+    white-space: nowrap;
+    transition: all 0.12s ease;
+  }
+  .adm-runs .adm-segment button.is-active {
+    background: #fff;
+    color: #4338ca;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  }
+  .adm-runs .adm-index-bar__active {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    min-height: 1.5rem;
+    margin-top: 0.75rem;
+  }
+  .adm-runs .adm-index-bar__advanced {
+    margin-top: 0.75rem;
+    padding: 0.875rem;
+    border-radius: 0.75rem;
+    border: 1px dashed #e5e7eb;
+    background: #fafbfc;
+  }
+  .adm-runs .adm-advanced-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  }
+  .adm-runs .adm-advanced-grid label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  .adm-runs .adm-advanced-grid input,
+  .adm-runs .adm-advanced-grid select {
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 0.625rem;
+    font-size: 0.8125rem;
+    background: #fff;
+  }
+  .adm-runs .adm-toolbar-btn {
+    border-radius: 0.625rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4b5563;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .adm-runs .adm-toolbar-btn:hover { background: #f9fafb; }
+  .adm-runs .adm-toolbar-btn--primary {
+    border-color: #c7d2fe;
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  .adm-runs .adm-run-grid {
+    display: grid;
+    gap: 0.875rem;
+    padding: 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+  }
+  .adm-runs .adm-run-card {
+    position: relative;
+    display: block;
+    border-radius: 1rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0;
+    text-align: left;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.2s ease, transform 0.2s var(--ease-spring);
+    cursor: pointer;
+  }
+  .adm-runs .adm-run-card:hover {
+    border-color: #c7d2fe;
+    box-shadow: 0 8px 24px rgb(99 102 241 / 0.1);
+    transform: translateY(-1px);
+  }
+  .adm-runs .adm-run-card__accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+  }
+  .adm-runs .adm-run-card--passed .adm-run-card__accent { background: var(--st-passed); }
+  .adm-runs .adm-run-card--anomaly .adm-run-card__accent,
+  .adm-runs .adm-run-card--failed .adm-run-card__accent { background: var(--st-anomaly); }
+  .adm-runs .adm-run-card--error .adm-run-card__accent { background: var(--st-error); }
+  .adm-runs .adm-run-card--cancelled .adm-run-card__accent { background: var(--st-cancelled); }
+  .adm-runs .adm-run-card__inner {
+    padding: 1rem 1rem 0.875rem 1.125rem;
+  }
+  .adm-runs .adm-run-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .adm-runs .adm-run-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.75rem;
+    font-size: 0.6875rem;
+    color: #6b7280;
+  }
+  .adm-runs .adm-run-card__empty {
+    grid-column: 1 / -1;
+    padding: 3rem 1rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #9ca3af;
+  }
+  .adm-runs .adm-explore__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #f3f4f6;
+    padding: 0.75rem 1.25rem;
+  }
+  .adm-runs .adm-module-timeline {
+    border-left: 2px solid #e5e7eb;
+    margin-left: 0.375rem;
+    padding-left: 0.875rem;
+  }
+  .adm-runs .adm-module-timeline__item {
+    position: relative;
+    padding-bottom: 0.75rem;
+  }
+  .adm-runs .adm-module-timeline__item::before {
+    content: "";
+    position: absolute;
+    left: -1.05rem;
+    top: 0.35rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: #d1d5db;
+  }
+  .adm-runs .adm-module-timeline__item--passed::before { background: var(--st-passed); }
+  .adm-runs .adm-module-timeline__item--anomaly::before { background: var(--st-anomaly); }
+  .adm-runs .adm-module-timeline__item--error::before { background: var(--st-error); }
+  .adm-runs .adm-saved-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    border: 1px dashed #c7d2fe;
+    background: #f8fafc;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #4338ca;
+    cursor: pointer;
+  }
+  .adm-runs .adm-saved-view button {
+    color: #9ca3af;
+    font-size: 0.75rem;
+    line-height: 1;
+  }
+  .adm-runs .adm-saved-view button:hover { color: #ef4444; }
+  .adm-runs .adm-heatmap-wrap {
+    position: relative;
+    width: 100%;
+    height: 16rem;
+    min-height: 12rem;
+  }
+  .adm-runs #runs-heatmap-canvas {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 12rem;
+  }
+  .adm-runs .adm-heatmap-fallback {
+    overflow-x: auto;
+  }
+  .adm-runs .adm-heatmap-fallback table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.625rem;
+  }
+  .adm-runs .adm-heatmap-fallback th,
+  .adm-runs .adm-heatmap-fallback td {
+    border: 1px solid #f3f4f6;
+    padding: 0.35rem 0.25rem;
+    text-align: center;
+    min-width: 2.5rem;
+  }
+  .adm-runs .adm-heatmap-fallback th {
+    font-weight: 600;
+    color: #6b7280;
+    background: #f9fafb;
+  }
+  .adm-runs .adm-heatmap-fallback td[data-value="-1"] { background: #f3f4f6; }
+  .adm-runs .adm-heatmap-fallback td[data-value="0"] { background: #dcfce7; }
+  .adm-runs .adm-heatmap-fallback td[data-value="1"] { background: #fef3c7; }
+  .adm-runs .adm-heatmap-fallback td[data-value="2"] { background: #fee2e2; }
+  .adm-runs .adm-heatmap-fallback td[data-value="3"] { background: #e5e7eb; }
+  .adm-runs .adm-comparison-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .adm-runs .adm-comparison-badge--new_failure {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  .adm-runs .adm-comparison-badge--recovered {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+  .adm-runs .adm-comparison-badge--still_failing {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+  }
+  .adm-runs .adm-row-menu { position: relative; display: inline-block; }
+  .adm-runs .adm-row-menu__btn {
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1;
+    color: #6b7280;
+  }
+  .adm-runs .adm-row-menu__btn:hover { background: #f3f4f6; color: #374151; }
+  .adm-runs .adm-row-menu__dropdown {
+    position: absolute;
+    right: 0;
+    z-index: 20;
+    margin-top: 0.25rem;
+    min-width: 7.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.25rem;
+    box-shadow: 0 8px 20px rgb(15 23 42 / 0.12);
+  }
+  .adm-runs .adm-row-menu__item {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #374151;
+  }
+  .adm-runs .adm-row-menu__item:hover { background: #f3f4f6; }
+  .adm-runs .adm-row-menu__item--danger { color: #dc2626; }
+  .adm-runs .adm-row-menu__item--danger:hover { background: #fef2f2; }
+</style>
+
+<div class="adm-runs space-y-6">
+  <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
     <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">Run 이력</h1>
-    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(정상·이상징후·점검실패·취소) 이력을 확인합니다.</p>
+    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 Run을 운영 관점에서 탐색합니다. 주의 필요 Run을 먼저 확인하세요.</p>
+    <p id="runs-updated-at" class="mt-1 text-xs text-gray-400"></p>
+  </div>
+
+  <div id="runs-board-loading" class="text-sm text-gray-400">보드 불러오는 중…</div>
+  <div id="runs-board" class="hidden space-y-4">
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" id="runs-kpi-grid"></div>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+      <div class="adm-panel lg:col-span-2">
+        <div class="adm-panel__head">
+          <div>
+            <h2 class="adm-panel__title">최근 7일 완료 추이</h2>
+            <p class="adm-panel__sub">정상 · 이상징후 · 점검실패 · 취소 (KST)</p>
+          </div>
+        </div>
+        <div class="p-4 pt-2">
+          <div class="adm-trend-chart-wrap">
+            <canvas id="runs-trend-canvas" aria-label="최근 7일 완료 추이"></canvas>
+          </div>
+          <div class="adm-trend hidden" id="runs-trend-fallback"></div>
+        </div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel__head">
+          <div>
+            <h2 class="adm-panel__title">주의 필요</h2>
+            <p class="adm-panel__sub">최근 이상징후·점검실패</p>
+          </div>
+        </div>
+        <div class="space-y-2 p-4 pt-0" id="runs-attention-list"></div>
+      </div>
+    </div>
+
+    <div class="adm-panel">
+      <div class="adm-panel__head">
+        <div>
+          <h2 class="adm-panel__title">실행자×시스템 히트맵</h2>
+          <p class="adm-panel__sub">최근 7일 · 셀별 최신 완료 Run 상태 (KST)</p>
+        </div>
+      </div>
+      <div class="p-4 pt-2">
+        <div class="adm-heatmap-wrap">
+          <div id="runs-heatmap-canvas" class="h-full w-full" aria-label="실행자별 시스템 상태 히트맵"></div>
+        </div>
+        <div class="adm-heatmap-fallback hidden" id="runs-heatmap-fallback"></div>
+      </div>
+    </div>
+
+    <div class="adm-panel">
+      <div class="adm-panel__head">
+        <div>
+          <h2 class="adm-panel__title">시스템별 최근 결과</h2>
+          <p class="adm-panel__sub">시스템마다 가장 최근 완료 Run</p>
+        </div>
+      </div>
+      <div class="grid gap-2 p-4 pt-0 sm:grid-cols-2 lg:grid-cols-3" id="runs-system-recent"></div>
+    </div>
+  </div>
+
+  <div class="adm-panel adm-explore">
+    <div class="adm-panel__head">
+      <div>
+        <h2 class="adm-panel__title">탐색</h2>
+        <p class="adm-panel__sub">필터로 Run을 찾고 카드에서 상세를 확인합니다</p>
+      </div>
+      <span id="runs-result-meta" class="text-xs text-gray-400"></span>
+    </div>
+    <div class="adm-index-bar">
+      <div class="adm-index-bar__top">
+        <div class="adm-search-wrap">
+          <input id="filter-run-id" type="search" placeholder="Run ID 접두 검색" autocomplete="off" aria-label="Run ID 검색" />
+          <span class="adm-search-divider" aria-hidden="true"></span>
+          <input id="filter-user-name" type="search" placeholder="실행자 이름" autocomplete="off" aria-label="실행자 이름 검색" />
+        </div>
+        <button id="btn-export-csv" type="button" class="adm-toolbar-btn">CSV보내기</button>
+        <button id="btn-reset" type="button" class="adm-toolbar-btn">초기화</button>
+      </div>
+      <div class="adm-index-bar__presets-row">
+        <div class="flex flex-wrap gap-2" id="runs-presets"></div>
+        <div class="adm-index-bar__saved">
+          <div class="flex flex-wrap gap-2 min-h-[1.5rem]" id="runs-saved-views"></div>
+          <button id="btn-save-view" type="button" class="adm-toolbar-btn adm-toolbar-btn--primary">뷰 저장</button>
+        </div>
+      </div>
+      <div class="adm-index-bar__filters">
+        <div class="adm-filter-group">
+          <button type="button" class="adm-filter-trigger" id="filter-trigger-system" data-filter-popover="system" aria-expanded="false">시스템</button>
+          <div class="adm-filter-popover hidden" id="filter-popover-system" data-popover="system" role="dialog" aria-label="시스템 필터">
+            <p class="adm-filter-popover__title">시스템</p>
+            <div id="filter-system-options"></div>
+          </div>
+        </div>
+        <div class="adm-filter-group">
+          <button type="button" class="adm-filter-trigger" id="filter-trigger-status" data-filter-popover="status" aria-expanded="false">상태</button>
+          <div class="adm-filter-popover hidden" id="filter-popover-status" data-popover="status" role="dialog" aria-label="상태 필터">
+            <p class="adm-filter-popover__title">상태</p>
+            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="PASSED" /> 정상</label>
+            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="ANOMALY" /> 이상징후</label>
+            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="ERROR" /> 점검실패</label>
+            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="CANCELLED" /> 취소</label>
+          </div>
+        </div>
+        <div class="adm-segment" id="filter-trigger-segment" role="group" aria-label="트리거">
+          <button type="button" data-trigger-value="" class="is-active">전체</button>
+          <button type="button" data-trigger-value="manual">수동</button>
+          <button type="button" data-trigger-value="schedule">예약</button>
+          <button type="button" data-trigger-value="suite">전체 점검</button>
+        </div>
+        <div class="adm-segment" id="filter-period-segment" role="group" aria-label="기간">
+          <button type="button" data-period-value="" class="is-active">전체</button>
+          <button type="button" data-period-value="today">오늘</button>
+          <button type="button" data-period-value="7d">7일</button>
+          <button type="button" data-period-value="30d">30일</button>
+        </div>
+        <button type="button" id="btn-toggle-advanced" class="adm-filter-trigger adm-filter-trigger--ghost" aria-expanded="false">고급 필터</button>
+      </div>
+      <div class="adm-index-bar__active" id="runs-active-filters"></div>
+      <div id="runs-advanced-filters" class="adm-index-bar__advanced hidden">
+        <div class="adm-advanced-grid">
+          <div>
+            <label for="filter-from-dt">시작 시각</label>
+            <input id="filter-from-dt" type="datetime-local" />
+          </div>
+          <div>
+            <label for="filter-to-dt">종료 시각</label>
+            <input id="filter-to-dt" type="datetime-local" />
+          </div>
+          <div>
+            <label for="filter-user">실행자 계정</label>
+            <select id="filter-user">
+              <option value="">전체</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <select id="filter-system" multiple class="sr-only" aria-hidden="true" tabindex="-1"></select>
+      <select id="filter-status" multiple class="sr-only" aria-hidden="true" tabindex="-1">
+        <option value="PASSED">정상</option>
+        <option value="ANOMALY">이상징후</option>
+        <option value="ERROR">점검실패</option>
+        <option value="CANCELLED">취소</option>
+      </select>
+      <select id="filter-trigger" class="sr-only" aria-hidden="true" tabindex="-1">
+        <option value="">전체</option>
+        <option value="manual">수동</option>
+        <option value="schedule">예약</option>
+        <option value="suite">전체 점검</option>
+      </select>
+      <select id="filter-period" class="sr-only" aria-hidden="true" tabindex="-1">
+        <option value="">전체</option>
+        <option value="today">오늘</option>
+        <option value="7d">최근 7일</option>
+        <option value="30d">최근 30일</option>
+      </select>
+    </div>
+    <div id="runs-card-grid" class="adm-run-grid">
+      <p class="adm-run-card__empty">불러오는 중…</p>
+    </div>
+    <div class="adm-explore__footer">
+      <p class="text-xs text-gray-400" id="runs-page-meta"></p>
+      <button id="btn-load-more" type="button" class="hidden adm-toolbar-btn">더 불러오기</button>
+    </div>
+  </div>
 </div>
 
-<div class="grid gap-3 md:grid-cols-3" id="summary-cards">
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">전체 사용자</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-users">—</p>
+<div class="adm-runs">
+  <div class="adm-drawer-backdrop" id="runs-drawer-backdrop"></div>
+  <aside class="adm-drawer" id="runs-drawer" aria-hidden="true">
+    <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+      <h3 class="text-sm font-bold text-gray-900">Run 상세</h3>
+      <div class="flex items-center gap-1">
+        <div class="relative hidden" id="runs-drawer-actions">
+          <button type="button" id="runs-drawer-menu-btn" class="rounded-lg px-2 py-1 text-lg leading-none text-gray-500 hover:bg-gray-100 hover:text-gray-700" aria-label="더보기">⋯</button>
+          <div id="runs-drawer-menu-dropdown" class="adm-drawer-menu hidden">
+            <button type="button" id="runs-drawer-delete-btn" class="w-full px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50">삭제</button>
+          </div>
+        </div>
+        <button type="button" id="runs-drawer-close" class="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="닫기">✕</button>
+      </div>
     </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">오늘 완료 Run</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-today-runs">—</p>
-    </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">완료 Run</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-runs">—</p>
-    </div>
-</div>
+    <div class="adm-drawer__body" id="runs-drawer-body"></div>
+  </aside>
 
-<div class="flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-    <div>
-        <label for="filter-system" class="mb-1 block text-xs font-medium text-gray-500">시스템</label>
-        <select id="filter-system" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">전체</option>
-        </select>
+  <div class="adm-modal-backdrop" id="runs-delete-modal">
+    <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <h3 class="text-base font-bold text-gray-900">Run 영구 삭제</h3>
+      <p class="mt-2 text-sm text-gray-600">다음 Run을 삭제하면 DB 기록·로그·스크린샷이 모두 제거됩니다.</p>
+      <p class="mt-3 rounded-lg bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700 break-all" id="runs-delete-run-id"></p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button type="button" id="runs-delete-cancel" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">취소</button>
+        <button type="button" id="runs-delete-confirm" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">삭제</button>
+      </div>
     </div>
-    <div>
-        <label for="filter-status" class="mb-1 block text-xs font-medium text-gray-500">상태</label>
-        <select id="filter-status" class="min-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">전체</option>
-            <option value="PASSED">정상</option>
-            <option value="ANOMALY">이상징후</option>
-            <option value="ERROR">점검실패</option>
-            <option value="CANCELLED">취소</option>
-        </select>
-    </div>
-    <div>
-        <label for="filter-user-name" class="mb-1 block text-xs font-medium text-gray-500">실행자 이름</label>
-        <input id="filter-user-name" type="text" placeholder="이름 검색" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-    </div>
-    <button id="btn-filter" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
-    <button id="btn-reset" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
-    <span id="runs-filter-meta" class="ml-auto text-xs text-gray-400"></span>
-</div>
-
-<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-    <div class="border-b border-gray-100 px-6 py-4">
-        <h2 class="text-sm font-semibold text-gray-900">최근 완료 Run</h2>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Run ID</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">시스템</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">실행자</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">상태</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">요청 시각</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">삭제</th>
-                </tr>
-            </thead>
-            <tbody id="runs-table-body" class="divide-y divide-gray-100">
-                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">불러오는 중...</td></tr>
-            </tbody>
-        </table>
-    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/admin-runs.js?v=2" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" defer></script>
+<script src="/static/admin-runs.js?v=14" defer></script>
 {% endblock %}
