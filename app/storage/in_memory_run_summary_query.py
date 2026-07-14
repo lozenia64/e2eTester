@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from app.core.enums import RunStatus
 from app.domain.summary_fields import run_summary_fields
@@ -66,6 +67,8 @@ def _row_from_run(run: Run) -> RunSummaryRow:
 
 
 def _matches(row: RunSummaryRow, query: RunSummaryFilter) -> bool:
+    if query.system_codes is not None and row.system_code not in query.system_codes:
+        return False
     if query.system_code is not None and row.system_code != query.system_code:
         return False
     if query.statuses is not None and row.status not in query.statuses:
@@ -86,6 +89,19 @@ def _matches(row: RunSummaryRow, query: RunSummaryFilter) -> bool:
         return False
     if query.schedule_tagged_only and row.schedule_id is None:
         return False
+    if query.triggered_by == "schedule":
+        if row.triggered_by != "schedule" and row.schedule_id is None:
+            return False
+    elif query.triggered_by == "suite":
+        if row.triggered_by != "suite" and row.suite_id is None:
+            return False
+    elif query.triggered_by == "manual":
+        if row.triggered_by not in (None, "", "manual"):
+            return False
+    if query.run_id_query:
+        prefix = query.run_id_query.strip()
+        if not row.run_id.startswith(prefix):
+            return False
     return True
 
 
@@ -114,6 +130,29 @@ class InMemoryRunSummaryQuery:
             counts[row.status.value] = counts.get(row.status.value, 0) + 1
         return counts
 
+    async def counts_by_status_filtered(self, query: RunSummaryFilter) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for row in await self._all_rows():
+            if not _matches(row, query):
+                continue
+            counts[row.status.value] = counts.get(row.status.value, 0) + 1
+        return counts
+
+    async def daily_status_counts(
+        self, query: RunSummaryFilter, *, tz: ZoneInfo | None = None
+    ) -> list[tuple[str, str, int]]:
+        buckets: dict[tuple[str, str], int] = {}
+        for row in await self._all_rows():
+            if not _matches(row, query):
+                continue
+            if tz is not None:
+                day_key = row.requested_at.astimezone(tz).strftime("%Y-%m-%d")
+            else:
+                day_key = row.requested_at.isoformat()[:10]
+            key = (day_key, row.status.value)
+            buckets[key] = buckets.get(key, 0) + 1
+        return [(day, status, count) for (day, status), count in sorted(buckets.items())]
+
     async def list_run_ids(self, query: RunSummaryFilter) -> list[str]:
         return [row.run_id for row in await self._all_rows() if _matches(row, query)]
 
@@ -128,6 +167,48 @@ class InMemoryRunSummaryQuery:
             if row.system_code not in result or moment > result[row.system_code]:
                 result[row.system_code] = moment
         return result
+
+    async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:
+        last_map = await self.last_finished_at_by_system()
+        all_rows = await self._all_rows()
+        if not last_map:
+            return self._fallback_latest_terminal_per_system(all_rows)
+        result: list[RunSummaryRow] = []
+        for system_code in sorted(last_map):
+            moment = _as_utc(last_map[system_code])
+            matches = sorted(
+                [
+                    row
+                    for row in all_rows
+                    if row.system_code == system_code
+                    and _as_utc(row.ended_at or row.requested_at) == moment
+                ],
+                key=lambda row: row.requested_at,
+                reverse=True,
+            )
+            if matches:
+                result.append(matches[0])
+        if result:
+            return result
+        return self._fallback_latest_terminal_per_system(all_rows)
+
+    @staticmethod
+    def _fallback_latest_terminal_per_system(rows: list[RunSummaryRow]) -> list[RunSummaryRow]:
+        latest: dict[str, RunSummaryRow] = {}
+        for row in rows:
+            if row.status not in _TERMINAL_FOR_BASELINE:
+                continue
+            moment = row.ended_at or row.requested_at
+            current = latest.get(row.system_code)
+            if current is None:
+                latest[row.system_code] = row
+                continue
+            current_moment = current.ended_at or current.requested_at
+            if moment > current_moment or (
+                moment == current_moment and row.requested_at > current.requested_at
+            ):
+                latest[row.system_code] = row
+        return [latest[code] for code in sorted(latest)]
 
     async def find_previous_finished_run_id(
         self, system_code: str, before: datetime, exclude_run_id: str

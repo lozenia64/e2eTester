@@ -1182,4 +1182,6 @@
   }, 60000);
 
   loadBoard();
+  const openScheduleId = new URLSearchParams(location.search).get("open");
+  if (openScheduleId) openDrawer(openScheduleId);
 })();

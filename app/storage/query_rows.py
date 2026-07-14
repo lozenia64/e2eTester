@@ -67,6 +67,7 @@ class RunSummaryFilter:
     """Run 요약 목록 질의 필터 — 전부 SQL WHERE 로 내려간다(파이썬 후처리 금지)."""
 
     system_code: str | None = None
+    system_codes: frozenset[str] | None = None
     statuses: frozenset[RunStatus] | None = None
     user_id: str | None = None
     user_name_query: str | None = None
@@ -75,6 +76,8 @@ class RunSummaryFilter:
     requested_since: datetime | None = None
     requested_before: datetime | None = None
     schedule_tagged_only: bool = False
+    triggered_by: str | None = None
+    run_id_query: str | None = None
 
 
 @dataclass(frozen=True)

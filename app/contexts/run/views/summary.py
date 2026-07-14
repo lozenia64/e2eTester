@@ -40,6 +40,7 @@ def summarize_row(row: RunSummaryRow, actor_context: ActorContext | None = None)
         "failed_module_name": row.failed_module_name,
         "triggered_by": row.triggered_by,
         "suite_id": row.suite_id,
+        "schedule_id": row.schedule_id,
         "created_by_user_id": created_by_user_id,
         "created_by_user_name": created_by_user_name,
     }

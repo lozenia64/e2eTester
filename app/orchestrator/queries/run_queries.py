@@ -8,12 +8,26 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Literal
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.contexts.insights.application.admin_run_history_board import (
+    ATTENTION_STATUSES,
+    BoardRunRow,
+    build_admin_run_history_board,
+)
+from app.contexts.insights.application.admin_run_history_heatmap import (
+    HeatmapRunRow,
+    build_user_system_heatmap,
+)
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.views.comparison import attach_comparison
 from app.contexts.run.views.summary import summarize_row
 from app.contexts.scheduling.scheduler import schedule_today_start_utc
 from app.core.enums import RunStatus
+from app.core.settings import get_settings
+from app.core.status_labels import ADMIN_DASHBOARD_RUN_STATUSES
 from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
 
 if TYPE_CHECKING:
@@ -32,6 +46,69 @@ ACTIVE_RUN_STATUSES = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus
 # "전체 스캔" 성격의 보드/캘린더 프리페치 상한 — 예약 태깅 Run 은 보존 정책상 이보다
 # 훨씬 적게 유지되지만, 무제한 SELECT 는 계약상 두지 않는다.
 _SCHEDULE_TAGGED_FETCH_LIMIT = 5000
+
+
+def _schedule_tz() -> ZoneInfo:
+    name = (get_settings().schedule_tz or "").strip() or "Asia/Seoul"
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def _board_row(row: RunSummaryRow) -> BoardRunRow:
+    return BoardRunRow(
+        run_id=row.run_id,
+        system_code=row.system_code,
+        system_name=row.system_name,
+        status=row.status,
+        requested_at=row.requested_at,
+        started_at=row.started_at,
+        ended_at=row.ended_at,
+        module_total=row.module_total,
+        module_passed=row.module_passed,
+        module_skipped=row.module_skipped,
+        failed_module_name=row.failed_module_name,
+        triggered_by=row.triggered_by,
+        suite_id=row.suite_id,
+        schedule_id=row.schedule_id,
+        created_by_user_name=row.created_by_user_name,
+    )
+
+
+def _resolve_statuses(
+    run_status: RunStatus | None,
+    run_statuses: frozenset[RunStatus] | None,
+) -> frozenset[RunStatus] | None:
+    statuses = run_statuses
+    if run_status is not None:
+        statuses = frozenset({run_status}) if statuses is None else statuses & {run_status}
+    return statuses
+
+
+def _build_filter(
+    *,
+    system_code: str | None = None,
+    system_codes: frozenset[str] | None = None,
+    user_id: str | None = None,
+    user_name_query: str | None = None,
+    statuses: frozenset[RunStatus] | None = None,
+    requested_since: datetime | None = None,
+    requested_before: datetime | None = None,
+    triggered_by: str | None = None,
+    run_id_query: str | None = None,
+) -> RunSummaryFilter:
+    return RunSummaryFilter(
+        system_code=system_code,
+        system_codes=system_codes,
+        statuses=statuses,
+        user_id=user_id,
+        user_name_query=user_name_query,
+        requested_since=requested_since,
+        requested_before=requested_before,
+        triggered_by=triggered_by,
+        run_id_query=run_id_query,
+    )
 
 
 def _intersect(statuses: frozenset[RunStatus] | None, other: frozenset[RunStatus]):
@@ -86,6 +163,140 @@ class RunQueries:
         )
         rows = await self._rows_for_scope(base, statuses, scope, limit)
         return [summarize_row(row, actor_context=actor_context) for row in rows]
+
+    async def list_run_summaries_page(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        user_id: str | None = None,
+        system_code: str | None = None,
+        system_codes: frozenset[str] | None = None,
+        user_name_query: str | None = None,
+        actor_context: ActorContext | None = None,
+        run_status: RunStatus | None = None,
+        run_statuses: frozenset[RunStatus] | None = None,
+        requested_since: datetime | None = None,
+        requested_before: datetime | None = None,
+        triggered_by: str | None = None,
+        run_id_query: str | None = None,
+    ) -> dict[str, Any]:
+        statuses = _resolve_statuses(run_status, run_statuses)
+        filt = _build_filter(
+            system_code=system_code,
+            system_codes=system_codes,
+            user_id=user_id,
+            user_name_query=user_name_query,
+            statuses=statuses,
+            requested_since=requested_since,
+            requested_before=requested_before,
+            triggered_by=triggered_by,
+            run_id_query=run_id_query,
+        )
+        rows = await self._summary.list_summaries(filt, Page(limit=limit, offset=offset))
+        total = await self._summary.count(filt)
+        comparisons = await self._summary.list_comparisons([row.run_id for row in rows])
+        items = [
+            attach_comparison(
+                summarize_row(row, actor_context=actor_context),
+                comparisons.get(row.run_id),
+            )
+            for row in rows
+        ]
+        return {
+            "items": items,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        }
+
+    async def get_admin_run_history_heatmap(
+        self,
+        *,
+        systems: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        tz = _schedule_tz()
+        now = datetime.now(UTC)
+        terminal = frozenset(ADMIN_DASHBOARD_RUN_STATUSES)
+        trend_local_start = now.astimezone(tz).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=6)
+        trend_since = trend_local_start.astimezone(UTC)
+        rows = await self._summary.list_summaries(
+            RunSummaryFilter(statuses=terminal, requested_since=trend_since),
+            Page(limit=3000),
+        )
+        heatmap_rows = [
+            HeatmapRunRow(
+                system_code=row.system_code,
+                system_name=row.system_name,
+                status=row.status,
+                requested_at=row.requested_at,
+                created_by_user_id=row.created_by_user_id,
+                created_by_user_name=row.created_by_user_name,
+            )
+            for row in rows
+        ]
+        payload = build_user_system_heatmap(heatmap_rows, systems)
+        payload["generated_at"] = now.isoformat()
+        payload["timezone"] = str(tz)
+        return payload
+
+    async def get_admin_run_history_board(
+        self,
+        *,
+        actor_context: ActorContext | None = None,
+    ) -> dict[str, Any]:
+        tz = _schedule_tz()
+        now = datetime.now(UTC)
+        today_start = schedule_today_start_utc()
+        terminal = frozenset(ADMIN_DASHBOARD_RUN_STATUSES)
+
+        total_finished = await self._summary.count(RunSummaryFilter(statuses=terminal))
+        today_counts = await self._summary.counts_by_status_filtered(
+            RunSummaryFilter(statuses=terminal, requested_since=today_start)
+        )
+
+        trend_local_start = now.astimezone(tz).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=6)
+        trend_since = trend_local_start.astimezone(UTC)
+        trend_raw = await self._summary.daily_status_counts(
+            RunSummaryFilter(statuses=terminal, requested_since=trend_since),
+            tz=tz,
+        )
+        attention_open_count = await self._summary.count(
+            RunSummaryFilter(statuses=ATTENTION_STATUSES)
+        )
+
+        attention_rows = await self._summary.list_summaries(
+            RunSummaryFilter(statuses=ATTENTION_STATUSES),
+            Page(limit=5),
+        )
+        by_system_rows = await self._summary.list_summaries_for_last_finished_by_system()
+
+        board = build_admin_run_history_board(
+            now=now,
+            tz=tz,
+            today_start=today_start,
+            total_finished=total_finished,
+            today_status_counts=today_counts,
+            trend_counts_raw=trend_raw,
+            attention_rows=[_board_row(row) for row in attention_rows],
+            by_system_recent_rows=[_board_row(row) for row in by_system_rows],
+            attention_open_count=attention_open_count,
+        )
+        attention_comparisons = await self._summary.list_comparisons(
+            [row.run_id for row in attention_rows]
+        )
+        board["attention_runs"] = [
+            attach_comparison(
+                summarize_row(row, actor_context=actor_context),
+                attention_comparisons.get(row.run_id),
+            )
+            for row in attention_rows
+        ]
+        return board
 
     async def _rows_for_scope(
         self,
