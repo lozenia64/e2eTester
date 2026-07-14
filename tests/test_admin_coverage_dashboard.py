@@ -93,6 +93,33 @@ def test_build_coverage_running_when_no_terminal() -> None:
     )
     assert day_cell["status"] == "RUNNING"
     assert day_cell["tone"] == "running"
+    assert day_cell["run_id"] == "r1"
+
+
+def test_build_coverage_run_id_matches_latest_active() -> None:
+    systems = [_system("hom", "HOM")]
+    runs = [
+        CoverageRunRow("r1", "hom", RunStatus.RUNNING, _dt_kst(2026, 7, 14, 9, 0)),
+        CoverageRunRow("r2", "hom", RunStatus.RUNNING, _dt_kst(2026, 7, 14, 11, 0)),
+    ]
+    data = build_admin_coverage_dashboard(systems, runs, now=GEN_AT, tz=KST)
+    day_cell = next(
+        c
+        for c in data["systems"][0]["cells"]
+        if c["slot_id"] == "day" and c["day_key"] == "2026-07-14"
+    )
+    assert day_cell["run_id"] == "r2"
+
+
+def test_row_latest_tone_prefers_today_over_older_severity() -> None:
+    systems = [_system("hom", "HOM")]
+    runs = [
+        CoverageRunRow("r_old_err", "hom", RunStatus.ERROR, _dt_kst(2026, 7, 14, 10, 0)),
+        CoverageRunRow("r_today_ok", "hom", RunStatus.PASSED, _dt_kst(2026, 7, 15, 10, 0)),
+    ]
+    data = build_admin_coverage_dashboard(systems, runs, now=GEN_AT, tz=KST)
+    assert data["systems"][0]["latest_tone"] == "passed"
+    assert data["totals"]["systems_all_green"] == 1
 
 
 def test_coverage_window_start_is_first_day_06_kst() -> None:

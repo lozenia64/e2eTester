@@ -85,10 +85,12 @@ def _column_label(day_key: str, slot_id: SlotId, tz: ZoneInfo) -> str:
     return f"{dow} {_SLOT_LABELS[slot_id]}"
 
 
-def _cell_status(runs: list[CoverageRunRow]) -> tuple[str, str | None, str | None, datetime | None]:
-    """슬롯 내 Run 목록 → (status_key, status_label, tone, checked_at)."""
+def _cell_status(
+    runs: list[CoverageRunRow],
+) -> tuple[str, str | None, str | None, datetime | None, str | None]:
+    """슬롯 내 Run 목록 → (status_key, status_label, tone, checked_at, run_id)."""
     if not runs:
-        return "not_checked", "미점검", "not_checked", None
+        return "not_checked", "미점검", "not_checked", None, None
 
     sorted_runs = sorted(runs, key=lambda row: row.requested_at, reverse=True)
     latest = sorted_runs[0]
@@ -103,33 +105,36 @@ def _cell_status(runs: list[CoverageRunRow]) -> tuple[str, str | None, str | Non
             run_status_label(status),
             run_status_badge_tone(status),
             pick.requested_at,
+            pick.run_id,
         )
 
     if any(row.status in _ACTIVE_STATUSES for row in sorted_runs):
-        return "RUNNING", run_status_label(RunStatus.RUNNING), "running", latest.requested_at
+        return (
+            "RUNNING",
+            run_status_label(RunStatus.RUNNING),
+            "running",
+            latest.requested_at,
+            latest.run_id,
+        )
 
-    return "not_checked", "미점검", "not_checked", None
+    return "not_checked", "미점검", "not_checked", None, None
 
 
-def _row_latest_tone(cells: list[dict[str, Any]]) -> str:
-    """행 요약 신호등 — 오늘 슬롯 우선, 없으면 가장 최근 점검 셀."""
-    priority = {
-        "error": 0,
-        "anomaly": 1,
-        "running": 2,
-        "passed": 3,
-        "cancelled": 4,
-        "not_checked": 5,
-    }
-    best = "not_checked"
-    best_rank = 99
+def _row_latest_tone(cells: list[dict[str, Any]], *, today_key: str) -> str:
+    """행 요약 신호등 — 오늘 슬롯(야간→저녁→주간) 우선, 없으면 가장 최근 점검 셀."""
+    for slot_id in reversed(_SLOT_ORDER):
+        for cell in cells:
+            if cell.get("day_key") == today_key and cell.get("slot_id") == slot_id:
+                tone = cell.get("tone") or "not_checked"
+                if tone != "not_checked":
+                    return tone
+                break
+
     for cell in reversed(cells):
         tone = cell.get("tone") or "not_checked"
-        rank = priority.get(tone, 6)
-        if rank < best_rank:
-            best_rank = rank
-            best = tone
-    return best
+        if tone != "not_checked":
+            return tone
+    return "not_checked"
 
 
 def build_admin_coverage_dashboard(
@@ -141,6 +146,7 @@ def build_admin_coverage_dashboard(
 ) -> dict[str, Any]:
     """시스템 × 21슬롯 커버리지 매트릭스를 집계한다."""
     day_keys = _window_day_keys(now, tz)
+    today_key = day_keys[-1]
     window_start_day = day_keys[0]
     tz_aware_now = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
     window_start_local = datetime.fromisoformat(f"{window_start_day}T06:00:00").replace(tzinfo=tz)
@@ -183,16 +189,7 @@ def build_admin_coverage_dashboard(
         for day_key in day_keys:
             for slot_id in _SLOT_ORDER:
                 slot_runs = bucketed.get((system.system_code, day_key, slot_id), [])
-                status_key, status_label, tone, checked_at = _cell_status(slot_runs)
-                run_id = None
-                if slot_runs:
-                    terminal = [
-                        row
-                        for row in sorted(slot_runs, key=lambda r: r.requested_at, reverse=True)
-                        if row.status in _TERMINAL_STATUSES
-                    ]
-                    pick = terminal[0] if terminal else slot_runs[0]
-                    run_id = pick.run_id
+                status_key, status_label, tone, checked_at, run_id = _cell_status(slot_runs)
 
                 if status_key == "not_checked":
                     totals_not_checked += 1
@@ -215,7 +212,7 @@ def build_admin_coverage_dashboard(
                     }
                 )
 
-        latest_tone = _row_latest_tone(cells)
+        latest_tone = _row_latest_tone(cells, today_key=today_key)
         if latest_tone == "passed":
             systems_all_green += 1
 

@@ -156,7 +156,7 @@
     wrap.querySelectorAll("[data-run-id]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const runId = btn.getAttribute("data-run-id");
-        if (runId) window.location.href = `/runs/${runId}`;
+        if (runId) window.location.href = `/runs/${encodeURIComponent(runId)}`;
       });
     });
   }
@@ -222,7 +222,7 @@
     wrap.querySelectorAll(".adm-daily-card[data-clickable='1']").forEach((card) => {
       card.addEventListener("click", () => {
         const runId = card.getAttribute("data-run-id");
-        if (runId) window.location.href = `/runs/${runId}`;
+        if (runId) window.location.href = `/runs/${encodeURIComponent(runId)}`;
       });
     });
   }
