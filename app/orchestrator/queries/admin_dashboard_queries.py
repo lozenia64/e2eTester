@@ -17,6 +17,9 @@ from app.storage.query_rows import Page, RunSummaryFilter
 if TYPE_CHECKING:
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import RunSummaryQueryPort
+    from app.storage.query_rows import RunSummaryRow
+
+_PAGE_SIZE = 500
 
 
 def _schedule_tz() -> ZoneInfo:
@@ -38,14 +41,28 @@ class AdminDashboardQueries:
         self._registry = registry
         self._summary_query = summary_query
 
+    async def _list_summaries_since(self, since: datetime) -> list[RunSummaryRow]:
+        filt = RunSummaryFilter(requested_since=since)
+        rows: list[RunSummaryRow] = []
+        offset = 0
+        while True:
+            page_rows = await self._summary_query.list_summaries(
+                filt,
+                Page(limit=_PAGE_SIZE, offset=offset),
+            )
+            if not page_rows:
+                break
+            rows.extend(page_rows)
+            if len(page_rows) < _PAGE_SIZE:
+                break
+            offset += _PAGE_SIZE
+        return rows
+
     async def get_coverage_dashboard(self) -> dict[str, Any]:
         tz = _schedule_tz()
         now = datetime.now(UTC)
         since = coverage_window_start_utc(now, tz)
-        rows = await self._summary_query.list_summaries(
-            RunSummaryFilter(requested_since=since),
-            Page(limit=10_000, offset=0),
-        )
+        rows = await self._list_summaries_since(since)
         run_rows = [
             CoverageRunRow(
                 run_id=row.run_id,

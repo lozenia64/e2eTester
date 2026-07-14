@@ -68,6 +68,16 @@
     await loadRunsPage();
   }
 
+  function isSameLocalDay(iso, reference = new Date()) {
+    if (!iso) return false;
+    const d = new Date(iso);
+    return (
+      d.getFullYear() === reference.getFullYear() &&
+      d.getMonth() === reference.getMonth() &&
+      d.getDate() === reference.getDate()
+    );
+  }
+
   async function loadRunsPage() {
     const [runsRes, usersRes, systemsRes] = await Promise.all([
       fetch(`/api/admin/runs?${buildRunsQuery()}`),
@@ -81,8 +91,7 @@
     document.getElementById("card-total-users").textContent = users.length;
     document.getElementById("card-total-runs").textContent = runs.length;
 
-    const today = new Date().toISOString().slice(0, 10);
-    const todayRuns = runs.filter((r) => r.requested_at && r.requested_at.startsWith(today));
+    const todayRuns = runs.filter((r) => isSameLocalDay(r.requested_at));
     document.getElementById("card-today-runs").textContent = todayRuns.length;
 
     const systemSelect = document.getElementById("filter-system");
