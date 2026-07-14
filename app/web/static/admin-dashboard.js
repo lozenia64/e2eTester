@@ -197,7 +197,13 @@
                 : c.not_inspected === sys.module_total
                   ? "not_checked"
                   : "passed";
-        const clickable = sys.latest_run_id ? "1" : "0";
+        const runHref = sys.latest_run_id
+          ? `/runs/${encodeURIComponent(sys.latest_run_id)}`
+          : null;
+        const cardTag = runHref ? "a" : "article";
+        const cardOpen = runHref
+          ? `<${cardTag} class="adm-daily-card" href="${runHref}">`
+          : `<${cardTag} class="adm-daily-card">`;
         const modules = (sys.modules || [])
           .map((m) => {
             const dotColor = toneVar(m.tone || "not_inspected");
@@ -207,7 +213,7 @@
             </span>`;
           })
           .join("");
-        return `<article class="adm-daily-card" data-clickable="${clickable}" data-run-id="${esc(sys.latest_run_id || "")}">
+        return `${cardOpen}
           <div class="flex items-start justify-between gap-2">
             <h3 class="text-sm font-semibold text-gray-900">${esc(sys.system_name)}</h3>
             <span class="adm-status-pill" style="${statusPillStyle(tone)}">${esc(sys.latest_run_status_label || "미점검")}</span>
@@ -215,19 +221,16 @@
           <p class="mt-1 text-[11px] text-gray-500">모듈 ${sys.inspected}/${sys.module_total} · 통과율 ${sys.pass_rate}%</p>
           <div class="mt-2.5">${buildSegbarHtml(sys)}</div>
           <div class="mt-2.5 flex flex-wrap gap-1">${modules}</div>
-        </article>`;
+        </${cardTag}>`;
       })
       .join("")}</div>`;
-
-    wrap.querySelectorAll(".adm-daily-card[data-clickable='1']").forEach((card) => {
-      card.addEventListener("click", () => {
-        const runId = card.getAttribute("data-run-id");
-        if (runId) window.location.href = `/runs/${encodeURIComponent(runId)}`;
-      });
-    });
   }
 
+  let dashboardLoadInFlight = false;
+
   async function loadDashboard() {
+    if (dashboardLoadInFlight) return;
+    dashboardLoadInFlight = true;
     try {
       const [coverageRes, dailyRes] = await Promise.all([
         fetch("/api/admin/dashboard"),
@@ -251,6 +254,8 @@
     } catch (error) {
       $("#adm-heatmap").innerHTML = `<p class="py-8 text-center text-sm text-red-500">${esc(error.message)}</p>`;
       $("#adm-updated-at").textContent = "갱신 실패";
+    } finally {
+      dashboardLoadInFlight = false;
     }
   }
 

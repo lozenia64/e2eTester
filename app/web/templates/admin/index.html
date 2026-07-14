@@ -216,8 +216,15 @@
     padding: 1rem;
     transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-spring);
   }
-  .adm-daily-card[data-clickable="1"] { cursor: pointer; }
-  .adm-daily-card[data-clickable="1"]:hover {
+  a.adm-daily-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+  .adm-daily-card[data-clickable="1"],
+  a.adm-daily-card { cursor: pointer; }
+  .adm-daily-card[data-clickable="1"]:hover,
+  a.adm-daily-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 28px -12px rgb(30 41 59 / 0.2);
   }
@@ -391,5 +398,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/admin-dashboard.js?v=6" defer></script>
+<script src="/static/admin-dashboard.js?v=7" defer></script>
 {% endblock %}
