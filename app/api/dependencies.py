@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from app.contexts.suite.application.service import SuiteService
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
-    from app.orchestrator.queries import DailyDashboardQueries, RunQueries
+    from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import (
         ScheduleRepositoryPort,
@@ -48,6 +48,11 @@ def get_run_queries(connection: HTTPConnection) -> RunQueries:
 def get_daily_queries(connection: HTTPConnection) -> DailyDashboardQueries:
     """일간 점검 현황 질의 핸들러(읽기 전용)."""
     return connection.app.state.daily_queries
+
+
+def get_admin_dashboard_queries(connection: HTTPConnection) -> AdminDashboardQueries:
+    """관리자 관제 대시보드 질의 핸들러(읽기 전용)."""
+    return connection.app.state.admin_dashboard_queries
 
 
 def get_suite_summary_query(connection: HTTPConnection) -> SuiteSummaryQueryPort:

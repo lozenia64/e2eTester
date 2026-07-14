@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% block title %}Run 이력{% endblock %}
+{% block nav_runs %}bg-red-50 text-red-700 font-semibold{% endblock %}
+
+{% block content %}
+<div>
+    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">Run 이력</h1>
+    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(정상·이상징후·점검실패·취소) 이력을 확인합니다.</p>
+</div>
+
+<div class="grid gap-3 md:grid-cols-3" id="summary-cards">
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">전체 사용자</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-users">—</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">오늘 완료 Run</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-today-runs">—</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">완료 Run</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-runs">—</p>
+    </div>
+</div>
+
+<div class="flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div>
+        <label for="filter-system" class="mb-1 block text-xs font-medium text-gray-500">시스템</label>
+        <select id="filter-system" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">전체</option>
+        </select>
+    </div>
+    <div>
+        <label for="filter-status" class="mb-1 block text-xs font-medium text-gray-500">상태</label>
+        <select id="filter-status" class="min-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">전체</option>
+            <option value="PASSED">정상</option>
+            <option value="ANOMALY">이상징후</option>
+            <option value="ERROR">점검실패</option>
+            <option value="CANCELLED">취소</option>
+        </select>
+    </div>
+    <div>
+        <label for="filter-user-name" class="mb-1 block text-xs font-medium text-gray-500">실행자 이름</label>
+        <input id="filter-user-name" type="text" placeholder="이름 검색" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <button id="btn-filter" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
+    <button id="btn-reset" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
+    <span id="runs-filter-meta" class="ml-auto text-xs text-gray-400"></span>
+</div>
+
+<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div class="border-b border-gray-100 px-6 py-4">
+        <h2 class="text-sm font-semibold text-gray-900">최근 완료 Run</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Run ID</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">시스템</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">실행자</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">상태</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">요청 시각</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">삭제</th>
+                </tr>
+            </thead>
+            <tbody id="runs-table-body" class="divide-y divide-gray-100">
+                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">불러오는 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/admin-runs.js?v=1" defer></script>
+{% endblock %}

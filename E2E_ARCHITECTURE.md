@@ -505,6 +505,7 @@ e2eTester/
 - `POST /api/trigger/{trigger_token}/otp` (대기 중 실행에 OTP 제출·재개)
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
+- `GET /api/admin/dashboard` (전체 시스템 7일×3타임 점검 커버리지 매트릭스, admin 전용, PII 없음)
 - `GET /api/admin/runs` (전체 Run 목록, admin 전용; `system_code`·`user_name` 필터, `limit` 지원)
 - `DELETE /api/admin/runs/{run_id}` (Run 영구 삭제 — `domain_events`·스냅샷·`run_history_index`·`module_history_index`·레거시 `runs` blob·로그·아티팩트 등 Run-scoped 행 전부 제거, 재기동 backfill 대상 아님, admin 전용)
 - `GET /api/admin/ops/snapshot` (Run/Suite/스케줄·실행 큐·최근 운영 이벤트 스냅샷, admin 전용)
@@ -519,7 +520,8 @@ e2eTester/
 - `PATCH /api/admin/users/{user_id}/active` (활성/비활성 전환, admin 전용)
 - `DELETE /api/admin/users/{user_id}` (사용자 삭제, admin 전용)
 - `PUT /api/admin/users/{user_id}/systems` (사용자 허용 시스템 목록 변경, admin 전용)
-- `GET /admin` (관리자 대시보드 HTML)
+- `GET /admin` (관리자 관제 대시보드 HTML — 7일×3타임 커버리지 히트맵 + 오늘 모듈 현황)
+- `GET /admin/runs` (Run 이력 HTML — 전체 완료 Run 목록·필터·삭제)
 - `GET /admin/users` (사용자 관리 HTML)
 - `GET /admin/stats` (사용량 통계 HTML)
 - `GET /admin/ops` (운영 관측 HTML — Run/Suite/스케줄·큐·최근 이벤트)
@@ -868,7 +870,8 @@ manifest 에 들어 있는 정보:
 
 **관리자 Run 관리:**
 
-- `GET /api/admin/runs` — 전체 Run 목록(시스템·사용자·상태 필터). 집계 대상은 `ADMIN_DASHBOARD_RUN_STATUSES`(= 정상·이상징후·점검실패·취소). `DELETE /api/admin/runs/{run_id}` — Run 영구 삭제: `SqliteRunWriteRepository.delete_run` 이 `domain_events`·`outbox`·`aggregate_snapshots`·`run_history_index`·`module_history_index`·레거시 `runs` blob·`session_checkpoints`·치유 이력 등 Run-scoped 행을 한 트랜잭션으로 제거하고, 로그·아티팩트·입력·제어 상태는 `RunService` 가 함께 정리한다(재기동 startup backfill 로 부활하지 않음). 일간 롤업(`daily_system_status`·`stats_rollup`)은 기존 정책대로 보존. 일일 보존 정리 배치(§5.9)도 같은 삭제 경로(`RunService.purge_runs`)를 쓴다.
+- `GET /api/admin/dashboard` / `GET /admin` — 최근 7일(KST)·하루 3타임(주간 06–18 / 저녁 18–22 / 야간 22–06) 기준 전체 시스템 점검 커버리지 매트릭스. 집계 규칙은 순수 빌더 `app/contexts/insights/application/admin_coverage_dashboard.py`, 질의는 `AdminDashboardQueries`(`run_history_index` 요약만 소비, PII 없음). 화면은 `app/web/static/admin-dashboard.js`(30초 자동 갱신).
+- `GET /api/admin/runs` / `GET /admin/runs` — 전체 Run 목록(시스템·사용자·상태 필터). 집계 대상은 `ADMIN_DASHBOARD_RUN_STATUSES`(= 정상·이상징후·점검실패·취소). `DELETE /api/admin/runs/{run_id}` — Run 영구 삭제: `SqliteRunWriteRepository.delete_run` 이 `domain_events`·`outbox`·`aggregate_snapshots`·`run_history_index`·`module_history_index`·레거시 `runs` blob·`session_checkpoints`·치유 이력 등 Run-scoped 행을 한 트랜잭션으로 제거하고, 로그·아티팩트·입력·제어 상태는 `RunService` 가 함께 정리한다(재기동 startup backfill 로 부활하지 않음). 일간 롤업(`daily_system_status`·`stats_rollup`)은 기존 정책대로 보존. 일일 보존 정리 배치(§5.9)도 같은 삭제 경로(`RunService.purge_runs`)를 쓴다.
 
 ### 5.11 자가 치유 센터 계층
 

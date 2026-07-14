@@ -3,202 +3,393 @@
 {% block nav_dashboard %}bg-red-50 text-red-700 font-semibold{% endblock %}
 
 {% block content %}
-<div>
-    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">관리자 대시보드</h1>
-    <p class="mt-1.5 text-sm text-gray-500">전체 사용자 현황과 완료된 Run(정상·이상징후·점검실패·취소) 이력을 확인합니다.</p>
-</div>
+<style>
+  .adm-dash {
+    --st-passed: #0ca30c;
+    --st-anomaly: #fab219;
+    --st-error: #d03b3b;
+    --st-running: #2a78d6;
+    --st-cancelled: #9ca3af;
+    --st-idle: #e5e7eb;
+    --st-track: #ecebe6;
+    --ease-spring: cubic-bezier(.22, 1, .36, 1);
+    --adm-cell-size: 1.75rem;
+    --adm-label-col: 8.5rem;
+  }
 
-<!-- 요약 카드 -->
-<div class="grid gap-3 md:grid-cols-3" id="summary-cards">
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">전체 사용자</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-users">—</p>
-    </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">오늘 완료 Run</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-today-runs">—</p>
-    </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">완료 Run</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900" id="card-total-runs">—</p>
-    </div>
-</div>
+  .adm-hero {
+    margin: -2rem -1rem 0;
+    padding: 1.75rem 1rem 1.25rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border-bottom: 1px solid #f1f5f9;
+  }
+  @media (min-width: 768px) {
+    .adm-hero { margin: -2rem -2rem 0; padding: 2rem 2rem 1.5rem; }
+  }
 
-<!-- 필터 -->
-<div class="flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-    <div>
-        <label for="filter-system" class="mb-1 block text-xs font-medium text-gray-500">시스템</label>
-        <select id="filter-system" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">전체</option>
-        </select>
-    </div>
-    <div>
-        <label for="filter-status" class="mb-1 block text-xs font-medium text-gray-500">상태</label>
-        <select id="filter-status" class="min-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">전체</option>
-            <option value="PASSED">정상</option>
-            <option value="ANOMALY">이상징후</option>
-            <option value="ERROR">점검실패</option>
-            <option value="CANCELLED">취소</option>
-        </select>
-    </div>
-    <div>
-        <label for="filter-user-name" class="mb-1 block text-xs font-medium text-gray-500">실행자 이름</label>
-        <input id="filter-user-name" type="text" placeholder="이름 검색" class="min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-    </div>
-    <button id="btn-filter" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">조회</button>
-    <button id="btn-reset" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">초기화</button>
-    <span id="runs-filter-meta" class="ml-auto text-xs text-gray-400"></span>
-</div>
+  .adm-refresh-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #6b7280;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+  .adm-refresh-pill::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: #22c55e;
+    animation: adm-pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes adm-pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
 
-<!-- 최근 Run 목록 -->
-<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-    <div class="border-b border-gray-100 px-6 py-4">
-        <h2 class="text-sm font-semibold text-gray-900">최근 완료 Run</h2>
+  .adm-reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.5s var(--ease-spring), transform 0.5s var(--ease-spring);
+  }
+  .adm-reveal.is-in { opacity: 1; transform: none; }
+
+  .adm-metric-icon--slate { background: #f1f5f9; color: #475569; }
+  .adm-metric-icon--green { background: #dcfce7; color: #16a34a; }
+  .adm-metric-icon--amber { background: #fef3c7; color: #d97706; }
+  .adm-metric-icon--red { background: #fee2e2; color: #dc2626; }
+  .adm-metric-icon--emerald { background: #d1fae5; color: #059669; }
+
+  .adm-kpi--green { background: #f0fdf4; color: #15803d; box-shadow: inset 0 0 0 1px rgb(22 163 74 / 0.12); }
+  .adm-kpi--amber { background: #fffbeb; color: #b45309; box-shadow: inset 0 0 0 1px rgb(217 119 6 / 0.12); }
+  .adm-kpi--red { background: #fef2f2; color: #b91c1c; box-shadow: inset 0 0 0 1px rgb(220 38 38 / 0.12); }
+  .adm-kpi--emerald { background: #ecfdf5; color: #047857; box-shadow: inset 0 0 0 1px rgb(5 150 105 / 0.12); }
+
+  .adm-panel {
+    border-radius: 1rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.04);
+    overflow: hidden;
+  }
+  .adm-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .adm-panel__title { font-size: 0.875rem; font-weight: 600; color: #111827; }
+  .adm-panel__sub { font-size: 0.6875rem; color: #9ca3af; margin-top: 0.125rem; }
+
+  .adm-legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    background: #f9fafb;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  .adm-legend-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 0.125rem;
+    flex-shrink: 0;
+  }
+
+  .adm-heatmap-wrap { overflow-x: auto; padding: 1rem 1.25rem 1.25rem; }
+  #adm-heatmap { width: 100%; }
+  .adm-heatmap-grid {
+    display: grid;
+    width: 100%;
+    grid-template-columns: var(--adm-label-col) repeat(21, minmax(1.25rem, 1fr));
+    column-gap: 4px;
+    row-gap: 4px;
+  }
+  .adm-heatmap-grid__label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #fff;
+    padding-right: 0.5rem;
+    min-height: 1.75rem;
+  }
+  .adm-heatmap-grid__day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: #6b7280;
+    padding-bottom: 0.125rem;
+  }
+  .adm-heatmap-grid__day.is-weekday { color: #111827; }
+  .adm-heatmap-grid__day.is-sat { color: #2563eb; }
+  .adm-heatmap-grid__day.is-sun { color: #dc2626; }
+  .adm-heatmap-grid__day.is-day-start,
+  .adm-heatmap-grid__slot.is-day-start,
+  .adm-heatmap-grid__cell.is-day-start {
+    box-shadow: inset 2px 0 0 0 #e5e7eb;
+  }
+  .adm-heatmap-grid__slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.125rem;
+    justify-self: stretch;
+  }
+  .adm-heatmap-grid__cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    justify-self: stretch;
+    min-width: 0;
+  }
+  .adm-slot-icon {
+    display: inline-flex;
+    color: #9ca3af;
+  }
+  .adm-slot-icon svg { width: 0.75rem; height: 0.75rem; }
+
+  .adm-cell {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 0.25rem;
+    border: 1px solid transparent;
+    transition: transform 0.15s var(--ease-spring), box-shadow 0.15s ease;
+    cursor: default;
+  }
+  .adm-cell[data-clickable="1"] { cursor: pointer; }
+  .adm-cell[data-clickable="1"]:hover {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgb(15 23 42 / 0.15);
+    z-index: 1;
+  }
+  .adm-cell:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+  }
+  .adm-cell[data-tone="passed"] { background: var(--st-passed); border-color: color-mix(in srgb, var(--st-passed) 80%, #000); }
+  .adm-cell[data-tone="anomaly"] { background: var(--st-anomaly); border-color: color-mix(in srgb, var(--st-anomaly) 70%, #000); }
+  .adm-cell[data-tone="error"] { background: var(--st-error); border-color: color-mix(in srgb, var(--st-error) 80%, #000); }
+  .adm-cell[data-tone="running"] {
+    background: var(--st-running);
+    border-color: color-mix(in srgb, var(--st-running) 80%, #000);
+    animation: adm-cell-pulse 1.6s ease-in-out infinite;
+  }
+  .adm-cell[data-tone="cancelled"] { background: var(--st-cancelled); }
+  .adm-cell[data-tone="not_checked"] { background: var(--st-idle); border-color: #e5e7eb; }
+
+  @keyframes adm-cell-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-running) 40%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--st-running) 12%, transparent); }
+  }
+
+  .adm-sys-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex-shrink: 0; }
+
+  .adm-daily-card {
+    border-radius: 0.875rem;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    padding: 1rem;
+    transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-spring);
+  }
+  .adm-daily-card[data-clickable="1"] { cursor: pointer; }
+  .adm-daily-card[data-clickable="1"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -12px rgb(30 41 59 / 0.2);
+  }
+  .adm-segbar {
+    display: flex;
+    height: 0.375rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: var(--st-track);
+  }
+  .adm-seg {
+    height: 100%;
+    transition: width 0.7s var(--ease-spring);
+  }
+  .adm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    background: #f9fafb;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #4b5563;
+    ring: 1px solid #f3f4f6;
+    border: 1px solid #f3f4f6;
+  }
+  .adm-chip__dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+  .adm-status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .adm-reveal { transition: none; opacity: 1; transform: none; }
+    .adm-cell { transition: none; }
+    .adm-cell[data-tone="running"] { animation: none; }
+    .adm-refresh-pill::before { animation: none; }
+    .adm-daily-card { transition: none; }
+    .adm-seg { transition: none; }
+  }
+</style>
+
+<div class="adm-dash space-y-5" id="admin-dashboard-root">
+    <div class="adm-hero">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin · Control</p>
+                <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">관리자 대시보드</h1>
+                <p class="mt-1.5 text-sm text-gray-500">최근 7일 · 3타임 기준 전체 시스템 점검 커버리지</p>
+            </div>
+            <p id="adm-updated-at" class="adm-refresh-pill">불러오는 중…</p>
+        </div>
     </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Run ID</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">시스템</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">실행자</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">상태</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">요청 시각</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">삭제</th>
-                </tr>
-            </thead>
-            <tbody id="runs-table-body" class="divide-y divide-gray-100">
-                <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">불러오는 중...</td></tr>
-            </tbody>
-        </table>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" id="adm-kpi-strip">
+        <div class="status-metric-card adm-reveal">
+            <div class="status-metric-card__head">
+                <div class="status-metric-card__identity">
+                    <span class="status-metric-card__icon adm-metric-icon--slate" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                    </span>
+                    <span class="status-metric-card__title">전체 시스템</span>
+                </div>
+                <span class="status-metric-card__kpi status-metric-card__kpi--indigo">
+                    <span class="status-metric-card__kpi-value" id="kpi-systems">—</span>
+                </span>
+            </div>
+            <p class="status-metric-card__summary">등록된 점검 대상</p>
+        </div>
+        <div class="status-metric-card adm-reveal">
+            <div class="status-metric-card__head">
+                <div class="status-metric-card__identity">
+                    <span class="status-metric-card__icon adm-metric-icon--green" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </span>
+                    <span class="status-metric-card__title">점검됨</span>
+                </div>
+                <span class="status-metric-card__kpi adm-kpi--green">
+                    <span class="status-metric-card__kpi-value" id="kpi-checked">—</span>
+                </span>
+            </div>
+            <p class="status-metric-card__summary">21슬롯 중 실행 이력 있음</p>
+        </div>
+        <div class="status-metric-card adm-reveal">
+            <div class="status-metric-card__head">
+                <div class="status-metric-card__identity">
+                    <span class="status-metric-card__icon adm-metric-icon--amber" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    </span>
+                    <span class="status-metric-card__title">이상징후</span>
+                </div>
+                <span class="status-metric-card__kpi adm-kpi--amber">
+                    <span class="status-metric-card__kpi-value" id="kpi-anomaly">—</span>
+                </span>
+            </div>
+            <p class="status-metric-card__summary">슬롯 단위 이상 감지</p>
+        </div>
+        <div class="status-metric-card adm-reveal">
+            <div class="status-metric-card__head">
+                <div class="status-metric-card__identity">
+                    <span class="status-metric-card__icon adm-metric-icon--red" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </span>
+                    <span class="status-metric-card__title">점검실패</span>
+                </div>
+                <span class="status-metric-card__kpi adm-kpi--red">
+                    <span class="status-metric-card__kpi-value" id="kpi-error">—</span>
+                </span>
+            </div>
+            <p class="status-metric-card__summary">도구·실행 오류</p>
+        </div>
+        <div class="status-metric-card adm-reveal">
+            <div class="status-metric-card__head">
+                <div class="status-metric-card__identity">
+                    <span class="status-metric-card__icon adm-metric-icon--emerald" aria-hidden="true">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    </span>
+                    <span class="status-metric-card__title">전체 정상</span>
+                </div>
+                <span class="status-metric-card__kpi adm-kpi--emerald">
+                    <span class="status-metric-card__kpi-value" id="kpi-all-green">—</span>
+                </span>
+            </div>
+            <p class="status-metric-card__summary">최근 상태 정상인 시스템</p>
+        </div>
+    </div>
+
+    <div class="adm-panel adm-reveal">
+        <div class="adm-panel__head">
+            <div>
+                <h2 class="adm-panel__title">주간 점검 커버리지</h2>
+                <p class="adm-panel__sub">7일 × 3타임 · 주간 06–18 / 저녁 18–22 / 야간 22–06</p>
+            </div>
+            <div class="flex flex-wrap gap-1.5" id="adm-legend" aria-label="범례">
+                <span class="adm-legend-pill"><span class="adm-legend-dot" style="background:var(--st-passed)"></span>정상</span>
+                <span class="adm-legend-pill"><span class="adm-legend-dot" style="background:var(--st-anomaly)"></span>이상</span>
+                <span class="adm-legend-pill"><span class="adm-legend-dot" style="background:var(--st-error)"></span>실패</span>
+                <span class="adm-legend-pill"><span class="adm-legend-dot" style="background:var(--st-running)"></span>진행</span>
+                <span class="adm-legend-pill"><span class="adm-legend-dot" style="background:var(--st-idle)"></span>미점검</span>
+            </div>
+        </div>
+        <div class="adm-heatmap-wrap">
+            <div id="adm-heatmap">
+                <p class="py-8 text-center text-sm text-gray-400">불러오는 중…</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="adm-panel adm-reveal">
+        <div class="adm-panel__head">
+            <div>
+                <h2 class="adm-panel__title">오늘 모듈 현황</h2>
+                <p class="adm-panel__sub">시스템·모듈별 당일 점검 결과</p>
+            </div>
+            <a href="/admin/runs" class="text-xs font-semibold text-indigo-600 hover:underline">Run 이력</a>
+        </div>
+        <div id="adm-daily-compact" class="p-4 pt-0">
+            <p class="py-6 text-center text-sm text-gray-400">불러오는 중…</p>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-const statusBadgeClasses = {
-    PASSED: 'bg-green-100 text-green-700',
-    ANOMALY: 'bg-amber-100 text-amber-800',
-    FAILED: 'bg-amber-100 text-amber-800',
-    ERROR: 'bg-red-100 text-red-700',
-    RUNNING: 'bg-blue-100 text-blue-700',
-    PENDING: 'bg-gray-100 text-gray-600',
-    CANCELLED: 'bg-gray-100 text-gray-500',
-    WAITING_INPUT: 'bg-yellow-100 text-yellow-700',
-};
-
-function buildRunsQuery() {
-    const params = new URLSearchParams({ limit: '200' });
-    const systemCode = document.getElementById('filter-system').value;
-    const userName = document.getElementById('filter-user-name').value.trim();
-    const runStatus = document.getElementById('filter-status').value;
-    if (systemCode) params.set('system_code', systemCode);
-    if (userName) params.set('user_name', userName);
-    if (runStatus) params.set('status', runStatus);
-    return params.toString();
-}
-
-function renderRunsTable(runs) {
-    const tbody = document.getElementById('runs-table-body');
-    if (runs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">Run 없음</td></tr>';
-        return;
-    }
-    tbody.innerHTML = runs.map(r => {
-        const cls = statusBadgeClasses[r.status] || 'bg-gray-100 text-gray-600';
-        const label = r.status_label || r.status;
-        const at = r.requested_at ? new Date(r.requested_at).toLocaleString('ko-KR') : '—';
-        const canDelete = !['RUNNING', 'PENDING', 'WAITING_INPUT'].includes(r.status);
-        const deleteBtn = canDelete
-            ? `<button type="button" class="delete-run-btn rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50" data-run-id="${r.run_id}">삭제</button>`
-            : `<span class="text-xs text-gray-300">—</span>`;
-        return `<tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-mono text-xs text-gray-600"><a href="/runs/${r.run_id}" class="hover:underline text-indigo-600">${r.run_id.slice(0, 12)}…</a></td>
-            <td class="px-4 py-3 text-sm">${r.system_name || r.system_code}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${r.created_by_user_name || '(시스템)'}</td>
-            <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cls}">${label}</span></td>
-            <td class="px-4 py-3 text-xs text-gray-500">${at}</td>
-            <td class="px-4 py-3 text-right">${deleteBtn}</td>
-        </tr>`;
-    }).join('');
-}
-
-async function deleteRun(runId) {
-    const confirmed = window.confirm(
-        `Run ${runId} 을(를) 영구 삭제하시겠습니까?\n\nDB 기록·로그·스크린샷이 모두 삭제되며 사용자 화면에서도 사라집니다.`
-    );
-    if (!confirmed) return;
-
-    const response = await fetch(`/api/admin/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
-    if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        window.alert(body.detail || `삭제에 실패했습니다. (${response.status})`);
-        return;
-    }
-    await loadDashboard();
-}
-
-async function loadDashboard() {
-    const [runsRes, usersRes, systemsRes] = await Promise.all([
-        fetch(`/api/admin/runs?${buildRunsQuery()}`),
-        fetch('/api/admin/users'),
-        fetch('/api/admin/systems'),
-    ]);
-    const runs = await runsRes.json();
-    const users = await usersRes.json();
-    const systems = await systemsRes.json();
-
-    document.getElementById('card-total-users').textContent = users.length;
-    document.getElementById('card-total-runs').textContent = runs.length;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const todayRuns = runs.filter(r => r.requested_at && r.requested_at.startsWith(today));
-    document.getElementById('card-today-runs').textContent = todayRuns.length;
-
-    const systemSelect = document.getElementById('filter-system');
-    if (systemSelect.options.length <= 1) {
-        systems.forEach(system => {
-            const option = document.createElement('option');
-            option.value = system.system_code;
-            option.textContent = system.system_name || system.system_code;
-            systemSelect.appendChild(option);
-        });
-    }
-
-    const filterParts = [];
-    const selectedSystem = systemSelect.options[systemSelect.selectedIndex];
-    if (systemSelect.value) filterParts.push(`시스템: ${selectedSystem.textContent}`);
-    const statusSelect = document.getElementById('filter-status');
-    const selectedStatus = statusSelect.options[statusSelect.selectedIndex];
-    if (statusSelect.value) filterParts.push(`상태: ${selectedStatus.textContent}`);
-    const userName = document.getElementById('filter-user-name').value.trim();
-    if (userName) filterParts.push(`실행자: ${userName}`);
-    document.getElementById('runs-filter-meta').textContent = filterParts.length
-        ? `${filterParts.join(' · ')} · ${runs.length}건`
-        : `최근 ${runs.length}건`;
-
-    renderRunsTable(runs);
-}
-
-document.getElementById('btn-filter').addEventListener('click', loadDashboard);
-document.getElementById('btn-reset').addEventListener('click', () => {
-    document.getElementById('filter-system').value = '';
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-user-name').value = '';
-    loadDashboard();
-});
-document.getElementById('filter-user-name').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') loadDashboard();
-});
-document.getElementById('runs-table-body').addEventListener('click', (event) => {
-    const button = event.target.closest('.delete-run-btn');
-    if (!button) return;
-    deleteRun(button.dataset.runId);
-});
-
-loadDashboard();
-</script>
+<script src="/static/admin-dashboard.js?v=5" defer></script>
 {% endblock %}

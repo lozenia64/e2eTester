@@ -36,7 +36,7 @@ from app.execution.redis_session_registry import RedisSessionRegistry
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.queries import DailyDashboardQueries, RunQueries
+from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
 from app.platform.artifact_manager import ArtifactManager
 from app.projections.handlers import ProjectionHandlers
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
@@ -139,6 +139,7 @@ class AppContainer:
     run_service: RunService = field(init=False)
     run_queries: RunQueries = field(init=False)
     daily_queries: DailyDashboardQueries = field(init=False)
+    admin_dashboard_queries: AdminDashboardQueries = field(init=False)
     suite_service: SuiteService = field(init=False)
     preset_service: PresetService = field(init=False)
 
@@ -285,6 +286,7 @@ class AppContainer:
             self.run_summary_query, self.run_write_repo, self.run_log_store
         )
         self.daily_queries = DailyDashboardQueries(self.registry, self.daily_status_query)
+        self.admin_dashboard_queries = AdminDashboardQueries(self.registry, self.run_summary_query)
 
         self.preset_service = PresetService(
             repository=self.preset_repository,
@@ -367,6 +369,7 @@ class AppContainer:
         app.state.run_service = self.run_service
         app.state.run_queries = self.run_queries
         app.state.daily_queries = self.daily_queries
+        app.state.admin_dashboard_queries = self.admin_dashboard_queries
         app.state.suite_summary_query = self.suite_summary_query
         app.state.suite_service = self.suite_service
         app.state.run_queue = self.run_queue
