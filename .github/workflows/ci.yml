@@ -28,6 +28,9 @@ jobs:
   changes:
     name: ci / changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter listFiles on pull_request events
     outputs:
       code: ${{ steps.filter.outputs.code }}
       security: ${{ steps.filter.outputs.security }}

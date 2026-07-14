@@ -81,6 +81,17 @@ async def admin_index(request: Request, current_user: User = Depends(require_adm
     )
 
 
+@router.get("/admin/runs", response_class=HTMLResponse)
+async def admin_runs(request: Request, current_user: User = Depends(require_admin)):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return templates.TemplateResponse(
+        request,
+        "admin/runs.html",
+        {"current_user": current_user},
+    )
+
+
 @router.get("/admin/users", response_class=HTMLResponse)
 async def admin_users(request: Request, current_user: User = Depends(require_admin)):
     if isinstance(current_user, RedirectResponse):
@@ -157,7 +168,7 @@ async def runs_history(
     if isinstance(current_user, RedirectResponse):
         return current_user
     if current_user.role == "admin":
-        return RedirectResponse(url="/admin", status_code=302)
+        return RedirectResponse(url="/admin/runs", status_code=302)
     return templates.TemplateResponse(
         request,
         "runs_history.html",

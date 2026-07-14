@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (
+    get_admin_dashboard_queries,
     get_module_settings_repo,
     get_ops_service,
     get_registry,
@@ -30,11 +31,20 @@ if TYPE_CHECKING:
     from app.contexts.insights.application.ops_service import OpsService
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.run.application.service import RunService
-    from app.orchestrator.queries import RunQueries
+    from app.orchestrator.queries import AdminDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
     from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/dashboard")
+async def admin_coverage_dashboard(
+    current_user: User = Depends(require_admin),
+    admin_queries: AdminDashboardQueries = Depends(get_admin_dashboard_queries),
+) -> dict[str, Any]:
+    """전체 시스템 7일×3타임 점검 커버리지 매트릭스(admin 전용, PII 없음)."""
+    return await admin_queries.get_coverage_dashboard()
 
 
 def _fmt_saved_seconds(seconds: int) -> str:

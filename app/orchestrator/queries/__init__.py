@@ -5,7 +5,8 @@
 애그리거트 로드(blob + 로그 하이드레이션)다.
 """
 
+from app.orchestrator.queries.admin_dashboard_queries import AdminDashboardQueries
 from app.orchestrator.queries.daily_queries import DailyDashboardQueries
 from app.orchestrator.queries.run_queries import RunQueries
 
-__all__ = ["DailyDashboardQueries", "RunQueries"]
+__all__ = ["AdminDashboardQueries", "DailyDashboardQueries", "RunQueries"]
