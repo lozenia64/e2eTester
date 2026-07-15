@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from app.api.dependencies import get_daily_queries
 from app.contexts.identity.dependencies import get_current_user
@@ -13,6 +15,20 @@ if TYPE_CHECKING:
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+templates = Jinja2Templates(directory="app/web/templates")
+
+_FRAGMENT_TEMPLATES = {
+    "kpi": "dashboard/partials/zone_a_kpi.html",
+    "matrix": "dashboard/partials/zone_b_matrix.html",
+}
+
+
+async def _load_dashboard(
+    daily_queries: DailyDashboardQueries,
+    current_user: User,
+) -> dict:
+    allowed = None if current_user.role == "admin" else current_user.allowed_system_codes
+    return await daily_queries.get_daily_dashboard(allowed_system_codes=allowed)
 
 
 @router.get("/daily")
@@ -21,5 +37,49 @@ async def daily_dashboard(
     daily_queries: DailyDashboardQueries = Depends(get_daily_queries),
 ):
     """로그인 사용자의 접근 가능한 시스템별 **일간 점검 현황**(시스템·모듈 단위)."""
-    allowed = None if current_user.role == "admin" else current_user.allowed_system_codes
-    return await daily_queries.get_daily_dashboard(allowed_system_codes=allowed)
+    return await _load_dashboard(daily_queries, current_user)
+
+
+@router.get("/daily/fragments/{zone}", response_class=HTMLResponse)
+async def daily_dashboard_fragment(
+    zone: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    daily_queries: DailyDashboardQueries = Depends(get_daily_queries),
+):
+    """HTMX용 일간 대시보드 zone partial."""
+    template_name = _FRAGMENT_TEMPLATES.get(zone)
+    if template_name is None:
+        raise HTTPException(status_code=404, detail="unknown fragment zone")
+    data = await _load_dashboard(daily_queries, current_user)
+    return templates.TemplateResponse(
+        request,
+        template_name,
+        {
+            "data": data,
+            "request": request,
+        },
+    )
+
+
+@router.get("/daily/fragments/system/{system_code}/panel", response_class=HTMLResponse)
+async def daily_system_panel(
+    system_code: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    daily_queries: DailyDashboardQueries = Depends(get_daily_queries),
+):
+    """모듈·시스템 드릴다운 패널(HTMX)."""
+    data = await _load_dashboard(daily_queries, current_user)
+    system = next((s for s in data["systems"] if s["system_code"] == system_code), None)
+    if system is None:
+        raise HTTPException(status_code=404, detail="system not found")
+    return templates.TemplateResponse(
+        request,
+        "dashboard/partials/system_panel.html",
+        {
+            "data": data,
+            "system": system,
+            "request": request,
+        },
+    )

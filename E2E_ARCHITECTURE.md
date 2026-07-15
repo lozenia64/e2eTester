@@ -421,7 +421,7 @@ e2eTester/
 
 현재 UX 특징:
 
-- 로그인 후 첫 화면은 **일간 점검 현황 대시보드**(`GET /`, `dashboard.html`)다. 접근 가능한 전체 시스템·모듈의 오늘(KST) 점검 상태를 전체 통과율 히어로 링·KPI 타일·시스템별 그래프 카드(라디얼 링 + 세그먼트 바 + 모듈 상태 칩)로 보여 준다. 데이터는 `dashboard.js` 가 `GET /api/dashboard/daily` 로 불러와 라디얼 링 채우기·카운트업·스태거 진입 애니메이션으로 렌더링하며, 30초마다 자동 갱신(탭 비활성 시 일시정지)하고 `prefers-reduced-motion` 을 존중한다. 상태 색은 라벨과 항상 함께 노출한다.
+- 로그인 후 첫 화면은 **일간 점검 현황 대시보드**(`GET /`, `dashboard.html`)다. 접근 가능한 전체 시스템·모듈의 오늘(KST) 점검 상태를 KPI 스트립과 **Cytoscape.js 파이프라인 매트릭스**(시스템별 스윔레인 + 모듈 노드)로 보여 준다. `dashboard.js` 가 HTMX로 `GET /api/dashboard/daily/fragments/{kpi,matrix}` 를 부분 갱신하고, 30초마다 자동 새로고침(탭 비활성 시 일시정지)하며 `prefers-reduced-motion` 을 존중한다. 시스템 노드 클릭 시 드로어 패널(`GET /api/dashboard/daily/fragments/system/{code}/panel`), 모듈 노드 클릭 시 Run 상세로 이동한다.
 - **점검 실행** 화면(`GET /runs/execute`, `execute.html`)은 기존 홈의 Run 트리거 UI로, “시스템 실행”과 “전체 순차 점검”을 함께 제공한다. **시스템** 섹션(SUITE + 개별 시스템 카드)이 상태 메트릭 직후 상단에 배치되고, **진행 중 / 최근 Run** 패널은 시스템 목록 하단에 위치한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
 - **인증 프리셋(내 점검 세트)**: 매번 인증 정보를 다시 입력하는 반복을 없애기 위해, 사용자가 자주 쓰는 인증 수단·정보(+선택 모듈)를 이름 붙여 저장하고 원클릭으로 불러온다. 개별 시스템 카드에는 프리셋 칩 행 + "현재 설정 저장" 버튼이 있고, 칩을 클릭하면 폼(인증 수단·조건부 인증 정보·브라우저 모드·모듈 선택)이 그대로 채워진다. **전체 점검(SUITE) 카드에서는 인증 정보를 직접 입력할 수 없고**, 선택한 시스템마다 저장된 프리셋을 하나씩 골라야 한다 — 프리셋이 없거나 고르지 않은(인증이 필요한) 시스템은 실행/예약이 차단된다(제출 시 검증 + 시스템별 상태 배지 `선택됨`/`미선택`/`프리셋 없음`). 프리셋은 사용자별로 격리되고 소유자만 조회/수정/삭제한다. 프런트 로직은 `app/web/static/app.js`(`loadPresets`/`renderIndividualPresetPanels`/`renderSuitePresetLists`), 스타일은 `app/web/static/app.css`(`.preset-*`).
@@ -469,6 +469,8 @@ e2eTester/
 - `POST /api/healing/patches/{patch_id}/reject` (패치 거절 — 사유 `note` 와 함께 감사 이력에 기록)
 - `GET /api/healing/patches/{patch_id}/download` (패치 diff 다운로드(.patch) — 소스 반영 대신 코드리뷰 도구로 가져갈 때)
 - `GET /api/dashboard/daily` (로그인 사용자의 접근 가능 시스템별 **일간 점검 현황** — 시스템·모듈 단위 오늘(KST) 점검 상태 집계, PII 미포함)
+- `GET /api/dashboard/daily/fragments/{zone}` (HTMX partial — `zone`=`kpi`|`matrix`, 일간 대시보드 KPI·매트릭스 영역 HTML)
+- `GET /api/dashboard/daily/fragments/system/{system_code}/panel` (시스템 드릴다운 드로어 패널 HTML — 모듈별 상태·Run 링크)
 - `GET /api/runs` (Run 요약 목록; `scope=today|before_today`, `limit` 쿼리 지원 — 생략 시 기존과 동일 전체 목록, 기본 limit 50)
 - `POST /api/runs/systems/{system_code}`
 - `GET /api/runs/{run_id}`
