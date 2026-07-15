@@ -64,9 +64,7 @@ async def test_four_subscribers_with_shared_store_send_once(tmp_path):
     notifier._sender = mock_sender
     run = _passed_run()
 
-    subscribers = [
-        EmailNotificationSubscriber(["chbot"], dedup_store=store) for _ in range(4)
-    ]
+    subscribers = [EmailNotificationSubscriber(["chbot"], dedup_store=store) for _ in range(4)]
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(

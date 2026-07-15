@@ -717,9 +717,7 @@ class RunCompletionEmailNotifier:
             self.send_run_operator_alert(run)
             return
         if not self._try_claim_sync("run", run.run_id):
-            print(
-                f"[email] pid={os.getpid()} run={run.run_id} already notified — skip duplicate"
-            )
+            print(f"[email] pid={os.getpid()} run={run.run_id} already notified — skip duplicate")
             return
         recipients = list(self._config.recipients_by_system.get(run.system_code, ()))
         if not recipients:
@@ -745,9 +743,7 @@ class RunCompletionEmailNotifier:
         if run.suite_id:
             return
         if not self._try_claim_sync("run_operator", run.run_id):
-            print(
-                f"[email] pid={os.getpid()} run={run.run_id} operator alert already sent — skip"
-            )
+            print(f"[email] pid={os.getpid()} run={run.run_id} operator alert already sent — skip")
             return
         recipients = list(self._config.operator_recipients)
         if not recipients:

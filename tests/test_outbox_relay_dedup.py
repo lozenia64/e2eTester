@@ -92,9 +92,7 @@ async def test_concurrent_process_once_publishes_run_finished_once(tmp_path):
     event_bus = EventBus()
     event_bus.subscribe(RunFinished, _count_run_finished)
 
-    relays = [
-        OutboxRelay(outbox, projections, write_repo, event_bus, projector) for _ in range(4)
-    ]
+    relays = [OutboxRelay(outbox, projections, write_repo, event_bus, projector) for _ in range(4)]
     results = await asyncio.gather(*(relay.process_once() for relay in relays))
 
     assert sum(results) >= 1
