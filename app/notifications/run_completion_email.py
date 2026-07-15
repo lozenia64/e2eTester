@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import os
 import re
 import smtplib
 from dataclasses import dataclass
@@ -61,6 +62,7 @@ from app.core.status_labels import (
 from app.core.suite_models import SuiteRun
 from app.notifications.report_renderer import render_run_report_html, render_suite_report_html
 from app.platform.artifact_manager import ArtifactManager
+from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465
@@ -680,18 +682,29 @@ class RunCompletionEmailBuilder:
 
 
 class RunCompletionEmailNotifier:
-    def __init__(self, config: EmailNotificationConfig) -> None:
+    def __init__(
+        self,
+        config: EmailNotificationConfig,
+        *,
+        dedup_store: SqliteEmailNotificationDedupStore | None = None,
+    ) -> None:
         self._config = config
+        self._dedup_store = dedup_store
         self._artifact_manager = ArtifactManager()
         self._builder = RunCompletionEmailBuilder(config)
         self._sender = GmailEmailSender(config)
 
     @classmethod
-    def from_env(cls, system_codes: list[str]) -> RunCompletionEmailNotifier | None:
+    def from_env(
+        cls,
+        system_codes: list[str],
+        *,
+        dedup_store: SqliteEmailNotificationDedupStore | None = None,
+    ) -> RunCompletionEmailNotifier | None:
         config = EmailNotificationConfig.from_env(system_codes)
         if config is None:
             return None
-        return cls(config)
+        return cls(config, dedup_store=dedup_store)
 
     @classmethod
     def inspect_env_status(cls, system_codes: list[str]) -> EmailNotificationStatus:
@@ -703,17 +716,25 @@ class RunCompletionEmailNotifier:
         if run.status in RUN_ERROR_STATUSES:
             self.send_run_operator_alert(run)
             return
+        if not self._try_claim_sync("run", run.run_id):
+            print(f"[email] pid={os.getpid()} run={run.run_id} already notified — skip duplicate")
+            return
         recipients = list(self._config.recipients_by_system.get(run.system_code, ()))
         if not recipients:
+            self._release_sync("run", run.run_id)
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: {run.system_code}")
 
-        artifacts = self._collect_artifacts(run)
-        email_selection = self._select_email_content(run, artifacts)
-        gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
-        message = self._builder.build(run, recipients, email_selection, gemini_selection)
-        self._sender.send(message, recipients)
+        try:
+            artifacts = self._collect_artifacts(run)
+            email_selection = self._select_email_content(run, artifacts)
+            gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
+            message = self._builder.build(run, recipients, email_selection, gemini_selection)
+            self._sender.send(message, recipients)
+        except Exception:
+            self._release_sync("run", run.run_id)
+            raise
         print(
-            f"[email] run={run.run_id} recipients={len(recipients)} "
+            f"[email] pid={os.getpid()} run={run.run_id} recipients={len(recipients)} "
             f"inline_screenshots={len(email_selection.inline_screenshots)} "
             f"log_attachments={len(email_selection.log_attachments)} status={run.status}"
         )
@@ -721,20 +742,28 @@ class RunCompletionEmailNotifier:
     def send_run_operator_alert(self, run: Run) -> None:
         if run.suite_id:
             return
+        if not self._try_claim_sync("run_operator", run.run_id):
+            print(f"[email] pid={os.getpid()} run={run.run_id} operator alert already sent — skip")
+            return
         recipients = list(self._config.operator_recipients)
         if not recipients:
             print(f"[email] run={run.run_id} 운영자 수신자 미설정 — ERROR 메일 생략")
+            self._release_sync("run_operator", run.run_id)
             return
 
-        artifacts = self._collect_artifacts(run)
-        email_selection = self._select_email_content(run, artifacts)
-        gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
-        message = self._builder.build(
-            run, recipients, email_selection, gemini_selection, operator_alert=True
-        )
-        self._sender.send(message, recipients)
+        try:
+            artifacts = self._collect_artifacts(run)
+            email_selection = self._select_email_content(run, artifacts)
+            gemini_selection = self._select_gemini_prompt_inputs(run, artifacts)
+            message = self._builder.build(
+                run, recipients, email_selection, gemini_selection, operator_alert=True
+            )
+            self._sender.send(message, recipients)
+        except Exception:
+            self._release_sync("run_operator", run.run_id)
+            raise
         print(
-            f"[email] run={run.run_id} operator_recipients={len(recipients)} "
+            f"[email] pid={os.getpid()} run={run.run_id} operator_recipients={len(recipients)} "
             f"inline_screenshots={len(email_selection.inline_screenshots)} "
             f"log_attachments={len(email_selection.log_attachments)} status={run.status}"
         )
@@ -743,45 +772,80 @@ class RunCompletionEmailNotifier:
         if suite.status in SUITE_ERROR_STATUSES:
             self.send_suite_operator_alert(suite, runs)
             return
+        if not self._try_claim_sync("suite", suite.suite_id):
+            print(
+                f"[email] pid={os.getpid()} suite={suite.suite_id} already notified — skip duplicate"
+            )
+            return
         recipients = self._resolve_suite_recipients(suite)
         if not recipients:
+            self._release_sync("suite", suite.suite_id)
             raise RuntimeError(f"메일 수신자를 찾지 못했습니다: suite={suite.suite_id}")
 
-        ordered_runs = self._order_runs_for_suite(suite, runs)
-        artifacts = self._collect_artifacts_for_runs(ordered_runs)
-        email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts)
-        gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
-        message = self._builder.build_suite(
-            suite, ordered_runs, recipients, email_selection, gemini_selection
-        )
-        self._sender.send(message, recipients)
+        try:
+            ordered_runs = self._order_runs_for_suite(suite, runs)
+            artifacts = self._collect_artifacts_for_runs(ordered_runs)
+            email_selection = self._select_suite_email_content(suite, ordered_runs, artifacts)
+            gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
+            message = self._builder.build_suite(
+                suite, ordered_runs, recipients, email_selection, gemini_selection
+            )
+            self._sender.send(message, recipients)
+        except Exception:
+            self._release_sync("suite", suite.suite_id)
+            raise
         print(
-            f"[email] suite={suite.suite_id} recipients={len(recipients)} "
+            f"[email] pid={os.getpid()} suite={suite.suite_id} recipients={len(recipients)} "
             f"inline_screenshots={len(email_selection.inline_screenshots)} "
             f"log_attachments={len(email_selection.log_attachments)} status={suite.status}"
         )
 
     def send_suite_operator_alert(self, suite: SuiteRun, runs: list[Run]) -> None:
+        if not self._try_claim_sync("suite_operator", suite.suite_id):
+            print(
+                f"[email] pid={os.getpid()} suite={suite.suite_id} operator alert already sent — skip"
+            )
+            return
         recipients = list(self._config.operator_recipients)
         if not recipients:
             print(f"[email] suite={suite.suite_id} 운영자 수신자 미설정 — ERROR 메일 생략")
+            self._release_sync("suite_operator", suite.suite_id)
             return
 
-        ordered_runs = self._order_runs_for_suite(suite, runs)
-        artifacts = self._collect_artifacts_for_runs(ordered_runs)
-        email_selection = self._select_suite_email_content(
-            suite, ordered_runs, artifacts, include_logs=True
-        )
-        gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
-        message = self._builder.build_suite(
-            suite, ordered_runs, recipients, email_selection, gemini_selection, operator_alert=True
-        )
-        self._sender.send(message, recipients)
+        try:
+            ordered_runs = self._order_runs_for_suite(suite, runs)
+            artifacts = self._collect_artifacts_for_runs(ordered_runs)
+            email_selection = self._select_suite_email_content(
+                suite, ordered_runs, artifacts, include_logs=True
+            )
+            gemini_selection = self._select_gemini_prompt_inputs_for_artifacts(artifacts)
+            message = self._builder.build_suite(
+                suite,
+                ordered_runs,
+                recipients,
+                email_selection,
+                gemini_selection,
+                operator_alert=True,
+            )
+            self._sender.send(message, recipients)
+        except Exception:
+            self._release_sync("suite_operator", suite.suite_id)
+            raise
         print(
-            f"[email] suite={suite.suite_id} operator_recipients={len(recipients)} "
+            f"[email] pid={os.getpid()} suite={suite.suite_id} operator_recipients={len(recipients)} "
             f"inline_screenshots={len(email_selection.inline_screenshots)} "
             f"log_attachments={len(email_selection.log_attachments)} status={suite.status}"
         )
+
+    def _try_claim_sync(self, scope: str, entity_id: str) -> bool:
+        if self._dedup_store is None:
+            return True
+        return self._dedup_store.try_claim_sync(scope, entity_id)
+
+    def _release_sync(self, scope: str, entity_id: str) -> None:
+        if self._dedup_store is None:
+            return
+        self._dedup_store.release_sync(scope, entity_id)
 
     def _resolve_suite_recipients(self, suite: SuiteRun) -> list[str]:
         seen: set[str] = set()

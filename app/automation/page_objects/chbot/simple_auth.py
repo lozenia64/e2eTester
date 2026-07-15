@@ -278,20 +278,16 @@ def _verify_welcome(page: Page) -> None:
     _wait_for_text(page, "환영합니다", timeout_ms=browser.MAX_TIMEOUT_MS)
 
 
-def request_otp(
+def run_identity_verification(
     page: Page,
     *,
     name: str,
     birthdate: str,
     gender_code: str,
-    carrier: str,
-    phone_number: str,
-) -> str:
-    """계약조회 진입부터 SMS 인증번호 요청까지 수행한다."""
+) -> None:
+    """계약조회 진입부터 본인 정보 확인·확인까지 수행한다."""
     normalized_birth = _normalize_birthdate(birthdate)
     normalized_gender = _normalize_gender_code(gender_code)
-    carrier_code = _normalize_carrier(carrier)
-    phone_prefix, phone_middle, phone_last = _parse_phone_number(phone_number)
 
     _send_chat_message(page, "계약조회")
     _step_pause(page)
@@ -304,6 +300,27 @@ def request_otp(
         gender_code=normalized_gender,
     )
     _click_identity_confirm(page)
+
+
+def request_otp(
+    page: Page,
+    *,
+    name: str,
+    birthdate: str,
+    gender_code: str,
+    carrier: str,
+    phone_number: str,
+) -> str:
+    """계약조회 진입부터 SMS 인증번호 요청까지 수행한다."""
+    carrier_code = _normalize_carrier(carrier)
+    phone_prefix, phone_middle, phone_last = _parse_phone_number(phone_number)
+
+    run_identity_verification(
+        page,
+        name=name,
+        birthdate=birthdate,
+        gender_code=gender_code,
+    )
     _select_phone_auth(page)
     _step_pause(page)
     _fill_phone_auth_form(

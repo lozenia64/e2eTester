@@ -242,12 +242,10 @@ class SuiteAggregate:
     def finalize(self, status: SuiteStatus, *, cancel_remaining: bool = False) -> None:
         """Suite 를 종료 상태로 봉인한다(영속·이벤트 발행은 호출자 책임).
 
-
-
         ``cancel_remaining`` 이면 아직 끝나지 않은 스텝을 모두 CANCELLED 로 봉인한다.
-
         """
-
+        if self._state.status in _SUITE_TERMINAL:
+            return
         if cancel_remaining:
             for step in self._state.steps:
                 if step.status not in _STEP_TERMINAL:

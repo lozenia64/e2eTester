@@ -62,7 +62,14 @@ class EventBus:
         self._handlers: dict[type, list[EventHandler]] = defaultdict(list)
 
     def subscribe(self, event_type: type, handler: EventHandler) -> None:
-        self._handlers[event_type].append(handler)
+        handlers = self._handlers[event_type]
+        if handler not in handlers:
+            handlers.append(handler)
+
+    def handler_count(self, event_type: type | None = None) -> int:
+        if event_type is not None:
+            return len(self._handlers.get(event_type, []))
+        return sum(len(handlers) for handlers in self._handlers.values())
 
     async def publish(self, event: Any) -> None:
         for handler in list(self._handlers.get(type(event), [])):

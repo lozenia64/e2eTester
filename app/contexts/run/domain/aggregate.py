@@ -23,6 +23,14 @@ _MODULE_TERMINAL = {
 }
 # 재기동 봉인 대상이 되는 "아직 진행 중" 상태들.
 _RUN_ACTIVE = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}
+# 더 이상 finalize 로 전이하지 않는 종료 상태들(seal_interrupted 와 동일 기준).
+_RUN_TERMINAL = {
+    RunStatus.PASSED,
+    RunStatus.ANOMALY,
+    RunStatus.ERROR,
+    RunStatus.FAILED,
+    RunStatus.CANCELLED,
+}
 _MODULE_ACTIVE = {
     ModuleStatus.PENDING,
     ModuleStatus.QUEUED,
@@ -399,6 +407,8 @@ class RunAggregate:
 
     def finalize(self, forced_status: RunStatus | None) -> RunStatus:
         """Run 을 종료 상태로 봉인한다(비교 계산·영속·이벤트는 호출자 책임). 결과 상태 반환."""
+        if self._state.status in _RUN_TERMINAL:
+            return self._state.status
         self._state.ended_at = datetime.now(UTC)
         self._state.awaiting_input_module_id = None
         self._state.awaiting_input_prompt = None

@@ -11,7 +11,7 @@
 - 대상 사이트: `https://chbot.hwgeneralins.com/P29GCdKMTnbsy0PRr` (경로 포함 고정값)
 - 플랫폼: 모바일 웹
 - **브라우저 기동 순서(필수)**: Playwright로 Chrome을 연 뒤 **모바일 디바이스 모드를 먼저 적용**(`app/systems/access_common/browser.py` 의 `apply_mobile_device_mode()`, executor `build_runtime()` 단계)하고, 그 다음에 사이트에 접속한다.
-- 인증 수단: 휴대폰 인증 단일(`supported_auth_methods: [phone]`). Run 폼에서 성명·생년월일·성별코드·통신사·휴대폰 번호를 입력하고, SMS 인증번호는 Run 화면 OTP 패널에서 입력한다.
+- 인증 수단: 휴대폰 인증·카카오 인증(`supported_auth_methods: [phone, kakao]`). Run 폼 `auth_method`로 선택한다. 휴대폰 인증은 성명·생년월일·성별코드·통신사·휴대폰 번호를 입력하고 SMS 인증번호는 OTP 패널에서 입력한다. 카카오 인증은 성명·생년월일·성별코드·휴대폰 번호만 필요하며 OTP pause 없이 카카오톡 앱 승인 후 자동 완료한다.
 - **전체 순차 점검(SUITE)**: 홈 SUITE 카드의 시스템 체크박스로 포함 여부를 선택할 수 있다. 선택 시 공통 `browser_mode`와 인증 정보로 모듈이 실행된다.
 - 실행기: `app/systems/chbot/executor.py` (`ChbotWorkflowExecutor`, `execution_mode = chbot_workflow_step`, `mobile=True`). 메인 접속은 `app/systems/access_common/`을 재사용하고, 간편본인인증·계약조회는 `app/systems/chbot/steps/`에서 처리한다.
 
@@ -40,7 +40,9 @@
 
 ### 3.2 간편본인인증 (`chbot.simple.auth`)
 
-메인화면 접속 직후 같은 브라우저 세션에서 챗봇 대화를 이어간다.
+메인화면 접속 직후 같은 브라우저 세션에서 챗봇 대화를 이어간다. `auth_method`에 따라 **휴대폰 인증**(§3.2.1) 또는 **카카오 인증**(§3.2.2) 경로로 분기한다. 공통 1~4단계(계약조회 → 본인 정보 확인)는 `app/automation/page_objects/chbot/simple_auth.py` `run_identity_verification()`에서 수행한다.
+
+#### 3.2.1 휴대폰 인증 (`auth_method: phone`)
 
 1. 하단 메시지 입력창(`#message`, placeholder `메세지를 입력하세요.`)에 `계약조회`를 입력하고 전송 버튼(`#btn-chat-send`)을 클릭한다.
 2. 챗봇 응답에 `본인 정보 확인` 문구가 표시되는지 확인한다.
@@ -61,7 +63,7 @@
 9. 인증번호 입력란(`input[name='smsCertNo']`)에 OTP를 입력하고 하단 `확인` 버튼(`a[data-sinario='AUT003_1']`)을 클릭한다.
 10. 챗봇 응답에 `환영합니다` 문구가 표시되면 "간편본인인증 성공"으로 종료한다.
 
-#### 셀렉터 요약 (Playwright MCP 수집)
+##### 셀렉터 요약 — 휴대폰 인증 (Playwright MCP 수집)
 
 | 단계 | 요소 | CSS 셀렉터 |
 |------|------|------------|
@@ -78,6 +80,34 @@
 | 휴대폰 인증 | 인증번호 요청 | `a:text-is('인증번호')` |
 | 휴대폰 인증 | 인증번호 입력 | `input[name='smsCertNo']` |
 | 휴대폰 인증 | 확인 | `a[data-sinario='AUT003_1']` |
+
+#### 3.2.2 카카오 인증 (`auth_method: kakao`)
+
+공통 1~4단계(계약조회 → 본인 정보 확인·확인) 후 카카오 경로를 탄다. OTP pause 없이 한 번에 완료한다(`ChbotSimpleAuthFlow` → `StepCompleted` only). 대기·재시도 상수는 `app/automation/scenarios/rep_homepage/constants.py` (`KAKAO_AUTH_BACKGROUND_WAIT_MS=30000`, `KAKAO_AUTH_MAX_ATTEMPTS=3`)를 사용한다.
+
+1. `간편인증 선택` 문구가 표시되는지 확인한다.
+2. `카카오 인증` 링크(`a:has-text('카카오 인증')`)를 클릭한다.
+3. `카카오 인증` 제목이 표시되는지 확인한다.
+4. 카카오 인증 폼(컨테이너: `xpath=//h2[contains(normalize-space(.),'카카오 인증')]/ancestor::div[contains(@class,'bot_lagacy')][1]`)에서 약관 전체동의(`input[name='checkbox01']`, `label:has-text('약관 전체동의')` 클릭)를 선택한다.
+5. **이름**(`input[name='aut_custNm']`)과 **휴대폰 번호**(`input[name='hndphTlano']`, `hndphTltno`, `hndphTlsno`)를 입력한다.
+6. 폼 `확인` 버튼(`a.chatting-btn.orange:has-text('확인')`)을 클릭해 카카오 인증을 요청한다.
+7. **「카카오 톡으로 인증번호가 발송되었습니다」** 알림 모달의 `확인`을 클릭해 닫는다.
+8. 30초 대기 후 사용자가 카카오톡 앱에서 승인했다고 가정하고, 채팅 카드의 **`카카오 인증완료 확인`** 또는 `확인` 버튼(`a:has-text('카카오 인증완료 확인')`, `a.chatting-btn.orange:has-text('확인')`)을 클릭한다.
+9. 인증 미완료 안내가 표시되면 6~8단계를 최대 3회 재시도한다.
+10. 챗봇 응답에 `환영합니다` 문구가 표시되면 "간편본인인증 성공"으로 종료한다.
+
+##### 셀렉터 요약 — 카카오 인증 (Playwright MCP 수집)
+
+| 단계 | 요소 | CSS 셀렉터 |
+|------|------|------------|
+| 간편인증 | 카카오 인증 | `a:has-text('카카오 인증')` |
+| 카카오 인증 | 컨테이너 | `xpath=//h2[contains(normalize-space(.),'카카오 인증')]/ancestor::div[contains(@class,'bot_lagacy')][1]` |
+| 카카오 인증 | 약관 전체동의 | `input[name='checkbox01']`, `label:has-text('약관 전체동의')` |
+| 카카오 인증 | 이름 | `input[name='aut_custNm']` |
+| 카카오 인증 | 휴대폰(앞/중/끝) | `input[name='hndphTlano']`, `hndphTltno`, `hndphTlsno` |
+| 카카오 인증 | 폼 확인(인증 요청) | `a.chatting-btn.orange:has-text('확인')` |
+| 카카오 인증 | 발송 알림 확인 | `.d_modal` 내 `span.d_modal_btn.d_modal_ok` (`인증번호가 발송` 문구 모달) |
+| 카카오 인증 | 인증완료 확인 | `a:has-text('카카오 인증완료 확인')`, `a.chatting-btn.orange:has-text('확인')` |
 
 ### 3.3 계약조회 (`chbot.contract.list`)
 

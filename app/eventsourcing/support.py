@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,30 +22,49 @@ class SqliteDatabase:
         self._conn = connect_sqlite(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = asyncio.Lock()
+        self._thread_lock = threading.Lock()
 
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         async with self._lock:
             await asyncio.to_thread(self._execute_sync, sql, params)
 
+    async def execute_changes(self, sql: str, params: tuple[Any, ...] = ()) -> int:
+        """INSERT/UPDATE/DELETE 실행 후 영향받은 행 수를 반환한다."""
+        async with self._lock:
+            return await asyncio.to_thread(self._execute_changes_sync, sql, params)
+
+    def _execute_changes_sync(self, sql: str, params: tuple[Any, ...]) -> int:
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            self._conn.commit()
+            return cursor.rowcount
+
+    def execute_changes_sync(self, sql: str, params: tuple[Any, ...] = ()) -> int:
+        """동기 스레드(예: SMTP 발송 스레드)에서 사용하는 변경 실행."""
+        return self._execute_changes_sync(sql, params)
+
     def _execute_sync(self, sql: str, params: tuple[Any, ...]) -> None:
-        self._conn.execute(sql, params)
-        self._conn.commit()
+        with self._thread_lock:
+            self._conn.execute(sql, params)
+            self._conn.commit()
 
     async def executemany(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
         async with self._lock:
             await asyncio.to_thread(self._executemany_sync, sql, params_seq)
 
     def _executemany_sync(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
-        self._conn.executemany(sql, params_seq)
-        self._conn.commit()
+        with self._thread_lock:
+            self._conn.executemany(sql, params_seq)
+            self._conn.commit()
 
     async def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         async with self._lock:
             return await asyncio.to_thread(self._fetchall_sync, sql, params)
 
     def _fetchall_sync(self, sql: str, params: tuple[Any, ...]) -> list[sqlite3.Row]:
-        cursor = self._conn.execute(sql, params)
-        return cursor.fetchall()
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            return cursor.fetchall()
 
     async def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
         async with self._lock:
@@ -55,8 +75,9 @@ class SqliteDatabase:
         self._conn.close()
 
     def _fetchone_sync(self, sql: str, params: tuple[Any, ...]) -> sqlite3.Row | None:
-        cursor = self._conn.execute(sql, params)
-        return cursor.fetchone()
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            return cursor.fetchone()
 
     async def transaction(self) -> _Transaction:
         return _Transaction(self)
@@ -86,6 +107,13 @@ class _Transaction:
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         self._db._conn.execute(sql, params)
+
+    def execute_changes(self, sql: str, params: tuple[Any, ...] = ()) -> int:
+        cursor = self._db._conn.execute(sql, params)
+        return cursor.rowcount
+
+    def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        return list(self._db._conn.execute(sql, params).fetchall())
 
     def executemany(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
         self._db._conn.executemany(sql, params_seq)
@@ -313,6 +341,14 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS email_notification_claims (
+            scope TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            claimed_at TEXT NOT NULL,
+            PRIMARY KEY (scope, entity_id)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS outbox_dead_letter (
             event_id TEXT PRIMARY KEY,
             aggregate_type TEXT NOT NULL,
@@ -369,6 +405,14 @@ async def ensure_schema(db: SqliteDatabase) -> None:
     # 기존 배포 DB 의 domain_events 에 stream_position 컬럼을 증분 추가한다(낙관적 동시성 위치).
     # NULL 로 시작하며 append 경로가 스트림별 위치를 채운다(부분 UNIQUE 인덱스는 NULL 을 무시).
     await _ensure_columns(db, "domain_events", {"stream_position": "INTEGER"})
+    await _ensure_columns(
+        db,
+        "outbox",
+        {
+            "claimed_by": "TEXT",
+            "claimed_at": "TEXT",
+        },
+    )
     await _migrate_projection_checkpoints_to_cursor(db)
 
 

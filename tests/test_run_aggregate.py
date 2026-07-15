@@ -165,6 +165,19 @@ def test_finalize_seals_run():
     assert run.awaiting_input_prompt is None
 
 
+def test_finalize_is_idempotent_no_duplicate_run_finished():
+    module = _module("a", 0, status=ModuleStatus.ANOMALY)
+    run = _run([module], status=RunStatus.RUNNING)
+    aggregate = RunAggregate(run)
+    aggregate.finalize(None)
+    first_events = aggregate.pull_events()
+    aggregate.finalize(None)
+    second_events = aggregate.pull_events()
+    assert run.status == RunStatus.ANOMALY
+    assert sum(event.event_type == "RunFinished" for event in first_events) == 1
+    assert second_events == []
+
+
 def test_select_failure_target_prefers_current_then_first_unrun():
     a = _module("a", 0, status=ModuleStatus.PASSED)
     b = _module("b", 1, status=ModuleStatus.RUNNING)

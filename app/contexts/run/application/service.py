@@ -901,6 +901,20 @@ class RunService:
         await self._persist(run, aggregate)
 
     async def _finalize_run(self, run: Run, forced_status: RunStatus | None = None) -> None:
+        if run.status in {
+            RunStatus.PASSED,
+            RunStatus.ANOMALY,
+            RunStatus.ERROR,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+        }:
+            logger.info(
+                "Run 이미 종료 — finalize 생략",
+                log_event="run.finalize_skipped",
+                run_id=run.run_id,
+                status=run.status.value,
+            )
+            return
         aggregate = RunAggregate(run)
         # 비교 결과를 finalize **이전**에 부착해, RunFinished 이벤트의 run_summary 가 comparison
         # 을 함께 실어 나가게 한다(실시간 프로젝터가 run_finished WS payload 를 blob 없이 조립).
