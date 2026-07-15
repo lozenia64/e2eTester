@@ -22,14 +22,10 @@ E2E_PROFILES = frozenset(
     }
 )
 
-SHIP_ELIGIBLE = frozenset(
-    {"step_fix", "new_module", "new_system", "platform", "healing_patch"}
-)
+SHIP_ELIGIBLE = frozenset({"step_fix", "new_module", "new_system", "platform", "healing_patch"})
 
 SECURITY_FLAGS = frozenset({"pii", "otp", "auth"})
-DEV_SECURITY_FLAGS = frozenset(
-    {"auth", "pii", "input_validation", "dependencies", "network"}
-)
+DEV_SECURITY_FLAGS = frozenset({"auth", "pii", "input_validation", "dependencies", "network"})
 
 PROFILE_SPECS: dict[str, dict[str, Any]] = {
     "step_fix": {
@@ -295,9 +291,7 @@ def apply_to_run_dir(run_dir: Path) -> dict[str, Any]:
         if key in intake:
             cv[key] = intake[key]
 
-    run_path.write_text(
-        json.dumps(run_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    run_path.write_text(json.dumps(run_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     graph_path = run_dir / "agent_graph.json"
     graph_path.write_text(

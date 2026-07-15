@@ -165,7 +165,9 @@ def validate_intake(data: dict) -> list[str]:
     graph = data.get("agent_graph")
     if graph is not None:
         if not isinstance(graph, list):
-            errors.append("agent_graph must be null or a list (prefer null; resolve_graph builds it)")
+            errors.append(
+                "agent_graph must be null or a list (prefer null; resolve_graph builds it)"
+            )
         elif len(graph) > 0:
             errors.append("agent_graph must be null — use resolve_graph.py")
     if "dev_path" in data and data["dev_path"] not in ("full", "standard", "minimal"):
@@ -298,7 +300,9 @@ def validate_agent(run_dir: Path, agent: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", required=True, help="Absolute path to run directory")
-    parser.add_argument("--agent", required=True, help="Agent id (e.g. e2e-intake, dev-spec-writer)")
+    parser.add_argument(
+        "--agent", required=True, help="Agent id (e.g. e2e-intake, dev-spec-writer)"
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
