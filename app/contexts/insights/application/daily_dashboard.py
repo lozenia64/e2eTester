@@ -59,7 +59,7 @@ _ATTENTION_RANK = {
 
 
 def system_attention_rank(counts: dict[str, int], *, module_total: int) -> int:
-    """시스템 단위 주의 등급 — error > anomaly > running > 미점검 > 전체정상."""
+    """시스템 단위 주의 등급 — error > anomaly > running > other > 미점검 > 전체정상."""
     if module_total == 0:
         return 0
     if counts.get("error", 0) > 0:

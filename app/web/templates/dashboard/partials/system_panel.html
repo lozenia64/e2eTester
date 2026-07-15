@@ -7,7 +7,7 @@
       <p class="mt-1 text-xs text-gray-500">{{ system.inspected }}/{{ system.module_total }} 모듈 점검 · 통과율 {{ system.pass_rate }}%</p>
     </div>
     <button type="button" class="dash-panel__close rounded-lg p-1 text-gray-400 hover:bg-gray-100"
-            onclick="document.querySelector('.dash')?.dispatchEvent(new CustomEvent('dash-close-drawer'))"
+            onclick="window.dispatchEvent(new CustomEvent('dash-close-drawer'))"
             aria-label="닫기">✕</button>
   </div>
 

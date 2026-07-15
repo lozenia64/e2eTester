@@ -50,8 +50,6 @@
     }
   });
 
-  window.addEventListener("resize", () => renderMatrixFromPayload());
-
   setInterval(() => {
     if (!document.hidden) document.body.dispatchEvent(new CustomEvent("dash-refresh"));
   }, REFRESH_MS);
@@ -460,7 +458,7 @@
       target: "#dash-drawer-body",
       swap: "innerHTML",
     });
-    root.dispatchEvent(new CustomEvent("dash-open-drawer"));
+    window.dispatchEvent(new CustomEvent("dash-open-drawer"));
   }
 
   function bootWhenReady() {
