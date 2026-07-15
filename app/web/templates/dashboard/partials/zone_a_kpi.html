@@ -1,0 +1,36 @@
+{# Zone A — 압축 KPI (sticky) #}
+<div id="dash-zone-kpi" class="dash-kpi-strip dash-reveal is-in">
+  {% set t = data.totals %}
+  <div class="dash-kpi-strip__inner">
+    <div class="dash-kpi-strip__hero">
+      <span class="dash-kpi-strip__rate dash-kpi__value">{{ t.pass_rate }}<span class="text-gray-400 text-sm">%</span></span>
+      <span class="text-xs font-semibold text-gray-500">통과율</span>
+    </div>
+    <div class="dash-kpi-strip__tile">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">완료 시스템</span>
+      <span class="dash-kpi__value text-lg font-bold text-gray-900">{{ t.systems_all_passed }}<span class="text-sm font-medium text-gray-400">/{{ t.systems }}</span></span>
+    </div>
+    <div class="dash-kpi-strip__tile">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">이상징후</span>
+      <span class="dash-kpi__value text-lg font-bold dash-tone-anomaly">{{ t.anomaly }}</span>
+    </div>
+    <div class="dash-kpi-strip__tile">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">점검실패</span>
+      <span class="dash-kpi__value text-lg font-bold dash-tone-error">{{ t.error }}</span>
+    </div>
+    <div class="dash-kpi-strip__tile">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">진행 중</span>
+      <span class="dash-kpi__value text-lg font-bold dash-tone-running">{{ t.running }}</span>
+    </div>
+    <div class="dash-kpi-strip__tile">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">미점검</span>
+      <span class="dash-kpi__value text-lg font-bold dash-tone-not_inspected">{{ t.not_inspected }}</span>
+    </div>
+    <div class="dash-kpi-strip__meta hidden sm:block">
+      <span class="text-[10px] text-gray-400">{{ t.passed }}/{{ t.modules }} 모듈 정상</span>
+      {% if data.generated_at %}
+      <span class="text-[10px] text-gray-400">· 갱신 {{ data.generated_at[:16].replace('T', ' ') }}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>

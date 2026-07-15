@@ -47,6 +47,88 @@ def _module_bucket(status: ModuleStatus | None) -> str:
     return "other"  # BLOCKED / CANCELLED
 
 
+# 주의 큐·정렬용 버킷 우선순위(높을수록 먼저 노출).
+_ATTENTION_RANK = {
+    "error": 50,
+    "anomaly": 40,
+    "running": 30,
+    "other": 20,
+    "not_inspected": 10,
+    "passed": 0,
+}
+
+
+def system_attention_rank(counts: dict[str, int], *, module_total: int) -> int:
+    """시스템 단위 주의 등급 — error > anomaly > running > 미점검 > 전체정상."""
+    if module_total == 0:
+        return 0
+    if counts.get("error", 0) > 0:
+        return _ATTENTION_RANK["error"]
+    if counts.get("anomaly", 0) > 0:
+        return _ATTENTION_RANK["anomaly"]
+    if counts.get("running", 0) > 0:
+        return _ATTENTION_RANK["running"]
+    if counts.get("other", 0) > 0:
+        return _ATTENTION_RANK["other"]
+    if counts.get("not_inspected", 0) > 0:
+        return _ATTENTION_RANK["not_inspected"]
+    return _ATTENTION_RANK["passed"]
+
+
+def sort_systems_attention_first(system_views: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """주의 등급 내림차순, 동률이면 display_order."""
+    return sorted(
+        system_views,
+        key=lambda s: (
+            -system_attention_rank(s["counts"], module_total=s["module_total"]),
+            s.get("display_order", 0),
+        ),
+    )
+
+
+_MODULE_ATTENTION_BUCKETS = frozenset({"error", "anomaly", "running"})
+
+
+def build_attention_items(system_views: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Zone C 주의 스트립 — 문제 모듈·미점검 시스템(PII 없음)."""
+    items: list[dict[str, Any]] = []
+    for sys in system_views:
+        for mod in sys.get("modules", []):
+            if mod["bucket"] not in _MODULE_ATTENTION_BUCKETS:
+                continue
+            items.append(
+                {
+                    "kind": "module",
+                    "system_code": sys["system_code"],
+                    "system_name": sys.get("system_name", sys["system_code"]),
+                    "module_id": mod["module_id"],
+                    "module_name": mod["name"],
+                    "status_label": mod["status_label"],
+                    "tone": mod["tone"],
+                    "run_id": mod["run_id"] or sys.get("latest_run_id"),
+                    "rank": _ATTENTION_RANK.get(mod["bucket"], 0),
+                }
+            )
+        if sys["counts"].get("not_inspected", 0) > 0 and not any(
+            m["bucket"] in _MODULE_ATTENTION_BUCKETS for m in sys.get("modules", [])
+        ):
+            items.append(
+                {
+                    "kind": "system",
+                    "system_code": sys["system_code"],
+                    "system_name": sys.get("system_name", sys["system_code"]),
+                    "module_id": None,
+                    "module_name": None,
+                    "status_label": f"미점검 {sys['counts']['not_inspected']}개",
+                    "tone": "not_inspected",
+                    "run_id": sys.get("latest_run_id"),
+                    "rank": _ATTENTION_RANK["not_inspected"],
+                }
+            )
+    items.sort(key=lambda it: (-it["rank"], it["system_name"], it["module_name"] or ""))
+    return items
+
+
 def _pick_module_status(
     module_id: str, system_runs: list[Run]
 ) -> tuple[ModuleStatus | None, str | None, int | None]:
@@ -106,6 +188,7 @@ def _system_view(system: SystemDefinition, system_runs: list[Run]) -> dict[str, 
     return {
         "system_code": system.system_code,
         "system_name": system.name,
+        "display_order": system.display_order,
         "module_total": module_total,
         "inspected": inspected,
         "pass_rate": pass_rate,
@@ -142,10 +225,12 @@ def build_daily_dashboard(
     for run_list in runs_by_system.values():
         run_list.sort(key=lambda r: r.requested_at, reverse=True)
 
-    system_views = [
-        _system_view(system, runs_by_system.get(system.system_code, []))
-        for system in sorted(systems, key=lambda s: s.display_order)
-    ]
+    system_views = sort_systems_attention_first(
+        [
+            _system_view(system, runs_by_system.get(system.system_code, []))
+            for system in sorted(systems, key=lambda s: s.display_order)
+        ]
+    )
 
     totals = {
         "systems": len(system_views),
@@ -172,6 +257,7 @@ def build_daily_dashboard(
         "date_label": date_label,
         "totals": totals,
         "systems": system_views,
+        "attention": build_attention_items(system_views),
     }
 
 
@@ -249,6 +335,7 @@ def _system_view_from_projection(
     return {
         "system_code": system.system_code,
         "system_name": system.name,
+        "display_order": system.display_order,
         "module_total": module_total,
         "inspected": inspected,
         "pass_rate": pass_rate,
@@ -284,15 +371,17 @@ def build_daily_dashboard_from_projection(
     for summary_list in summaries_by_system.values():
         summary_list.sort(key=lambda item: item.requested_at, reverse=True)
 
-    system_views = [
-        _system_view_from_projection(
-            system,
-            status_by_system.get(system.system_code, {}),
-            summaries_by_system.get(system.system_code, []),
-            duration_by_module_run=durations,
-        )
-        for system in sorted(systems, key=lambda s: s.display_order)
-    ]
+    system_views = sort_systems_attention_first(
+        [
+            _system_view_from_projection(
+                system,
+                status_by_system.get(system.system_code, {}),
+                summaries_by_system.get(system.system_code, []),
+                duration_by_module_run=durations,
+            )
+            for system in sorted(systems, key=lambda s: s.display_order)
+        ]
+    )
 
     totals = {
         "systems": len(system_views),
@@ -319,4 +408,5 @@ def build_daily_dashboard_from_projection(
         "date_label": date_label,
         "totals": totals,
         "systems": system_views,
+        "attention": build_attention_items(system_views),
     }

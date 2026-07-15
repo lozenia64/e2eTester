@@ -1,315 +1,475 @@
-// 일간 점검 대시보드 — /api/dashboard/daily 를 불러와 시스템·모듈별 현황을
-// 애니메이션 그래프(라디얼 링·세그먼트 바·카운트업·스태거 진입)로 렌더링한다.
-// dashboard.html 이 로드된 페이지에서만 동작하며, 다른 페이지에서는 no-op 이다.
+// 일간 점검 대시보드 — HTMX + Cytoscape.js 라이브 파이프라인 (2026 node-canvas UI)
 
 (() => {
   const root = document.querySelector(".dash");
   if (!root) return;
 
-  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const RING_C = 2 * Math.PI * 52; // r=52
   const REFRESH_MS = 30000;
-
-  const TONE_VARS = {
-    passed: "var(--st-passed)",
-    anomaly: "var(--st-anomaly)",
-    error: "var(--st-error)",
-    running: "var(--st-running)",
-    blocked: "var(--st-blocked)",
-    cancelled: "var(--st-blocked)",
-    skipped: "var(--st-blocked)",
-    waiting_input: "var(--st-running)",
-    pending: "var(--st-idle)",
-    not_inspected: "var(--st-idle)",
-  };
-  const toneVar = (tone) => TONE_VARS[tone] || "var(--st-idle)";
-
+  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (sel, el = document) => el.querySelector(sel);
-  const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
-  // ── 카운트업 애니메이션 ────────────────────────────────────────────────
-  function countUp(el, to, { suffix = "" } = {}) {
-    const from = Number(el.dataset.value || 0);
-    el.dataset.value = String(to);
-    if (REDUCED || from === to) {
-      el.innerHTML = to + suffix;
-      return;
+  const TONE = {
+    passed: { fill: "#10b981", ring: "#6ee7b7", label: "정상" },
+    anomaly: { fill: "#f59e0b", ring: "#fcd34d", label: "이상징후" },
+    error: { fill: "#ef4444", ring: "#fca5a5", label: "점검실패" },
+    running: { fill: "#3b82f6", ring: "#93c5fd", label: "진행 중" },
+    waiting_input: { fill: "#3b82f6", ring: "#93c5fd", label: "입력 대기" },
+    blocked: { fill: "#f97316", ring: "#fdba74", label: "차단" },
+    cancelled: { fill: "#f97316", ring: "#fdba74", label: "취소" },
+    skipped: { fill: "#f97316", ring: "#fdba74", label: "건너뜀" },
+    not_inspected: { fill: "#94a3b8", ring: "#e2e8f0", label: "미점검" },
+    pending: { fill: "#94a3b8", ring: "#e2e8f0", label: "대기" },
+  };
+
+  let matrixCy = null;
+  let matrixResizeObs = null;
+  let matrixResizeTimer = null;
+
+  if (typeof cytoscape !== "undefined" && typeof cytoscapeNodeHtmlLabel !== "undefined") {
+    cytoscape.use(cytoscapeNodeHtmlLabel);
+  }
+
+  document.body.addEventListener("htmx:afterSwap", (ev) => {
+    if (!root.contains(ev.target) && ev.target !== root) return;
+    $("#dash-error")?.classList.add("hidden");
+    if (ev.target.id === "dash-host-matrix" || ev.target.closest("#dash-host-matrix")) {
+      renderMatrixFromPayload();
     }
-    const dur = 900;
-    const start = performance.now();
-    const ease = (t) => 1 - Math.pow(1 - t, 3);
-    function frame(now) {
-      const p = Math.min(1, (now - start) / dur);
-      const val = Math.round(from + (to - from) * ease(p));
-      el.innerHTML = val + suffix;
-      if (p < 1) requestAnimationFrame(frame);
+  });
+
+  document.body.addEventListener("htmx:responseError", (ev) => {
+    const path = ev.detail?.pathInfo?.requestPath || "";
+    if (!path.includes("/api/dashboard/daily")) return;
+    $("#dash-error")?.classList.remove("hidden");
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      document.body.dispatchEvent(new CustomEvent("dash-refresh"));
+      loadDateLabel();
     }
-    requestAnimationFrame(frame);
-  }
+  });
 
-  // ── 라디얼 링 채우기 ──────────────────────────────────────────────────
-  function fillRing(circle, pct, tone) {
-    circle.setAttribute("class", `dash-ring__value dash-tone-${tone}`);
-    const offset = RING_C * (1 - Math.max(0, Math.min(100, pct)) / 100);
-    if (REDUCED) {
-      circle.style.strokeDashoffset = String(offset);
-      return;
-    }
-    circle.style.strokeDashoffset = String(RING_C);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        circle.style.strokeDashoffset = String(offset);
-      });
-    });
-  }
+  window.addEventListener("resize", () => renderMatrixFromPayload());
 
-  // 시스템 건강 톤(우선순위: 실패 > 이상 > 진행 > 정상 > 미점검)
-  function systemTone(sys) {
-    const c = sys.counts;
-    if (sys.module_total === 0 || c.not_inspected === sys.module_total) return "not_inspected";
-    if (c.error > 0) return "error";
-    if (c.anomaly > 0) return "anomaly";
-    if (c.running > 0) return "running";
-    if (c.passed > 0) return "passed";
-    return "not_inspected";
-  }
-
-  function pill(el, label, tone) {
-    el.textContent = label;
-    el.style.color = toneVar(tone);
-    el.style.backgroundColor = `color-mix(in srgb, ${toneVar(tone)} 14%, white)`;
-  }
-
-  function fmtTime(iso) {
-    if (!iso) return null;
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-    } catch {
-      return null;
-    }
-  }
-
-  const TRIGGER_LABEL = { schedule: "예약", manual: "수동", suite: "전체점검" };
-
-  // ── 세그먼트 바 ───────────────────────────────────────────────────────
-  const SEG_ORDER = [
-    ["passed", "passed"],
-    ["running", "running"],
-    ["anomaly", "anomaly"],
-    ["error", "error"],
-    ["other", "blocked"],
-    ["not_inspected", "not_inspected"],
-  ];
-  function buildSegbar(container, sys) {
-    container.innerHTML = "";
-    const total = sys.module_total || 1;
-    SEG_ORDER.forEach(([key, tone], i) => {
-      const n = sys.counts[key] || 0;
-      if (n === 0) return;
-      const seg = document.createElement("div");
-      seg.className = "dash-seg";
-      seg.style.width = `${(n / total) * 100}%`;
-      seg.style.backgroundColor = toneVar(tone);
-      seg.style.transitionDelay = `${i * 70}ms`;
-      seg.title = `${n}개`;
-      container.appendChild(seg);
-    });
-  }
-
-  const COUNT_ROWS = [
-    ["정상", "passed", "passed"],
-    ["이상징후", "anomaly", "anomaly"],
-    ["점검실패", "error", "error"],
-    ["미점검", "not_inspected", "not_inspected"],
-  ];
-  function buildCounts(container, sys) {
-    container.innerHTML = "";
-    for (const [label, key, tone] of COUNT_ROWS) {
-      const row = document.createElement("div");
-      row.className = "inline-flex items-center gap-1.5";
-      row.innerHTML =
-        `<span class="h-2 w-2 rounded-full" style="background:${toneVar(tone)}"></span>` +
-        `<span class="text-gray-500">${label}</span>` +
-        `<span class="ml-auto font-semibold text-gray-800" style="font-variant-numeric:tabular-nums">${sys.counts[key] || 0}</span>`;
-      container.appendChild(row);
-    }
-  }
-
-  // ── 모듈 칩 ───────────────────────────────────────────────────────────
-  function buildModules(container, sys) {
-    container.innerHTML = "";
-    for (const m of sys.modules) {
-      const chip = document.createElement("span");
-      chip.className =
-        `dash-chip dash-chip--${m.tone} inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1 ` +
-        "text-[11px] font-medium text-gray-600 ring-1 ring-gray-100";
-      chip.title = `${m.name} · ${m.status_label}`;
-      const dot = document.createElement("span");
-      dot.className = `dash-chip__dot h-2 w-2 rounded-full dash-tone-${m.tone}`;
-      dot.style.backgroundColor = toneVar(m.tone);
-      const name = document.createElement("span");
-      name.className = "truncate max-w-[9rem]";
-      name.textContent = m.name;
-      chip.append(dot, name);
-      container.appendChild(chip);
-    }
-  }
-
-  // ── 시스템 카드 ───────────────────────────────────────────────────────
-  function buildSystemCard(sys) {
-    const tpl = $("#dash-system-template");
-    const node = tpl.content.firstElementChild.cloneNode(true);
-
-    $('[data-field="name"]', node).textContent = sys.system_name;
-
-    const latestEl = $('[data-field="latest"]', node);
-    const time = fmtTime(sys.latest_run_at);
-    if (time) {
-      const trg = TRIGGER_LABEL[sys.triggered_by] || sys.triggered_by || "";
-      latestEl.textContent = `최근 점검 ${time}${trg ? ` · ${trg}` : ""}`;
-    } else {
-      latestEl.textContent = "오늘 점검 이력 없음";
-    }
-
-    pill($('[data-field="status-pill"]', node), sys.latest_run_status_label, sys.latest_run_tone);
-
-    buildSegbar($('[data-field="segbar"]', node), sys);
-    buildCounts($('[data-field="counts"]', node), sys);
-    buildModules($('[data-field="modules"]', node), sys);
-
-    if (sys.latest_run_id) {
-      node.style.cursor = "pointer";
-      node.addEventListener("click", (e) => {
-        if (e.target.closest("a")) return;
-        window.location.href = `/runs/${sys.latest_run_id}`;
-      });
-    }
-
-    // 카드 노출 시 채울 값 저장
-    node._activate = () => {
-      fillRing($('[data-field="ring"]', node), sys.pass_rate, systemTone(sys));
-      countUp($('[data-field="rate"]', node), sys.pass_rate, {
-        suffix: '<span class="text-[10px] text-gray-400">%</span>',
-      });
-      $$(".dash-seg", node).forEach((s) => s.classList.add("is-in"));
-    };
-    return node;
-  }
-
-  // ── 진입 애니메이션(스태거 + 활성화) ──────────────────────────────────
-  let observer = null;
-  function revealAll(cards) {
-    if (observer) observer.disconnect();
-    if (REDUCED || !("IntersectionObserver" in window)) {
-      cards.forEach((c) => {
-        c.classList.add("is-in");
-        c._activate && c._activate();
-      });
-      return;
-    }
-    let order = 0;
-    observer = new IntersectionObserver(
-      (entries, obs) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const c = entry.target;
-          c.style.transitionDelay = `${(order++ % 6) * 80}ms`;
-          c.classList.add("is-in");
-          c._activate && c._activate();
-          obs.unobserve(c);
-        }
-      },
-      { threshold: 0.15 }
-    );
-    cards.forEach((c) => observer.observe(c));
-  }
-
-  // ── 렌더 ──────────────────────────────────────────────────────────────
-  function renderHero(totals) {
-    const rate = totals.pass_rate || 0;
-    fillRing($("#dash-hero-ring"), rate, heroTone(totals));
-    countUp($("#dash-hero-rate"), rate, {
-      suffix: '<span class="text-lg text-gray-400">%</span>',
-    });
-    const caption = $("#dash-hero-caption");
-    caption.textContent =
-      `${totals.modules}개 모듈 중 ${totals.passed}개 정상` +
-      (totals.not_inspected ? ` · ${totals.not_inspected}개 미점검` : "");
-  }
-
-  function heroTone(totals) {
-    if (!totals.modules || totals.not_inspected === totals.modules) return "not_inspected";
-    if (totals.error > 0) return "error";
-    if (totals.anomaly > 0) return "anomaly";
-    if (totals.running > 0) return "running";
-    if (totals.passed > 0) return "passed";
-    return "not_inspected";
-  }
-
-  function renderKpis(totals) {
-    $$("[data-kpi]").forEach((el) => {
-      const key = el.dataset.kpi;
-      if (key in totals) countUp(el, totals[key]);
-    });
-  }
-
-  function render(data) {
-    $("#dash-date").textContent = data.date_label || "";
-    renderHero(data.totals);
-    renderKpis(data.totals);
-
-    const container = $("#dash-systems");
-    container.innerHTML = "";
-    $("#dash-empty").classList.toggle("hidden", data.systems.length > 0);
-
-    const cards = [];
-    for (const sys of data.systems) {
-      const card = buildSystemCard(sys);
-      container.appendChild(card);
-      cards.push(card);
-    }
-
-    // 상단 요약 카드는 즉시 노출/활성화(위쪽 고정)
-    const topCards = $$(".dash-reveal", root).filter((c) => !cards.includes(c));
-    requestAnimationFrame(() => topCards.forEach((c) => c.classList.add("is-in")));
-
-    revealAll(cards);
-  }
-
-  // ── 데이터 로드 ───────────────────────────────────────────────────────
-  let refreshTimer = null;
-  async function load() {
-    try {
-      const res = await fetch("/api/dashboard/daily", { headers: { Accept: "application/json" } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      $("#dash-error").classList.add("hidden");
-      render(data);
-    } catch (err) {
-      console.error("일간 점검 현황 로드 실패", err);
-      $("#dash-error").classList.remove("hidden");
-    }
-  }
+  setInterval(() => {
+    if (!document.hidden) document.body.dispatchEvent(new CustomEvent("dash-refresh"));
+  }, REFRESH_MS);
 
   $("#dash-refresh")?.addEventListener("click", () => {
     const btn = $("#dash-refresh");
     btn.disabled = true;
-    load().finally(() => {
-      setTimeout(() => (btn.disabled = false), 600);
-    });
+    document.body.dispatchEvent(new CustomEvent("dash-refresh"));
+    setTimeout(() => {
+      btn.disabled = false;
+      loadDateLabel();
+    }, 600);
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      if (refreshTimer) clearInterval(refreshTimer);
-      refreshTimer = null;
-    } else if (!refreshTimer) {
-      refreshTimer = setInterval(load, REFRESH_MS);
-      load();
+  async function loadDateLabel() {
+    try {
+      const res = await fetch("/api/dashboard/daily", { headers: { Accept: "application/json" } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const el = $("#dash-date");
+      if (el && data.date_label) el.textContent = data.date_label;
+    } catch {
+      /* ignore */
     }
-  });
+  }
+  loadDateLabel();
 
-  load();
-  refreshTimer = setInterval(load, REFRESH_MS);
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  const LAYOUT = {
+    padX: 14,
+    padY: 10,
+    sysMinW: 124,
+    sysMaxW: 168,
+    modMinW: 72,
+    modMaxW: 148,
+    modGap: 10,
+    charW: 10.5,
+    modPad: 24,
+    handleExtra: 4,
+  };
+
+  function textWidthPx(text) {
+    return Math.ceil(String(text || "").length * LAYOUT.charW);
+  }
+
+  function sysCardWidth(name) {
+    const w = 52 + textWidthPx(name);
+    return Math.min(LAYOUT.sysMaxW, Math.max(LAYOUT.sysMinW, w));
+  }
+
+  function idealModWidth(label) {
+    return Math.min(LAYOUT.modMaxW, Math.max(LAYOUT.modMinW, textWidthPx(label) + LAYOUT.modPad));
+  }
+
+  function modHeight(modW, label) {
+    const inner = modW - LAYOUT.modPad;
+    const perLine = Math.max(4, Math.floor(inner / LAYOUT.charW));
+    return label.length > perLine ? 50 : 42;
+  }
+
+  /** 전체 모듈 기준 통일 크기 (가장 긴 라벨·가장 높은 노드) */
+  function computeGlobalModuleSize(systems, flowLeft, flowRight) {
+    const allMods = systems.flatMap((s) => s.modules || []);
+    if (allMods.length === 0) {
+      return { modW: LAYOUT.modMinW, modH: 42 };
+    }
+
+    let modW = allMods.reduce(
+      (max, m) => Math.max(max, idealModWidth(m.name)),
+      LAYOUT.modMinW,
+    );
+    let modH = allMods.reduce((max, m) => Math.max(max, modHeight(modW, m.name)), 42);
+
+    const maxCount = Math.max(...systems.map((s) => (s.modules || []).length), 1);
+    const avail = flowRight - flowLeft;
+    const needed = modW * maxCount + LAYOUT.modGap * Math.max(0, maxCount - 1);
+    if (needed > avail) {
+      modW = Math.floor((avail - LAYOUT.modGap * Math.max(0, maxCount - 1)) / maxCount);
+      modW = Math.max(LAYOUT.modMinW, modW);
+      modH = allMods.reduce((max, m) => Math.max(max, modHeight(modW, m.name)), 42);
+    }
+
+    return { modW, modH };
+  }
+
+  function needsMultiline(label, modW) {
+    return label.length * LAYOUT.charW > modW - LAYOUT.modPad;
+  }
+
+  /** 동일 modW 기준 좌→우 패킹 */
+  function layoutModuleRowUniform(mods, flowLeft, flowRight, modW) {
+    const n = mods.length;
+    if (n === 0) return [];
+    const total = modW * n + LAYOUT.modGap * (n - 1);
+    const avail = flowRight - flowLeft;
+    const start = flowLeft + Math.max(0, avail - total) / 2;
+    let cursor = start;
+    return mods.map(() => {
+      const slot = { x: cursor + modW / 2 };
+      cursor += modW + LAYOUT.modGap;
+      return slot;
+    });
+  }
+
+  function maxSysCardWidth(systems) {
+    return systems.reduce((max, s) => Math.max(max, sysCardWidth(s.system_name)), LAYOUT.sysMinW);
+  }
+
+  function passAccent(rate) {
+    if (rate >= 100) return "#10b981";
+    if (rate >= 50) return "#6366f1";
+    if (rate > 0) return "#f59e0b";
+    return "#94a3b8";
+  }
+
+  function toneMeta(tone) {
+    return TONE[tone] || TONE.not_inspected;
+  }
+
+  function buildElements(systems, width, height) {
+    const elements = [];
+    const n = Math.max(systems.length, 1);
+    const rowH = Math.max(68, (height - LAYOUT.padY * 2) / n);
+    const sysW = maxSysCardWidth(systems);
+    const flowLeft = LAYOUT.padX + sysW + 18;
+    const flowRight = width - LAYOUT.padX - LAYOUT.handleExtra;
+    const laneW = width - LAYOUT.padX * 2;
+    const { modW, modH } = computeGlobalModuleSize(systems, flowLeft, flowRight);
+
+    systems.forEach((sys, si) => {
+      const cy = LAYOUT.padY + rowH * (si + 0.5);
+      const accent = passAccent(sys.pass_rate);
+      const laneId = `lane:${sys.system_code}`;
+      const sysId = `sys:${sys.system_code}`;
+      const mods = sys.modules || [];
+
+      elements.push({
+        data: { id: laneId, laneW, rowH: rowH - 8, accent },
+        classes: "swimlane",
+        position: { x: width / 2, y: cy },
+      });
+
+      elements.push({
+        data: {
+          id: sysId,
+          kind: "system",
+          systemCode: sys.system_code,
+          label: sys.system_name,
+          passRate: sys.pass_rate,
+          accent,
+          sysW,
+        },
+        classes: "html system",
+        position: { x: LAYOUT.padX + sysW / 2, y: cy },
+      });
+
+      const slots = layoutModuleRowUniform(mods, flowLeft, flowRight, modW);
+      mods.forEach((mod, mi) => {
+        const modId = `${sys.system_code}:${mod.module_id}`;
+        const tone = mod.tone || "not_inspected";
+        const slot = slots[mi];
+        const prevId = mi === 0 ? sysId : `${sys.system_code}:${mods[mi - 1].module_id}`;
+        const prevTone = mi === 0 ? "not_inspected" : mods[mi - 1].tone || "not_inspected";
+        const active = tone === "passed" || prevTone === "passed";
+        const flowing = tone === "running" || tone === "waiting_input";
+
+        elements.push({
+          data: {
+            id: modId,
+            kind: "module",
+            label: mod.name,
+            tone,
+            runId: mod.run_id,
+            statusLabel: mod.status_label,
+            durationMs: mod.duration_ms,
+            modW,
+            modH,
+            multiline: needsMultiline(mod.name, modW) ? "yes" : "no",
+          },
+          classes: "html module",
+          position: { x: slot.x, y: cy },
+        });
+
+        elements.push({
+          data: {
+            id: `e:${prevId}:${modId}`,
+            source: prevId,
+            target: modId,
+            ...(active ? { active: "yes" } : {}),
+            ...(flowing ? { flowing: "yes" } : {}),
+          },
+        });
+      });
+    });
+
+    return elements;
+  }
+
+  function nodeTemplate(data) {
+    if (data.kind === "system") {
+      const w = data.sysW || LAYOUT.sysMinW;
+      return `<div class="dash-flow-sys" style="--accent:${esc(data.accent)};width:${w}px" title="${esc(data.label)} · 통과율 ${data.passRate}%">
+        <span class="dash-flow-sys__ring">${data.passRate}%</span>
+        <span class="dash-flow-sys__name">${esc(data.label)}</span>
+      </div>`;
+    }
+
+    const meta = toneMeta(data.tone);
+    const idle = data.tone === "not_inspected" || data.tone === "pending";
+    const live = data.tone === "running" || data.tone === "waiting_input";
+    const multiline = data.multiline === "yes";
+    const tip = [
+      data.label,
+      data.statusLabel || meta.label,
+      data.durationMs != null ? `소요 ${(data.durationMs / 1000).toFixed(1)}초` : null,
+      data.runId ? "클릭하여 Run 상세" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    return `<div class="dash-flow-node${idle ? " is-idle" : ""}${live ? " is-live" : ""}${multiline ? " is-wrap" : ""}"
+      data-tone="${esc(data.tone)}"
+      style="--node:${meta.fill};--ring:${meta.ring};width:${data.modW}px;height:${data.modH}px"
+      title="${esc(tip)}">
+      <span class="dash-flow-node__body">
+        <span class="dash-flow-node__label">${esc(data.label)}</span>
+      </span>
+    </div>`;
+  }
+
+  function cytoscapeStyles() {
+    return [
+      {
+        selector: ".swimlane",
+        style: {
+          shape: "round-rectangle",
+          width: "data(laneW)",
+          height: "data(rowH)",
+          "background-color": "#ffffff",
+          "background-opacity": 0.55,
+          "border-width": 1,
+          "border-color": "#e2e8f0",
+          "border-opacity": 0.9,
+          "z-index": 0,
+          "overlay-opacity": 0,
+        },
+      },
+      {
+        selector: "node.html",
+        style: {
+          width: 1,
+          height: 1,
+          "background-opacity": 0,
+          "border-opacity": 0,
+          "z-index": 10,
+        },
+      },
+      {
+        selector: "node.system",
+        style: { width: "data(sysW)", height: 48 },
+      },
+      {
+        selector: "node.module",
+        style: { width: "data(modW)", height: "data(modH)" },
+      },
+      {
+        selector: "edge",
+        style: {
+          width: 2.5,
+          "curve-style": "bezier",
+          "control-point-step-size": 40,
+          "target-arrow-shape": "triangle",
+          "arrow-scale": 0.85,
+          "line-color": "#cbd5e1",
+          "target-arrow-color": "#94a3b8",
+          "line-opacity": 0.55,
+          "z-index": 5,
+        },
+      },
+      {
+        selector: "edge[active = 'yes']",
+        style: {
+          width: 3,
+          "line-color": "#34d399",
+          "target-arrow-color": "#10b981",
+          "line-opacity": 0.85,
+        },
+      },
+      {
+        selector: "edge[flowing = 'yes']",
+        style: {
+          "line-style": "dashed",
+          "line-dash-pattern": [6, 4],
+          "line-color": "#60a5fa",
+          "target-arrow-color": "#3b82f6",
+          "line-opacity": 0.9,
+        },
+      },
+      {
+        selector: "node:selected",
+        style: { "overlay-opacity": 0.08, "overlay-color": "#6366f1" },
+      },
+      {
+        selector: "edge:selected",
+        style: { width: 3.5, "line-color": "#818cf8" },
+      },
+    ];
+  }
+
+  function renderMatrixFromPayload() {
+    const el = $("#dash-matrix-chart", root);
+    const payloadEl = $("#dash-matrix-payload", root);
+    if (!el || !payloadEl || typeof cytoscape === "undefined") return;
+
+    let payload;
+    try {
+      payload = JSON.parse(payloadEl.textContent || "{}");
+    } catch {
+      return;
+    }
+
+    const systems = payload.systems || [];
+    const w = Math.max(el.clientWidth, 320);
+    const h = Math.max(el.clientHeight, 200);
+    const elements = buildElements(systems, w, h);
+
+    if (matrixCy) {
+      matrixCy.destroy();
+      matrixCy = null;
+    }
+
+    el.innerHTML = "";
+
+    matrixCy = cytoscape({
+      container: el,
+      elements,
+      style: cytoscapeStyles(),
+      layout: { name: "preset", fit: false },
+      minZoom: 1,
+      maxZoom: 1,
+      wheelSensitivity: 0,
+      userZoomingEnabled: false,
+      userPanningEnabled: false,
+      boxSelectionEnabled: false,
+      autounselectify: false,
+    });
+
+    if (typeof matrixCy.nodeHtmlLabel === "function") {
+      matrixCy.nodeHtmlLabel(
+        [
+          {
+            query: "node.html",
+            halign: "center",
+            valign: "center",
+            cssClass: "dash-cy-html",
+            tpl: nodeTemplate,
+          },
+        ],
+        { enablePointerEvents: true },
+      );
+    }
+
+    matrixCy.on("tap", "node.system", (evt) => {
+      const code = evt.target.data("systemCode");
+      if (code) openDrawer(code);
+    });
+
+    matrixCy.on("tap", "node.module", (evt) => {
+      const runId = evt.target.data("runId");
+      if (runId) window.location.href = `/runs/${runId}`;
+    });
+
+    if (!REDUCED) {
+      matrixCy.elements("node.module").forEach((node, i) => {
+        node.animate(
+          {
+            style: { opacity: 1 },
+            position: node.position(),
+            duration: 420,
+            easing: "ease-out-cubic",
+          },
+          { delay: i * 35 },
+        );
+      });
+    }
+
+    if (!matrixResizeObs && typeof ResizeObserver !== "undefined") {
+      matrixResizeObs = new ResizeObserver(() => {
+        clearTimeout(matrixResizeTimer);
+        matrixResizeTimer = setTimeout(() => renderMatrixFromPayload(), 150);
+      });
+      matrixResizeObs.observe(el);
+    }
+  }
+
+  function openDrawer(systemCode) {
+    if (typeof htmx === "undefined") return;
+    htmx.ajax("GET", `/api/dashboard/daily/fragments/system/${systemCode}/panel`, {
+      target: "#dash-drawer-body",
+      swap: "innerHTML",
+    });
+    root.dispatchEvent(new CustomEvent("dash-open-drawer"));
+  }
+
+  function bootWhenReady() {
+    if (typeof cytoscape === "undefined") {
+      window.setTimeout(bootWhenReady, 50);
+      return;
+    }
+    renderMatrixFromPayload();
+  }
+
+  bootWhenReady();
 })();

@@ -28,7 +28,7 @@ async def dashboard_home(
     current_user: User = Depends(get_current_user),
     run_service: RunService = Depends(get_run_service),
 ):
-    """일간 점검 현황 대시보드(로그인 후 첫 화면). 데이터는 JS 가 `/api/dashboard/daily` 로 로드."""
+    """일간 점검 현황 대시보드(로그인 후 첫 화면). HTMX fragment + JSON API 로 데이터 로드."""
     if isinstance(current_user, RedirectResponse):
         return current_user
     if current_user.role == "admin":
