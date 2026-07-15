@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_registry, get_suite_service
 from app.contexts.identity.dependencies import get_current_user
@@ -23,10 +23,12 @@ router = APIRouter(prefix="/api/suites", tags=["suites"])
 
 @router.get("")
 async def list_suites(
+    scope: Literal["today", "before_today"] | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     suite_service: SuiteService = Depends(get_suite_service),
 ):
-    return await suite_service.list_suite_summaries()
+    return await suite_service.list_suite_summaries(limit=limit, scope=scope)
 
 
 @router.post("")

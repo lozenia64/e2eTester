@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
 from app.contexts.run.application.command_port import RunCommandPort
+from app.contexts.scheduling.scheduler import schedule_today_start_utc
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.contexts.suite.domain.state_machine import (
     CancelSuite,
@@ -36,6 +38,14 @@ from app.storage.ports import (
 from app.storage.query_rows import SuiteSummaryRow
 
 logger = get_logger(__name__)
+
+ACTIVE_SUITE_STATUSES = frozenset(
+    {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
+)
+
+
+def _suite_finished_statuses() -> frozenset[SuiteStatus]:
+    return frozenset(status for status in SuiteStatus if status not in ACTIVE_SUITE_STATUSES)
 
 
 class SuiteService:
@@ -91,9 +101,45 @@ class SuiteService:
     async def get_suite(self, suite_id: str) -> SuiteRun:
         return await self._read_repo.get_suite(suite_id)
 
-    async def list_suite_summaries(self, limit: int = 20) -> list[dict]:
-        rows = await self._summary_query.list_summaries(limit=limit)
+    async def list_suite_summaries(
+        self,
+        *,
+        limit: int = 20,
+        scope: Literal["today", "before_today"] | None = None,
+    ) -> list[dict]:
+        rows = await self._summary_rows_for_scope(scope=scope, limit=limit)
         return [self._summarize_suite_row(row) for row in rows]
+
+    async def _summary_rows_for_scope(
+        self,
+        *,
+        scope: Literal["today", "before_today"] | None,
+        limit: int,
+    ) -> list[SuiteSummaryRow]:
+        if scope == "today":
+            today_start = schedule_today_start_utc()
+            active_rows = await self._summary_query.list_summaries(
+                limit=limit,
+                statuses=ACTIVE_SUITE_STATUSES,
+            )
+            remaining = max(0, limit - len(active_rows))
+            finished_rows: list[SuiteSummaryRow] = []
+            if remaining:
+                finished_rows = await self._summary_query.list_summaries(
+                    limit=remaining,
+                    requested_since=today_start,
+                    statuses=_suite_finished_statuses(),
+                )
+            return active_rows + finished_rows
+
+        if scope == "before_today":
+            return await self._summary_query.list_summaries(
+                limit=limit,
+                requested_before=schedule_today_start_utc(),
+                statuses=_suite_finished_statuses(),
+            )
+
+        return await self._summary_query.list_summaries(limit=limit)
 
     async def list_suites_by_schedule(
         self, schedule_id: str, limit: int = 30

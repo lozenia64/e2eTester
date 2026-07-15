@@ -1385,6 +1385,24 @@ function createSuiteStripRow(group) {
     return strip;
 }
 
+function renderExecutionGroups(listEl, runs, suites, options = {}) {
+    const { activeFirst = false, limit } = options;
+    let groups = buildExecutionGroups(runs, suites);
+    if (activeFirst) {
+        const activeGroups = groups.filter((group) => isExecutionGroupActive(group));
+        const finishedGroups = groups.filter((group) => !isExecutionGroupActive(group));
+        groups = [...activeGroups, ...finishedGroups];
+    }
+    if (limit != null) {
+        groups = groups.slice(0, limit);
+    }
+    listEl.innerHTML = "";
+    for (const group of groups) {
+        listEl.appendChild(group.type === "suite" ? createSuiteStripRow(group) : createRunListItem(group.runs[0]));
+    }
+    return groups.length;
+}
+
 function renderRunList(runs, suites) {
     const section = document.getElementById("runs-section");
     const list = document.getElementById("runs-list");
@@ -1392,16 +1410,8 @@ function renderRunList(runs, suites) {
         return;
     }
 
-    const groups = buildExecutionGroups(runs, suites);
-    const activeGroups = groups.filter((group) => isExecutionGroupActive(group));
-    const finishedGroups = groups.filter((group) => !isExecutionGroupActive(group));
-    const visibleGroups = [...activeGroups, ...finishedGroups].slice(0, RUN_LIST_LIMIT);
-
-    section.classList.toggle("is-hidden", visibleGroups.length === 0);
-    list.innerHTML = "";
-    for (const group of visibleGroups) {
-        list.appendChild(group.type === "suite" ? createSuiteStripRow(group) : createRunListItem(group.runs[0]));
-    }
+    const count = renderExecutionGroups(list, runs, suites, { activeFirst: true, limit: RUN_LIST_LIMIT });
+    section.classList.toggle("is-hidden", count === 0);
 }
 
 async function refreshRunList() {
@@ -1434,16 +1444,23 @@ async function bindRunsHistory() {
     }
     const statusEl = document.getElementById("runs-history-status");
     try {
-        const response = await fetch(`/api/runs?scope=before_today&limit=${RUN_HISTORY_LIMIT}`);
-        if (!response.ok) {
+        const [runsResult, suitesResult] = await Promise.allSettled([
+            fetch(`/api/runs?scope=before_today&limit=${RUN_HISTORY_LIMIT}`),
+            fetch(`/api/suites?scope=before_today&limit=${RUN_HISTORY_LIMIT}`),
+        ]);
+        if (runsResult.status !== "fulfilled" || !runsResult.value.ok) {
             if (statusEl) {
                 statusEl.textContent = "Run 목록을 불러오지 못했습니다.";
             }
             return;
         }
-        const runs = await response.json();
-        list.innerHTML = "";
-        if (runs.length === 0) {
+        const runs = await runsResult.value.json();
+        let suites = [];
+        if (suitesResult.status === "fulfilled" && suitesResult.value.ok) {
+            suites = await suitesResult.value.json();
+        }
+        const count = renderExecutionGroups(list, runs, suites);
+        if (count === 0) {
             if (statusEl) {
                 statusEl.textContent = "이전 Run 이력이 없습니다.";
             }
@@ -1451,9 +1468,6 @@ async function bindRunsHistory() {
         }
         if (statusEl) {
             statusEl.classList.add("is-hidden");
-        }
-        for (const run of runs) {
-            list.appendChild(createRunListItem(run));
         }
     } catch (error) {
         console.error("Run 이력 로드 실패", error);

@@ -57,23 +57,58 @@ def _row_to_summary(row) -> SuiteSummaryRow:
     )
 
 
+def _where(
+    *,
+    requested_before: datetime | None,
+    requested_since: datetime | None,
+    statuses: frozenset[SuiteStatus] | None,
+) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+    if statuses is not None:
+        placeholders = ",".join("?" for _ in statuses)
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(sorted(status.value for status in statuses))
+    if requested_since is not None:
+        clauses.append("requested_at >= ?")
+        params.append(requested_since.isoformat())
+    if requested_before is not None:
+        clauses.append("requested_at < ?")
+        params.append(requested_before.isoformat())
+    if not clauses:
+        return "", params
+    return " WHERE " + " AND ".join(clauses), params
+
+
 class SqliteSuiteSummaryQuery:
     """``SuiteSummaryQueryPort`` SQLite 어댑터."""
 
     def __init__(self, db: SqliteDatabase) -> None:
         self._db = db
 
-    async def list_summaries(self, *, limit: int | None = None) -> list[SuiteSummaryRow]:
+    async def list_summaries(
+        self,
+        *,
+        limit: int | None = None,
+        requested_before: datetime | None = None,
+        requested_since: datetime | None = None,
+        statuses: frozenset[SuiteStatus] | None = None,
+    ) -> list[SuiteSummaryRow]:
+        where_sql, params = _where(
+            requested_before=requested_before,
+            requested_since=requested_since,
+            statuses=statuses,
+        )
         sql = f"""
             SELECT {_SELECT_COLUMNS}
             FROM suite_history_index
+            {where_sql}
             ORDER BY requested_at DESC
         """
-        params: tuple = ()
         if limit is not None:
             sql += " LIMIT ?"
-            params = (limit,)
-        rows = await self._db.fetchall(sql, params)
+            params = [*params, limit]
+        rows = await self._db.fetchall(sql, tuple(params))
         return [_row_to_summary(row) for row in rows]
 
     async def counts_by_status(self) -> dict[str, int]:

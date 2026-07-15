@@ -14,6 +14,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from app.contexts.healing.models import HealingEvent, HealingPatch, HealingPolicy
+from app.core.enums import SuiteStatus
 from app.core.preset_models import AuthPreset
 from app.core.run_models import AnomalyHandling, PendingExecution, Run
 from app.core.schedule_models import Schedule
@@ -92,7 +93,14 @@ class ModuleHistoryQueryPort(Protocol):
 class SuiteSummaryQueryPort(Protocol):
     """Suite 요약 목록 **읽기** 쿼리 경계 — ``suite_history_index`` 프로젝션 전용."""
 
-    async def list_summaries(self, *, limit: int | None = None) -> list[SuiteSummaryRow]: ...
+    async def list_summaries(
+        self,
+        *,
+        limit: int | None = None,
+        requested_before: datetime | None = None,
+        requested_since: datetime | None = None,
+        statuses: frozenset[SuiteStatus] | None = None,
+    ) -> list[SuiteSummaryRow]: ...
     async def counts_by_status(self) -> dict[str, int]: ...
 
 
