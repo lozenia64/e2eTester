@@ -443,13 +443,19 @@
       });
     }
 
-    if (!matrixResizeObs && typeof ResizeObserver !== "undefined") {
+    bindMatrixResizeObserver(el);
+  }
+
+  function bindMatrixResizeObserver(el) {
+    if (typeof ResizeObserver === "undefined") return;
+    if (!matrixResizeObs) {
       matrixResizeObs = new ResizeObserver(() => {
         clearTimeout(matrixResizeTimer);
         matrixResizeTimer = setTimeout(() => renderMatrixFromPayload(), 150);
       });
-      matrixResizeObs.observe(el);
     }
+    matrixResizeObs.disconnect();
+    matrixResizeObs.observe(el);
   }
 
   function openDrawer(systemCode) {

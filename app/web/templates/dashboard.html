@@ -367,7 +367,7 @@
     border-left: 1px solid rgb(255 255 255 / 0.6);
   }
 
-  .htmx-request .dash-htmx-indicator { opacity: 1; }
+  .dash-htmx-indicator.htmx-request { opacity: 1; }
   .dash-htmx-indicator { opacity: 0; transition: opacity 0.2s; }
   [x-cloak] { display: none !important; }
 
@@ -401,6 +401,7 @@
     <div id="dash-host-kpi"
          hx-get="/api/dashboard/daily/fragments/kpi"
          hx-trigger="load, dash-refresh from:body"
+         hx-indicator="#dash-htmx-busy"
          hx-swap="innerHTML">
       <div class="h-10 animate-pulse rounded-xl bg-gray-100"></div>
     </div>
@@ -417,6 +418,7 @@
   <div id="dash-host-matrix" class="dash-host-matrix"
        hx-get="/api/dashboard/daily/fragments/matrix"
        hx-trigger="load, dash-refresh from:body"
+       hx-indicator="#dash-htmx-busy"
        hx-swap="innerHTML">
     <div class="flex-1 animate-pulse rounded-2xl bg-gray-100 min-h-[12rem]"></div>
   </div>
@@ -436,5 +438,5 @@
 <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape-node-html-label@1.2.2/dist/cytoscape-node-html-label.js" defer></script>
-<script src="/static/dashboard.js?v=12" defer></script>
+<script src="/static/dashboard.js?v=13" defer></script>
 {% endblock %}
