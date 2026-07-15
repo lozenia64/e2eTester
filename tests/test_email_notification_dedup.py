@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -85,13 +86,12 @@ async def test_email_subscriber_sends_once_for_concurrent_run_finished(tmp_path)
     store = SqliteEmailNotificationDedupStore(db)
     notifier = RunCompletionEmailNotifier(_email_config(), dedup_store=store)
     mock_sender = MagicMock()
-    send_started = asyncio.Event()
-    release_send = asyncio.Event()
+    send_started = threading.Event()
+    release_send = threading.Event()
 
     def slow_send(_message, _recipients):
         send_started.set()
-        while not release_send.is_set():
-            pass
+        release_send.wait()
 
     mock_sender.send.side_effect = slow_send
     notifier._sender = mock_sender
@@ -106,7 +106,7 @@ async def test_email_subscriber_sends_once_for_concurrent_run_finished(tmp_path)
         tasks = [
             asyncio.create_task(subscriber.on_run_finished(RunFinished(run=run))) for _ in range(4)
         ]
-        await asyncio.wait_for(send_started.wait(), timeout=1.0)
+        await asyncio.wait_for(asyncio.to_thread(send_started.wait), timeout=1.0)
         release_send.set()
         await asyncio.gather(*tasks)
 

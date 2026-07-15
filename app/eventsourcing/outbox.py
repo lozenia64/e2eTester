@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -49,8 +50,21 @@ class SqliteOutbox:
         """
         stale_before = (datetime.now(UTC) - timedelta(seconds=CLAIM_STALE_SECONDS)).isoformat()
         now = datetime.now(UTC).isoformat()
-        async with await self._db.transaction() as tx:
-            rows = tx.fetchall(
+        return await asyncio.to_thread(
+            self._claim_pending_sync, limit, claim_token, stale_before, now
+        )
+
+    def _claim_pending_sync(
+        self,
+        limit: int,
+        claim_token: str,
+        stale_before: str,
+        now: str,
+    ) -> list[StoredEvent]:
+        with self._db._thread_lock:
+            if self._db._conn.in_transaction:
+                self._db._conn.rollback()
+            rows = self._db._conn.execute(
                 """
                 SELECT de.sequence_id AS domain_sequence_id,
                        o.event_id, o.aggregate_type, o.aggregate_id, o.event_type,
@@ -67,10 +81,10 @@ class SqliteOutbox:
                 LIMIT ?
                 """,
                 (stale_before, limit),
-            )
+            ).fetchall()
             claimed: list[StoredEvent] = []
             for row in rows:
-                updated = tx.execute_changes(
+                updated = self._db._conn.execute(
                     """
                     UPDATE outbox
                     SET claimed_by = ?, claimed_at = ?
@@ -83,7 +97,7 @@ class SqliteOutbox:
                       )
                     """,
                     (claim_token, now, row["event_id"], stale_before),
-                )
+                ).rowcount
                 if updated != 1:
                     continue
                 claimed.append(
@@ -99,6 +113,7 @@ class SqliteOutbox:
                         ),
                     )
                 )
+            self._db._conn.commit()
             return claimed
 
     async def mark_published(self, event_id: str, *, claim_token: str) -> None:

@@ -34,34 +34,37 @@ class SqliteDatabase:
             return await asyncio.to_thread(self._execute_changes_sync, sql, params)
 
     def _execute_changes_sync(self, sql: str, params: tuple[Any, ...]) -> int:
-        cursor = self._conn.execute(sql, params)
-        self._conn.commit()
-        return cursor.rowcount
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            self._conn.commit()
+            return cursor.rowcount
 
     def execute_changes_sync(self, sql: str, params: tuple[Any, ...] = ()) -> int:
         """동기 스레드(예: SMTP 발송 스레드)에서 사용하는 변경 실행."""
-        with self._thread_lock:
-            return self._execute_changes_sync(sql, params)
+        return self._execute_changes_sync(sql, params)
 
     def _execute_sync(self, sql: str, params: tuple[Any, ...]) -> None:
-        self._conn.execute(sql, params)
-        self._conn.commit()
+        with self._thread_lock:
+            self._conn.execute(sql, params)
+            self._conn.commit()
 
     async def executemany(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
         async with self._lock:
             await asyncio.to_thread(self._executemany_sync, sql, params_seq)
 
     def _executemany_sync(self, sql: str, params_seq: list[tuple[Any, ...]]) -> None:
-        self._conn.executemany(sql, params_seq)
-        self._conn.commit()
+        with self._thread_lock:
+            self._conn.executemany(sql, params_seq)
+            self._conn.commit()
 
     async def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         async with self._lock:
             return await asyncio.to_thread(self._fetchall_sync, sql, params)
 
     def _fetchall_sync(self, sql: str, params: tuple[Any, ...]) -> list[sqlite3.Row]:
-        cursor = self._conn.execute(sql, params)
-        return cursor.fetchall()
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            return cursor.fetchall()
 
     async def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
         async with self._lock:
@@ -72,8 +75,9 @@ class SqliteDatabase:
         self._conn.close()
 
     def _fetchone_sync(self, sql: str, params: tuple[Any, ...]) -> sqlite3.Row | None:
-        cursor = self._conn.execute(sql, params)
-        return cursor.fetchone()
+        with self._thread_lock:
+            cursor = self._conn.execute(sql, params)
+            return cursor.fetchone()
 
     async def transaction(self) -> _Transaction:
         return _Transaction(self)
