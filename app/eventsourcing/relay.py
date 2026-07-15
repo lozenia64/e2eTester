@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import uuid
 
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.logging import get_logger
@@ -50,12 +52,27 @@ class OutboxRelay:
         self._suite_finished_loader = suite_finished_loader
         self._running = False
         self._task: asyncio.Task | None = None
+        self._claim_token = f"relay-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        self.relay_instance_id = id(self)
 
     def start(self) -> None:
         if self._running:
+            logger.warning(
+                "아웃박스 릴레이 이중 기동 무시",
+                log_event="outbox.relay_double_start",
+                relay_instance_id=self.relay_instance_id,
+                pid=os.getpid(),
+            )
             return
         self._running = True
         self._task = asyncio.create_task(self._loop())
+        logger.info(
+            "아웃박스 릴레이 시작",
+            log_event="outbox.relay_started",
+            relay_instance_id=self.relay_instance_id,
+            claim_token=self._claim_token,
+            pid=os.getpid(),
+        )
 
     async def stop(self) -> None:
         self._running = False
@@ -69,7 +86,9 @@ class OutboxRelay:
 
     async def process_once(self) -> int:
         """한 번 폴링·처리(테스트/마이그레이션용). 처리한 이벤트 수 반환."""
-        entries = await self._outbox.claim_pending(self._batch_size)
+        entries = await self._outbox.claim_pending(
+            self._batch_size, claim_token=self._claim_token
+        )
         if not entries:
             return 0
         processed = 0
@@ -86,9 +105,10 @@ class OutboxRelay:
                     event_id=event.event_id,
                     event_type=event.event_type,
                 )
+                await self._outbox.release_claim(event.event_id, claim_token=self._claim_token)
                 await self._outbox.move_to_dead_letter(event, str(exc))
                 continue
-            await self._outbox.mark_published(event.event_id)
+            await self._outbox.mark_published(event.event_id, claim_token=self._claim_token)
             processed += 1
         return processed
 

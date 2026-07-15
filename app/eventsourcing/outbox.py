@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.domain.events import DomainEvent
 from app.eventsourcing.event_store import StoredEvent
 from app.eventsourcing.support import SqliteDatabase
+
+# 미발행 행이 이 시간보다 오래 점유되면 다른 릴레이가 재청구할 수 있다.
+CLAIM_STALE_SECONDS = 120
 
 
 class SqliteOutbox:
@@ -37,49 +40,86 @@ class SqliteOutbox:
             rows,
         )
 
-    async def claim_pending(self, limit: int = 100) -> list[StoredEvent]:
-        """Claim pending outbox rows (SQLite lacks SKIP LOCKED; single-process relay).
+    async def claim_pending(self, limit: int = 100, *, claim_token: str) -> list[StoredEvent]:
+        """미발행 outbox 행을 원자적으로 점유한다(BEGIN IMMEDIATE).
 
-        아웃박스 행과 이벤트 스토어 행은 같은 트랜잭션으로 기록되므로 ``event_id`` JOIN 은
-        항상 성립하며, 여기서 동봉하는 ``domain_events.sequence_id`` 가 프로젝션 커서의
-        정본 좌표가 된다(아웃박스 자체 시퀀스는 배달 순서일 뿐 커서 기준이 아니다).
-        따라서 정렬도 **커서 기준과 동일한 ``de.sequence_id``** 로 한다 — 커서는 단조
-        ``sequence_id <= cursor`` 스킵이므로, 배달 순서가 커서 좌표와 어긋나면 낮은
-        시퀀스를 건너뛰어(커서가 앞질러) 프로젝션이 영구 유실될 수 있다.
+        동일 행을 여러 릴레이/폴링 루프가 동시에 읽어도 ``claimed_by`` 가 설정된 행은
+        한 소비자만 처리할 수 있다. API 프로세스당 OutboxRelay 1개 운영을 전제로 하되,
+        중복 기동·동시 ``process_once`` 에도 안전하다.
         """
-        rows = await self._db.fetchall(
-            """
-            SELECT de.sequence_id AS domain_sequence_id,
-                   o.event_id, o.aggregate_type, o.aggregate_id, o.event_type,
-                   o.payload, o.occurred_at
-            FROM outbox o
-            JOIN domain_events de ON de.event_id = o.event_id
-            WHERE o.published_at IS NULL
-            ORDER BY de.sequence_id ASC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        return [
-            StoredEvent(
-                sequence_id=row["domain_sequence_id"],
-                event=DomainEvent(
-                    event_id=row["event_id"],
-                    aggregate_type=row["aggregate_type"],
-                    aggregate_id=row["aggregate_id"],
-                    event_type=row["event_type"],
-                    payload=json.loads(row["payload"]),
-                    occurred_at=datetime.fromisoformat(row["occurred_at"]),
-                ),
+        stale_before = (datetime.now(UTC) - timedelta(seconds=CLAIM_STALE_SECONDS)).isoformat()
+        now = datetime.now(UTC).isoformat()
+        async with await self._db.transaction() as tx:
+            rows = tx.fetchall(
+                """
+                SELECT de.sequence_id AS domain_sequence_id,
+                       o.event_id, o.aggregate_type, o.aggregate_id, o.event_type,
+                       o.payload, o.occurred_at
+                FROM outbox o
+                JOIN domain_events de ON de.event_id = o.event_id
+                WHERE o.published_at IS NULL
+                  AND (
+                        o.claimed_by IS NULL
+                        OR o.claimed_at IS NULL
+                        OR o.claimed_at < ?
+                  )
+                ORDER BY de.sequence_id ASC
+                LIMIT ?
+                """,
+                (stale_before, limit),
             )
-            for row in rows
-        ]
+            claimed: list[StoredEvent] = []
+            for row in rows:
+                updated = tx.execute_changes(
+                    """
+                    UPDATE outbox
+                    SET claimed_by = ?, claimed_at = ?
+                    WHERE event_id = ?
+                      AND published_at IS NULL
+                      AND (
+                            claimed_by IS NULL
+                            OR claimed_at IS NULL
+                            OR claimed_at < ?
+                      )
+                    """,
+                    (claim_token, now, row["event_id"], stale_before),
+                )
+                if updated != 1:
+                    continue
+                claimed.append(
+                    StoredEvent(
+                        sequence_id=row["domain_sequence_id"],
+                        event=DomainEvent(
+                            event_id=row["event_id"],
+                            aggregate_type=row["aggregate_type"],
+                            aggregate_id=row["aggregate_id"],
+                            event_type=row["event_type"],
+                            payload=json.loads(row["payload"]),
+                            occurred_at=datetime.fromisoformat(row["occurred_at"]),
+                        ),
+                    )
+                )
+            return claimed
 
-    async def mark_published(self, event_id: str) -> None:
+    async def mark_published(self, event_id: str, *, claim_token: str) -> None:
         now = datetime.now(UTC).isoformat()
         await self._db.execute(
-            "UPDATE outbox SET published_at = ? WHERE event_id = ?",
-            (now, event_id),
+            """
+            UPDATE outbox
+            SET published_at = ?, claimed_by = NULL, claimed_at = NULL
+            WHERE event_id = ? AND claimed_by = ? AND published_at IS NULL
+            """,
+            (now, event_id, claim_token),
+        )
+
+    async def release_claim(self, event_id: str, *, claim_token: str) -> None:
+        await self._db.execute(
+            """
+            UPDATE outbox
+            SET claimed_by = NULL, claimed_at = NULL
+            WHERE event_id = ? AND claimed_by = ? AND published_at IS NULL
+            """,
+            (event_id, claim_token),
         )
 
     async def move_to_dead_letter(self, event: DomainEvent, error_message: str) -> None:

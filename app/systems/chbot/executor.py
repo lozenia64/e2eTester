@@ -10,6 +10,7 @@ DEFAULT_BASE_URL = "https://chbot.hwgeneralins.com/P29GCdKMTnbsy0PRr"
 
 @dataclass
 class ChbotRuntime(AccessRuntime):
+    auth_method: str = "phone"
     name: str = ""
     birthdate: str = ""
     gender_code: str = ""
@@ -36,6 +37,7 @@ class ChbotWorkflowExecutor(AccessWorkflowExecutor):
             page=runtime.page,
             dialog_messages=runtime.dialog_messages,
             closed=runtime.closed,
+            auth_method=(input_data.get("auth_method") or "phone").strip().lower(),
             name=(input_data.get("name") or "").strip(),
             birthdate=(input_data.get("birthdate") or "").strip(),
             gender_code=(input_data.get("gender_code") or "").strip(),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -20,7 +21,7 @@ from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
-from app.events.bus import EventBus
+from app.events.bus import EventBus, RunFinished
 from app.events.subscribers.email_notification import EmailNotificationSubscriber
 from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.eventsourcing.outbox import SqliteOutbox
@@ -51,6 +52,7 @@ from app.storage.run_history_backfill import backfill_run_history_index
 from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
 from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
+from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 from app.storage.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
@@ -136,6 +138,8 @@ class AppContainer:
     execution_gateway: CompositeExecutionGateway = field(init=False)
 
     event_bus: EventBus = field(init=False)
+    email_dedup_store: SqliteEmailNotificationDedupStore = field(init=False)
+    email_subscriber: EmailNotificationSubscriber = field(init=False)
     run_service: RunService = field(init=False)
     run_queries: RunQueries = field(init=False)
     daily_queries: DailyDashboardQueries = field(init=False)
@@ -260,7 +264,12 @@ class AppContainer:
         FailureAnalysisSubscriber(failure_analyzer, self.run_write_repo, self.registry).register(
             self.event_bus
         )
-        EmailNotificationSubscriber(self.system_codes).register(self.event_bus)
+        self.email_dedup_store = SqliteEmailNotificationDedupStore(self.es_db)
+        self.email_subscriber = EmailNotificationSubscriber(
+            self.system_codes,
+            dedup_store=self.email_dedup_store,
+        )
+        self.email_subscriber.register(self.event_bus)
 
         self.run_service = RunService(
             registry=self.registry,
@@ -448,6 +457,11 @@ class AppContainer:
             log_event="startup.email_status",
             title=email_status.title,
             message=email_status.message,
+            pid=os.getpid(),
+            db_path=str(self.db_path),
+            email_handler_count=self.event_bus.handler_count(RunFinished),
+            email_subscriber_id=id(self.email_subscriber),
+            outbox_relay_id=self.outbox_relay.relay_instance_id,
         )
 
         interrupted_runs = await self.run_service.reconcile_interrupted_runs()

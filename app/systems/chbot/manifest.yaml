@@ -4,6 +4,7 @@ description: 접속 · 간편본인인증 · 계약조회 점검
 display_order: 60
 supported_auth_methods:
 - phone
+- kakao
 run_form:
 - key: browser_mode
   label: 브라우저 실행 모드
@@ -16,6 +17,17 @@ run_form:
     value: headed
   - label: 백그라운드 실행
     value: headless
+- key: auth_method
+  label: 인증 수단
+  type: select
+  required: true
+  default: phone
+  help_text: 휴대폰인증과 카카오인증을 실행할 수 있습니다.
+  options:
+  - label: 휴대폰인증
+    value: phone
+  - label: 카카오인증
+    value: kakao
 - key: name
   label: 고객명
   type: text
@@ -55,6 +67,8 @@ run_form:
   type: select
   required: true
   default: skt
+  show_when:
+    auth_method: phone
   options:
   - label: SKT
     value: skt
@@ -73,6 +87,10 @@ run_form:
   type: text
   required: true
   placeholder: 01012345678
+  show_when:
+    auth_method:
+    - phone
+    - kakao
 modules:
 - module_id: chbot.main.access
   system_code: chbot
@@ -94,7 +112,7 @@ modules:
 - module_id: chbot.simple.auth
   system_code: chbot
   name: 간편본인인증
-  description: 계약조회 진입 후 본인 정보 확인·휴대폰 간편인증을 완료합니다.
+  description: 계약조회 진입 후 본인 정보 확인·휴대폰/카카오 간편인증을 완료합니다.
   group: auth
   order: 20
   depends_on:
