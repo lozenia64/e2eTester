@@ -138,20 +138,43 @@ def test_system_attention_rank_and_sort_helpers():
             "system_code": "ok",
             "display_order": 10,
             "module_total": 2,
-            "counts": {"passed": 2, "error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0},
+            "counts": {
+                "passed": 2,
+                "error": 0,
+                "anomaly": 0,
+                "running": 0,
+                "other": 0,
+                "not_inspected": 0,
+            },
             "modules": [],
         },
         {
             "system_code": "bad",
             "display_order": 20,
             "module_total": 1,
-            "counts": {"passed": 0, "error": 1, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0},
+            "counts": {
+                "passed": 0,
+                "error": 1,
+                "anomaly": 0,
+                "running": 0,
+                "other": 0,
+                "not_inspected": 0,
+            },
             "modules": [
-                {"module_id": "m1", "name": "m1", "bucket": "error", "status_label": "점검실패", "tone": "error", "run_id": "r1"},
+                {
+                    "module_id": "m1",
+                    "name": "m1",
+                    "bucket": "error",
+                    "status_label": "점검실패",
+                    "tone": "error",
+                    "run_id": "r1",
+                },
             ],
         },
     ]
-    assert system_attention_rank(views[1]["counts"], module_total=1) > system_attention_rank(views[0]["counts"], module_total=2)
+    assert system_attention_rank(views[1]["counts"], module_total=1) > system_attention_rank(
+        views[0]["counts"], module_total=2
+    )
     sorted_codes = [s["system_code"] for s in sort_systems_attention_first(views)]
     assert sorted_codes == ["bad", "ok"]
     items = build_attention_items(views)
