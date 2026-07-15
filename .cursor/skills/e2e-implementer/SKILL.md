@@ -13,8 +13,17 @@ Writes application code. Follow all e2e domain invariants.
 ## Inputs
 
 - `<run_dir>/intake.json`
-- All prior artifacts in `<run_dir>/` (context-map, scenario-impact, manifest-plan, architecture-delta, healing-plan, docs-checklist)
+- **Dev phase artifacts** (when present):
+  - `<run_dir>/spec.md` (dev-spec-writer)
+  - `<run_dir>/tasks.yaml` (dev-task-planner)
+  - `<run_dir>/ux-spec.md` (dev-ux-designer, if exists)
+  - `<run_dir>/architecture.md` (dev-architect, if exists)
+  - `<run_dir>/context.md` (guardian — primary ground truth for implementer)
+- **E2E phase artifacts**:
+  - context-map, scenario-impact, manifest-plan, architecture-delta, healing-plan, docs-checklist
 - `.cursor/skills/e2e-orchestrator/domain-context.md`
+
+Read `context.md` and `spec.md` first when both exist; e2e artifacts refine domain-specific scope.
 
 ## Task
 

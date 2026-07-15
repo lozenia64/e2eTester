@@ -13,7 +13,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from orchestration_gates import validate_planning_gate  # noqa: E402
+from orchestration_gates import e2e_profile, validate_planning_gate  # noqa: E402
 
 
 def main() -> int:
@@ -29,12 +29,12 @@ def main() -> int:
 
     run_data = json.loads(run_json_path.read_text(encoding="utf-8"))
     workspace = Path(run_data["workspace"])
-    profile = run_data.get("pipeline_profile") or ""
+    profile = e2e_profile(run_data)
     if not profile:
         intake_path = run_dir / "intake.json"
         if intake_path.is_file():
             intake = json.loads(intake_path.read_text(encoding="utf-8"))
-            profile = intake.get("pipeline_profile") or ""
+            profile = e2e_profile(intake)
 
     result = validate_planning_gate(run_dir, workspace, profile)
     report = {

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Validate e2e-orchestrator agent artifacts."""
+"""Validate e2e-orchestrator agent artifacts (unified router)."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,17 +30,22 @@ RESEARCH_SECTIONS = [
     "## 참고 URL",
 ]
 
+GLOBAL_AGENTS = frozenset({"guardian", "triage", "debugger"})
+
+DEV_VALIDATE_SCRIPT = (
+    Path.home() / ".cursor" / "skills" / "dev-orchestrator" / "scripts" / "validate_artifacts.py"
+)
+
 AGENT_ARTIFACTS: dict[str, dict] = {
     "e2e-intake": {
         "file": "intake.json",
         "required": [
-            "pipeline_profile",
+            "e2e_pipeline_profile",
             "system_code",
             "layer",
             "touch_surfaces",
             "risk_flags",
             "conditional_agents",
-            "agent_graph",
         ],
     },
     "e2e-researcher": {
@@ -97,6 +103,12 @@ AGENT_ARTIFACTS: dict[str, dict] = {
         "if_false": ["failed_agent", "feedback"],
         "requires_mechanical": True,
     },
+    "guardian": {
+        "files": ["review.md", "context.md"],
+    },
+    "triage": {
+        "skip_artifacts": True,
+    },
 }
 
 
@@ -132,7 +144,6 @@ def validate_json(path: Path, required: list[str], if_false: list[str] | None = 
 
 
 def normalize_system_code(value: object) -> str | None:
-    """Accept JSON null or LLM-emitted string aliases for platform-wide scope."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -145,17 +156,36 @@ def normalize_system_code(value: object) -> str | None:
 
 def validate_intake(data: dict) -> list[str]:
     errors: list[str] = []
-    profile = data.get("pipeline_profile")
+    profile = data.get("e2e_pipeline_profile") or data.get("pipeline_profile")
     if profile not in PIPELINE_PROFILES:
-        errors.append(f"invalid pipeline_profile: {profile}")
+        errors.append(f"invalid e2e_pipeline_profile: {profile}")
     system_code = normalize_system_code(data.get("system_code"))
     if system_code == "__invalid__":
         errors.append(f"invalid system_code: {data.get('system_code')}")
     graph = data.get("agent_graph")
-    if not isinstance(graph, list) or len(graph) == 0:
-        errors.append("agent_graph must be a non-empty list")
-    if isinstance(graph, list) and "e2e-researcher" in graph:
-        errors.append("agent_graph must not include e2e-researcher (manager runs E0R separately)")
+    if graph is not None:
+        if not isinstance(graph, list):
+            errors.append("agent_graph must be null or a list (prefer null; resolve_graph builds it)")
+        elif len(graph) > 0:
+            errors.append("agent_graph must be null — use resolve_graph.py")
+    if "dev_path" in data and data["dev_path"] not in ("full", "standard", "minimal"):
+        errors.append(f"invalid dev_path: {data.get('dev_path')}")
+    return errors
+
+
+def validate_guardian(run_dir: Path) -> list[str]:
+    errors: list[str] = []
+    review = run_dir / "review.md"
+    context = run_dir / "context.md"
+    if not review.is_file():
+        errors.append("missing file: review.md")
+    if not context.is_file():
+        errors.append("missing file: context.md")
+    if review.is_file():
+        text = review.read_text(encoding="utf-8")
+        upper = text.upper()
+        if "APPROVED" not in upper and "REJECTED" not in upper:
+            errors.append("review.md must contain APPROVED or REJECTED")
     return errors
 
 
@@ -184,21 +214,40 @@ def validate_mechanical_prerequisite(run_dir: Path) -> list[str]:
     return []
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run-dir", required=True, help="Absolute path to run directory")
-    parser.add_argument("--agent", required=True, help="Agent skill name (e.g. e2e-intake)")
-    args = parser.parse_args()
+def delegate_dev_validation(run_dir: Path, agent: str) -> dict:
+    if not DEV_VALIDATE_SCRIPT.is_file():
+        return {"valid": False, "errors": [f"dev validator not found: {DEV_VALIDATE_SCRIPT}"]}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(DEV_VALIDATE_SCRIPT),
+            "--run-dir",
+            str(run_dir),
+            "--agent",
+            agent,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {
+            "valid": False,
+            "errors": [proc.stdout or proc.stderr or "dev validation failed"],
+        }
 
-    run_dir = Path(args.run_dir)
-    agent = args.agent
-    if agent not in AGENT_ARTIFACTS:
-        print(json.dumps({"valid": False, "errors": [f"unknown agent: {agent}"]}))
-        return 1
 
-    spec = AGENT_ARTIFACTS[agent]
+def validate_e2e_agent(run_dir: Path, agent: str, spec: dict) -> list[str]:
     errors: list[str] = []
     filename = spec.get("file", "")
+
+    if spec.get("skip_artifacts"):
+        return []
+
+    if agent == "guardian" or "files" in spec:
+        return validate_guardian(run_dir)
 
     if filename.endswith(".json"):
         path = run_dir / filename
@@ -226,8 +275,35 @@ def main() -> int:
     if spec.get("requires_mechanical"):
         errors.extend(validate_mechanical_prerequisite(run_dir))
 
-    result = {"valid": len(errors) == 0, "agent": agent, "errors": errors}
-    print(json.dumps(result, ensure_ascii=False))
+    return errors
+
+
+def validate_agent(run_dir: Path, agent: str) -> dict:
+    if agent.startswith("dev-"):
+        return delegate_dev_validation(run_dir, agent)
+
+    if agent in GLOBAL_AGENTS:
+        spec = AGENT_ARTIFACTS.get(agent, {})
+        errors = validate_e2e_agent(run_dir, agent, spec) if spec else []
+        return {"valid": len(errors) == 0, "agent": agent, "errors": errors}
+
+    if agent not in AGENT_ARTIFACTS:
+        return {"valid": False, "agent": agent, "errors": [f"unknown agent: {agent}"]}
+
+    spec = AGENT_ARTIFACTS[agent]
+    errors = validate_e2e_agent(run_dir, agent, spec)
+    return {"valid": len(errors) == 0, "agent": agent, "errors": errors}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-dir", required=True, help="Absolute path to run directory")
+    parser.add_argument("--agent", required=True, help="Agent id (e.g. e2e-intake, dev-spec-writer)")
+    args = parser.parse_args()
+
+    run_dir = Path(args.run_dir)
+    result = validate_agent(run_dir, args.agent)
+    print(json.dumps(result, ensure_ascii=True))
     return 0 if result["valid"] else 1
 
 

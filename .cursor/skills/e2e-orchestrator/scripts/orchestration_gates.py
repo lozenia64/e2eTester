@@ -62,6 +62,11 @@ def read_intake(run_dir: Path) -> dict[str, Any]:
     return data or {}
 
 
+def e2e_profile(data: dict[str, Any]) -> str:
+    """Resolve e2e pipeline profile from run.json or intake.json."""
+    return str(data.get("e2e_pipeline_profile") or data.get("pipeline_profile") or "")
+
+
 def check(
     name: str, passed: bool, message: str, *, failed_agent: str | None = None
 ) -> dict[str, Any]:
@@ -322,7 +327,7 @@ def compute_mechanical_verdict(run_dir: Path) -> dict[str, Any]:
     }
 
     intake = read_intake(run_dir)
-    profile = intake.get("pipeline_profile") or ""
+    profile = e2e_profile(intake)
 
     for filename, name in reports.items():
         path = run_dir / filename
