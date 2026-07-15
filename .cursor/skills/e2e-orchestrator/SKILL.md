@@ -1,17 +1,16 @@
 ---
 name: e2e-orchestrator
 description: >-
-  Runs the e2eTester project-specific multi-agent pipeline (intake, domain scout,
-  scenario analysis, manifest planning, implementation, CI gates, release judge).
-  Use when the user asks to run e2e-orchestrator or automate E2E platform work
-  in this repository.
+  Sole entry point for e2eTester multi-agent orchestration. Wraps dev-orchestrator
+  phases plus e2e domain skills and global ~/.cursor/agents. Use when the user
+  asks to run e2e-orchestrator or automate E2E platform work in this repository.
 ---
 
-# e2e Orchestrator
+# e2e Orchestrator (Unified Wrapper)
 
-Manager agent for the **e2eTester** project multi-agent pipeline. **Do not write application code** — delegate via `Task` to built-in subagents using e2e skill contracts.
+Manager agent for **e2eTester**. **Wraps dev-orchestrator phases** and owns the full loop.
 
-This orchestrator is **project-local** (`.cursor/skills/`). It does not replace the global `dev-orchestrator`.
+**Do not write application code or intake.json** — delegate via `Task` per [unified-registry.md](unified-registry.md).
 
 ## Start
 
@@ -21,78 +20,90 @@ This orchestrator is **project-local** (`.cursor/skills/`). It does not replace 
    python3 .cursor/skills/e2e-orchestrator/scripts/init_run.py "<workspace>" "<user_request>"
    ```
 3. Parse JSON output → `run_id`, `run_dir`.
-4. Read [pipeline-profiles.md](pipeline-profiles.md), [handoff-matrix.md](handoff-matrix.md), [subagent-map.md](subagent-map.md), [domain-context.md](domain-context.md).
+4. Read [unified-registry.md](unified-registry.md), [unified-profiles.md](unified-profiles.md), [handoff-matrix.md](handoff-matrix.md), [domain-context.md](domain-context.md).
+
+## Manager rules (mandatory)
+
+- **Never** write `intake.json` or implementation code yourself — always `Task(e2e-intake)` then `Task(e2e-implementer)`.
+- **Never** hand-build or shorten `agent_graph` — only `resolve_graph.py` output.
+- **Never** skip guardian when graph includes it.
+- Parse subagent output; run `validate_artifacts.py` after every agent.
 
 ## Execution loop
 
 ```
-Task(e2e-intake) → validate → merge intake.json into run.json (pipeline_profile)
-IF profile != docs_only:
-  Task(e2e-researcher) → validate
-  python3 run_research_gate.py --run-dir → fail → backtrack e2e-researcher
-FOR each agent in agent_graph (skip E01, E0R; skip QC agents):
-  Task(agent skill) → validate_artifacts.py --run-dir --agent
-  append_handoff.py on each transition
-  IF agent is last planner before e2e-implementer:
-    python3 run_planning_gate.py --run-dir → fail → backtrack per handoff-matrix
-Task(e2e-implementer) OR e2e-docs-writer (docs_only) → validate (incl. preflight-report)
-python3 run_preflight_gates.py --run-dir → fail → backtrack e2e-implementer
-python3 run_gates.py --run-dir --fail-fast
-PARALLEL Task for each active QC agent → validate each QC report
-python3 run_mechanical_verdict.py --run-dir → fail → backtrack (no E09)
-Task(e2e-release-judge) → validate release-verdict.json
-IF passed: status=complete, summarize to user
+init_run.py
+Task(e2e-intake) → validate_artifacts --agent e2e-intake
+resolve_graph.py --run-dir → updates run.json.agent_graph, qc_agents, ship_agents
+IF stop_after_research (spike): report and offer upgrade → STOP
+IF NOT skip_research: Task(e2e-researcher) → validate → run_research_gate.py
+FOR each agent in run.json.agent_graph:
+  IF agent == guardian:
+    Task(guardian) → validate_artifacts --agent guardian
+    IF review.md REJECTED: backtrack per handoff-matrix
+  ELSE:
+    Task(agent per unified-registry) → validate_artifacts --agent <id>
+  IF agent == run.json.last_planner: run_planning_gate.py
+IF implementer == e2e-implementer:
+  Task(e2e-implementer) → validate → run_preflight_gates.py
+ELIF implementer == e2e-docs-writer:
+  Task(e2e-docs-writer) → validate
+PARALLEL Task for each agent in run.json.qc_agents → validate each
+run_gates.py --fail-fast → run_mechanical_verdict.py
+Task(e2e-release-judge) → validate
+IF release passed AND ship_agents non-empty:
+  Task(dev-pr-publisher) → validate
+  Task(dev-ci-watcher) → validate → backtrack on CI fail
+IF passed: status=complete, summarize
 ELSE: backtrack per handoff-matrix.md
 ```
 
-**Spike profile:** after `e2e-researcher` + research gate, stop and report to user. Offer upgrade to `step_fix` or `new_module`.
+**Spike profile:** after research gate, stop and report. Offer upgrade to `step_fix` or `new_module`.
 
-**Last planner before E08** (for T1 gate): profile-specific — see [pipeline-profiles.md](pipeline-profiles.md) and [handoff-matrix.md](handoff-matrix.md).
+Launch **multiple Task calls in one message** for QC parallel fan-out.
 
 ## Task invocation template
 
-For each specialist:
-
 ```
-Run skill: <e2e-skill-name>
-Run directory: <run_dir absolute>
+Run skill/agent: <agent_id from unified-registry>
+Run directory: <run_dir absolute>   # artifacts_dir = run_dir
 Workspace: <workspace absolute>
 User request: <from run.json>
-Context variables: <run.json context_variables + pipeline_profile>
-Inputs: <list artifact paths this agent reads>
+Context variables: <run.json context_variables>
+Inputs: <artifact paths from artifacts-contract.md>
 Output: write <artifact> per artifacts-contract.md
-Domain context: read relevant sections from .cursor/skills/e2e-orchestrator/domain-context.md
-Feedback (if retry): <from release-verdict.json or mechanical-verdict.json>
-Readonly: <yes/no per subagent-map.md>
-Subagent type: <per subagent-map.md>
-Do NOT modify built-in subagent definitions — follow this skill contract only.
+Domain context: read domain-context.md (e2e agents)
+Feedback (if retry): <from release-verdict.json or gate reports>
+Readonly: <per unified-registry>
+Subagent type: <per unified-registry>
+Load handoff-protocol skill for HANDOFF_JSON footer.
 ```
-
-Launch **multiple Task calls in one message** for Quality Council parallel fan-out.
 
 ## Quality Council
 
-After E08 preflight passes (or `e2e-docs-writer` for docs_only):
-
-| Agent | When active |
-|-------|-------------|
-| e2e-test-runner | always — confirm preflight passed, then `run_gates.py --fail-fast` |
-| e2e-code-reviewer | always except docs_only |
-| e2e-security-auditor | `conditional_agents` contains `security-auditor` OR risk_flags has `pii`/`otp`/`auth` |
+QC agents come from `run.json.qc_agents` (resolved by `resolve_graph.py`). Always includes e2e-test-runner except spike. e2e-code-reviewer except docs_only. Security auditors when risk_flags warrant.
 
 After QC: `run_mechanical_verdict.py` must pass before `e2e-release-judge`.
 
-QC agents map to built-in subagents per [subagent-map.md](subagent-map.md).
+## Ship phase (conditional)
+
+Only when `run.json.ship_agents` is non-empty (`ship_requested` + `ship_eligible` profile).
 
 ## Validation
 
 After each agent:
 
 ```bash
-python3 .cursor/skills/e2e-orchestrator/scripts/validate_artifacts.py --run-dir "<run_dir>" --agent "<skill-name>"
+python3 .cursor/skills/e2e-orchestrator/scripts/validate_artifacts.py --run-dir "<run_dir>" --agent "<agent-id>"
 ```
 
-Gate scripts (mechanical — manager runs these, not LLM judgment):
+After intake:
+
+```bash
+python3 .cursor/skills/e2e-orchestrator/scripts/resolve_graph.py --run-dir "<run_dir>"
+```
+
+Gate scripts:
 
 ```bash
 python3 .cursor/skills/e2e-orchestrator/scripts/run_research_gate.py --run-dir "<run_dir>"
@@ -108,16 +119,11 @@ Record handoffs:
 python3 .cursor/skills/e2e-orchestrator/scripts/append_handoff.py --run-dir "<run_dir>" --from-agent "<prev>" --to-agent "<next>" --reason "<why>"
 ```
 
-Retry same agent once on invalid artifact; then abort with errors.
-
 ## Backtrack
 
-On `release-verdict.json` `passed: false`, `mechanical-verdict.json` `passed: false`, or any gate report `passed: false`:
+On any gate, mechanical-verdict, release-verdict, or guardian REJECTED failure — see [handoff-matrix.md](handoff-matrix.md).
 
-1. Load `failed_agent` from verdict/gate report (or infer from gate name).
-2. Map restart via [handoff-matrix.md](handoff-matrix.md).
-3. Increment `attempts[failed_agent]` and `gate_attempts` in `run.json`; abort if over limits.
-4. Rerun from restart agent through graph (include all verification tiers after implementer).
+Re-run `resolve_graph.py` only if intake.json profile changes.
 
 ## Limits
 
@@ -128,10 +134,11 @@ On `release-verdict.json` `passed: false`, `mechanical-verdict.json` `passed: fa
 
 Use `AskQuestion` when:
 
-- spike profile completes (upgrade to step_fix/new_module?)
-- `live_site_claim` in risk_flags (confirm test claim submission)
-- healing_patch profile with pending patch approval
+- spike completes (upgrade profile?)
+- `live_site_claim` in risk_flags
+- healing_patch with pending patch approval
+- guardian REJECTED twice
 
 ## Final report
 
-Include: `run_id`, `pipeline_profile`, `system_code`, T0–T3 gate results, retry count, path to `run_dir`.
+Include: `run_id`, `e2e_pipeline_profile`, `dev_pipeline_profile`, T0–T3 gates, QC agents, ship status, retry count, `run_dir` path.

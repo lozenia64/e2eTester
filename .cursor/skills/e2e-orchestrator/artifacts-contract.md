@@ -39,20 +39,74 @@ Skipped when `pipeline_profile` is `docs_only`.
 
 ```json
 {
-  "pipeline_profile": "step_fix|new_module|new_system|platform|healing_patch|docs_only|spike",
+  "e2e_pipeline_profile": "step_fix|new_module|new_system|platform|healing_patch|docs_only|spike",
+  "dev_pipeline_profile": "feature",
+  "pipeline_profile": "platform",
   "system_code": "hom|mhm|fp|hrp|hwtc|chbot|null",
   "layer": "steps|manifest|executor|gateway|domain|orchestrator|api|web|healing|scheduling",
   "touch_surfaces": ["selector", "otp", "manifest", "api", "ws", "sqlite", "docs"],
   "affected_modules": ["module_id", "..."],
-  "risk_flags": ["pii", "live_site_claim", "selector_fragile", "cross_channel_hom_mhm", "auth", "otp"],
-  "conditional_agents": ["security-auditor"],
-  "agent_graph": ["e2e-domain-scout", "e2e-scenario-analyst", "..."],
+  "risk_flags": ["pii", "user_facing", "unknown_tech", "auth", "otp"],
+  "conditional_agents": ["dev-ux-designer", "e2e-security-auditor"],
+  "dev_path": "full|standard|minimal",
+  "ship_requested": false,
+  "agent_graph": null,
   "summary": "한 줄 요약"
 }
 ```
 
-Note: `agent_graph` excludes E01, E0R, and QC agents; manager runs E0R after intake and expands QC after E08 preflight.
-For `system_code`, prefer JSON `null` for platform-wide scope; the validator also accepts the string `"null"` if a subagent emits it literally.
+Note: `agent_graph` must be **null** at intake time. Manager runs `resolve_graph.py` to populate `run.json.agent_graph`, `qc_agents`, and `ship_agents`.
+For `system_code`, prefer JSON `null` for platform-wide scope.
+
+### guardian → `review.md` + `context.md`
+
+`review.md` must contain `APPROVED` or `REJECTED`. `context.md` is the implementer ground-truth bundle.
+
+### dev-spec-writer → `spec.md`
+
+Sections: `## 목표`, `## 범위`, `## 수용 기준`, `## 비범위`
+
+### dev-context-scout → `context-map.md`
+
+Sections: `## 관련 파일`, `## 패턴` (e2e-domain-scout may append `## E2E 확장`)
+
+### dev-architect → `architecture.md`
+
+Sections: `## 개요`, `## 컴포넌트`, `## 데이터 흐름`
+
+### dev-task-planner → `tasks.yaml`
+
+YAML task breakdown, min 5 lines.
+
+### dev-ux-designer → `ux-spec.md`
+
+Sections: `## 레이아웃`, `## 상태`
+
+### dev-researcher → `research.md`
+
+Sections: `## 요약`, `## 권장 사항`
+
+### dev-build-integrator → `build-report.json`
+
+```json
+{"passed": true, "commands": []}
+```
+
+### dev-security-auditor → `security-report.json`
+
+Same shape as e2e-security-auditor.
+
+### dev-pr-publisher → `pr.json`
+
+```json
+{"url": "https://github.com/...", "branch": "feature/name"}
+```
+
+### dev-ci-watcher → `ci-report.json`
+
+```json
+{"passed": true}
+```
 
 ### e2e-domain-scout → `context-map.md`
 
