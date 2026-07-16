@@ -16,6 +16,8 @@ from app.automation.page_objects.hom import (
     login_move,
     long_term_policy_certificate,
     main_access,
+    marketing_consent_apply,
+    marketing_consent_withdraw,
     phone_login,
 )
 from app.automation.page_objects.hom import (
@@ -41,5 +43,7 @@ PC_CHANNEL = ChannelProfile(
         compensation_result=compensation_result,
         compensation_cancel=compensation_cancel,
         long_term_policy_certificate=long_term_policy_certificate,
+        marketing_consent_apply=marketing_consent_apply,
+        marketing_consent_withdraw=marketing_consent_withdraw,
     ),
 )

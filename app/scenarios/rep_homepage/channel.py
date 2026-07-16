@@ -41,6 +41,8 @@ class ChannelSteps:
     compensation_result: StepAdapter
     compensation_cancel: StepAdapter
     long_term_policy_certificate: StepAdapter
+    marketing_consent_apply: StepAdapter
+    marketing_consent_withdraw: StepAdapter
 
 
 @dataclass(frozen=True)

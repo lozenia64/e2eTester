@@ -24,8 +24,10 @@
 6. `hom.compensation.result` — `app/automation/page_objects/hom/compensation_result.py` PageObject (`compensation_result` Flow)
 7. `hom.compensation.cancel` — `app/automation/page_objects/hom/compensation_cancel.py` PageObject (`compensation_cancel` Flow)
 8. `hom.proof.long_term_policy` — `app/automation/page_objects/hom/long_term_policy_certificate.py` PageObject (`long_term_policy_certificate` Flow)
+9. `hom.marketing.consent.apply` — `app/automation/page_objects/hom/marketing_consent_apply.py` PageObject (`marketing_consent_apply` Flow)
+10. `hom.marketing.consent.withdraw` — `app/automation/page_objects/hom/marketing_consent_withdraw.py` PageObject (`marketing_consent_withdraw` Flow)
 
-`compensation_result`·`compensation_cancel` PageObject는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/automation/page_objects/hom/compensation_result_common.py`에서 공유한다. 청구 식별 문구 상수는 `app/automation/scenarios/rep_homepage/constants.py`가 SSOT이다.
+`compensation_result`·`compensation_cancel` PageObject는 결과 목록 진입·탭 선택·대상 행 탐색·상세(result02) 진입 등 공통 로직을 `app/automation/page_objects/hom/compensation_result_common.py`에서 공유한다. `marketing_consent_apply`·`marketing_consent_withdraw`는 GNB 진입·라디오 상태 확인 등 공통 로직을 `app/automation/page_objects/hom/marketing_consent_common.py`에서 공유한다. 청구 식별 문구 상수는 `app/automation/scenarios/rep_homepage/constants.py`가 SSOT이다.
 
 모듈별 `timeout_seconds`: 로그인·보험금청구 접수·보험금청구 결과 조회·보험금청구 취소는 300초, 그 외 HOM 단계는 180초.
 
@@ -39,8 +41,10 @@
 - `hom.compensation.result` → `hom.compensation.charge`
 - `hom.compensation.cancel` → `hom.compensation.charge`
 - `hom.proof.long_term_policy` → `hom.login`
+- `hom.marketing.consent.apply` → `hom.login`
+- `hom.marketing.consent.withdraw` → `hom.marketing.consent.apply`
 
-즉 HOM은 더 이상 단일 직선 체인만으로 해석하지 않는다. 로그인 이후 계약조회, 보험금청구, 증명서 발급이 서로 다른 브랜치로 분기하며, 대시보드에서 모듈을 선택 해제하면 선택되지 않은 모듈은 Run 화면에서 `SKIPPED` 로 표시된다.
+즉 HOM은 더 이상 단일 직선 체인만으로 해석하지 않는다. 로그인 이후 계약조회, 보험금청구, 증명서 발급, 마케팅동의가 서로 다른 브랜치로 분기하며, 대시보드에서 모듈을 선택 해제하면 선택되지 않은 모듈은 Run 화면에서 `SKIPPED` 로 표시된다.
 
 ## 3. 워크플로우
 
@@ -54,6 +58,7 @@
               -> 계약조회 브랜치: 계약목록 조회 -> 계약상세 조회
               -> 보상 브랜치: 보험금청구 접수(charge00~charge06) -> 보험금청구 결과 조회(result01 → result02 → pop-result04) -> 보험금청구 취소(result01 → result02 → 접수취소 → result01)
               -> 증명서 브랜치: 장기보험증권 증명서 발급
+              -> 마케팅동의 브랜치: 마케팅동의 신청 -> 마케팅동의 철회
 ```
 
 ### Step 1. 메인화면 접속
@@ -221,6 +226,43 @@
 - 발급방법선택 테이블의 다운로드 라디오버튼 클릭
 - 화면 하단의 증명서발급 버튼 클릭. pdf 파일이 정상적으로 다운로드 되는지 확인.
 
+### Step 9. 마케팅동의 신청
+
+파일:
+
+- `app/automation/page_objects/hom/marketing_consent_apply.py`
+- `app/automation/page_objects/hom/marketing_consent_common.py` (GNB 진입·라디오·팝업·변경 버튼 공통 헬퍼)
+
+역할:
+
+- **진입**: GNB **MY한화** 호버 후 **`a[href*="/my/member/change-addition01.do"]`** 또는 **`link` 「마케팅활용동의신청/철회」** 클릭. MY한화 호버 시 **`#uiPOPCustInfoChg`** 고객정보 변경 안내 팝업이 뜨면 닫기(X/닫기) 후 진행하며, 클릭이 막히면 **`/my/member/change-addition01.do`** 직접 이동으로 대체한다.
+- `/my/member/change-addition01.do` 포함 URL 확인
+- **`동의하지 않습니다`** 라디오가 선택되어 있으면 다음 단계로 진행
+- **`동의하지 않습니다`** 라디오가 선택되지 않았으면 최종 성공(모듈 종료)
+- **`동의합니다`**(`#formAllAgreeY` / 모두 동의합니다) 라디오 클릭 → **`#uiPOPGmea000`** 상세동의서 팝업 표시 대기
+- 팝업 내 질문 행의 **`ul.list_word2 li`** 에서 **`□ 동의함`** 항목 클릭 (개인신용정보·광고성 각각). 라이브 사이트 검증상 닫기만으로는 본문 폼이 진행되지 않아 이 단계는 필수다.
+- 팝업 **`#btnClose`** 또는 **`button.ui-close`** 로 닫기
+- 본문 **`#formCheck1`**, **`#formAgree1`**(`input[type=checkbox]`) 체크, 연락 수단은 **`#return2`(문자)** 만 체크·나머지(`#return1`/`#return3`/`#return4`) 해제
+- 하단 **`변경`** 버튼 클릭. `alert` 발생 시 `login_common.add_dialog_logger` 가 자동 수락
+- 최종적으로 **`동의하지 않습니다`** 가 선택되지 않았으면 성공
+
+### Step 10. 마케팅동의 철회
+
+파일:
+
+- `app/automation/page_objects/hom/marketing_consent_withdraw.py`
+- `app/automation/page_objects/hom/marketing_consent_common.py`
+
+역할:
+
+- **진입**: Step 9와 동일하게 **MY한화 > 마케팅활용동의신청/철회** 이동
+- `/my/member/change-addition01.do` 포함 URL 확인
+- **`동의하지 않습니다`** 가 선택되어 있지 않으면 다음 단계로 진행
+- **`동의하지 않습니다`** 가 이미 선택되어 있으면 최종 성공(모듈 종료)
+- **`동의하지 않습니다`** 라디오 클릭
+- 하단 **`변경`** 버튼 클릭. `alert` 발생 시 자동 수락
+- 최종적으로 **`동의하지 않습니다`** 가 선택되어 있으면 성공
+
 
 
 ## 4. UI 입력 모델
@@ -244,7 +286,7 @@
 
 추가 선택 규칙:
 
-- 실행 전 그래프에서 8개 모듈의 실행 여부를 개별 선택할 수 있다.
-- 기본값은 8개 전체 선택이다.
+- 실행 전 그래프에서 10개 모듈의 실행 여부를 개별 선택할 수 있다.
+- 기본값은 10개 전체 선택이다.
 - 선택 해제된 모듈은 실행 요청 payload의 `selected_module_ids` 에 포함되지 않으며 Run 화면에서 `SKIPPED` 로 렌더링된다.
 - 선행 모듈이 빠진 잘못된 조합은 UI에서 경고를 보여줄 수 있지만 최종 판정은 서버가 수행하며, 실행 생성 시 400 오류로 거부된다.

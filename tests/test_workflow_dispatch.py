@@ -119,9 +119,10 @@ def test_step_needs_input_maps_to_waiting_input(tmp_path):
 
 def test_runtime_error_maps_to_anomaly(tmp_path):
     executor = _FakeExecutor(ArtifactManager(tmp_path))
-    result, _ = _run(executor, "anomaly", tmp_path)
+    result, logs = _run(executor, "anomaly", tmp_path)
     assert result.status == ModuleStatus.ANOMALY
     assert result.last_error == "사이트 이상"
+    assert not any("[diagnostic] page_html_begin" in line for line in logs)
 
 
 def test_other_exception_maps_to_error(tmp_path):

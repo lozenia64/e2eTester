@@ -25,6 +25,8 @@ def test_hom_page_objects_are_importable():
         contract_list,
         login_move,
         main_access,
+        marketing_consent_apply,
+        marketing_consent_withdraw,
         phone_login,
     )
 
@@ -35,6 +37,8 @@ def test_hom_page_objects_are_importable():
         contract_list,
         compensation_charge,
         compensation_cancel,
+        marketing_consent_apply,
+        marketing_consent_withdraw,
     ):
         assert callable(getattr(module, "run", None)) or hasattr(module, "request_sms")
 
