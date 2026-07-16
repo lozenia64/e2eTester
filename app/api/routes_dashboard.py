@@ -309,6 +309,7 @@ async def run_dashboard(
         "run.html",
         {
             "run": run,
+            "run_modules_bootstrap": [m.model_dump(mode="json") for m in run.modules],
             "current_user": current_user,
         },
     )

@@ -1929,9 +1929,11 @@ function bindSchedulesOverview() {
 
 function updateModuleCard(module) {
     rememberModuleState(module);
+    rememberModuleDetail(module);
     updateRunProgress();
+    syncDebugTimelineItem(module);
 
-    const card = document.querySelector(`[data-module-id="${module.module_id}"]`);
+    const card = document.querySelector(`#node-grid [data-module-id="${module.module_id}"]`);
     if (!card) {
         return;
     }
@@ -1973,11 +1975,46 @@ function updateModuleCard(module) {
     }
 
     tickRunningElapsed();
+
+    if (debugWorkspaceState.selectedModuleId === module.module_id) {
+        renderDebugDetailPanel(module);
+    }
 }
 
 const logEntries = [];
 let logFilterModuleId = "";
 let logSearchText = "";
+let logAutoScrollEnabled = true;
+/** @type {"live" | "paused" | "snapshot"} */
+let logHoldMode = "live";
+let logHoldFromIndex = 0;
+let logSnapshotSavedAutoScroll = null;
+const MAX_LOG_ENTRIES = 10000;
+
+function logDisplaySourceEntries() {
+    if (logHoldMode === "live") {
+        return logEntries;
+    }
+    return logEntries.slice(0, logHoldFromIndex);
+}
+
+function pendingLogEntryCount() {
+    if (logHoldMode === "live") {
+        return 0;
+    }
+    return Math.max(0, logEntries.length - logHoldFromIndex);
+}
+
+function isLogDisplayHeld() {
+    return logHoldMode !== "live";
+}
+
+function resetLogHoldState() {
+    logHoldMode = "live";
+    logHoldFromIndex = 0;
+    logSnapshotSavedAutoScroll = null;
+    updateDebugStreamControls();
+}
 
 function logEntryMatchesFilters(entry) {
     if (logFilterModuleId && entry.moduleId !== logFilterModuleId) {
@@ -1996,17 +2033,54 @@ function formatLogLine(entry) {
 function createLogLineNode(entry) {
     const line = document.createElement("div");
     line.className = "log-line";
+    if (isDebugWorkspaceActive()) {
+        line.classList.add("is-clickable");
+        if (
+            debugWorkspaceState.selectedModuleId &&
+            entry.moduleId === debugWorkspaceState.selectedModuleId
+        ) {
+            line.classList.add("is-highlighted");
+        }
+    }
     line.dataset.moduleId = entry.moduleId;
     line.textContent = formatLogLine(entry);
     return line;
 }
 
-function renderLogConsole() {
-    const consoleNode = document.getElementById("log-console");
-    if (!consoleNode) {
+function getLogConsoleNodes() {
+    return ["log-console", "log-console-debug"]
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+}
+
+function shouldAutoScrollLogConsole(consoleNode) {
+    if (!logAutoScrollEnabled || isLogDisplayHeld()) {
+        return false;
+    }
+    return consoleNode.scrollHeight - consoleNode.scrollTop - consoleNode.clientHeight < 48;
+}
+
+function appendLogEntryToDom(entry) {
+    if (!logEntryMatchesFilters(entry)) {
         return;
     }
-    const visibleEntries = logEntries.filter(logEntryMatchesFilters);
+    for (const consoleNode of getLogConsoleNodes()) {
+        const emptyNode = consoleNode.querySelector(".log-empty");
+        if (emptyNode) {
+            emptyNode.remove();
+        }
+        const nearBottom = shouldAutoScrollLogConsole(consoleNode);
+        consoleNode.appendChild(createLogLineNode(entry));
+        if (nearBottom) {
+            consoleNode.scrollTop = consoleNode.scrollHeight;
+        }
+    }
+}
+
+function renderLogConsoleTo(consoleNode) {
+    const visibleEntries = logDisplaySourceEntries().filter(logEntryMatchesFilters);
+    const previousScrollTop = consoleNode.scrollTop;
+    const wasNearBottom = shouldAutoScrollLogConsole(consoleNode);
     consoleNode.innerHTML = "";
     for (const entry of visibleEntries) {
         consoleNode.appendChild(createLogLineNode(entry));
@@ -2014,36 +2088,67 @@ function renderLogConsole() {
     if (visibleEntries.length === 0) {
         const empty = document.createElement("div");
         empty.className = "log-empty";
-        empty.textContent = logEntries.length === 0 ? "아직 출력된 로그가 없습니다." : "조건에 맞는 로그가 없습니다.";
+        const sourceCount = logDisplaySourceEntries().length;
+        empty.textContent =
+            logEntries.length === 0
+                ? "아직 출력된 로그가 없습니다."
+                : sourceCount === 0
+                  ? "조건에 맞는 로그가 없습니다."
+                  : "일시정지/스냅샷 상태에서 표시할 로그가 없습니다.";
         consoleNode.appendChild(empty);
     }
-    consoleNode.scrollTop = consoleNode.scrollHeight;
+    if (wasNearBottom) {
+        consoleNode.scrollTop = consoleNode.scrollHeight;
+    } else if (!logAutoScrollEnabled || isLogDisplayHeld()) {
+        consoleNode.scrollTop = Math.min(previousScrollTop, consoleNode.scrollHeight);
+    }
+}
+
+function renderLogConsole() {
+    for (const consoleNode of getLogConsoleNodes()) {
+        renderLogConsoleTo(consoleNode);
+    }
+    updateDebugStreamControls();
+}
+
+function trimLogEntriesIfNeeded() {
+    const overflow = logEntries.length - MAX_LOG_ENTRIES;
+    if (overflow <= 0) {
+        return false;
+    }
+    logEntries.splice(0, overflow);
+    if (isLogDisplayHeld()) {
+        logHoldFromIndex = Math.max(0, logHoldFromIndex - overflow);
+    }
+    return true;
 }
 
 function appendLogEntry(moduleId, message) {
     const entry = { moduleId: moduleId || "", message };
     logEntries.push(entry);
-    if (!logEntryMatchesFilters(entry)) {
+    if (trimLogEntriesIfNeeded()) {
+        renderLogConsole();
         return;
     }
-    const consoleNode = document.getElementById("log-console");
-    if (!consoleNode) {
+    if (isLogDisplayHeld()) {
+        updateDebugStreamControls();
         return;
     }
-    const emptyNode = consoleNode.querySelector(".log-empty");
-    if (emptyNode) {
-        emptyNode.remove();
-    }
-    const nearBottom = consoleNode.scrollHeight - consoleNode.scrollTop - consoleNode.clientHeight < 48;
-    consoleNode.appendChild(createLogLineNode(entry));
-    if (nearBottom) {
-        consoleNode.scrollTop = consoleNode.scrollHeight;
-    }
+    appendLogEntryToDom(entry);
+    updateDebugStreamControls();
 }
 
 function loadLogEntriesFromRun(runPayload) {
+    const wasHeld = isLogDisplayHeld();
+    const prevHoldMode = logHoldMode;
+    const prevHoldIndex = logHoldFromIndex;
+
     logEntries.length = 0;
-    const modules = [...(runPayload.modules ?? [])].sort(
+    if (!wasHeld) {
+        resetLogHoldState();
+    }
+
+    const modules = [...resolveRunPayloadModules(runPayload)].sort(
         (left, right) => Number(left.order ?? 0) - Number(right.order ?? 0),
     );
     for (const module of modules) {
@@ -2051,11 +2156,18 @@ function loadLogEntriesFromRun(runPayload) {
             logEntries.push({ moduleId: module.module_id, message: line });
         }
     }
+    trimLogEntriesIfNeeded();
+
+    if (wasHeld) {
+        logHoldMode = prevHoldMode;
+        logHoldFromIndex = Math.min(prevHoldIndex, logEntries.length);
+    }
+
     renderLogConsole();
 }
 
 function logExportText() {
-    return logEntries.filter(logEntryMatchesFilters).map(formatLogLine).join("\n");
+    return logDisplaySourceEntries().filter(logEntryMatchesFilters).map(formatLogLine).join("\n");
 }
 
 function currentRunId() {
@@ -2105,12 +2217,14 @@ function bindLogControls() {
     if (filter) {
         filter.addEventListener("change", () => {
             logFilterModuleId = filter.value;
+            syncDebugLogSearchInputs();
             renderLogConsole();
         });
     }
     if (search) {
         search.addEventListener("input", () => {
             logSearchText = search.value.trim().toLowerCase();
+            syncDebugLogSearchInputs();
             renderLogConsole();
         });
     }
@@ -2119,6 +2233,669 @@ function bindLogControls() {
     }
     if (downloadButton) {
         downloadButton.addEventListener("click", downloadLogs);
+    }
+}
+
+// ── Run 상세: 실패 탐색 워크스페이스 ─────────────────────────────────────────
+const moduleDetailCache = new Map();
+let debugWorkspaceBound = false;
+const debugWorkspaceState = {
+    available: false,
+    active: false,
+    userPrefersClassic: false,
+    selectedModuleId: "",
+};
+
+function rememberModuleDetail(module) {
+    moduleDetailCache.set(module.module_id, { ...module });
+}
+
+function parseRunBootstrap() {
+    const modulesNode = document.getElementById("run-modules-bootstrap");
+    const statusNode = document.getElementById("run-status-bootstrap");
+    if (!modulesNode) {
+        return { modules: [], runStatus: "" };
+    }
+    try {
+        const modules = JSON.parse(modulesNode.textContent || "[]");
+        const runStatus = statusNode ? JSON.parse(statusNode.textContent || '""') : "";
+        return { modules, runStatus };
+    } catch (error) {
+        console.error("Run bootstrap 파싱 실패", error);
+        return { modules: [], runStatus: "" };
+    }
+}
+
+function sortedModuleDetails() {
+    return [...moduleDetailCache.values()].sort(
+        (left, right) => Number(left.order ?? 0) - Number(right.order ?? 0),
+    );
+}
+
+function isFailedRunStatus(runStatus) {
+    const status = String(runStatus ?? "").toLowerCase();
+    return isModuleIssueStatus(status) || status === "failed";
+}
+
+function shouldOfferDebugWorkspace(runStatus) {
+    return isFailedRunStatus(runStatus);
+}
+
+function isDebugWorkspaceActive() {
+    return debugWorkspaceState.active && !debugWorkspaceState.userPrefersClassic;
+}
+
+function preferredDebugModuleId(modules) {
+    const issue = modules.find((module) => isModuleIssueStatus(module.status));
+    if (issue) {
+        return issue.module_id;
+    }
+    const withShot = modules.find((module) => moduleScreenshotUrl(module));
+    if (withShot) {
+        return withShot.module_id;
+    }
+    return modules[0]?.module_id ?? "";
+}
+
+function artifactBaseName(artifact) {
+    return String(artifact).split("/").pop()?.toLowerCase() ?? "";
+}
+
+function moduleScreenshotUrl(module) {
+    const artifacts = module?.artifacts ?? [];
+    const pngArtifacts = artifacts.filter((artifact) => /\.png$/i.test(artifact));
+    if (pngArtifacts.length === 0) {
+        return null;
+    }
+    const finalShot = pngArtifacts.find((artifact) => artifactBaseName(artifact) === "final.png");
+    return finalShot ?? pngArtifacts[pngArtifacts.length - 1];
+}
+
+function applyRunStatusUpdate(runStatus, runPayload = {}) {
+    const runStatusEl = document.getElementById("run-status");
+    if (!runStatusEl || !runStatus) {
+        return;
+    }
+    runStatusEl.textContent = runStatus;
+    runStatusEl.className = statusBadgeClassName(runStatus, "px-3 py-1.5");
+    updateRunActions(runStatus);
+    refreshDebugWorkspaceAfterRunPayload({
+        ...runPayload,
+        status: runStatus,
+    });
+}
+
+function timelineDotClass(status) {
+    const normalized = normalizeOutcomeStatus(status);
+    return `run-debug-timeline-item__dot--${normalized}`;
+}
+
+function renderDebugTimeline() {
+    const list = document.getElementById("debug-timeline");
+    if (!list) {
+        return;
+    }
+    list.innerHTML = "";
+    for (const [index, module] of sortedModuleDetails().entries()) {
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "run-debug-timeline-item";
+        button.dataset.moduleId = module.module_id;
+        if (module.module_id === debugWorkspaceState.selectedModuleId) {
+            button.classList.add("is-selected");
+        }
+
+        const dot = document.createElement("span");
+        dot.className = `run-debug-timeline-item__dot ${timelineDotClass(module.status)}`;
+        dot.setAttribute("aria-hidden", "true");
+
+        const body = document.createElement("span");
+        body.className = "run-debug-timeline-item__body";
+
+        const name = document.createElement("span");
+        name.className = "run-debug-timeline-item__name";
+        name.textContent = module.name;
+
+        const meta = document.createElement("span");
+        meta.className = "run-debug-timeline-item__meta";
+        meta.textContent = `${index + 1}. ${statusDisplayLabel({ status: module.status })}`;
+
+        body.appendChild(name);
+        body.appendChild(meta);
+        button.appendChild(dot);
+        button.appendChild(body);
+        button.addEventListener("click", () => selectDebugModule(module.module_id));
+        item.appendChild(button);
+        list.appendChild(item);
+    }
+}
+
+function syncDebugTimelineItem(module) {
+    if (!document.getElementById("debug-timeline")) {
+        return;
+    }
+    const button = document.querySelector(
+        `#debug-timeline .run-debug-timeline-item[data-module-id="${module.module_id}"]`,
+    );
+    if (!button) {
+        renderDebugTimeline();
+        return;
+    }
+    const dot = button.querySelector(".run-debug-timeline-item__dot");
+    if (dot) {
+        dot.className = `run-debug-timeline-item__dot ${timelineDotClass(module.status)}`;
+    }
+    const meta = button.querySelector(".run-debug-timeline-item__meta");
+    if (meta) {
+        const index = sortedModuleDetails().findIndex((entry) => entry.module_id === module.module_id);
+        meta.textContent = `${index + 1}. ${statusDisplayLabel({ status: module.status })}`;
+    }
+}
+
+function setDebugTimelineSelection(moduleId) {
+    const timelineContainer = document.getElementById("debug-timeline");
+    if (!timelineContainer) {
+        return;
+    }
+    timelineContainer.querySelectorAll(".run-debug-timeline-item").forEach((button) => {
+        button.classList.toggle("is-selected", button.dataset.moduleId === moduleId);
+    });
+}
+
+function scrollDebugLogMessageIntoView(moduleId, formattedMessage) {
+    const consoleNode = document.getElementById("log-console-debug");
+    if (!consoleNode) {
+        return;
+    }
+    for (const line of consoleNode.querySelectorAll(".log-line")) {
+        if (line.dataset.moduleId === moduleId && line.textContent === formattedMessage) {
+            line.scrollIntoView({ block: "center", behavior: "smooth" });
+            return;
+        }
+    }
+}
+
+function selectDebugModule(moduleId, options = {}) {
+    const { silent = false, scrollLogMessage = null } = options;
+    if (!moduleId) {
+        return;
+    }
+    debugWorkspaceState.selectedModuleId = moduleId;
+    logFilterModuleId = moduleId;
+    syncClassicLogFilter();
+
+    const timelineButton = document.querySelector(
+        `#debug-timeline .run-debug-timeline-item[data-module-id="${moduleId}"]`,
+    );
+    if (timelineButton) {
+        setDebugTimelineSelection(moduleId);
+    } else {
+        renderDebugTimeline();
+        setDebugTimelineSelection(moduleId);
+    }
+
+    const module = moduleDetailCache.get(moduleId);
+    if (module) {
+        renderDebugDetailPanel(module);
+    }
+    renderLogConsole();
+    if (!silent) {
+        highlightDebugLogLines(moduleId);
+        if (scrollLogMessage) {
+            scrollDebugLogMessageIntoView(moduleId, scrollLogMessage);
+        } else {
+            document
+                .querySelector(`#debug-timeline .run-debug-timeline-item[data-module-id="${moduleId}"]`)
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+    }
+}
+
+function renderDebugDetailPanel(module) {
+    const title = document.getElementById("debug-module-title");
+    const message = document.getElementById("debug-module-message");
+    const urlNode = document.getElementById("debug-current-url");
+    const screenshot = document.getElementById("debug-screenshot");
+    const screenshotBtn = document.getElementById("debug-screenshot-btn");
+    const screenshotEmpty = document.getElementById("debug-screenshot-empty");
+    const dialogsWrap = document.getElementById("debug-dialogs");
+    const dialogList = document.getElementById("debug-dialog-list");
+    const analysisWrap = document.getElementById("debug-analysis");
+    const artifactsWrap = document.getElementById("debug-artifacts");
+    const artifactLinks = document.getElementById("debug-artifact-links");
+
+    if (title) {
+        title.textContent = `${module.name} · ${module.module_id}`;
+    }
+    if (message) {
+        message.textContent = module.message || "";
+    }
+    if (urlNode) {
+        const url = module.current_url || "";
+        urlNode.textContent = url || "—";
+        urlNode.title = url;
+    }
+
+    const shotUrl = moduleScreenshotUrl(module);
+    if (screenshot && screenshotBtn && screenshotEmpty) {
+        if (shotUrl) {
+            screenshot.src = shotUrl;
+            screenshotBtn.classList.remove("is-hidden");
+            screenshotEmpty.classList.add("is-hidden");
+        } else {
+            screenshot.removeAttribute("src");
+            screenshotBtn.classList.add("is-hidden");
+            screenshotEmpty.classList.remove("is-hidden");
+        }
+    }
+
+    const dialogs = module.dialog_messages ?? [];
+    if (dialogsWrap && dialogList) {
+        dialogList.innerHTML = "";
+        dialogsWrap.classList.toggle("is-hidden", dialogs.length === 0);
+        for (const text of dialogs) {
+            const li = document.createElement("li");
+            li.textContent = text;
+            dialogList.appendChild(li);
+        }
+    }
+
+    const analysis = module.failure_analysis;
+    if (analysisWrap) {
+        analysisWrap.classList.toggle("is-hidden", !analysis);
+        if (analysis) {
+            const category = document.getElementById("debug-analysis-category");
+            const summary = document.getElementById("debug-analysis-summary");
+            const action = document.getElementById("debug-analysis-action");
+            const dev = document.getElementById("debug-analysis-dev");
+            if (category) {
+                category.textContent = analysis.category || "";
+            }
+            if (summary) {
+                summary.textContent = analysis.user_summary || "";
+            }
+            if (action) {
+                action.textContent = analysis.recommended_action || "";
+            }
+            if (dev) {
+                dev.textContent = analysis.developer_details || "";
+            }
+        }
+    }
+
+    const artifacts = module.artifacts ?? [];
+    if (artifactsWrap && artifactLinks) {
+        artifactLinks.innerHTML = "";
+        artifactsWrap.classList.toggle("is-hidden", artifacts.length === 0);
+        for (const artifact of artifacts) {
+            const link = document.createElement("a");
+            link.href = artifact;
+            link.target = "_blank";
+            link.rel = "noreferrer";
+            link.textContent = artifact.split("/").pop();
+            artifactLinks.appendChild(link);
+        }
+    }
+}
+
+function syncClassicLogFilter() {
+    const filter = document.getElementById("log-filter");
+    if (filter) {
+        filter.value = logFilterModuleId;
+    }
+}
+
+function syncDebugLogSearchInputs() {
+    const debugSearch = document.getElementById("debug-log-search");
+    const classicSearch = document.getElementById("log-search");
+    if (debugSearch && document.activeElement !== debugSearch) {
+        debugSearch.value = logSearchText;
+    }
+    if (classicSearch && document.activeElement !== classicSearch) {
+        classicSearch.value = logSearchText;
+    }
+}
+
+function syncLogAutoScrollButton() {
+    const autoScrollButton = document.getElementById("debug-log-autoscroll");
+    if (!autoScrollButton) {
+        return;
+    }
+    autoScrollButton.setAttribute("aria-pressed", String(logAutoScrollEnabled));
+    autoScrollButton.classList.toggle("is-active", logAutoScrollEnabled);
+    autoScrollButton.disabled = logHoldMode === "snapshot";
+}
+
+function updateDebugStreamControls() {
+    const hint = document.getElementById("debug-log-pause-hint");
+    const pauseButton = document.getElementById("debug-log-pause");
+    const snapshotButton = document.getElementById("debug-log-snapshot");
+    const pending = pendingLogEntryCount();
+
+    if (pauseButton) {
+        const paused = logHoldMode === "paused";
+        pauseButton.setAttribute("aria-pressed", String(paused));
+        pauseButton.classList.toggle("is-active", paused);
+        pauseButton.disabled = logHoldMode === "snapshot";
+        pauseButton.textContent = paused ? "재개" : "일시정지";
+    }
+    if (snapshotButton) {
+        const snapped = logHoldMode === "snapshot";
+        snapshotButton.setAttribute("aria-pressed", String(snapped));
+        snapshotButton.classList.toggle("is-active", snapped);
+        snapshotButton.textContent = snapped ? "스냅샷 해제" : "스냅샷 고정";
+    }
+    syncLogAutoScrollButton();
+    if (!hint) {
+        return;
+    }
+    if (logHoldMode === "snapshot") {
+        hint.textContent =
+            pending > 0 ? `스냅샷 고정 · ${pending}건 대기 중` : "스냅샷 고정 — 이 시점 화면 유지";
+        hint.classList.remove("is-hidden");
+        return;
+    }
+    if (logHoldMode === "paused") {
+        hint.textContent = pending > 0 ? `일시정지 · ${pending}건 대기 중` : "일시정지 — 신규 로그 수집 중단";
+        hint.classList.remove("is-hidden");
+        return;
+    }
+    if (!logAutoScrollEnabled) {
+        hint.textContent = "자동 스크롤 꺼짐";
+        hint.classList.remove("is-hidden");
+        return;
+    }
+    hint.classList.add("is-hidden");
+    hint.textContent = "";
+}
+
+function enterLogPause() {
+    if (logHoldMode === "snapshot") {
+        return;
+    }
+    if (logHoldMode === "live") {
+        logHoldFromIndex = logEntries.length;
+        logHoldMode = "paused";
+    }
+    updateDebugStreamControls();
+}
+
+function resumeLogPause() {
+    if (logHoldMode !== "paused") {
+        return;
+    }
+    logHoldMode = "live";
+    logHoldFromIndex = 0;
+    renderLogConsole();
+    updateDebugStreamControls();
+}
+
+function toggleLogPause() {
+    if (logHoldMode === "paused") {
+        resumeLogPause();
+        return;
+    }
+    enterLogPause();
+}
+
+function enterLogSnapshot() {
+    if (logHoldMode !== "paused") {
+        logHoldFromIndex = logEntries.length;
+    }
+    if (logHoldMode !== "snapshot") {
+        logSnapshotSavedAutoScroll = logAutoScrollEnabled;
+        logAutoScrollEnabled = false;
+    }
+    logHoldMode = "snapshot";
+    updateDebugStreamControls();
+}
+
+function releaseLogSnapshot() {
+    if (logHoldMode !== "snapshot") {
+        return;
+    }
+    logHoldMode = "live";
+    logHoldFromIndex = 0;
+    if (logSnapshotSavedAutoScroll !== null) {
+        logAutoScrollEnabled = logSnapshotSavedAutoScroll;
+        logSnapshotSavedAutoScroll = null;
+    }
+    renderLogConsole();
+    updateDebugStreamControls();
+}
+
+function toggleLogSnapshot() {
+    if (logHoldMode === "snapshot") {
+        releaseLogSnapshot();
+        return;
+    }
+    enterLogSnapshot();
+}
+
+function highlightDebugLogLines(moduleId) {
+    for (const consoleNode of getLogConsoleNodes()) {
+        for (const line of consoleNode.querySelectorAll(".log-line")) {
+            line.classList.toggle("is-highlighted", Boolean(moduleId) && line.dataset.moduleId === moduleId);
+        }
+    }
+}
+
+function setRunPageViewMode(useDebug) {
+    const workspace = document.getElementById("run-debug-workspace");
+    const classicModules = document.getElementById("run-classic-modules");
+    const classicLogs = document.getElementById("run-classic-logs");
+    const toggle = document.getElementById("run-view-toggle");
+    if (!workspace) {
+        return;
+    }
+    if (!debugWorkspaceState.available) {
+        debugWorkspaceState.active = false;
+        debugWorkspaceState.userPrefersClassic = true;
+        workspace.classList.add("is-hidden");
+        classicModules?.classList.remove("is-hidden");
+        classicLogs?.classList.remove("is-hidden");
+        toggle?.classList.add("is-hidden");
+        return;
+    }
+
+    debugWorkspaceState.active = useDebug;
+    debugWorkspaceState.userPrefersClassic = !useDebug;
+    workspace.classList.toggle("is-hidden", !useDebug);
+    classicModules?.classList.toggle("is-hidden", useDebug);
+    classicLogs?.classList.toggle("is-hidden", useDebug);
+
+    if (toggle) {
+        toggle.classList.remove("is-hidden");
+        toggle.textContent = useDebug ? "클래식 보기" : "탐색 워크스페이스";
+        toggle.setAttribute("aria-pressed", useDebug ? "true" : "false");
+    }
+
+    if (useDebug) {
+        if (!debugWorkspaceState.selectedModuleId) {
+            debugWorkspaceState.selectedModuleId = preferredDebugModuleId(sortedModuleDetails());
+        }
+        renderDebugTimeline();
+        selectDebugModule(debugWorkspaceState.selectedModuleId, { silent: true });
+    } else {
+        if (isLogDisplayHeld()) {
+            resetLogHoldState();
+        }
+        syncClassicLogFilter();
+        renderLogConsole();
+    }
+}
+
+function openDebugLightbox(url) {
+    const box = document.getElementById("debug-lightbox");
+    const image = document.getElementById("debug-lightbox-img");
+    if (!box || !image || !url) {
+        return;
+    }
+    image.src = url;
+    box.classList.remove("is-hidden");
+}
+
+function closeDebugLightbox() {
+    const box = document.getElementById("debug-lightbox");
+    const image = document.getElementById("debug-lightbox-img");
+    if (!box || !image) {
+        return;
+    }
+    image.removeAttribute("src");
+    box.classList.add("is-hidden");
+}
+
+function bindDebugWorkspace() {
+    const workspace = document.getElementById("run-debug-workspace");
+    if (!workspace || debugWorkspaceBound) {
+        return;
+    }
+    debugWorkspaceBound = true;
+
+    const { modules, runStatus } = parseRunBootstrap();
+    for (const module of modules) {
+        rememberModuleState(module);
+        rememberModuleDetail(module);
+    }
+    updateRunProgress();
+    loadLogEntriesFromRun({ modules });
+
+    debugWorkspaceState.available = shouldOfferDebugWorkspace(runStatus);
+
+    document.getElementById("run-view-toggle")?.addEventListener("click", () => {
+        if (!debugWorkspaceState.available) {
+            return;
+        }
+        setRunPageViewMode(!isDebugWorkspaceActive());
+    });
+
+    document.getElementById("debug-screenshot-btn")?.addEventListener("click", () => {
+        const module = moduleDetailCache.get(debugWorkspaceState.selectedModuleId);
+        const url = module ? moduleScreenshotUrl(module) : null;
+        if (url) {
+            openDebugLightbox(url);
+        }
+    });
+    document.getElementById("debug-lightbox-close")?.addEventListener("click", closeDebugLightbox);
+    document.getElementById("debug-lightbox")?.addEventListener("click", (event) => {
+        if (event.target.id === "debug-lightbox") {
+            closeDebugLightbox();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeDebugLightbox();
+        }
+    });
+
+    const pauseButton = document.getElementById("debug-log-pause");
+    pauseButton?.addEventListener("click", toggleLogPause);
+
+    document.getElementById("debug-log-snapshot")?.addEventListener("click", toggleLogSnapshot);
+
+    const autoScrollButton = document.getElementById("debug-log-autoscroll");
+    autoScrollButton?.addEventListener("click", () => {
+        if (logHoldMode === "snapshot") {
+            return;
+        }
+        logAutoScrollEnabled = !logAutoScrollEnabled;
+        syncLogAutoScrollButton();
+        updateDebugStreamControls();
+        if (logAutoScrollEnabled && !isLogDisplayHeld()) {
+            for (const consoleNode of getLogConsoleNodes()) {
+                consoleNode.scrollTop = consoleNode.scrollHeight;
+            }
+        }
+    });
+
+    document.getElementById("debug-log-search")?.addEventListener("input", (event) => {
+        logSearchText = event.target.value.trim().toLowerCase();
+        syncDebugLogSearchInputs();
+        renderLogConsole();
+    });
+    document.getElementById("debug-log-copy")?.addEventListener("click", (event) => {
+        copyLogsToClipboard(event.currentTarget);
+    });
+    document.getElementById("debug-log-download")?.addEventListener("click", downloadLogs);
+
+    for (const consoleNode of getLogConsoleNodes()) {
+        consoleNode.addEventListener("click", (event) => {
+            if (!isDebugWorkspaceActive()) {
+                return;
+            }
+            const line = event.target.closest(".log-line");
+            if (!line?.dataset.moduleId) {
+                return;
+            }
+            selectDebugModule(line.dataset.moduleId, {
+                scrollLogMessage: line.textContent,
+            });
+        });
+    }
+
+    document.querySelectorAll("#node-grid .node-card").forEach((card) => {
+        card.addEventListener("click", (event) => {
+            if (event.target.closest("a")) {
+                return;
+            }
+            if (!debugWorkspaceState.available) {
+                return;
+            }
+            const moduleId = card.dataset.moduleId;
+            if (!moduleId) {
+                return;
+            }
+            if (!isDebugWorkspaceActive()) {
+                setRunPageViewMode(true);
+            }
+            selectDebugModule(moduleId);
+        });
+    });
+
+    if (debugWorkspaceState.available) {
+        setRunPageViewMode(true);
+    }
+}
+
+function resolveRunPayloadModules(runPayload) {
+    const fromPayload = runPayload?.modules;
+    if (Array.isArray(fromPayload) && fromPayload.length > 0) {
+        return fromPayload;
+    }
+    return sortedModuleDetails();
+}
+
+function refreshDebugWorkspaceAfterRunPayload(runPayload) {
+    const modules = resolveRunPayloadModules(runPayload);
+    if (!modules.length) {
+        return;
+    }
+    for (const module of modules) {
+        rememberModuleDetail(module);
+    }
+    const runStatus = runPayload?.status ?? document.getElementById("run-status")?.textContent ?? "";
+    const shouldOffer = shouldOfferDebugWorkspace(runStatus);
+    if (!debugWorkspaceState.available && shouldOffer) {
+        debugWorkspaceState.available = true;
+        if (!debugWorkspaceState.selectedModuleId) {
+            debugWorkspaceState.selectedModuleId = preferredDebugModuleId(modules);
+        }
+        if (debugWorkspaceState.userPrefersClassic) {
+            document.getElementById("run-view-toggle")?.classList.remove("is-hidden");
+        } else {
+            setRunPageViewMode(true);
+        }
+    }
+    if (!debugWorkspaceState.available) {
+        return;
+    }
+    if (isDebugWorkspaceActive()) {
+        renderDebugTimeline();
+        const module = moduleDetailCache.get(debugWorkspaceState.selectedModuleId);
+        if (module) {
+            renderDebugDetailPanel(module);
+        }
     }
 }
 
@@ -3166,9 +3943,7 @@ function bindRunSocket() {
         const message = JSON.parse(event.data);
 
         if (message.event_type === "snapshot") {
-            document.getElementById("run-status").textContent = message.payload.status;
-            document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
-            updateRunActions(message.payload.status);
+            applyRunStatusUpdate(message.payload.status, message.payload);
             updateOtpPanel(message.payload);
             updateComparisonPanel(message.payload);
             loadLogEntriesFromRun(message.payload);
@@ -3187,10 +3962,7 @@ function bindRunSocket() {
         }
 
         if (message.run_status) {
-            const runStatus = document.getElementById("run-status");
-            runStatus.textContent = message.run_status;
-            runStatus.className = statusBadgeClassName(message.run_status, "px-3 py-1.5");
-            updateRunActions(message.run_status);
+            applyRunStatusUpdate(message.run_status, message.payload);
         }
 
         if (message.event_type === "module_waiting_input" && message.payload?.module) {
@@ -3206,6 +3978,10 @@ function bindRunSocket() {
 
         if (message.event_type === "run_finished") {
             updateComparisonPanel(message.payload);
+            applyRunStatusUpdate(
+                message.payload?.status ?? message.run_status,
+                message.payload ?? {},
+            );
         }
     });
 }
@@ -3267,6 +4043,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindRunsHistory();
     bindSchedulesOverview();
     bindLogControls();
+    bindDebugWorkspace();
     startRuntimeTicker();
     bindRunActions();
     bindOtpForm();

@@ -3,7 +3,7 @@
 {% block title %}Run Dashboard{% endblock %}
 
 {% block content %}
-{% set status_pill = {'pending': 'bg-gray-100 text-gray-600', 'queued': 'bg-gray-100 text-gray-600', 'running': 'bg-blue-100 text-blue-700', 'waiting_input': 'bg-amber-100 text-amber-700', 'passed': 'bg-emerald-100 text-emerald-700', 'failed': 'bg-red-100 text-red-700', 'blocked': 'bg-orange-100 text-orange-700', 'skipped': 'bg-slate-200 text-slate-700', 'cancelled': 'bg-zinc-200 text-zinc-700'} %}
+{% set status_pill = {'pending': 'bg-gray-100 text-gray-600', 'queued': 'bg-gray-100 text-gray-600', 'running': 'bg-blue-100 text-blue-700', 'waiting_input': 'bg-amber-100 text-amber-700', 'passed': 'bg-emerald-100 text-emerald-700', 'anomaly': 'bg-amber-100 text-amber-800', 'error': 'bg-red-100 text-red-700', 'failed': 'bg-amber-100 text-amber-800', 'blocked': 'bg-orange-100 text-orange-700', 'skipped': 'bg-slate-200 text-slate-700', 'cancelled': 'bg-zinc-200 text-zinc-700'} %}
 {% set active_statuses = ['pending', 'running', 'waiting_input'] %}
 
 <!-- 페이지 헤더 -->
@@ -22,8 +22,12 @@
         <span id="run-status" class="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold {{ status_pill.get(run.status|lower, 'bg-gray-100 text-gray-600') }}">{{ run.status }}</span>
         <button type="button" id="run-cancel" class="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60{% if run.status|lower not in active_statuses %} hidden{% endif %}">실행 취소</button>
         <button type="button" id="run-rerun" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60{% if run.status|lower in active_statuses %} hidden{% endif %}">동일 조건으로 재실행</button>
+        <button type="button" id="run-view-toggle" class="is-hidden inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-4 focus:ring-indigo-100" aria-pressed="false">클래식 보기</button>
     </div>
 </div>
+
+<script type="application/json" id="run-modules-bootstrap">{{ run_modules_bootstrap | tojson }}</script>
+<script type="application/json" id="run-status-bootstrap">{{ run.status | tojson }}</script>
 
 <!-- 진행률 -->
 <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" id="run-progress">
@@ -69,8 +73,85 @@
     </div>
 </section>
 
-<!-- 모듈 노드 -->
-<section class="space-y-4">
+<!-- 실패 탐색 워크스페이스 (이상징후·점검실패 Run) -->
+<section id="run-debug-workspace" class="run-debug is-hidden" aria-label="실패 탐색 워크스페이스">
+    <div class="run-debug__head">
+        <div>
+            <h2 class="text-lg font-bold tracking-tight text-gray-900">실패 탐색 워크스페이스</h2>
+            <p class="mt-1 text-sm text-gray-500">모듈을 선택하면 스크린샷·맥락·로그가 한 화면에서 동기화됩니다.</p>
+        </div>
+    </div>
+    <div class="run-debug__layout">
+        <aside class="run-debug__timeline" aria-label="모듈 타임라인">
+            <p class="run-debug__timeline-label">모듈 타임라인</p>
+            <ol id="debug-timeline" class="run-debug__timeline-list"></ol>
+        </aside>
+        <div class="run-debug__main">
+            <div class="run-debug__visual">
+                <div class="run-debug__screenshot-wrap">
+                    <button type="button" id="debug-screenshot-btn" class="run-debug__screenshot-btn is-hidden" aria-label="스크린샷 전체 보기">
+                        <img id="debug-screenshot" alt="모듈 종료 화면" class="run-debug__screenshot-img">
+                    </button>
+                    <div id="debug-screenshot-empty" class="run-debug__screenshot-empty">스크린샷 없음</div>
+                </div>
+                <div class="run-debug__context">
+                    <h3 class="run-debug__context-title" id="debug-module-title">모듈을 선택하세요</h3>
+                    <p class="run-debug__context-message" id="debug-module-message"></p>
+                    <dl class="run-debug__meta">
+                        <div class="run-debug__meta-row">
+                            <dt>현재 URL</dt>
+                            <dd id="debug-current-url" class="run-debug__url">—</dd>
+                        </div>
+                    </dl>
+                    <div id="debug-dialogs" class="run-debug__dialogs is-hidden">
+                        <p class="run-debug__subsection-label">다이얼로그 메시지</p>
+                        <ul id="debug-dialog-list" class="run-debug__dialog-list"></ul>
+                    </div>
+                    <div id="debug-analysis" class="run-debug__analysis is-hidden">
+                        <p class="run-debug__subsection-label">
+                            <svg class="inline h-3.5 w-3.5 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                            AI 분석
+                            <span id="debug-analysis-category" class="run-debug__analysis-cat"></span>
+                        </p>
+                        <p id="debug-analysis-summary" class="run-debug__analysis-summary"></p>
+                        <p id="debug-analysis-action" class="run-debug__analysis-action"></p>
+                        <details class="run-debug__analysis-details">
+                            <summary>개발자용 상세</summary>
+                            <p id="debug-analysis-dev"></p>
+                        </details>
+                    </div>
+                    <div id="debug-artifacts" class="run-debug__artifacts is-hidden">
+                        <p class="run-debug__subsection-label">아티팩트</p>
+                        <div id="debug-artifact-links" class="run-debug__artifact-links"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="run-debug__logs">
+                <div class="run-debug__logs-head">
+                    <h3 class="text-sm font-bold text-gray-900">모듈 로그</h3>
+                    <div class="run-debug__logs-tools">
+                        <span id="debug-log-pause-hint" class="run-debug__pause-hint is-hidden" aria-live="polite"></span>
+                        <input id="debug-log-search" type="search" placeholder="로그 검색" class="run-debug__log-search">
+                        <button type="button" id="debug-log-pause" class="run-debug__tool-btn" aria-pressed="false">일시정지</button>
+                        <button type="button" id="debug-log-snapshot" class="run-debug__tool-btn" aria-pressed="false" title="현재 화면을 고정하고 자동 스크롤을 끕니다">스냅샷 고정</button>
+                        <button type="button" id="debug-log-autoscroll" class="run-debug__tool-btn is-active" aria-pressed="true">자동 스크롤</button>
+                        <button type="button" id="debug-log-copy" class="run-debug__tool-btn">복사</button>
+                        <button type="button" id="debug-log-download" class="run-debug__tool-btn">다운로드</button>
+                    </div>
+                </div>
+                <div class="log-console run-debug__log-console" id="log-console-debug" role="log" aria-live="off"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="debug-lightbox" class="run-debug-lightbox is-hidden" role="dialog" aria-modal="true" aria-label="스크린샷 전체 보기">
+    <button type="button" class="run-debug-lightbox__close" id="debug-lightbox-close" aria-label="닫기">×</button>
+    <img id="debug-lightbox-img" alt="스크린샷 확대" class="run-debug-lightbox__img">
+</div>
+
+<!-- 모듈 노드 (클래식 보기) -->
+<section id="run-classic-modules" class="space-y-4">
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">모듈 노드</h2>
         <p class="text-sm text-gray-500">전체 {{ run.modules|length }}개 모듈 중 {{ run.selected_module_ids|length }}개가 선택되었습니다. 제외된 모듈은 SKIPPED 상태로 유지됩니다.</p>
@@ -125,8 +206,8 @@
     </div>
 </section>
 
-<!-- 실행 로그 -->
-<section class="space-y-4">
+<!-- 실행 로그 (클래식 보기) -->
+<section id="run-classic-logs" class="space-y-4">
     <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
             <h2 class="text-lg font-bold tracking-tight text-gray-900">실행 로그</h2>
