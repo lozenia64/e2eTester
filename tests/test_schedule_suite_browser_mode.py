@@ -175,7 +175,9 @@ async def _build_stack(tmp_path: Path) -> dict[str, Any]:
     }
 
 
-def _legacy_suite_schedule(*, browser_mode: str, suite_systems: dict[str, dict[str, str]]) -> Schedule:
+def _legacy_suite_schedule(
+    *, browser_mode: str, suite_systems: dict[str, dict[str, str]]
+) -> Schedule:
     return Schedule(
         schedule_id="sch_legacy_suite",
         schedule_kind="suite",
@@ -197,7 +199,9 @@ def stack(tmp_path: Path) -> dict[str, Any]:
     return asyncio.run(_build_stack(tmp_path))
 
 
-async def test_create_suite_schedule_strips_browser_mode_from_suite_systems(stack: dict[str, Any]) -> None:
+async def test_create_suite_schedule_strips_browser_mode_from_suite_systems(
+    stack: dict[str, Any],
+) -> None:
     scheduler: SchedulerService = stack["scheduler"]
     polluted = {"hom": _hom_phone_input(browser_mode="headed")}
 
@@ -259,7 +263,9 @@ async def test_run_now_suite_schedule_passes_headless_to_start_run(stack: dict[s
     assert run_commands.start_run_calls[0]["input_data"]["browser_mode"] == "headless"
 
 
-def test_api_create_suite_schedule_and_run_now_preserves_browser_mode(stack: dict[str, Any]) -> None:
+def test_api_create_suite_schedule_and_run_now_preserves_browser_mode(
+    stack: dict[str, Any],
+) -> None:
     run_commands: _CapturingRunCommands = stack["run_commands"]
     scheduler: SchedulerService = stack["scheduler"]
     schedule_repo: InMemoryScheduleRepository = stack["schedule_repo"]
