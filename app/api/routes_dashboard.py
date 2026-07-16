@@ -186,6 +186,31 @@ def _accessible_systems(current_user: User, run_service: RunService) -> list[dic
     return [{"system_code": s.system_code, "name": s.name} for s in systems]
 
 
+@router.get("/presets", response_class=HTMLResponse)
+async def presets_center(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    run_service: RunService = Depends(get_run_service),
+):
+    """인증 프리셋 관리 — 저장된 내 점검 세트 조회·수정·삭제. 관리자도 접근 가능."""
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    systems = run_service.list_systems()
+    if current_user.role != "admin":
+        allowed = set(current_user.allowed_system_codes)
+        systems = [s for s in systems if s.system_code in allowed]
+    systems = sorted(systems, key=lambda s: (s.display_order, s.name))
+    systems_payload = {system.system_code: system.model_dump(mode="json") for system in systems}
+    return templates.TemplateResponse(
+        request,
+        "presets.html",
+        {
+            "current_user": current_user,
+            "systems_payload": systems_payload,
+        },
+    )
+
+
 @router.get("/schedules", response_class=HTMLResponse)
 async def schedules_center(
     request: Request,
