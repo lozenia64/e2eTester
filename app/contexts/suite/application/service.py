@@ -213,11 +213,26 @@ class SuiteService:
 
     # --- 검증 / 입력 병합 -------------------------------------------------
 
+    @staticmethod
+    def _normalize_systems_input(
+        systems: dict[str, dict[str, str]] | None,
+    ) -> dict[str, dict[str, str]]:
+        """시스템별 입력에서 browser_mode 를 제거한다.
+
+        브라우저 모드는 Suite 수준(suite.browser_mode)에서만 결정한다. 프리셋·레거시
+        예약 데이터에 남아 있는 per-system browser_mode 가 Run 입력을 덮어쓰지 않게 한다.
+        """
+        normalized = {key: dict(value) for key, value in (systems or {}).items()}
+        for per_system in normalized.values():
+            per_system.pop("browser_mode", None)
+        return normalized
+
     def _merge_input(
         self, browser_mode: str, system_code: str, systems_input: dict[str, dict[str, str]]
     ) -> dict[str, str]:
-        merged = {"browser_mode": browser_mode}
-        merged.update(systems_input.get(system_code, {}))
+        merged = dict(systems_input.get(system_code, {}))
+        merged.pop("browser_mode", None)
+        merged["browser_mode"] = browser_mode
         return merged
 
     @staticmethod
@@ -287,7 +302,7 @@ class SuiteService:
         if normalized_mode not in {"headed", "headless"}:
             raise ValueError("browser_mode는 headed 또는 headless 여야 합니다.")
 
-        normalized_systems = {key: dict(value) for key, value in (systems or {}).items()}
+        normalized_systems = self._normalize_systems_input(systems)
         resolved_system_codes = self._resolve_selected_system_codes(
             registered, selected_system_codes
         )

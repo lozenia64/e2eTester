@@ -54,6 +54,7 @@ async def test_create_and_list_preset(tmp_path):
     assert preset.system_code == "hom"
     assert preset.auth_method == "phone"
     assert preset.input_data["phone_number"] == "01012345678"
+    assert "browser_mode" not in preset.input_data
 
     presets = await service.list_presets("user_1")
     assert [item.preset_id for item in presets] == [preset.preset_id]
@@ -115,3 +116,31 @@ async def test_update_and_delete_preset(tmp_path):
 
     await service.delete_preset(preset.preset_id, "user_1")
     assert await service.list_presets("user_1") == []
+
+
+async def test_create_strips_browser_mode_from_stored_input(tmp_path):
+    service = _service(tmp_path)
+    preset = await service.create_preset(
+        "user_1",
+        CreatePresetRequest(
+            system_code="hom",
+            name="백그라운드 저장 시도",
+            input_data=_hom_phone_input() | {"browser_mode": "headless"},
+        ),
+    )
+    assert "browser_mode" not in preset.input_data
+
+
+async def test_update_strips_browser_mode_from_stored_input(tmp_path):
+    service = _service(tmp_path)
+    preset = await service.create_preset(
+        "user_1",
+        CreatePresetRequest(system_code="hom", name="기본", input_data=_hom_phone_input()),
+    )
+    updated = await service.update_preset(
+        preset.preset_id,
+        "user_1",
+        UpdatePresetRequest(input_data=_hom_phone_input() | {"browser_mode": "headless"}),
+    )
+    assert "browser_mode" not in updated.input_data
+    assert updated.input_data["phone_number"] == "01012345678"
