@@ -174,6 +174,7 @@
       const node = $(`[data-kpi="${key}"]`, root);
       if (node) node.textContent = kpi[key] ?? "–";
     }
+    window.E2ENavBadges?.setCounts?.({ schedule: Number(kpi.attention) || 0 });
   }
 
   function issueDescription(schedule, issue) {

@@ -137,11 +137,7 @@
     const tabBadge = $("#heal-tab-patch-count");
     tabBadge.textContent = pending;
     tabBadge.classList.toggle("hidden", !pending);
-    const navBadge = document.getElementById("nav-healing-badge");
-    if (navBadge) {
-      navBadge.textContent = pending > 99 ? "99+" : String(pending);
-      navBadge.classList.toggle("hidden", !pending);
-    }
+    window.E2ENavBadges?.setCounts?.({ healing: pending });
   }
 
   // ── 정책 패널 ────────────────────────────────────────────────────────────

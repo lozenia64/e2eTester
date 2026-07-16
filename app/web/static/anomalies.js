@@ -110,13 +110,8 @@
     $$(".inbox-kpi").forEach((btn) => {
       btn.dataset.active = String(btn.dataset.filterState === state.filterState);
     });
-    // 사이드바 배지 동기화
-    const badge = document.getElementById("nav-anomaly-badge");
-    if (badge) {
-      const n = state.counts.unresolved || 0;
-      badge.textContent = n > 99 ? "99+" : String(n);
-      badge.classList.toggle("hidden", n === 0);
-    }
+    // 사이드바·햄버거 배지 동기화
+    window.E2ENavBadges?.setCounts?.({ anomaly: state.counts.unresolved || 0 });
   }
 
   function render() {
