@@ -11,6 +11,10 @@ from app.automation.flows.rep_homepage.compensation_flow import (
 )
 from app.automation.flows.rep_homepage.contract_flow import ContractDetailFlow, ContractListFlow
 from app.automation.flows.rep_homepage.login_flow import LoginFlow
+from app.automation.flows.rep_homepage.marketing_consent_flow import (
+    MarketingConsentApplyFlow,
+    MarketingConsentWithdrawFlow,
+)
 from app.automation.scenario_engine import ScenarioEngine
 
 
@@ -24,4 +28,6 @@ def build_rep_homepage_engine() -> ScenarioEngine:
     engine.register("compensation_result", CompensationResultFlow())
     engine.register("compensation_cancel", CompensationCancelFlow())
     engine.register("long_term_policy_certificate", LongTermPolicyCertificateFlow())
+    engine.register("marketing_consent_apply", MarketingConsentApplyFlow())
+    engine.register("marketing_consent_withdraw", MarketingConsentWithdrawFlow())
     return engine

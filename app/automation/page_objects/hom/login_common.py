@@ -746,6 +746,114 @@ def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> N
     log(f"[wait] End URL contains wait: {fragment} -> {page.url}")
 
 
+def maybe_dismiss_cust_info_change_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -> None:
+    """Dismiss #uiPOPCustInfoChg 고객정보 변경 안내 팝업 when it blocks GNB clicks."""
+    popup = page.locator("#uiPOPCustInfoChg.pop_round.open, #uiPOPCustInfoChg:visible").first
+    try:
+        if not popup.is_visible(timeout=1000):
+            return
+    except Exception:
+        return
+
+    log("[step] 고객정보 변경 안내 팝업(uiPOPCustInfoChg) 감지")
+
+    close_candidates = [
+        popup.locator(".btn_close, .btn_pop_close, button.close, a.close").first,
+        popup.locator('button:has-text("닫기"), a:has-text("닫기")').first,
+        popup.get_by_role("button", name=re.compile(r"다음에\s*할게요|나중에|닫기")).first,
+        page.get_by_role("button", name=re.compile(r"다음에\s*할게요|나중에\s*하기")).first,
+    ]
+    for candidate in close_candidates:
+        try:
+            if candidate.count() == 0 or not candidate.is_visible(timeout=800):
+                continue
+            click_with_log(candidate, "고객정보 변경 안내 팝업 닫기")
+            wait_timeout_with_log(page, 500, "고객정보 변경 안내 팝업 닫힘 대기")
+            try:
+                if not popup.is_visible(timeout=800):
+                    log("[step] 고객정보 변경 안내 팝업 닫기 완료")
+                    return
+            except Exception:
+                log("[step] 고객정보 변경 안내 팝업 닫기 완료")
+                return
+        except Exception:
+            continue
+
+    dismissed = page.evaluate(
+        """
+        () => {
+            const popup = document.querySelector('#uiPOPCustInfoChg');
+            if (!popup) {
+                return false;
+            }
+            const isVisible = (element) => {
+                if (!element) {
+                    return false;
+                }
+                const style = window.getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            };
+            if (!isVisible(popup)) {
+                return false;
+            }
+
+            const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+            for (const element of popup.querySelectorAll('button, a, input, [role="button"]')) {
+                const text = normalize(element.textContent);
+                if (!text || text.includes('고객정보 확인')) {
+                    continue;
+                }
+                if (
+                    text.includes('닫기') ||
+                    text.includes('다음에') ||
+                    text.includes('나중에') ||
+                    element.className.includes('close')
+                ) {
+                    element.click();
+                    return true;
+                }
+            }
+
+            for (const element of popup.querySelectorAll('.btn_close, .close, [class*="close"]')) {
+                if (isVisible(element)) {
+                    element.click();
+                    return true;
+                }
+            }
+            return false;
+        }
+        """
+    )
+    if dismissed:
+        log("[step] 고객정보 변경 안내 팝업 DOM 닫기 시도")
+        wait_timeout_with_log(page, 500, "고객정보 변경 안내 팝업 닫힘 대기")
+        try:
+            if not popup.is_visible(timeout=800):
+                return
+        except Exception:
+            return
+
+    forcibly_hidden = page.evaluate(
+        """
+        () => {
+            const popup = document.querySelector('#uiPOPCustInfoChg');
+            if (!popup) {
+                return false;
+            }
+            popup.setAttribute('data-e2e-forced-hidden', 'true');
+            popup.style.setProperty('display', 'none', 'important');
+            popup.style.setProperty('visibility', 'hidden', 'important');
+            popup.style.setProperty('pointer-events', 'none', 'important');
+            popup.classList.remove('open');
+            return true;
+        }
+        """
+    )
+    if forcibly_hidden:
+        log("[warn] 고객정보 변경 안내 팝업(uiPOPCustInfoChg)을 강제 숨김 처리했습니다.")
+
+
 def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -> None:
     log("[step] Check post-login popup")
 

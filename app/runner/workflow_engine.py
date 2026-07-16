@@ -11,6 +11,7 @@ from app.contexts.healing.page_proxy import HealedPage
 from app.core.enums import ModuleStatus
 from app.core.system_models import ModuleDefinition
 from app.platform.artifact_manager import ArtifactManager
+from app.runner.page_diagnostic import capture_page_html_diagnostic_safe
 from app.runner.screenshot import capture_screenshot
 from app.runner.step_logging import pop_sink, push_sink
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
@@ -195,6 +196,7 @@ class BaseWorkflowExecutor(ABC):
                         message = str(exc)
                         last_error = str(exc)
                         sink(f"[error] {exc}")
+                        capture_page_html_diagnostic_safe(real_page, artifact_dir, sink)
                     except Exception as exc:
                         status = ModuleStatus.ERROR
                         message = str(exc)
@@ -214,6 +216,9 @@ class BaseWorkflowExecutor(ABC):
             runtime.page = real_page
 
         artifacts = [self._artifact_manager.relative_path(log_path)]
+        page_html_path = artifact_dir / "page.html"
+        if page_html_path.exists():
+            artifacts.append(self._artifact_manager.relative_path(page_html_path))
         if screenshot_path.exists():
             artifacts.append(self._artifact_manager.relative_path(screenshot_path))
 

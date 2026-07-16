@@ -1,6 +1,6 @@
 system_code: hom
 name: 대표홈페이지(PC)
-description: 접속 · 로그인 · 계약 조회 · 보험금청구 · 증명서 발급 점검
+description: 접속 · 로그인 · 계약 조회 · 보험금청구 · 증명서 발급 · 마케팅동의 점검
 display_order: 10
 supported_auth_methods:
 - phone
@@ -243,6 +243,42 @@ modules:
   workflow_name: hom_login
   workflow_step: long_term_policy_certificate
   estimated_manual_seconds: 300
+  max_retries: 2
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+- module_id: hom.marketing.consent.apply
+  system_code: hom
+  name: 마케팅동의 신청
+  description: MY한화 GNB에서 마케팅활용동의신청/철회 화면으로 이동해 동의 상태로 변경합니다.
+  group: inquiry
+  order: 100
+  depends_on:
+  - hom.login
+  timeout_seconds: 180
+  execution_mode: hom_workflow_step
+  workflow_name: hom_login
+  workflow_step: marketing_consent_apply
+  estimated_manual_seconds: 180
+  max_retries: 2
+  retry_backoff_ms: 500
+  retryable_on:
+  - ERROR
+  partial_rerun_allowed: true
+- module_id: hom.marketing.consent.withdraw
+  system_code: hom
+  name: 마케팅동의 철회
+  description: 마케팅활용동의신청/철회 화면에서 미동의 상태로 변경합니다.
+  group: inquiry
+  order: 110
+  depends_on:
+  - hom.marketing.consent.apply
+  timeout_seconds: 180
+  execution_mode: hom_workflow_step
+  workflow_name: hom_login
+  workflow_step: marketing_consent_withdraw
+  estimated_manual_seconds: 120
   max_retries: 2
   retry_backoff_ms: 500
   retryable_on:
