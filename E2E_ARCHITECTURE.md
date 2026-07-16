@@ -82,7 +82,7 @@ e2eTester/
       gemini_schemas.py
     api/
       dependencies.py              # FastAPI Depends 프로바이더 (HTTP·WS 공용, app.state 직접 접근 금지)
-      routes_dashboard.py          # HTML 페이지 라우트 (/, /runs/execute, /runs/history, /schedules, /anomalies, /insights, /self-healing, /admin/*)
+      routes_dashboard.py          # HTML 페이지 라우트 (/, /runs/execute, /runs/history, /presets, /schedules, /anomalies, /insights, /self-healing, /admin/*)
       routes_daily.py              # 일간 점검 현황 데이터 API (/api/dashboard/daily)
       routes_runs.py
       routes_presets.py            # 인증 프리셋 CRUD (/api/presets)
@@ -424,7 +424,7 @@ e2eTester/
 - 로그인 후 첫 화면은 **일간 점검 현황 대시보드**(`GET /`, `dashboard.html`)다. 접근 가능한 전체 시스템·모듈의 오늘(KST) 점검 상태를 KPI 스트립과 **Cytoscape.js 파이프라인 매트릭스**(시스템별 스윔레인 + 모듈 노드)로 보여 준다. `dashboard.js` 가 HTMX로 `GET /api/dashboard/daily/fragments/{kpi,matrix}` 를 부분 갱신하고, 30초마다 자동 새로고침(탭 비활성 시 일시정지)하며 `prefers-reduced-motion` 을 존중한다. 시스템 노드 클릭 시 드로어 패널(`GET /api/dashboard/daily/fragments/system/{code}/panel`), 모듈 노드 클릭 시 Run 상세로 이동한다.
 - **점검 실행** 화면(`GET /runs/execute`, `execute.html`)은 기존 홈의 Run 트리거 UI로, “시스템 실행”과 “전체 순차 점검”을 함께 제공한다. **시스템** 섹션(SUITE + 개별 시스템 카드)이 상태 메트릭 직후 상단에 배치되고, **진행 중 / 최근 Run** 패널은 시스템 목록 하단에 위치한다.
 - 홈 화면 상단에는 상태 카드 3종(등록 시스템 수, AI 분석 설정 상태, 종료 메일 설정 상태)이 표시된다.
-- **인증 프리셋(내 점검 세트)**: 매번 인증 정보를 다시 입력하는 반복을 없애기 위해, 사용자가 자주 쓰는 인증 수단·정보(+선택 모듈)를 이름 붙여 저장하고 원클릭으로 불러온다. 개별 시스템 카드에는 프리셋 칩 행 + "현재 설정 저장" 버튼이 있고, 칩을 클릭하면 폼(인증 수단·조건부 인증 정보·브라우저 모드·모듈 선택)이 그대로 채워진다. **전체 점검(SUITE) 카드에서는 인증 정보를 직접 입력할 수 없고**, 선택한 시스템마다 저장된 프리셋을 하나씩 골라야 한다 — 프리셋이 없거나 고르지 않은(인증이 필요한) 시스템은 실행/예약이 차단된다(제출 시 검증 + 시스템별 상태 배지 `선택됨`/`미선택`/`프리셋 없음`). 프리셋은 사용자별로 격리되고 소유자만 조회/수정/삭제한다. 프런트 로직은 `app/web/static/app.js`(`loadPresets`/`renderIndividualPresetPanels`/`renderSuitePresetLists`), 스타일은 `app/web/static/app.css`(`.preset-*`).
+- **인증 프리셋(내 점검 세트)**: 매번 인증 정보를 다시 입력하는 반복을 없애기 위해, 사용자가 자주 쓰는 인증 수단·정보(+선택 모듈)를 이름 붙여 저장하고 원클릭으로 불러온다. 개별 시스템 카드에는 프리셋 칩 행 + "현재 설정 저장" 버튼이 있고, 칩을 클릭하면 폼(인증 수단·조건부 인증 정보·브라우저 모드·모듈 선택)이 그대로 채워진다. **전체 점검(SUITE) 카드에서는 인증 정보를 직접 입력할 수 없고**, 선택한 시스템마다 저장된 프리셋을 하나씩 골라야 한다 — 프리셋이 없거나 고르지 않은(인증이 필요한) 시스템은 실행/예약이 차단된다(제출 시 검증 + 시스템별 상태 배지 `선택됨`/`미선택`/`프리셋 없음`). 프리셋은 사용자별로 격리되고 소유자만 조회/수정/삭제한다. **프리셋 관리** 화면(`GET /presets`, `presets.html`)에서 저장된 프리셋을 시스템별로 조회·수정·삭제할 수 있다(드로어 편집, `PUT /api/presets/{preset_id}`). 점검 실행 화면 프리셋 칩 로직은 `app/web/static/app.js`(`loadPresets`/`renderIndividualPresetPanels`/`renderSuitePresetLists`), 관리 화면은 `app/web/static/presets.js`, 공통 스타일은 `app/web/static/app.css`(`.preset-*`).
 - 홈 **진행 중 / 최근 Run** 패널은 `GET /api/runs?scope=today` 요약을 주기적으로 불러와 렌더링한다 — 진행 중(PENDING/RUNNING/WAITING_INPUT) Run 은 날짜와 무관하게 포함하고, 그 외 Run 은 KST(`E2E_SCHEDULE_TZ`) 당일 `requested_at` 만 표시한다(최대 8건, 진행 중 우선). 당일·진행 중 Run 이 없으면 섹션을 숨긴다.
 - **Run 이력** 페이지(`GET /runs/history`)에서 당일 이전 Run 을 `GET /api/runs?scope=before_today` 로 조회한다(SQLite 영속 — 서버 재시작 후에도 이력이 남음).
 - 개별 시스템 실행 전 모듈 선택 그래프에서 모듈을 개별 해제할 수 있고, 선택값은 실행 요청의 `selected_module_ids` 로 전달된다.
@@ -445,6 +445,7 @@ e2eTester/
 - `GET /account/password` (비밀번호 변경 HTML)
 - `POST /auth/change-password`
 - `GET /runs/history` (당일 이전 Run 이력 HTML, 비관리자; admin 은 `/admin` 으로 리다이렉트)
+- `GET /presets` (인증 프리셋 관리 HTML — 저장된 프리셋 조회·수정·삭제; 관리자도 접근 가능)
 - `GET /runs/{run_id}` (Run 상세 HTML)
 - `GET /suites/{suite_id}` (Suite 상세 HTML)
 - `GET /schedules` (예약 점검 관리 센터 HTML — 무인 점검 관제실: KPI/조치 필요/목록/시간표 캘린더/상세 드로어; admin 포함, 리다이렉트 없음. 수정 폼 렌더링을 위해 접근 가능 시스템의 manifest 를 함께 내려준다)
