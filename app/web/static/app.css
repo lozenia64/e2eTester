@@ -1285,3 +1285,108 @@ a.run-chip:hover {
         animation: none;
     }
 }
+
+/* ── 모바일 내비게이션 드로어 (base.html) ─────────────────────────────── */
+.mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgb(15 23 42 / 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.mobile-nav-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+@media (min-width: 768px) {
+    .mobile-nav-backdrop {
+        display: none;
+    }
+}
+
+#app-sidebar {
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 767px) {
+    body.mobile-nav-open {
+        overflow: hidden;
+        touch-action: none;
+    }
+
+    body.mobile-nav-open main {
+        touch-action: none;
+    }
+
+    #app-sidebar {
+        transform: translateX(-100%);
+        max-width: min(18rem, 88vw);
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #app-sidebar.is-open {
+        transform: translateX(0);
+    }
+
+    #app-sidebar nav a,
+    #app-sidebar > .border-t a,
+    #app-sidebar > .border-t button[type="submit"] {
+        min-height: 2.75rem;
+        padding-top: 0.625rem;
+        padding-bottom: 0.625rem;
+    }
+
+    #mobile-nav-close {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+}
+
+@media (min-width: 768px) {
+    #app-sidebar {
+        transform: none;
+        max-width: none;
+    }
+}
+
+.mobile-nav-toggle__icon--close {
+    display: none;
+}
+
+.mobile-nav-toggle.is-open .mobile-nav-toggle__icon--menu {
+    display: none;
+}
+
+.mobile-nav-toggle.is-open .mobile-nav-toggle__icon--close {
+    display: block;
+}
+
+.mobile-nav-attention-badge {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    padding: 0 0.3rem;
+    border-radius: 9999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.125rem;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: 0 0 0 2px #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mobile-nav-backdrop,
+    #app-sidebar {
+        transition: none;
+    }
+}
