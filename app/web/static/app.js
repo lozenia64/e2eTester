@@ -783,6 +783,10 @@ function applyPresetToForm(form, preset) {
         return 0;
     });
     for (const key of keys) {
+        // browser_mode 는 프리셋에 저장하지 않으며, 적용 시에도 현재 폼 선택을 유지한다.
+        if (key === "browser_mode") {
+            continue;
+        }
         const field = form.querySelector(`[name="${key}"]`);
         if (field) {
             field.value = data[key];
@@ -2481,6 +2485,8 @@ function collectSuiteRequest(form) {
         );
         if (preset) {
             systems[systemCode] = { ...preset.input_data };
+            // 브라우저 모드는 Suite 폼의 공통 선택값만 따른다(프리셋 저장 시 포함된 값 무시).
+            delete systems[systemCode].browser_mode;
         }
     }
     return {

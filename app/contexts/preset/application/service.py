@@ -32,6 +32,13 @@ class PresetService:
         self._repository = repository
         self._run_service = run_service
 
+    @staticmethod
+    def _preset_input(sanitized_input: dict[str, str]) -> dict[str, str]:
+        """프리셋에 저장할 입력값 — browser_mode 는 실행 시점 폼/Suite 선택으로만 결정한다."""
+        stored = dict(sanitized_input)
+        stored.pop("browser_mode", None)
+        return stored
+
     async def list_presets(self, user_id: str, system_code: str | None = None) -> list[AuthPreset]:
         presets = await self._repository.list_by_user(user_id)
         if system_code is not None:
@@ -54,6 +61,7 @@ class PresetService:
         sanitized_input, _resolved_modules = self._run_service.validate_run_request(
             request.system_code, request.input_data, request.selected_module_ids
         )
+        stored_input = self._preset_input(sanitized_input)
         now = datetime.now(UTC)
         preset = AuthPreset(
             preset_id=f"preset_{now.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}",
@@ -61,8 +69,8 @@ class PresetService:
             system_code=system.system_code,
             system_name=system.name,
             name=name,
-            auth_method=sanitized_input.get("auth_method", ""),
-            input_data=sanitized_input,
+            auth_method=stored_input.get("auth_method", ""),
+            input_data=stored_input,
             selected_module_ids=request.selected_module_ids,
             created_at=now,
             updated_at=now,
@@ -99,7 +107,7 @@ class PresetService:
             sanitized_input, _resolved = self._run_service.validate_run_request(
                 preset.system_code, new_input, new_modules
             )
-            input_data = sanitized_input
+            input_data = self._preset_input(sanitized_input)
             selected_module_ids = new_modules
             auth_method = sanitized_input.get("auth_method", "")
         updated = preset.model_copy(
