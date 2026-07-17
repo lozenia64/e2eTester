@@ -70,10 +70,14 @@ def resolve_role(
 
 def main() -> int:
     configure_stdout_utf8()
-    parser = argparse.ArgumentParser(description="Resolve Orca terminal handles for claude/cursor/grok")
+    parser = argparse.ArgumentParser(
+        description="Resolve Orca terminal handles for claude/cursor/grok"
+    )
     parser.add_argument("--workspace", default=str(ROOT))
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("--claude-handle", default=None, help="Explicit Claude Code handle override")
+    parser.add_argument(
+        "--claude-handle", default=None, help="Explicit Claude Code handle override"
+    )
     parser.add_argument("--cursor-handle", default=None, help="Explicit Cursor handle override")
     parser.add_argument("--grok-handle", default=None, help="Explicit Grok handle override")
     args = parser.parse_args()

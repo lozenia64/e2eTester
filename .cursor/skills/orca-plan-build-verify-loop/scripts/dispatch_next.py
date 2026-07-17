@@ -42,7 +42,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Dispatch next hop of the plan-build-verify loop")
     parser.add_argument("--loop-dir", required=True)
     parser.add_argument("--to", required=True, choices=["cursor", "grok", "claude"])
-    parser.add_argument("--feedback", default=None, help="Inline feedback text (e.g. prior FAIL reasons)")
+    parser.add_argument(
+        "--feedback", default=None, help="Inline feedback text (e.g. prior FAIL reasons)"
+    )
     parser.add_argument("--feedback-file", default=None, help="Path to a file with feedback text")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -62,7 +64,11 @@ def main() -> int:
     iteration = int(loop.get(iter_key) or 0) + 1
     max_iter = int(loop.get(max_key) or 5)
     if iteration > max_iter:
-        print(json.dumps({"ok": False, "error": f"max iterations for {iter_key} ({max_iter}) exceeded"}))
+        print(
+            json.dumps(
+                {"ok": False, "error": f"max iterations for {iter_key} ({max_iter}) exceeded"}
+            )
+        )
         return 1
 
     loop[iter_key] = iteration
@@ -89,7 +95,15 @@ def main() -> int:
     )
     task_id = create["result"]["task"]["id"]
 
-    dispatch_args = ["orchestration", "dispatch", "--task", task_id, "--to", target_handle, "--json"]
+    dispatch_args = [
+        "orchestration",
+        "dispatch",
+        "--task",
+        task_id,
+        "--to",
+        target_handle,
+        "--json",
+    ]
     if args.dry_run:
         dispatch_args.extend(["--dry-run", "--return-preamble"])
     else:
@@ -108,7 +122,10 @@ def main() -> int:
     loop["last_dispatch_target_handle"] = target_handle
     loop["updated_at"] = now
     write_loop(loop_dir, loop)
-    append_trace(loop_dir, f"{now} dispatch to={args.to} handle={target_handle} task={task_id} iter={iteration}")
+    append_trace(
+        loop_dir,
+        f"{now} dispatch to={args.to} handle={target_handle} task={task_id} iter={iteration}",
+    )
 
     out = {
         "ok": True,

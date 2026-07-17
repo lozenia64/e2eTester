@@ -64,7 +64,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Initialize plan-build-verify loop")
     parser.add_argument("workspace", help="Project workspace root")
     parser.add_argument("user_request", help="Original user requirement (short)")
-    parser.add_argument("--plan-file", required=True, help="Path to the plan markdown Claude Code wrote")
+    parser.add_argument(
+        "--plan-file", required=True, help="Path to the plan markdown Claude Code wrote"
+    )
     parser.add_argument("--loop-id", default=None, help="Optional 8-char hex loop id")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
     parser.add_argument("--claude-handle", default=None)
@@ -130,7 +132,9 @@ def main() -> int:
     (loop_dir / "loop.json").write_text(
         json.dumps(loop_json, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    (loop_dir / "trace.log").write_text(f"{now} init loop_id={loop_id} handles={handles}\n", encoding="utf-8")
+    (loop_dir / "trace.log").write_text(
+        f"{now} init loop_id={loop_id} handles={handles}\n", encoding="utf-8"
+    )
 
     print(
         json.dumps(
