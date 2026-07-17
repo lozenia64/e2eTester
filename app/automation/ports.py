@@ -31,6 +31,11 @@ class Flow(Protocol):
     def run(self, ctx: AutomationContext) -> StepOutcome: ...
 
 
+def invoke_flow(flow: Flow, ctx: AutomationContext) -> StepOutcome:
+    """Flow 포트 계약으로 workflow_step 을 실행한다(단일 진입점)."""
+    return flow.run(ctx)
+
+
 @runtime_checkable
 class AutomationPort(Protocol):
     """실행기가 workflow_step 을 automation BC 로 위임할 때 쓰는 포트."""

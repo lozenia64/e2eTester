@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from app.automation.page_objects.chbot import contract_list, kakao_auth, simple_auth
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 
 
-class ChbotSimpleAuthFlow:
+class ChbotSimpleAuthFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         if not runtime.name or not runtime.birthdate or not runtime.gender_code:
@@ -46,7 +46,7 @@ class ChbotSimpleAuthFlow:
         )
 
 
-class ChbotContractListFlow:
+class ChbotContractListFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         return StepCompleted(contract_list.run(runtime.page))

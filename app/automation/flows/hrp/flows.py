@@ -7,11 +7,11 @@ from app.automation.page_objects.hrp import (
     salvage_bid_inquiry_detail,
     salvage_bid_inquiry_list,
 )
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 
 
-class HrpLoginFlow:
+class HrpLoginFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         if not runtime.user_id or not runtime.password:
@@ -35,13 +35,13 @@ class HrpLoginFlow:
         )
 
 
-class HrpSalvageBidListFlow:
+class HrpSalvageBidListFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         return StepCompleted(salvage_bid_inquiry_list.run(runtime.page, base_url=runtime.base_url))
 
 
-class HrpSalvageBidDetailFlow:
+class HrpSalvageBidDetailFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         return StepCompleted(
