@@ -1,0 +1,30 @@
+"""Scheduling BC composition — SchedulerService + run retention."""
+
+from __future__ import annotations
+
+from app.contexts.run.application.service import RunService
+from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
+from app.contexts.scheduling.scheduler import SchedulerService
+from app.contexts.suite.application.service import SuiteService
+from app.orchestrator.queries import RunQueries
+from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
+
+
+def compose_scheduler(
+    run_commands: RunService,
+    suite_service: SuiteService,
+    repository: SqliteScheduleRepository,
+    run_queries: RunQueries,
+) -> SchedulerService:
+    return SchedulerService(
+        run_commands=run_commands,
+        suite_service=suite_service,
+        repository=repository,
+        run_queries=run_queries,
+    )
+
+
+def compose_retention_scheduler(
+    run_service: RunService,
+) -> RunRetentionScheduler | None:
+    return RunRetentionScheduler.from_env(RunRetentionService(run_service))

@@ -8,15 +8,20 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
+from app.contexts.healing.composition import compose_healing
 from app.contexts.healing.engine import SelfHealingEngine
 from app.contexts.healing.service import HealingService
+from app.contexts.identity.composition import compose_identity
 from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
 from app.contexts.insights.application.ops_service import OpsService
 from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.insights.composition import compose_insights
 from app.contexts.preset.application.service import PresetService
+from app.contexts.preset.composition import compose_preset_repository, compose_preset_service
 from app.contexts.run.application.service import RunService
-from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
+from app.contexts.scheduling.composition import compose_retention_scheduler, compose_scheduler
+from app.contexts.scheduling.run_retention import RunRetentionScheduler
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
@@ -53,11 +58,6 @@ from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
 from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
-from app.storage.sqlite_healing_stores import (
-    SqliteHealingEventStore,
-    SqliteHealingPatchStore,
-    SqliteHealingPolicyStore,
-)
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_preset_repository import SqlitePresetRepository
@@ -172,8 +172,9 @@ class AppContainer:
         self.db_path = self.settings.db_path or DEFAULT_DB_PATH
         self.es_db = SqliteDatabase(self.db_path)
 
-        self.user_repository = SqliteUserRepository(self.db_path)
-        self.user_service = UserService(self.user_repository)
+        identity = compose_identity(self.db_path)
+        self.user_repository = identity.user_repository
+        self.user_service = identity.user_service
 
         self.run_write_repo = SqliteRunWriteRepository(self.es_db)
         self.run_summary_query = SqliteRunSummaryQuery(self.es_db)
@@ -194,7 +195,7 @@ class AppContainer:
         self.suite_control_store = SqliteSuiteControlStore(self.db_path)
         self.suite_input_store = EncryptedSqliteSuiteInputStore(self.es_db, encryption_secret)
 
-        self.preset_repository = SqlitePresetRepository(self.db_path)
+        self.preset_repository = compose_preset_repository(self.db_path)
         self.module_settings_repository = SqliteModuleSettingsRepository(self.db_path)
         self.anomaly_handling_store = SqliteAnomalyHandlingStore(self.db_path)
         self.anomaly_inbox_query = SqliteAnomalyInboxQuery(self.es_db)
@@ -244,12 +245,8 @@ class AppContainer:
         # 워커의 SessionServer 하나뿐이다(구 LocalExecutionGateway 는 폐기).
         self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
 
-        self.healing_service = HealingService(
-            event_store=SqliteHealingEventStore(self.db_path),
-            policy_store=SqliteHealingPolicyStore(self.db_path),
-            patch_store=SqliteHealingPatchStore(self.db_path),
-            registry=self.registry,
-        )
+        healing = compose_healing(self.db_path, self.registry)
+        self.healing_service = healing.healing_service
 
         self.execution_gateway = CompositeExecutionGateway(
             [
@@ -297,10 +294,7 @@ class AppContainer:
         self.daily_queries = DailyDashboardQueries(self.registry, self.daily_status_query)
         self.admin_dashboard_queries = AdminDashboardQueries(self.registry, self.run_summary_query)
 
-        self.preset_service = PresetService(
-            repository=self.preset_repository,
-            run_service=self.run_service,
-        )
+        self.preset_service = compose_preset_service(self.preset_repository, self.run_service)
 
         self.suite_service = SuiteService(
             registry=self.registry,
@@ -315,11 +309,11 @@ class AppContainer:
         )
         self.suite_service.register(self.event_bus)
 
-        self.scheduler = SchedulerService(
-            run_commands=self.run_service,
-            suite_service=self.suite_service,
-            repository=self.schedule_repository,
-            run_queries=self.run_queries,
+        self.scheduler = compose_scheduler(
+            self.run_service,
+            self.suite_service,
+            self.schedule_repository,
+            self.run_queries,
         )
         realtime_projector = RealtimeProjector(
             self.realtime,
@@ -337,37 +331,27 @@ class AppContainer:
             log_store=self.run_log_store,
             suite_finished_loader=self.suite_service.load_suite_finished_payload,
         )
-        self.retention_scheduler = RunRetentionScheduler.from_env(
-            RunRetentionService(self.run_service)
-        )
+        self.retention_scheduler = compose_retention_scheduler(self.run_service)
 
     def wire_read_models(self) -> None:
-        self.stats_service = StatsService(
+        insights = compose_insights(
             stats_query=self.stats_query,
             suite_summary_query=self.suite_summary_query,
             registry=self.registry,
             module_settings_repo=self.module_settings_repository,
             user_service=self.user_service,
             schedule_repo=self.schedule_repository,
-        )
-        self.insights_service = InsightsService(
             run_summary_query=self.run_summary_query,
             module_history_query=self.module_history_query,
-            registry=self.registry,
             anomaly_store=self.anomaly_handling_store,
             anomaly_query=self.anomaly_inbox_query,
-            user_service=self.user_service,
-            suite_summary_query=self.suite_summary_query,
-            schedule_repo=self.schedule_repository,
-        )
-        self.ops_service = OpsService(
             settings=self.settings,
-            run_summary_query=self.run_summary_query,
-            suite_summary_query=self.suite_summary_query,
-            schedule_repo=self.schedule_repository,
             run_queue=self.run_queue,
             scheduler=self.scheduler,
         )
+        self.stats_service = insights.stats_service
+        self.insights_service = insights.insights_service
+        self.ops_service = insights.ops_service
 
     def apply_to_app_state(self, app: FastAPI) -> None:
         app.state.settings = self.settings
