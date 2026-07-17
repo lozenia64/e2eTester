@@ -11,10 +11,10 @@
   3. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
      — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
        `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
-  4. 코드가 읽는 환경변수가 README.md 또는 .env.example 에 문서화되어 있는지
-  5. 기본 Gemini 모델 체인(코드 상수)이 README.md / .env.example 와 일치하는지
+  4. 코드가 읽는 환경변수가 docs/INSTALL.md 또는 .env.example 에 문서화되어 있는지
+  5. 기본 Gemini 모델 체인(코드 상수)이 docs/INSTALL.md / .env.example 와 일치하는지
   6. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
-  7. (역방향) README.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
+  7. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
   8. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
 
 사용법:
@@ -61,6 +61,7 @@ MANIFEST_GLOB = "app/systems/*/manifest.yaml"
 SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
 ARCHITECTURE_DOC = REPO_ROOT / "E2E_ARCHITECTURE.md"
 README_DOC = REPO_ROOT / "README.md"
+INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 API_DIR = REPO_ROOT / "app" / "api"
 GEMINI_MODELS_SRC = REPO_ROOT / "app" / "ai" / "gemini_models.py"
@@ -265,18 +266,18 @@ def _collect_env_names() -> tuple[set[str], set[str]]:
 
 
 def check_env_vars_documented() -> CheckResult:
-    result = CheckResult("코드가 읽는 환경변수가 README.md/.env.example 에 문서화")
-    doc_text = _read(README_DOC) + "\n" + _read(ENV_EXAMPLE)
+    result = CheckResult("코드가 읽는 환경변수가 docs/INSTALL.md/.env.example 에 문서화")
+    doc_text = _read(INSTALL_DOC) + "\n" + _read(ENV_EXAMPLE)
     literals, prefixes = _collect_env_names()
     for name in sorted(literals):
         if name not in doc_text:
             result.problems.append(
-                f"환경변수 `{name}` 가 README.md/.env.example 에 문서화되지 않음."
+                f"환경변수 `{name}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
             )
     for prefix in sorted(prefixes):
         if prefix not in doc_text:
             result.problems.append(
-                f"동적 환경변수 prefix `{prefix}{{...}}` 가 README.md/.env.example 에 문서화되지 않음."
+                f"동적 환경변수 prefix `{prefix}{{...}}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
             )
     result.details.append(
         f"환경변수 {len(literals)}개 + 동적 prefix {len(prefixes)}개를 문서와 대조했습니다."
@@ -291,8 +292,8 @@ def check_documented_env_vars_used() -> CheckResult:
     (`E2E_EMAIL_RECIPIENTS_{...}` 류) 양쪽과 대조하고, 환경변수처럼 보이지만 아닌
     토큰(DOC_ENV_EXEMPT — 예: 파일명 E2E_ARCHITECTURE)은 제외한다.
     """
-    result = CheckResult("README.md/.env.example 의 환경변수를 코드가 읽음 (죽은 변수 없음)")
-    doc_text = _read(README_DOC) + "\n" + _read(ENV_EXAMPLE)
+    result = CheckResult("docs/INSTALL.md/.env.example 의 환경변수를 코드가 읽음 (죽은 변수 없음)")
+    doc_text = _read(INSTALL_DOC) + "\n" + _read(ENV_EXAMPLE)
     literals, prefixes = _collect_env_names()
     documented = sorted(set(DOC_ENV_RE.findall(doc_text)) - DOC_ENV_EXEMPT)
     for name in documented:
@@ -302,7 +303,7 @@ def check_documented_env_vars_used() -> CheckResult:
             continue
         result.problems.append(
             f"문서화된 환경변수 `{name}` 를 읽는 코드가 없음 "
-            f"(변수 제거/개명 시 README.md/.env.example 에서도 제거/갱신 필요)."
+            f"(변수 제거/개명 시 docs/INSTALL.md/.env.example 에서도 제거/갱신 필요)."
         )
     result.details.append(f"문서 환경변수 {len(documented)}개를 코드와 대조했습니다.")
     return result
@@ -371,7 +372,7 @@ def check_folder_tree_paths_exist() -> CheckResult:
 # 5. 기본 Gemini 모델 체인
 # --------------------------------------------------------------------------- #
 def check_model_chain_matches() -> CheckResult:
-    result = CheckResult("기본 Gemini 모델 체인이 README.md/.env.example 와 일치")
+    result = CheckResult("기본 Gemini 모델 체인이 docs/INSTALL.md/.env.example 와 일치")
     src = _read(GEMINI_MODELS_SRC)
     match = MODEL_CHAIN_RE.search(src)
     if not match:
@@ -382,7 +383,7 @@ def check_model_chain_matches() -> CheckResult:
     models = re.findall(r"""["']([^"']+)["']""", match.group(1))
     chain = "|".join(models)
     result.details.append(f"코드 기본 모델 체인: {chain}")
-    for doc_path in (README_DOC, ENV_EXAMPLE):
+    for doc_path in (INSTALL_DOC, ENV_EXAMPLE):
         if chain not in _read(doc_path):
             result.problems.append(
                 f"기본 모델 체인 `{chain}` 가 {doc_path.name} 와 일치하지 않음 "
