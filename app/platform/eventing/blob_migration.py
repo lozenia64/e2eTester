@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from app.core.enums import ModuleStatus, RunStatus
 from app.domain import events as domain_events
 from app.domain.summary_fields import run_summary_fields
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import RunRecord
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 

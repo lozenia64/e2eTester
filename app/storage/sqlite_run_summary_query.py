@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from app.core.enums import RunStatus
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.query_rows import Page, RunComparisonRow, RunSummaryFilter, RunSummaryRow
 
 _TERMINAL_FOR_BASELINE = (

@@ -15,8 +15,8 @@ import pytest
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.eventsourcing.snapshot_rebuild import rebuild_run_snapshots
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.platform.eventing.snapshot_rebuild import rebuild_run_snapshots
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.records import RunRecord
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
@@ -156,7 +156,7 @@ async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
     from app.contexts.suite.domain.aggregate import SuiteAggregate
     from app.core.enums import SuiteStatus
     from app.core.suite_models import SuiteRun, SuiteStep
-    from app.eventsourcing.snapshot_rebuild import rebuild_all_snapshots
+    from app.platform.eventing.snapshot_rebuild import rebuild_all_snapshots
     from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 
     db = SqliteDatabase(tmp_path / "suite.db")

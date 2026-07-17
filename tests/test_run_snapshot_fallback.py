@@ -11,10 +11,10 @@ from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.domain.summary_fields import module_history_fields, run_summary_fields
-from app.eventsourcing.snapshot_rebuild import repair_incomplete_run_snapshots
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.orchestrator.queries.run_queries import RunQueries
-from app.projections.handlers import _module_history_upsert, _run_history_upsert
+from app.platform.eventing.handlers import _module_history_upsert, _run_history_upsert
+from app.platform.eventing.snapshot_rebuild import repair_incomplete_run_snapshots
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.records import RunRecord
 from app.storage.run_log_store import InMemoryRunLogStore
 from app.storage.run_snapshot_fallback import is_incomplete_snapshot, resolve_run_snapshot

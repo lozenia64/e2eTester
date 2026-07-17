@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 from app.core.suite_models import SuiteRun
 from app.domain.events import DomainEvent
-from app.eventsourcing.outbox import SqliteOutbox
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.outbox import SqliteOutbox
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import SuiteRecord
 
 

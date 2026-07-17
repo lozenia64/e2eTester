@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.contexts.identity.infrastructure.sqlite_user_repository import SqliteUserRepository
 from app.contexts.identity.service import UserService
-from app.storage.sqlite_user_repository import SqliteUserRepository
 
 
 @dataclass(frozen=True)

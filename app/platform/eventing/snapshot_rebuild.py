@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 
 from app.contexts.run.domain.decider import rebuild_state
 from app.contexts.suite.domain.decider import rebuild_state as rebuild_suite_state
-from app.eventsourcing.event_store import _row_to_event
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.event_store import _row_to_event
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import RunRecord, SuiteRecord
 
 

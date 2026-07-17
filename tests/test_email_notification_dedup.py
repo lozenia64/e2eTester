@@ -11,13 +11,13 @@ import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.events.bus import EventBus, RunFinished
-from app.events.subscribers.email_notification import EmailNotificationSubscriber
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.notifications.run_completion_email import (
     EmailNotificationConfig,
     RunCompletionEmailNotifier,
 )
+from app.platform.eventing.bus import EventBus, RunFinished
+from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 
@@ -69,7 +69,7 @@ async def test_four_subscribers_with_shared_store_send_once(tmp_path):
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            "app.events.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
+            "app.platform.eventing.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
             lambda *_args, **_kwargs: notifier,
         )
         await asyncio.gather(
@@ -100,7 +100,7 @@ async def test_email_subscriber_sends_once_for_concurrent_run_finished(tmp_path)
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            "app.events.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
+            "app.platform.eventing.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
             lambda *_args, **_kwargs: notifier,
         )
         tasks = [

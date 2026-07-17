@@ -7,18 +7,18 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
+from app.contexts.insights.infrastructure.sqlite_daily_status_query import SqliteDailyStatusQuery
+from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.scheduling.scheduler import schedule_today_label
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import ProjectionHandlers
-from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
-from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_stats_query import SqliteStatsQuery
 
 
 def _sample_run(run_id: str = "run_proj") -> Run:

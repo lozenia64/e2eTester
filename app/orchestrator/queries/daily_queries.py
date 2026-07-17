@@ -14,8 +14,8 @@ from app.contexts.insights.application.daily_dashboard import build_daily_dashbo
 from app.contexts.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
 
 if TYPE_CHECKING:
+    from app.contexts.insights.infrastructure.ports import DailyStatusQueryPort
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import DailyStatusQueryPort
 
 
 class DailyDashboardQueries:

@@ -6,8 +6,8 @@ from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.run_models import FailureAnalysis, FailureAnalysisRequest, Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 from app.core.system_models import ModuleDefinition
-from app.events.bus import EventBus, RunFinished
 from app.platform.artifact_manager import ArtifactManager
+from app.platform.eventing.bus import EventBus, RunFinished
 
 
 class FailureAnalysisSubscriber:

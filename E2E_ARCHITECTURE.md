@@ -103,6 +103,9 @@ e2eTester/
       jwt.py
       service.py
       models.py
+      infrastructure/
+        user_repository.py         # UserRepositoryPort + 인메모리 어댑터(테스트용)
+        sqlite_user_repository.py  # SQLite 사용자 어댑터(기본 사용)
     core/
       enums.py                     # RunStatus/SuiteStatus/ModuleStatus (PASSED/ANOMALY/ERROR/...)
       env_utils.py
@@ -152,23 +155,25 @@ e2eTester/
       summary_fields.py            # run_summary_fields / suite_summary_fields (fat event 요약)
     composition/
       container.py                 # AppContainer — 컴포지션 루트(저장소·게이트웨이·OutboxRelay·서비스 배선)
-    eventsourcing/
-      event_store.py               # SqliteEventStore (domain events append-only)
-      outbox.py                    # SqliteOutbox (transactional outbox)
-      relay.py                     # OutboxRelay → projection · EventBus · RealtimeProjector
-      support.py                   # SqliteDatabase + projection 스키마
-    projections/
-      handlers.py                  # ProjectionHandlers (CQRS read-model 테이블 갱신)
+    platform/                      # 공유 인프라·기술 유틸(특정 컨텍스트 무소속)
+      artifact_manager.py          # 아티팩트 경로·파일 관리(실행 평면 아님 — 오케스트레이션이 경로 계산)
+      eventing/                    # 이벤트 소싱·아웃박스·도메인 버스·프로젝션 핸들러
+        event_store.py             # SqliteEventStore (domain events append-only)
+        outbox.py                  # SqliteOutbox (transactional outbox)
+        relay.py                   # OutboxRelay → projection · EventBus · RealtimeProjector
+        support.py                 # SqliteDatabase + projection 스키마
+        snapshot_rebuild.py        # aggregate_snapshots 이벤트 폴드 재구성
+        blob_migration.py          # 레거시 blob → 이벤트 스트림 1회성 이관
+        bus.py                     # EventBus + RunFinished/RunWaitingInput/RunResumed/SuiteFinished
+        handlers.py                # ProjectionHandlers (CQRS read-model 테이블 갱신)
+        subscribers/
+          failure_analysis.py      # FailureAnalysisSubscriber (AI 실패 분석)
+          email_notification.py    # EmailNotificationSubscriber (종료 메일)
     realtime/
       adapter.py                   # RealtimeNotificationPort 구현
       projector.py                 # RealtimeProjector (OutboxRelay가 WS fan-out 담당)
       ports.py                     # RealtimeNotificationPort
       redis_fanout.py              # Redis pub/sub fan-out (다중 API 프로세스)
-    events/
-      bus.py                       # EventBus + RunFinished/RunWaitingInput/RunResumed/SuiteFinished 도메인 이벤트
-      subscribers/
-        failure_analysis.py        # FailureAnalysisSubscriber (AI 실패 분석)
-        email_notification.py      # EmailNotificationSubscriber (종료 메일)
     execution/
       gateway.py                   # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
       results.py                   # StepExecutionResult: 실행 결과 계약(WP-C4 — runner 에서 이관)
@@ -190,6 +195,9 @@ e2eTester/
       models.py                    # HealingAttempt/정책·패치 모델 + 기본 신뢰도 임계치
       ports.py                     # HealingRecorderPort (어댑터 → 기록 위임 포트)
       service.py                   # HealingService: 치유 기록·정책·패치 얇은 I/O 인터프리터
+      infrastructure/
+        ports.py                   # HealingEventStorePort / HealingPolicyStorePort / HealingPatchStorePort
+        sqlite_healing_stores.py   # SQLite 치유 이벤트/정책/패치 어댑터 + 동기 정책 리더
     notifications/
       run_completion_email.py
       report_renderer.py
@@ -205,8 +213,20 @@ e2eTester/
       stats_charts.py              # 통계 차트 데이터 구성
       ops_service.py               # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
       daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
+    contexts/insights/infrastructure/
+      ports.py                   # StatsQueryPort / DailyStatusQueryPort / Anomaly* 포트
+      sqlite_stats_query.py      # StatsQueryPort SQLite 어댑터
+      in_memory_stats_query.py   # StatsQueryPort 인메모리 어댑터(테스트)
+      sqlite_daily_status_query.py # DailyStatusQueryPort
+      sqlite_anomaly_handling_store.py # AnomalyHandlingStorePort
+      sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
+      module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
+      sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
     contexts/preset/application/
       service.py                   # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
+    contexts/preset/infrastructure/
+      ports.py                   # PresetRepositoryPort
+      sqlite_preset_repository.py # SQLite 인증 프리셋 어댑터(auth_presets 테이블, PII 의도 영속)
     orchestrator/                  # 공유 CQRS 질의 계층(run/suite/insights/preset/healing 서비스는 contexts/ 로 이동됨)
       queries/                     # RunQueries / DailyDashboardQueries (읽기 전용 질의 핸들러)
     registry/
@@ -217,6 +237,10 @@ e2eTester/
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
       command_port.py              # ScheduleRunQueryPort 등 스케줄러 의존 포트
+      infrastructure/
+        ports.py                   # ScheduleRepositoryPort
+        schedule_repository.py     # 인메모리 예약 어댑터
+        sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
     automation/                    # Automation BC (Flow + PageObject 4-layer)
       ports.py                     # AutomationPort / AutomationContext / Flow
       scenario_engine.py           # workflow_step → Flow 디스패치
@@ -245,8 +269,6 @@ e2eTester/
         rep_homepage/
           constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
       fixtures/                    # 계약 테스트용 최소 HTML
-    platform/                      # 공유 인프라·기술 유틸(특정 컨텍스트 무소속)
-      artifact_manager.py          # 아티팩트 경로·파일 관리(실행 평면 아님 — 오케스트레이션이 경로 계산)
     runner/                        # 실행 평면(Playwright 구동 — contexts/api 는 import 금지, AG-009)
       screenshot.py                # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
       step_outcome.py              # StepOutcome 타입드 결과 (StepCompleted/StepNeedsInput)
@@ -296,28 +318,16 @@ e2eTester/
       sqlite_module_history_query.py # ModuleHistoryQueryPort (module_history_index 모듈 실행 이력 행)
       sqlite_suite_summary_query.py # SuiteSummaryQueryPort (suite_history_index 요약 행)
       in_memory_run_summary_query.py # RunSummaryQueryPort 인메모리 어댑터(테스트 전용)
-      sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
-      sqlite_daily_status_query.py # DailyStatusQueryPort
-      sqlite_stats_query.py        # StatsQueryPort (stats_rollup + run/module 이력 행, blob 미접근)
       sqlite_run_log_store.py      # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
       sqlite_run_control_store.py  # SQLite Run 제어 상태 어댑터(취소·OTP 재개, run_control 테이블)
       sqlite_suite_repository.py   # SQLite Suite 어댑터(기본 사용)
       sqlite_suite_control_store.py # SQLite Suite 제어 상태 어댑터(취소 의도, suite_control 테이블)
-      sqlite_schedule_repository.py # SQLite 예약 어댑터(기본 사용)
-      sqlite_user_repository.py    # SQLite 사용자 어댑터(기본 사용)
-      sqlite_preset_repository.py  # SQLite 인증 프리셋 어댑터(auth_presets 테이블, PII 의도 영속)
-      sqlite_anomaly_handling_store.py # SQLite 이상건 처리상태 어댑터(anomaly_handling 테이블)
-      sqlite_healing_stores.py     # SQLite 치유 이벤트/정책/패치 어댑터 + 동기 정책 리더
-      sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
-      module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
-      user_repository.py           # 인메모리 사용자 어댑터(테스트용)
       run_control_store.py         # 인메모리 Run 제어 상태 어댑터
       run_input_store.py           # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
       suite_control_store.py       # 인메모리 Suite 제어 상태 어댑터
       suite_input_store.py         # 인메모리 Suite 시스템별 입력값 어댑터(기본 사용)
       run_repository.py            # 인메모리 Run 어댑터(테스트·영속 불요용)
       run_log_store.py             # 인메모리 모듈 로그 어댑터
-      schedule_repository.py       # 인메모리 예약 어댑터
       suite_repository.py          # 인메모리 Suite 어댑터
     web/
       templates/

@@ -10,11 +10,11 @@ import pytest
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.events.bus import EventBus, RunFinished
-from app.eventsourcing.outbox import SqliteOutbox
-from app.eventsourcing.relay import OutboxRelay
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.bus import EventBus, RunFinished
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.outbox import SqliteOutbox
+from app.platform.eventing.relay import OutboxRelay
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository

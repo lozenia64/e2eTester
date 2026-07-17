@@ -8,17 +8,23 @@ from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
 from app.contexts.insights.application.ops_service import OpsService
 from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.insights.infrastructure.sqlite_anomaly_handling_store import (
+    SqliteAnomalyHandlingStore,
+)
+from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
+from app.contexts.insights.infrastructure.sqlite_module_settings_repository import (
+    SqliteModuleSettingsRepository,
+)
+from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
+from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
+    SqliteScheduleRepository,
+)
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.core.settings import E2ESettings
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.registry.loader import ModuleRegistry
-from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
-from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
-from app.storage.sqlite_stats_query import SqliteStatsQuery
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 

@@ -12,9 +12,9 @@ from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.orchestrator.queries import RunQueries
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_log_store import InMemoryRunLogStore
 from app.storage.run_repository import InMemoryRunRepository

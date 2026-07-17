@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.input_crypto import decrypt_bytes, derive_key, encrypt_bytes
 
 _RUN_INPUT_SALT = b"e2e-run-input-v1"

@@ -8,10 +8,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.insights.infrastructure.in_memory_stats_query import InMemoryStatsQuery
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition, SystemDefinition
-from app.storage.in_memory_stats_query import InMemoryStatsQuery
 from app.storage.run_repository import InMemoryRunRepository
 
 

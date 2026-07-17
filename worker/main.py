@@ -16,12 +16,12 @@ import os
 import uvicorn
 
 from app.contexts.healing.engine import SelfHealingEngine
+from app.contexts.healing.infrastructure.sqlite_healing_stores import SqliteHealingPolicyReader
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.execution.redis_session_registry import RedisSessionRegistry
 from app.platform.artifact_manager import ArtifactManager
 from app.registry.loader import ModuleRegistry
-from app.storage.sqlite_healing_stores import SqliteHealingPolicyReader
 from worker.health import SessionHeartbeatManager
 from worker.http_server import create_http_app
 from worker.session_server import SessionServer

@@ -12,30 +12,34 @@ from app.contexts.healing.composition import compose_healing
 from app.contexts.healing.engine import SelfHealingEngine
 from app.contexts.healing.service import HealingService
 from app.contexts.identity.composition import compose_identity
+from app.contexts.identity.infrastructure.sqlite_user_repository import SqliteUserRepository
 from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
 from app.contexts.insights.application.ops_service import OpsService
 from app.contexts.insights.application.stats_service import StatsService
 from app.contexts.insights.composition import compose_insights
+from app.contexts.insights.infrastructure.sqlite_anomaly_handling_store import (
+    SqliteAnomalyHandlingStore,
+)
+from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
+from app.contexts.insights.infrastructure.sqlite_daily_status_query import SqliteDailyStatusQuery
+from app.contexts.insights.infrastructure.sqlite_module_settings_repository import (
+    SqliteModuleSettingsRepository,
+)
+from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.preset.application.service import PresetService
 from app.contexts.preset.composition import compose_preset_repository, compose_preset_service
+from app.contexts.preset.infrastructure.sqlite_preset_repository import SqlitePresetRepository
 from app.contexts.run.application.service import RunService
 from app.contexts.scheduling.composition import compose_retention_scheduler, compose_scheduler
+from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
+    SqliteScheduleRepository,
+)
 from app.contexts.scheduling.run_retention import RunRetentionScheduler
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
-from app.events.bus import EventBus, RunFinished
-from app.events.subscribers.email_notification import EmailNotificationSubscriber
-from app.events.subscribers.failure_analysis import FailureAnalysisSubscriber
-from app.eventsourcing.outbox import SqliteOutbox
-from app.eventsourcing.relay import OutboxRelay
-from app.eventsourcing.snapshot_rebuild import (
-    rebuild_missing_run_snapshots,
-    repair_incomplete_run_snapshots,
-)
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
@@ -44,7 +48,17 @@ from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
 from app.platform.artifact_manager import ArtifactManager
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.bus import EventBus, RunFinished
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.outbox import SqliteOutbox
+from app.platform.eventing.relay import OutboxRelay
+from app.platform.eventing.snapshot_rebuild import (
+    rebuild_missing_run_snapshots,
+    repair_incomplete_run_snapshots,
+)
+from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
+from app.platform.eventing.subscribers.failure_analysis import FailureAnalysisSubscriber
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
 from app.realtime.redis_fanout import RedisRealtimeFanOut
@@ -54,29 +68,21 @@ from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputSto
 from app.storage.legacy_runs_projection_backfill import backfill_from_legacy_runs
 from app.storage.module_history_backfill import backfill_module_history_index
 from app.storage.run_history_backfill import backfill_run_history_index
-from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
-from app.storage.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
-from app.storage.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_module_settings_repository import SqliteModuleSettingsRepository
-from app.storage.sqlite_preset_repository import SqlitePresetRepository
 from app.storage.sqlite_run_control_store import SqliteRunControlStore
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 from app.storage.sqlite_session_checkpoint_store import (
     SqliteSessionCheckpointStore,
     StorageStateCipher,
 )
-from app.storage.sqlite_stats_query import SqliteStatsQuery
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 from app.storage.sqlite_support import DEFAULT_DB_PATH
-from app.storage.sqlite_user_repository import SqliteUserRepository
 
 if TYPE_CHECKING:
     from fastapi import FastAPI

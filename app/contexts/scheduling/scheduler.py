@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.contexts.scheduling.command_port import ScheduleCommandPort, ScheduleRunQueryPort
 from app.contexts.scheduling.cron import next_run_after, parse_cron
+from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
 from app.contexts.scheduling.schedule_center import (
     MATCH_BEFORE,
     ExecutionPoint,
@@ -37,7 +38,6 @@ from app.core.schedule_models import (
 )
 from app.core.settings import get_settings
 from app.core.suite_models import SuiteRun
-from app.storage.ports import ScheduleRepositoryPort
 from app.storage.query_rows import RunSummaryRow, SuiteSummaryRow
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"

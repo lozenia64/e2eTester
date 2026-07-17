@@ -11,14 +11,14 @@ from app.contexts.run.application.service import RunService
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.events.bus import EventBus
-from app.eventsourcing.snapshot_rebuild import rebuild_missing_run_snapshots
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.in_memory_job_queue import InMemoryJobQueue
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.platform.artifact_manager import ArtifactManager
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.bus import EventBus
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.snapshot_rebuild import rebuild_missing_run_snapshots
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.registry.loader import ModuleRegistry
 from app.storage.legacy_runs_projection_backfill import backfill_from_legacy_runs
 from app.storage.module_history_backfill import backfill_module_history_index

@@ -65,10 +65,9 @@ forbidden_modules = [
     "app.execution",
     "app.api",
     "app.orchestrator",
-    "app.eventsourcing",
+    "app.platform.eventing",
     "app.web",
     "app.composition",
-    "app.projections",
     "app.realtime",
 ]
 

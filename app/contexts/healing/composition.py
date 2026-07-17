@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.contexts.healing.service import HealingService
-from app.registry.loader import ModuleRegistry
-from app.storage.sqlite_healing_stores import (
+from app.contexts.healing.infrastructure.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
     SqliteHealingPolicyStore,
 )
+from app.contexts.healing.service import HealingService
+from app.registry.loader import ModuleRegistry
 
 
 @dataclass(frozen=True)

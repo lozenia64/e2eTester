@@ -5,16 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.ops_buffer import ops_event_buffer
 from app.core.settings import E2ESettings
 from app.execution.run_queue import RunExecutionQueue
-from app.storage.ports import (
-    RunSummaryQueryPort,
-    ScheduleRepositoryPort,
-    SuiteSummaryQueryPort,
-)
+from app.storage.ports import RunSummaryQueryPort, SuiteSummaryQueryPort
 from app.storage.query_rows import Page, RunSummaryFilter
 
 _ACTIVE_RUN_STATUSES = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})

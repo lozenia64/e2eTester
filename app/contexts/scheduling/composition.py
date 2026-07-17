@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from app.contexts.run.application.service import RunService
+from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
+    SqliteScheduleRepository,
+)
 from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.orchestrator.queries import RunQueries
-from app.storage.sqlite_schedule_repository import SqliteScheduleRepository
 
 
 def compose_scheduler(

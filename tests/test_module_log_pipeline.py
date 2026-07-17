@@ -17,10 +17,10 @@ from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition, SystemDefinition
-from app.events.bus import EventBus
 from app.execution.in_memory_job_queue import InMemoryJobQueue
 from app.execution.run_queue import RunExecutionQueue
 from app.execution.simulated_gateway import SimulatedExecutionGateway
+from app.platform.eventing.bus import EventBus
 from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.storage.run_input_store import InMemoryRunInputStore
 from app.storage.run_log_store import InMemoryRunLogStore

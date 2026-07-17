@@ -13,23 +13,16 @@ from datetime import datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from app.contexts.healing.models import HealingEvent, HealingPatch, HealingPolicy
 from app.core.enums import SuiteStatus
-from app.core.preset_models import AuthPreset
-from app.core.run_models import AnomalyHandling, PendingExecution, Run
-from app.core.schedule_models import Schedule
+from app.core.run_models import PendingExecution, Run
 from app.core.suite_models import SuiteRun
 from app.domain.events import DomainEvent
 from app.storage.query_rows import (
-    AnomalyInboxRow,
-    DailyRunSummaryRow,
-    DailyStatusRow,
     ModuleHistoryRow,
     Page,
     RunComparisonRow,
     RunSummaryFilter,
     RunSummaryRow,
-    StatsRollupRow,
     SuiteSummaryRow,
 )
 
@@ -213,130 +206,3 @@ class SuiteReadRepositoryPort(Protocol):
 
 class SuiteRepositoryPort(SuiteReadRepositoryPort, Protocol):
     """Suite 저장소 **복합 포트**(하위 호환 · read-only)."""
-
-
-class ScheduleRepositoryPort(Protocol):
-    async def save(self, schedule: Schedule) -> Schedule: ...
-    async def get(self, schedule_id: str) -> Schedule: ...
-    async def list(self) -> list[Schedule]: ...
-    async def delete(self, schedule_id: str) -> None: ...
-
-
-class AnomalyHandlingStorePort(Protocol):
-    """이상징후 인박스 **처리 레코드**(``AnomalyHandling``)의 저장 경계.
-
-    ANOMALY/ERROR 로 끝난 모듈(이상건)마다 처리상태·담당자·메모를 모듈-Run 단위로 보관한다.
-    이상건 자체는 Run 스캔으로 매번 새로 도출하고, 이 스토어는 그 위에 얹히는 '조치' 메타데이터만
-    소유한다(행이 없으면 기본 ``UNRESOLVED``). ``module_run_id`` = ``f"{run_id}::{module_id}"``.
-    """
-
-    async def get(self, module_run_id: str) -> AnomalyHandling | None: ...
-    async def list(self) -> list[AnomalyHandling]: ...
-    async def upsert(self, handling: AnomalyHandling) -> AnomalyHandling: ...
-
-
-class AnomalyInboxQueryPort(Protocol):
-    """이상징후 인박스 **읽기** 쿼리 — ``anomaly_inbox_index`` 프로젝션."""
-
-    async def list_page(
-        self,
-        allowed_system_codes: list[str] | None,
-        *,
-        limit: int = 500,
-        offset: int = 0,
-    ) -> list[AnomalyInboxRow]: ...
-
-
-class DailyStatusQueryPort(Protocol):
-    """일간 점검 현황 **읽기** 쿼리 — ``daily_system_status`` + 당일 Run 요약."""
-
-    async def list_for_date(
-        self,
-        date_label: str,
-        allowed_system_codes: list[str] | None,
-    ) -> list[DailyStatusRow]: ...
-
-    async def list_run_summaries_for_date(
-        self,
-        date_label: str,
-        since_utc: datetime,
-        allowed_system_codes: list[str] | None,
-    ) -> list[DailyRunSummaryRow]: ...
-
-
-class StatsQueryPort(Protocol):
-    """사용량 통계 **읽기** 쿼리 — ``stats_rollup`` + run/module 이력 인덱스 행.
-
-    통계는 Run 엔티티(blob)를 받지 않는다: Run 단위 귀속은 ``RunSummaryRow``,
-    모듈 단위 집계(통과/실패/소요/절감시간)는 ``ModuleHistoryRow`` 로 계산한다.
-    """
-
-    async def rollup_between(
-        self,
-        from_day: str | None,
-        to_day: str | None,
-        *,
-        system_codes: list[str] | None = None,
-    ) -> list[StatsRollupRow]: ...
-
-    async def list_usage_run_rows(
-        self,
-        from_dt: datetime | None,
-        to_dt: datetime | None,
-    ) -> list[RunSummaryRow]: ...
-
-    async def list_usage_module_rows(
-        self,
-        from_dt: datetime | None,
-        to_dt: datetime | None,
-    ) -> list[ModuleHistoryRow]: ...
-
-
-class HealingEventStorePort(Protocol):
-    """자가 치유 이벤트(감사 로그)의 저장 경계 — append-only.
-
-    무인 실행 중 셀렉터가 깨졌을 때의 치유 시도 1건(무엇이 깨졌나/어떻게 복구했나/신뢰도)을
-    기록한다. 이벤트는 수정되지 않고 쌓이기만 하며, 만성(chronic) 판정·MTTR·복구율 집계의
-    입력이 된다.
-    """
-
-    async def append(self, event: HealingEvent) -> HealingEvent: ...
-    async def list(self, limit: int | None = None) -> list[HealingEvent]: ...
-
-
-class HealingPolicyStorePort(Protocol):
-    """자동 복구 정책(시스템별 auto-heal on/off + 신뢰도 임계치)의 저장 경계.
-
-    ``system_code="*"`` 행이 전역 기본값이다. 실행 스레드는 이 포트가 아니라 같은 테이블을
-    읽는 동기 리더(``SqliteHealingPolicyReader``)로 정책 스냅샷을 조회한다(스레드 경계 분리).
-    """
-
-    async def list(self) -> list[HealingPolicy]: ...
-    async def upsert(self, policy: HealingPolicy) -> HealingPolicy: ...
-
-
-class HealingPatchStorePort(Protocol):
-    """셀렉터 오토픽스 패치(승인 대기 diff 제안)의 저장 경계.
-
-    치유된 셀렉터를 실제 steps 소스에 반영하는 제안(PROPOSED)과 그 승인/거절 감사 이력
-    (누가 언제 어떤 셀렉터를 바꿨나)을 보관한다. 소스 파일 적용 자체는 ``HealingService``
-    가 승인 시점에 수행한다.
-    """
-
-    async def add(self, patch: HealingPatch) -> HealingPatch: ...
-    async def get(self, patch_id: str) -> HealingPatch: ...
-    async def list(self) -> list[HealingPatch]: ...
-    async def update(self, patch: HealingPatch) -> HealingPatch: ...
-
-
-class PresetRepositoryPort(Protocol):
-    """사용자별 인증 프리셋(``AuthPreset``)의 저장 경계.
-
-    프리셋은 인증 정보(PII 포함 가능)를 **의도적으로** 영속한다 — 그것이 기능의 목적이다.
-    소유권 강제(사용자별 격리)는 상위 서비스/라우트가 책임지며, 저장소는 CRUD 만 담당한다.
-    """
-
-    async def save(self, preset: AuthPreset) -> AuthPreset: ...
-    async def get(self, preset_id: str) -> AuthPreset: ...
-    async def list_by_user(self, user_id: str) -> list[AuthPreset]: ...
-    async def delete(self, preset_id: str) -> None: ...

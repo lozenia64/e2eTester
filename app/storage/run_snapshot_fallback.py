@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import FailureAnalysis, Run, RunModule
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import RunRecord
 
 _ACTIVE_MODULE_STATUSES = frozenset(

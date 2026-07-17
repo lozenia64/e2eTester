@@ -15,10 +15,10 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from app.eventsourcing.event_store import SqliteEventStore
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.platform.eventing.event_store import SqliteEventStore
+from app.platform.eventing.handlers import PROJECTION_NAMES, ProjectionHandlers
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.platform.sqlite_connection import connect_sqlite
-from app.projections.handlers import PROJECTION_NAMES, ProjectionHandlers
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 _PROJECTION_TABLES = (

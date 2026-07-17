@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from app.contexts.preset.application.service import PresetService
+from app.contexts.preset.infrastructure.sqlite_preset_repository import SqlitePresetRepository
 from app.contexts.run.application.service import RunService
-from app.storage.sqlite_preset_repository import SqlitePresetRepository
 
 
 def compose_preset_repository(db_path: str) -> SqlitePresetRepository:

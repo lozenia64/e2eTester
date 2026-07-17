@@ -16,6 +16,7 @@ from app.api.routes_schedules import router as schedules_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
 from app.contexts.run.application.planner import RunPlanner
+from app.contexts.scheduling.infrastructure.schedule_repository import InMemoryScheduleRepository
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.core.enums import RunStatus
@@ -26,10 +27,9 @@ from app.core.schedule_models import (
     SUITE_SCHEDULE_SYSTEM_NAME,
     Schedule,
 )
-from app.events.bus import EventBus
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.platform.eventing.bus import EventBus
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.registry.loader import ModuleRegistry
-from app.storage.schedule_repository import InMemoryScheduleRepository
 from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 from app.storage.suite_control_store import InMemorySuiteControlStore
 from app.storage.suite_input_store import InMemorySuiteInputStore

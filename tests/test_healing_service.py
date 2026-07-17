@@ -6,17 +6,17 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.contexts.healing.models import HealingAction, HealingAttempt, PatchStatus
-from app.contexts.healing.service import HealingService
-from app.core.enums import ModuleStatus, RunStatus
-from app.core.run_models import Run, RunModule
-from app.core.system_models import ModuleDefinition
-from app.storage.sqlite_healing_stores import (
+from app.contexts.healing.infrastructure.sqlite_healing_stores import (
     SqliteHealingEventStore,
     SqliteHealingPatchStore,
     SqliteHealingPolicyReader,
     SqliteHealingPolicyStore,
 )
+from app.contexts.healing.models import HealingAction, HealingAttempt, PatchStatus
+from app.contexts.healing.service import HealingService
+from app.core.enums import ModuleStatus, RunStatus
+from app.core.run_models import Run, RunModule
+from app.core.system_models import ModuleDefinition
 
 
 class FakeRegistry:
