@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.contexts.healing.composition import compose_healing
 from app.contexts.healing.engine import SelfHealingEngine
 from app.contexts.healing.service import HealingService
@@ -31,6 +30,7 @@ from app.contexts.preset.application.service import PresetService
 from app.contexts.preset.composition import compose_preset_repository, compose_preset_service
 from app.contexts.preset.infrastructure.sqlite_preset_repository import SqlitePresetRepository
 from app.contexts.run.application.service import RunService
+from app.contexts.run.composition import compose_run_repositories, compose_run_service
 from app.contexts.scheduling.composition import compose_retention_scheduler, compose_scheduler
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
     SqliteScheduleRepository,
@@ -38,17 +38,18 @@ from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
 from app.contexts.scheduling.run_retention import RunRetentionScheduler
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
+from app.contexts.suite.composition import compose_suite_repositories, compose_suite_service
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
 from app.execution.composite_gateway import CompositeExecutionGateway
+from app.execution.composition import compose_execution_gateway, compose_execution_runtime
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
-from app.execution.simulated_gateway import SimulatedExecutionGateway
-from app.execution.worker_gateway import WorkerExecutionGateway
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
 from app.platform.artifact_manager import ArtifactManager
 from app.platform.eventing.bus import EventBus, RunFinished
+from app.platform.eventing.composition import compose_event_bus
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.relay import OutboxRelay
@@ -57,9 +58,9 @@ from app.platform.eventing.snapshot_rebuild import (
     repair_incomplete_run_snapshots,
 )
 from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
-from app.platform.eventing.subscribers.failure_analysis import FailureAnalysisSubscriber
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
+from app.realtime.composition import compose_realtime, should_use_redis_fanout
 from app.realtime.projector import RealtimeProjector
 from app.realtime.redis_fanout import RedisRealtimeFanOut
 from app.registry.loader import ModuleRegistry
@@ -74,10 +75,7 @@ from app.storage.sqlite_run_control_store import SqliteRunControlStore
 from app.storage.sqlite_run_log_store import SqliteRunLogStore
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_session_checkpoint_store import (
-    SqliteSessionCheckpointStore,
-    StorageStateCipher,
-)
+from app.storage.sqlite_session_checkpoint_store import SqliteSessionCheckpointStore
 from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
 from app.storage.sqlite_suite_repository import SqliteSuiteRepository
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
@@ -182,24 +180,23 @@ class AppContainer:
         self.user_repository = identity.user_repository
         self.user_service = identity.user_service
 
-        self.run_write_repo = SqliteRunWriteRepository(self.es_db)
-        self.run_summary_query = SqliteRunSummaryQuery(self.es_db)
-        self.module_history_query = SqliteModuleHistoryQuery(self.es_db)
-        self.suite_summary_query = SqliteSuiteSummaryQuery(self.es_db)
-        self.run_log_store = SqliteRunLogStore(self.db_path)
-        self.run_control_store = SqliteRunControlStore(self.db_path)
         encryption_secret = self.settings.jwt_secret.get_secret_value()
-        self.run_input_store = EncryptedSqliteRunInputStore(self.es_db, encryption_secret)
-        # Phase C: 세션 storage_state 를 입력 스토어와 동일 비밀로 암호화해 보관하는 체크포인트 스토어.
-        self.session_checkpoint_store = SqliteSessionCheckpointStore(
-            self.es_db, cipher=StorageStateCipher(encryption_secret)
-        )
+        run_repos = compose_run_repositories(self.es_db, self.db_path, encryption_secret)
+        self.run_write_repo = run_repos.run_write_repo
+        self.run_summary_query = run_repos.run_summary_query
+        self.module_history_query = run_repos.module_history_query
+        self.suite_summary_query = run_repos.suite_summary_query
+        self.run_log_store = run_repos.run_log_store
+        self.run_control_store = run_repos.run_control_store
+        self.run_input_store = run_repos.run_input_store
+        self.session_checkpoint_store = run_repos.session_checkpoint_store
 
-        self.suite_write_repo = SqliteSuiteWriteRepository(self.es_db)
-        self.suite_repository = SqliteSuiteRepository(self.es_db)
-        self.schedule_repository = SqliteScheduleRepository(self.db_path)
-        self.suite_control_store = SqliteSuiteControlStore(self.db_path)
-        self.suite_input_store = EncryptedSqliteSuiteInputStore(self.es_db, encryption_secret)
+        suite_repos = compose_suite_repositories(self.es_db, self.db_path, encryption_secret)
+        self.suite_write_repo = suite_repos.suite_write_repo
+        self.suite_repository = suite_repos.suite_repository
+        self.schedule_repository = suite_repos.schedule_repository
+        self.suite_control_store = suite_repos.suite_control_store
+        self.suite_input_store = suite_repos.suite_input_store
 
         self.preset_repository = compose_preset_repository(self.db_path)
         self.module_settings_repository = SqliteModuleSettingsRepository(self.db_path)
@@ -209,91 +206,57 @@ class AppContainer:
         self.stats_query = SqliteStatsQuery(self.es_db)
 
     def wire_realtime(self) -> None:
-        use_redis_fanout = self._should_use_redis_fanout()
-        if use_redis_fanout:
-            self.redis_fanout = RedisRealtimeFanOut(self.settings.redis_url)
-            self.realtime = RealtimeNotificationAdapter(self.redis_fanout)
-            self.suite_realtime = SuiteRealtimeNotificationAdapter(self.redis_fanout)
-        else:
-            self.redis_fanout = None
-            self.realtime = RealtimeNotificationAdapter()
-            self.suite_realtime = SuiteRealtimeNotificationAdapter()
+        realtime = compose_realtime(self.settings)
+        self.realtime = realtime.realtime
+        self.suite_realtime = realtime.suite_realtime
+        self.redis_fanout = realtime.redis_fanout
 
     def _should_use_redis_fanout(self) -> bool:
-        """remote 실행 또는 명시 opt-in 일 때만 Redis fan-out 을 켠다."""
-        if not self.settings.redis_url:
-            return False
-        return self.settings.execution_mode == "remote" or self.settings.realtime_fanout_enabled
+        return should_use_redis_fanout(self.settings)
 
     def wire_execution(self) -> None:
-        self.artifact_manager = ArtifactManager()
-        self.system_codes = [system.system_code for system in self.registry.list_systems()]
+        runtime = compose_execution_runtime(self.registry, self.settings)
+        self.artifact_manager = runtime.artifact_manager
+        self.system_codes = runtime.system_codes
+        self.session_registry = runtime.session_registry
+        self.run_queue = runtime.run_queue
 
-        # 실행 평면 분리(Model B): Run 오케스트레이션 인터프리터는 **항상 API 프로세스에서
-        # in-process** 로 돈다(ProfilePartitionedRunQueue). 원격 모드에서도 Redis 로 Run 잡을
-        # 분배하지 않는다 — 씬 워커에는 Run 을 소비할 RunService/RunJobConsumer 가 없기 때문이다.
-        # 브라우저 스텝만 WorkerExecutionGateway 로 워커에 위임하고, Redis 는 워커 세션 리스
-        # (session_registry)·실시간 팬아웃·체크포인트에만 쓴다.
-        self.session_registry = (
-            RedisSessionRegistry(self.settings.redis_url, self.settings.session_lease_ttl)
-            if self.settings.execution_mode == "remote"
-            else None
-        )
-        self.run_queue = ProfilePartitionedRunQueue(
-            heavy_workers=self.settings.run_concurrency_heavy,
-            light_workers=self.settings.run_concurrency_light,
-            interactive_workers=self.settings.run_concurrency_interactive,
-        )
-
-        # 실행 평면 분리(WP-C1): API 프로세스에는 Playwright·실행 스레드가 없다. 실 브라우저
-        # 모듈은 항상 WorkerExecutionGateway 로 워커에 위임하고(런타임 자가치유도 워커가 소유),
-        # SIM 모듈만 in-process SimulatedGateway 가 처리한다. in-process 브라우저 호스트는
-        # 워커의 SessionServer 하나뿐이다(구 LocalExecutionGateway 는 폐기).
         self.healing_engine = None  # 런타임 치유 엔진은 워커 프로세스가 소유(API 는 기록/패치만).
-
         healing = compose_healing(self.db_path, self.registry)
         self.healing_service = healing.healing_service
 
-        self.execution_gateway = CompositeExecutionGateway(
-            [
-                WorkerExecutionGateway(self.settings.worker_base_url, self.session_registry),
-                SimulatedExecutionGateway(),
-            ]
-        )
+        gateway = compose_execution_gateway(self.settings, self.session_registry)
+        self.execution_gateway = gateway.execution_gateway
 
     def wire_orchestration(self) -> None:
-        self.event_bus = EventBus()
-        failure_analyzer = GeminiFailureAnalyzer.from_env()
-        FailureAnalysisSubscriber(failure_analyzer, self.run_write_repo, self.registry).register(
-            self.event_bus
-        )
-        self.email_dedup_store = SqliteEmailNotificationDedupStore(self.es_db)
-        self.email_subscriber = EmailNotificationSubscriber(
-            self.system_codes,
-            dedup_store=self.email_dedup_store,
-        )
-        self.email_subscriber.register(self.event_bus)
-
-        self.run_service = RunService(
+        eventing = compose_event_bus(
             registry=self.registry,
-            write_repo=self.run_write_repo,
-            summary_query=self.run_summary_query,
+            run_write_repo=self.run_write_repo,
+            system_codes=self.system_codes,
+            es_db=self.es_db,
+        )
+        self.event_bus = eventing.event_bus
+        self.email_dedup_store = eventing.email_dedup_store
+        self.email_subscriber = eventing.email_subscriber
+
+        run_svc = compose_run_service(
+            registry=self.registry,
+            run_write_repo=self.run_write_repo,
+            run_summary_query=self.run_summary_query,
             realtime=self.realtime,
-            log_store=self.run_log_store,
+            run_log_store=self.run_log_store,
             execution_gateway=self.execution_gateway,
             event_bus=self.event_bus,
-            control_store=self.run_control_store,
-            input_store=self.run_input_store,
+            run_control_store=self.run_control_store,
+            run_input_store=self.run_input_store,
             run_queue=self.run_queue,
             artifact_manager=self.artifact_manager,
             healing_recorder=self.healing_service,
             session_registry=self.session_registry,
             session_checkpoint_store=self.session_checkpoint_store,
         )
-        if isinstance(self.run_queue, ProfilePartitionedRunQueue):
-            self.run_queue.set_run_job_handler(self.run_service.dispatch_run_job)
+        self.run_service = run_svc.run_service
 
-        # 읽기 전용 질의 핸들러(CQRS query side) — 라우트가 직접 주입받는다.
         self.run_queries = RunQueries(
             self.run_summary_query, self.run_write_repo, self.run_log_store
         )
@@ -302,18 +265,18 @@ class AppContainer:
 
         self.preset_service = compose_preset_service(self.preset_repository, self.run_service)
 
-        self.suite_service = SuiteService(
+        suite_svc = compose_suite_service(
             registry=self.registry,
             run_commands=self.run_service,
-            write_repo=self.suite_write_repo,
-            read_repo=self.suite_repository,
-            realtime=self.suite_realtime,
+            suite_write_repo=self.suite_write_repo,
+            suite_repository=self.suite_repository,
+            suite_realtime=self.suite_realtime,
             event_bus=self.event_bus,
-            cancel_store=self.suite_control_store,
-            input_store=self.suite_input_store,
-            summary_query=self.suite_summary_query,
+            suite_control_store=self.suite_control_store,
+            suite_input_store=self.suite_input_store,
+            suite_summary_query=self.suite_summary_query,
         )
-        self.suite_service.register(self.event_bus)
+        self.suite_service = suite_svc.suite_service
 
         self.scheduler = compose_scheduler(
             self.run_service,
