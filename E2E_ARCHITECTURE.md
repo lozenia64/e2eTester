@@ -1,6 +1,6 @@
 # E2E Tester 아키텍처 문서
 
-> **문서 소유권(SSOT):** 이 문서는 **플랫폼 아키텍처·계층 역할·상태머신·이벤트 모델·아티팩트 전략·폴더 구조·API 엔드포인트 목록(§5.2)** 의 단일 진실원천이다. 시스템별 시나리오는 `docs/scenarios/{code}.md`, 실행 방법·환경변수는 `README.md` 가 소유한다. 전체 규칙과 PR 체크리스트는 [docs/DOCS_GOVERNANCE.md](docs/DOCS_GOVERNANCE.md) 참고. 코드로 추출 가능한 사실은 `scripts/check_docs_consistency.py` 가 소스와의 일치를 강제한다.
+> **문서 소유권(SSOT):** 이 문서는 **플랫폼 아키텍처·계층 역할·상태머신·이벤트 모델·아티팩트 전략·폴더 구조·API 엔드포인트 목록(§5.2)** 의 단일 진실원천이다. 시스템별 시나리오는 `docs/scenarios/{code}.md`, 점검 도구 사용 안내는 `README.md`, 설치·환경변수는 `docs/INSTALL.md` 가 소유한다. 전체 규칙과 PR 체크리스트는 [docs/DOCS_GOVERNANCE.md](docs/DOCS_GOVERNANCE.md) 참고. 코드로 추출 가능한 사실은 `scripts/check_docs_consistency.py` 가 소스와의 일치를 강제한다.
 
 ## 1. 문서 목적
 

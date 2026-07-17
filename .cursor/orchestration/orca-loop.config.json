@@ -1,0 +1,8 @@
+{
+  "verifier_terminal_title_pattern": "Claude Code",
+  "gates_profile": "full",
+  "gates_command": "python3 scripts/ci/run_all_gates.py --profile full",
+  "max_verify_iterations": 3,
+  "wait_timeout_ms": 900000,
+  "heartbeat_interval_ms": 300000
+}
