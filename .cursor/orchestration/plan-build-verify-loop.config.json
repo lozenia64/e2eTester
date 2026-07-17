@@ -1,0 +1,12 @@
+{
+  "claude_terminal_title_pattern": "Claude Code",
+  "claude_preview_patterns": ["Perusing", "Pondering", "Percolating", "Claude Code"],
+  "cursor_terminal_title_pattern": "Cursor",
+  "cursor_preview_patterns": ["Composer", "cursor-agent"],
+  "grok_terminal_title_pattern": "grok",
+  "grok_preview_patterns": ["Grok 4", "always-approve"],
+  "max_cursor_grok_iterations": 5,
+  "max_claude_gate_iterations": 3,
+  "wait_timeout_ms": 1800000,
+  "gates_command": "python3 scripts/ci/run_all_gates.py --profile full"
+}

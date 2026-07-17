@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin wrapper around the Orca CLI for dev-verify loop scripts."""
+"""Thin wrapper around the Orca CLI for plan-build-verify loop scripts."""
 
 from __future__ import annotations
 
