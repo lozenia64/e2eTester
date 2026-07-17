@@ -1,11 +1,26 @@
 # Orchestration runtime
 
-Unified e2e-orchestrator v2 run state (wraps dev-orchestrator phases + e2e domain skills + global agents).
+Two complementary orchestration modes:
 
-- **Runs:** `.cursor/orchestration/runs/{run_id}/` (gitignored)
-- **Skills:** `.cursor/skills/e2e-orchestrator/` + `~/.cursor/skills/dev-*` + `~/.cursor/agents/`
+| Mode | Entry | State dir |
+|------|-------|-----------|
+| **Orca dev-verify loop** (Cursor develops + Claude Code verifies) | `/orchestration <goal>` | `.cursor/orchestration/loops/{loop_id}/` |
+| **e2e-orchestrator** (full multi-agent pipeline) | `e2e-orchestrator 실행: <request>` | `.cursor/orchestration/runs/{run_id}/` |
 
-## Invoke (sole entry point)
+- **Skills:** `.cursor/skills/orca-dev-verify-loop/` · `.cursor/skills/e2e-orchestrator/` + `~/.cursor/skills/dev-*` + `~/.cursor/agents/`
+- **Orca loop config:** `.cursor/orchestration/orca-loop.config.json`
+
+## Orca dev-verify loop (interactive)
+
+Requires Orca runtime + Claude Code terminal in the same worktree.
+
+```
+/orchestration <your development goal>
+```
+
+See [orca-dev-verify-loop/SKILL.md](../skills/orca-dev-verify-loop/SKILL.md).
+
+## e2e-orchestrator (full pipeline)
 
 ```
 e2e-orchestrator 실행: <your request>

@@ -46,6 +46,7 @@ dump.rdb
 
 # --- Cursor: skills 는 커밋, 오케스트레이터 런타임·로컬 리포트는 제외 ---
 .cursor/orchestration/runs/
+.cursor/orchestration/loops/
 .cursor/gates-report.json
 .cursor/plans/
 
