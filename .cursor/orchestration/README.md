@@ -4,21 +4,21 @@ Two complementary orchestration modes:
 
 | Mode | Entry | State dir |
 |------|-------|-----------|
-| **Orca dev-verify loop** (Cursor develops + Claude Code verifies) | `/orchestration <goal>` | `.cursor/orchestration/loops/{loop_id}/` |
+| **Orca plan-build-verify loop** (Claude Code plans + final gate, Cursor implements, Grok strictly verifies) | `/orchestration <goal>` | `.cursor/orchestration/loops/{loop_id}/` |
 | **e2e-orchestrator** (full multi-agent pipeline) | `e2e-orchestrator 실행: <request>` | `.cursor/orchestration/runs/{run_id}/` |
 
-- **Skills:** `.cursor/skills/orca-dev-verify-loop/` · `.cursor/skills/e2e-orchestrator/` + `~/.cursor/skills/dev-*` + `~/.cursor/agents/`
-- **Orca loop config:** `.cursor/orchestration/orca-loop.config.json`
+- **Skills:** `.cursor/skills/orca-plan-build-verify-loop/` · `.cursor/skills/e2e-orchestrator/` + `~/.cursor/skills/dev-*` + `~/.cursor/agents/`
+- **Orca loop config:** `.cursor/orchestration/plan-build-verify-loop.config.json`
 
-## Orca dev-verify loop (interactive)
+## Orca plan-build-verify loop (interactive)
 
-Requires Orca runtime + Claude Code terminal in the same worktree.
+Requires Orca runtime + Claude Code, Cursor, and Grok terminals in the same worktree.
 
 ```
 /orchestration <your development goal>
 ```
 
-See [orca-dev-verify-loop/SKILL.md](../skills/orca-dev-verify-loop/SKILL.md).
+See [orca-plan-build-verify-loop/SKILL.md](../skills/orca-plan-build-verify-loop/SKILL.md).
 
 ## e2e-orchestrator (full pipeline)
 
