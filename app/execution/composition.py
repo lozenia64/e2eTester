@@ -15,6 +15,15 @@ from app.registry.loader import ModuleRegistry
 
 
 @dataclass(frozen=True)
+class ExecutionContainer:
+    artifact_manager: ArtifactManager
+    system_codes: list[str]
+    session_registry: RedisSessionRegistry | None
+    run_queue: ProfilePartitionedRunQueue
+    execution_gateway: CompositeExecutionGateway
+
+
+@dataclass(frozen=True)
 class ExecutionRuntimeComposition:
     artifact_manager: ArtifactManager
     system_codes: list[str]

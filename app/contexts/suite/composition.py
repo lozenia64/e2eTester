@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.contexts.run.application.service import RunService
-from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
-    SqliteScheduleRepository,
-)
 from app.contexts.suite.application.service import SuiteService
 from app.platform.eventing.bus import EventBus
 from app.platform.eventing.support import SqliteDatabase
@@ -20,11 +17,19 @@ from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 
 
+@dataclass
+class SuiteContainer:
+    suite_write_repo: SqliteSuiteWriteRepository = field(init=False)
+    suite_repository: SqliteSuiteRepository = field(init=False)
+    suite_control_store: SqliteSuiteControlStore = field(init=False)
+    suite_input_store: EncryptedSqliteSuiteInputStore = field(init=False)
+    suite_service: SuiteService = field(init=False)
+
+
 @dataclass(frozen=True)
 class SuiteRepositories:
     suite_write_repo: SqliteSuiteWriteRepository
     suite_repository: SqliteSuiteRepository
-    schedule_repository: SqliteScheduleRepository
     suite_control_store: SqliteSuiteControlStore
     suite_input_store: EncryptedSqliteSuiteInputStore
 
@@ -37,7 +42,6 @@ def compose_suite_repositories(
     return SuiteRepositories(
         suite_write_repo=SqliteSuiteWriteRepository(es_db),
         suite_repository=SqliteSuiteRepository(es_db),
-        schedule_repository=SqliteScheduleRepository(db_path),
         suite_control_store=SqliteSuiteControlStore(db_path),
         suite_input_store=EncryptedSqliteSuiteInputStore(es_db, encryption_secret),
     )

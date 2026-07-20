@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
@@ -12,6 +12,9 @@ from app.contexts.insights.infrastructure.sqlite_anomaly_handling_store import (
     SqliteAnomalyHandlingStore,
 )
 from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
+from app.contexts.insights.infrastructure.sqlite_daily_status_query import (
+    SqliteDailyStatusQuery,
+)
 from app.contexts.insights.infrastructure.sqlite_module_settings_repository import (
     SqliteModuleSettingsRepository,
 )
@@ -22,17 +25,25 @@ from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.core.settings import E2ESettings
 from app.execution.profile_queue import ProfilePartitionedRunQueue
+from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
 from app.registry.loader import ModuleRegistry
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 
-@dataclass(frozen=True)
-class InsightsComposition:
-    stats_service: StatsService
-    insights_service: InsightsService
-    ops_service: OpsService
+@dataclass
+class InsightsContainer:
+    module_settings_repository: SqliteModuleSettingsRepository = field(init=False)
+    anomaly_handling_store: SqliteAnomalyHandlingStore = field(init=False)
+    anomaly_inbox_query: SqliteAnomalyInboxQuery = field(init=False)
+    daily_status_query: SqliteDailyStatusQuery = field(init=False)
+    stats_query: SqliteStatsQuery = field(init=False)
+    daily_queries: DailyDashboardQueries = field(init=False)
+    admin_dashboard_queries: AdminDashboardQueries = field(init=False)
+    stats_service: StatsService = field(init=False)
+    insights_service: InsightsService = field(init=False)
+    ops_service: OpsService = field(init=False)
 
 
 def compose_insights(
@@ -50,7 +61,7 @@ def compose_insights(
     settings: E2ESettings,
     run_queue: ProfilePartitionedRunQueue,
     scheduler: SchedulerService,
-) -> InsightsComposition:
+) -> InsightsContainer:
     stats_service = StatsService(
         stats_query=stats_query,
         suite_summary_query=suite_summary_query,
@@ -77,8 +88,8 @@ def compose_insights(
         run_queue=run_queue,
         scheduler=scheduler,
     )
-    return InsightsComposition(
-        stats_service=stats_service,
-        insights_service=insights_service,
-        ops_service=ops_service,
-    )
+    container = InsightsContainer()
+    container.stats_service = stats_service
+    container.insights_service = insights_service
+    container.ops_service = ops_service
+    return container

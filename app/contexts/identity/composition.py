@@ -9,12 +9,12 @@ from app.contexts.identity.service import UserService
 
 
 @dataclass(frozen=True)
-class IdentityComposition:
+class IdentityContainer:
     user_repository: SqliteUserRepository
     user_service: UserService
 
 
-def compose_identity(db_path: str) -> IdentityComposition:
+def compose_identity(db_path: str) -> IdentityContainer:
     user_repository = SqliteUserRepository(db_path)
     user_service = UserService(user_repository)
-    return IdentityComposition(user_repository=user_repository, user_service=user_service)
+    return IdentityContainer(user_repository=user_repository, user_service=user_service)

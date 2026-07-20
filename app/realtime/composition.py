@@ -10,7 +10,7 @@ from app.realtime.redis_fanout import RedisRealtimeFanOut
 
 
 @dataclass(frozen=True)
-class RealtimeComposition:
+class RealtimeContainer:
     realtime: RealtimeNotificationAdapter
     suite_realtime: SuiteRealtimeNotificationAdapter
     redis_fanout: RedisRealtimeFanOut | None
@@ -23,15 +23,15 @@ def should_use_redis_fanout(settings: E2ESettings) -> bool:
     return settings.execution_mode == "remote" or settings.realtime_fanout_enabled
 
 
-def compose_realtime(settings: E2ESettings) -> RealtimeComposition:
+def compose_realtime(settings: E2ESettings) -> RealtimeContainer:
     if should_use_redis_fanout(settings):
         redis_fanout = RedisRealtimeFanOut(settings.redis_url)
-        return RealtimeComposition(
+        return RealtimeContainer(
             realtime=RealtimeNotificationAdapter(redis_fanout),
             suite_realtime=SuiteRealtimeNotificationAdapter(redis_fanout),
             redis_fanout=redis_fanout,
         )
-    return RealtimeComposition(
+    return RealtimeContainer(
         realtime=RealtimeNotificationAdapter(),
         suite_realtime=SuiteRealtimeNotificationAdapter(),
         redis_fanout=None,

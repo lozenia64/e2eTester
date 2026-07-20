@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.contexts.healing.service import HealingService
 from app.contexts.run.application.service import RunService
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
+from app.orchestrator.queries import RunQueries
 from app.platform.artifact_manager import ArtifactManager
 from app.platform.eventing.bus import EventBus
 from app.platform.eventing.support import SqliteDatabase
@@ -25,6 +26,20 @@ from app.storage.sqlite_session_checkpoint_store import (
     StorageStateCipher,
 )
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+
+
+@dataclass
+class RunContainer:
+    run_write_repo: SqliteRunWriteRepository = field(init=False)
+    run_summary_query: SqliteRunSummaryQuery = field(init=False)
+    module_history_query: SqliteModuleHistoryQuery = field(init=False)
+    suite_summary_query: SqliteSuiteSummaryQuery = field(init=False)
+    run_log_store: SqliteRunLogStore = field(init=False)
+    run_control_store: SqliteRunControlStore = field(init=False)
+    run_input_store: EncryptedSqliteRunInputStore = field(init=False)
+    session_checkpoint_store: SqliteSessionCheckpointStore = field(init=False)
+    run_service: RunService = field(init=False)
+    run_queries: RunQueries = field(init=False)
 
 
 @dataclass(frozen=True)

@@ -63,9 +63,9 @@ async def test_container_build_start_stop_lifecycle(tmp_path) -> None:
 
     await container.start()
 
-    assert container.event_bus.handler_count(RunFinished) >= 1
-    assert container.run_queue.worker_count > 0
+    assert container.eventing.event_bus.handler_count(RunFinished) >= 1
+    assert container.execution.run_queue.worker_count > 0
     assert container.outbox_relay is not None
-    assert callable(container.suite_service.load_suite_finished_payload)
+    assert callable(container.suite.suite_service.load_suite_finished_payload)
 
     await container.stop()

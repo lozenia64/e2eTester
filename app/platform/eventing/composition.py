@@ -15,7 +15,7 @@ from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 
 @dataclass(frozen=True)
-class EventingComposition:
+class EventingContainer:
     event_bus: EventBus
     email_dedup_store: SqliteEmailNotificationDedupStore
     email_subscriber: EmailNotificationSubscriber
@@ -27,7 +27,7 @@ def compose_event_bus(
     run_write_repo: SqliteRunWriteRepository,
     system_codes: list[str],
     es_db: SqliteDatabase,
-) -> EventingComposition:
+) -> EventingContainer:
     event_bus = EventBus()
     failure_analyzer = GeminiFailureAnalyzer.from_env()
     FailureAnalysisSubscriber(failure_analyzer, run_write_repo, registry).register(event_bus)
@@ -37,7 +37,7 @@ def compose_event_bus(
         dedup_store=email_dedup_store,
     )
     email_subscriber.register(event_bus)
-    return EventingComposition(
+    return EventingContainer(
         event_bus=event_bus,
         email_dedup_store=email_dedup_store,
         email_subscriber=email_subscriber,
