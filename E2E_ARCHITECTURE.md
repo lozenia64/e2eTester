@@ -1110,6 +1110,27 @@ Suite (`/ws/suites/{suite_id}`):
 - ✅ 자가 치유 approve: 소스 직접 패치 금지 → `artifacts/healing_patches/` 패치 파일만 생성
 - ✅ contract tests (`tests/contract/`)
 
+### Phase 6. 인프라 커널 완전 분리 (Run/Suite 저장소 이관) — 미착수
+
+커밋 `e0f04ab`(identity/preset/healing/scheduling/insights 5개 컨텍스트 SQLite 어댑터를
+`app/storage/` → `app/contexts/{ctx}/infrastructure/`로 이동)는 Run/Suite 저장소를 의도적으로
+제외했다. 이유를 여기 남긴다 — 이 절반은 성격이 다른 두 작업으로 나뉜다:
+
+- **1단계(저위험, 아직 안 함)**: `app/storage/sqlite_run_*`/`sqlite_suite_*`/
+  `encrypted_{run,suite}_input_store.py`/`sqlite_session_checkpoint_store.py`를
+  `app/contexts/{run,suite}/infrastructure/`로 옮기는 것 — 다른 5개 컨텍스트와 동일한 순수
+  import 경로 변경. DB 스키마·쿼리 무변경, 다운타임 불필요. 이 리팩토링을 다시 3자
+  plan-build-verify 루프로 요청하면 바로 진행 가능하다.
+- **2단계(고위험, 트리거 조건 필요)**: `SqliteRunWriteRepository`/`SqliteSuiteWriteRepository`/
+  `SqliteSuiteRepository`는 서로 다른 테이블이 아니라 **같은 물리 테이블
+  `aggregate_snapshots`/`domain_events`를 `stream_id` 접두사(`Run:{id}`/`Suite:{id}`)로만
+  구분해 공유**한다. 1단계로 Python 파일만 옮겨도 이 사실은 안 바뀐다 — 진짜 컨텍스트별
+  데이터 소유(전용 테이블 또는 DB 파일 분리)를 하려면 라이브 데이터를 `aggregate_type` 별로
+  재배치하는 마이그레이션이 필요하고, 다운타임 또는 이중 쓰기 전환 기간이 든다. 지금 규모(단일
+  프로세스, SQLite 한 파일)에서는 이 작업의 실익이 비용보다 크지 않아 보류한다. **트리거
+  조건**: Run/Suite 이벤트 스트림 규모가 한 SQLite 파일의 쓰기 처리량을 실제로 제약하기
+  시작하거나, 컨텍스트별로 별도 DB/수평 확장이 필요해지는 시점.
+
 ## 13. 목표 아키텍처
 
 현재 샘플이 향후 도달해야 할 목표 구조는 아래와 같다.
