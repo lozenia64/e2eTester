@@ -27,9 +27,7 @@ class ScenarioEngine:
         flow = self.get_flow(workflow_step)
         if flow is None:
             return None
-        from app.automation.ports import invoke_flow
-
-        return invoke_flow(flow, ctx)
+        return flow.run(ctx)
 
 
 def as_automation_port(engine: ScenarioEngine) -> AutomationPort:
