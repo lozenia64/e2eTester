@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 
 from app.contexts.run.contracts.records import RunRecord
+from app.contexts.run.domain.events import RunEventRecord
 from app.core.run_models import DashboardEvent, Run
-from app.domain.events import DomainEvent
 from app.realtime.listener_registry import ListenerRegistry
 
 
@@ -22,20 +22,20 @@ class InMemoryRunRepository:
         self._listeners: ListenerRegistry[DashboardEvent] = ListenerRegistry()
         self._lock = asyncio.Lock()
 
-    async def create_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run:
+    async def create_run(self, run: Run, *, events: list[RunEventRecord] | None = None) -> Run:
         del events
         async with self._lock:
             self._runs[run.run_id] = RunRecord.from_domain(run)
         return run
 
-    async def save_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run:
+    async def save_run(self, run: Run, *, events: list[RunEventRecord] | None = None) -> Run:
         del events
         async with self._lock:
             self._runs[run.run_id] = RunRecord.from_domain(run)
         return run
 
-    async def append_events(self, events: list[DomainEvent]) -> None:
-        del events  # 인메모리 어댑터는 이벤트 스토어/아웃박스를 갖지 않는다(테스트 전용).
+    async def append_events(self, run_id: str, events: list[RunEventRecord]) -> None:
+        del run_id, events  # 인메모리 어댑터는 이벤트 스토어/아웃박스를 갖지 않는다(테스트 전용).
 
     async def get_run(self, run_id: str) -> Run:
         async with self._lock:

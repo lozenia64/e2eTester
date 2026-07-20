@@ -9,7 +9,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol
 
 from app.core.logging import get_logger
-from app.domain.events import DomainEvent
 from app.platform.eventing.bus import (
     EventBus,
     RunFinished,
@@ -17,6 +16,7 @@ from app.platform.eventing.bus import (
     RunWaitingInput,
     SuiteFinished,
 )
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.hydration import AggregateHydratorPort
 from app.platform.eventing.outbox import SqliteOutbox
@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 
 class RealtimeApplyPort(Protocol):
-    async def apply(self, event: DomainEvent) -> None: ...
+    async def apply(self, event: EventEnvelope) -> None: ...
 
 
 _EVENT_BUS_MAP: dict[str, tuple[str, Callable[[object], object]]] = {
@@ -132,7 +132,7 @@ class OutboxRelay:
                 logger.exception("아웃박스 릴레이 루프 오류", log_event="outbox.relay_loop_failed")
                 await asyncio.sleep(self._poll_interval_seconds)
 
-    async def _maybe_dispatch_event_bus(self, event: DomainEvent) -> None:
+    async def _maybe_dispatch_event_bus(self, event: EventEnvelope) -> None:
         entry = _EVENT_BUS_MAP.get(event.event_type)
         if entry is None:
             return

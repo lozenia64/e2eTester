@@ -11,11 +11,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.contexts.run.contracts.records import RunRecord
+from app.contexts.run.domain.events import RunEventRecord
+from app.contexts.run.infrastructure.codec import RunEventCodec
 from app.core.run_models import Run
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.event_store import SqliteEventStore
 from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.support import SqliteDatabase
+
+_CODEC = RunEventCodec()
 
 
 class SqliteRunWriteRepository:
@@ -30,11 +34,11 @@ class SqliteRunWriteRepository:
         self._event_store = SqliteEventStore(db)
         self._outbox = SqliteOutbox(db)
 
-    async def create_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run:
+    async def create_run(self, run: Run, *, events: list[RunEventRecord] | None = None) -> Run:
         await self._persist(run, events or [])
         return run
 
-    async def save_run(self, run: Run, *, events: list[DomainEvent] | None = None) -> Run:
+    async def save_run(self, run: Run, *, events: list[RunEventRecord] | None = None) -> Run:
         await self._persist(run, events or [])
         return run
 
@@ -61,12 +65,13 @@ class SqliteRunWriteRepository:
             return await resolve_run_snapshot(self._db, run_id, run)
         return run
 
-    async def append_events(self, events: list[DomainEvent]) -> None:
+    async def append_events(self, run_id: str, events: list[RunEventRecord]) -> None:
         """상태 스냅샷 없이 이벤트·아웃박스만 적재."""
         if not events:
             return
+        envelopes = [_CODEC.encode(run_id, record) for record in events]
         async with await self._db.transaction() as tx:
-            self._append_events_sync(tx, events)
+            self._append_events_sync(tx, envelopes)
 
     async def delete_run(self, run_id: str) -> None:
         """Run 스트림·스냅샷·프로젝션·레거시 blob 을 한 트랜잭션으로 영구 삭제한다."""
@@ -126,11 +131,12 @@ class SqliteRunWriteRepository:
         if row is not None:
             tx.execute(sql, params)
 
-    async def _persist(self, run: Run, events: list[DomainEvent]) -> None:
+    async def _persist(self, run: Run, events: list[RunEventRecord]) -> None:
         payload = RunRecord.serialize(run)
+        envelopes = [_CODEC.encode(run.run_id, record) for record in events]
         async with await self._db.transaction() as tx:
-            if events:
-                self._append_events_sync(tx, events)
+            if envelopes:
+                self._append_events_sync(tx, envelopes)
             # 스냅샷 = 이벤트 폴드의 파생 캐시(유일 상태 저장소). version = append 후 마지막
             # stream_position — scripts/rebuild_snapshots.py 의 재구성 결과와 대조 가능하다.
             version = self._current_stream_position(tx, "Run", run.run_id)
@@ -162,7 +168,7 @@ class SqliteRunWriteRepository:
         )
         return int(row["pos"]) if row is not None else 0
 
-    def _append_events_sync(self, tx, events: list[DomainEvent]) -> None:
+    def _append_events_sync(self, tx, events: list[EventEnvelope]) -> None:
         # 스트림별 stream_position 을 연속 부여한다(낙관적 동시성 좌표). 배치 내 이벤트는 보통
         # 한 애그리거트에 속하지만, 로그 등 혼합 배치도 안전하게 애그리거트별로 증가시킨다.
         next_pos: dict[tuple[str, str], int] = {}

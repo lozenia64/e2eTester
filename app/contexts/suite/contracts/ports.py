@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import Protocol
 
 from app.contexts.suite.contracts.query_rows import SuiteSummaryRow
+from app.contexts.suite.domain.events import SuiteEventRecord
 from app.core.enums import SuiteStatus
 from app.core.suite_models import SuiteRun
-from app.domain.events import DomainEvent
 
 
 class SuiteSummaryQueryPort(Protocol):
@@ -57,13 +57,13 @@ class SuiteWriteRepositoryPort(Protocol):
     """Suite 상태 집합체의 **쓰기** 영속 경계."""
 
     async def create_suite(
-        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+        self, suite: SuiteRun, *, events: list[SuiteEventRecord] | None = None
     ) -> SuiteRun: ...
     async def save_suite(
-        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+        self, suite: SuiteRun, *, events: list[SuiteEventRecord] | None = None
     ) -> SuiteRun: ...
     async def get_suite(self, suite_id: str) -> SuiteRun: ...
-    async def append_events(self, events: list[DomainEvent]) -> None: ...
+    async def append_events(self, suite_id: str, events: list[SuiteEventRecord]) -> None: ...
 
 
 class SuiteReadRepositoryPort(Protocol):

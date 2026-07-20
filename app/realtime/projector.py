@@ -18,7 +18,7 @@ from app.contexts.suite.views.view import SuiteView
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.run_models import DashboardEvent
 from app.core.suite_models import SuiteEvent
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.realtime.ports import RealtimeNotificationPort, SuiteRealtimeNotificationPort
 
 # module_* WS 이벤트를 만드는 Run 이벤트 → 와이어 이벤트 타입.
@@ -57,13 +57,13 @@ class RealtimeProjector:
         # run_loader/suite_loader/log_store 는 더 이상 쓰지 않는다(blob 미접근). 기존 배선
         # 호환을 위해 시그니처만 유지한다(컴포지션 루트가 넘겨도 무시).
 
-    async def apply(self, event: DomainEvent) -> None:
+    async def apply(self, event: EventEnvelope) -> None:
         if event.aggregate_type == "Run":
             await self._apply_run(event)
         elif event.aggregate_type == "Suite":
             await self._apply_suite(event)
 
-    async def _apply_run(self, event: DomainEvent) -> None:
+    async def _apply_run(self, event: EventEnvelope) -> None:
         # 로그(module_log)는 더 이상 도메인 이벤트가 아니다(WP-B5) — RunService 가 실시간 채널로
         # 직접 발행하므로 이 프로젝터(아웃박스 릴레이 경로)는 로그를 다루지 않는다.
         run_id = event.aggregate_id
@@ -109,7 +109,7 @@ class RealtimeProjector:
         if run_wire is not None and summary is not None:
             await self._publish_run_event(run_id, summary, run_wire)
 
-    async def _apply_suite(self, event: DomainEvent) -> None:
+    async def _apply_suite(self, event: EventEnvelope) -> None:
         suite_wire = {
             "SuiteCreated": "suite_created",
             "SuiteStarted": "suite_started",

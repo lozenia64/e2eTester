@@ -9,22 +9,24 @@ import pytest
 
 from app.contexts.insights.application.stats_service import StatsService
 from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
+from app.contexts.run.contracts.records import RunModuleRecord
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.domain.events import RunEventRecord, RunImported
 from app.contexts.run.infrastructure.backfill.module_history_backfill import (
     backfill_module_history_index,
 )
 from app.contexts.run.infrastructure.backfill.run_history_backfill import backfill_run_history_index
+from app.contexts.run.infrastructure.codec import RunEventCodec
 from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition, SystemDefinition
-from app.domain import events as domain_events
 from app.domain.summary_fields import run_summary_fields
 from app.platform.eventing.handlers import ProjectionHandlers, _run_history_upsert
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.platform.snapshot_rebuild import rebuild_missing_run_snapshots
-from tests.eventing_helpers import make_projection_handlers
+from tests.eventing_helpers import make_projection_handlers, run_events_as_envelopes
 
 
 class _Env:
@@ -34,7 +36,11 @@ class _Env:
         self.projections = make_projection_handlers(db, self.write_repo)
         self.sequence = 0
 
-    async def apply(self, events) -> None:
+    async def apply(self, events, *, run_id: str | None = None) -> None:
+        if events and isinstance(events[0], RunEventRecord):
+            if run_id is None:
+                raise ValueError("run_id is required for RunEventRecord batches")
+            events = run_events_as_envelopes(run_id, events)
         for event in events:
             self.sequence += 1
             await self.projections.apply(event, self.sequence)
@@ -79,10 +85,8 @@ class _FakeRegistry:
         ]
 
 
-def _module_wire(module: RunModule) -> dict:
-    wire = module.model_dump(mode="json")
-    wire.pop("logs", None)
-    return wire
+def _module_wire(module: RunModule) -> RunModuleRecord:
+    return RunModuleRecord.from_domain(module)
 
 
 def _passed_run(run_id: str) -> Run:
@@ -120,12 +124,17 @@ async def test_run_imported_populates_module_history_index(tmp_path: Path) -> No
     await ensure_schema(env.db)
 
     run = _passed_run("run_imported")
-    event = domain_events.run_imported(
-        run.run_id,
-        run_summary=run_summary_fields(run),
-        all_modules=[_module_wire(module) for module in run.modules],
+    summary = run_summary_fields(run)
+    record = RunEventRecord(
+        event=RunImported(
+            run_summary=summary,
+            all_modules=[_module_wire(module) for module in run.modules],
+        ),
+        run_summary=summary,
+        event_id="evt_imported",
+        occurred_at=datetime.now(UTC),
     )
-    await env.apply([event])
+    await env.apply(run_events_as_envelopes(run.run_id, [record]))
 
     rows = await SqliteModuleHistoryQuery(env.db).list_for_runs([run.run_id])
     assert len(rows) == 2
@@ -158,7 +167,7 @@ async def test_stats_aggregates_modules_and_savings_from_history(tmp_path: Path)
     aggregate.finalize(None)
     events = aggregate.pull_events()
     await env.write_repo.save_run(aggregate.persistable_state(), events=events)
-    await env.apply(events)
+    await env.apply(events, run_id=run.run_id)
 
     sql, params = _run_history_upsert(run.run_id, run_summary_fields(aggregate.persistable_state()))
     await env.db.execute(sql, params)

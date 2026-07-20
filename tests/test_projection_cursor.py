@@ -11,16 +11,16 @@ from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.event_store import SqliteEventStore
 from app.platform.eventing.handlers import PROJECTION_NAMES, ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
-def _run_finished_event(run_id: str = "run_cursor") -> DomainEvent:
+def _run_finished_event(run_id: str = "run_cursor") -> EventEnvelope:
     requested_at = datetime(2026, 7, 1, 3, 0, tzinfo=UTC)
-    return DomainEvent.create(
+    return EventEnvelope.create(
         "Run",
         run_id,
         "RunFinished",
@@ -86,7 +86,7 @@ async def test_cursor_advances_even_for_unhandled_event_types(tmp_path: Path) ->
     """어떤 프로젝션도 소비하지 않는 이벤트도 커서를 전진시킨다(커서 정체 방지)."""
     db, projections = await _make_handlers(tmp_path, "advance.db")
     # 어떤 프로젝션도 소비하지 않는 합성 이벤트 타입(커서 전진만 확인).
-    noop = DomainEvent.create("Run", "run_x", "RunDiagnosticNoted", {"note": "x"})
+    noop = EventEnvelope.create("Run", "run_x", "RunDiagnosticNoted", {"note": "x"})
 
     await projections.apply(noop, 7)
 

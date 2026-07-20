@@ -128,6 +128,7 @@ e2eTester/
           state_machine.py         # RunStateMachine: Run 실행 결정 전이표 + decide_rehydration(순수)
           decider.py               # Run Decider: decide/evolve/rebuild_state (순수, 이벤트=진실)
           commands.py              # RunCommand 군(decide 입력 의도)
+          events.py                # RunEvent 판별 유니온 + RunEventRecord (타입화 도메인 이벤트)
         application/
           service.py               # RunService: 실행 순서·부작용 오케스트레이션(결정=StateMachine, 변경=Aggregate 위임)
           comparator.py            # RunComparator: 직전 Run 대비 비교(저장소 의존)
@@ -145,6 +146,7 @@ e2eTester/
           records.py               # RunRecord / RunModuleRecord (영속 DTO)
         infrastructure/
           sqlite_run_write_repository.py
+          codec.py                   # RunEventCodec: RunEventRecord ↔ EventEnvelope
           sqlite_run_control_store.py
           sqlite_run_log_store.py
           sqlite_run_summary_query.py
@@ -167,6 +169,7 @@ e2eTester/
           state_machine.py         # SuiteStateMachine: Suite 사가 결정 전이표(순수)
           decider.py               # Suite Decider: decide(cmd,state)→events / evolve (순수, 이벤트=진실)
           commands.py              # SuiteCommand 군(BeginSuite/StartStep/... — decide 입력 의도)
+          events.py                # SuiteEvent 판별 유니온 + SuiteEventRecord (타입화 도메인 이벤트)
         application/
           service.py               # SuiteService: 이벤트 기반 Saga(결정=StateMachine, 변경=Aggregate 위임)
         views/
@@ -177,6 +180,7 @@ e2eTester/
           records.py               # SuiteRecord / SuiteStepRecord (영속 DTO)
         infrastructure/
           sqlite_suite_write_repository.py
+          codec.py                   # SuiteEventCodec: SuiteEventRecord ↔ EventEnvelope
           sqlite_suite_repository.py
           sqlite_suite_control_store.py
           sqlite_suite_summary_query.py
@@ -186,7 +190,6 @@ e2eTester/
           in_memory_suite_input_store.py
           hydration.py             # SuiteHydrator (EventBus SuiteFinished payload)
     domain/                        # 공유 도메인 커널(run+suite 공용)
-      events.py                    # 도메인 이벤트 카탈로그(Run/Suite/RunImported)
       execution_policy.py          # ModuleExecutionPolicy / SystemExecutionPolicy (재시도·부분재실행·execution_profile)
       snapshots.py                 # RunSnapshot / SuiteSnapshot (frozen, aggregate.to_snapshot())
       summary_fields.py            # run_summary_fields / suite_summary_fields (fat event 요약)
@@ -199,6 +202,7 @@ e2eTester/
       security/
         input_crypto.py            # AES-GCM 입력 암호화 프리미티브
       eventing/                    # 이벤트 소싱·아웃박스·도메인 버스·프로젝션 핸들러
+        envelope.py                # EventEnvelope: domain_events/outbox 직렬화 봉투(물리 계층)
         event_store.py             # SqliteEventStore (domain events append-only)
         outbox.py                  # SqliteOutbox (transactional outbox)
         relay.py                   # OutboxRelay → projection · EventBus · RealtimeProjector

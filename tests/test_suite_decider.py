@@ -34,17 +34,21 @@ def _suite(suite_id: str = "suite_dec") -> SuiteRun:
 
 def _initial_state(suite_id: str = "suite_dec") -> object:
     aggregate = SuiteAggregate.for_new_suite(_suite(suite_id))
-    return rebuild_state(aggregate.pull_events())
+    return rebuild_state(aggregate.pull_events(), suite_id=suite_id)
 
 
-def _apply(state, *events):
+def _apply(state, suite_id: str, *events):
     for event in events:
-        state = evolve(state, event)
+        state = evolve(state, event, suite_id=suite_id)
     return state
 
 
+def _event_type_name(event) -> str:
+    return type(event.event).__name__
+
+
 def test_empty_stream_folds_to_none():
-    assert rebuild_state([]) is None
+    assert rebuild_state([], suite_id="suite_dec") is None
 
 
 def test_suite_created_initializes_snapshot():
@@ -57,53 +61,53 @@ def test_suite_created_initializes_snapshot():
 def test_decide_begin_and_start_step():
     state = _initial_state()
     events = decide(c.BeginSuite(), state)
-    assert [e.event_type for e in events] == ["SuiteStarted"]
-    state = _apply(state, *events)
+    assert [_event_type_name(e) for e in events] == ["SuiteStarted"]
+    state = _apply(state, "suite_dec", *events)
     assert state.status == SuiteStatus.RUNNING
 
     events = decide(c.StartStep(0), state)
-    assert [e.event_type for e in events] == ["SuiteStepStarted"]
-    state = _apply(state, *events)
+    assert [_event_type_name(e) for e in events] == ["SuiteStepStarted"]
+    state = _apply(state, "suite_dec", *events)
     assert state.current_step_index == 0
     assert state.steps[0].status == SuiteStatus.RUNNING
 
 
 def test_decide_link_and_record_step_result():
-    state = _apply(_initial_state(), *decide(c.BeginSuite(), _initial_state()))
-    state = _apply(state, *decide(c.StartStep(0), state))
-    state = _apply(state, *decide(c.LinkRun(0, "run_hom"), state))
+    state = _apply(_initial_state(), "suite_dec", *decide(c.BeginSuite(), _initial_state()))
+    state = _apply(state, "suite_dec", *decide(c.StartStep(0), state))
+    state = _apply(state, "suite_dec", *decide(c.LinkRun(0, "run_hom"), state))
     assert state.active_run_id == "run_hom"
     assert state.steps[0].run_id == "run_hom"
 
     events = decide(c.RecordStepResult(0, SuiteStatus.PASSED), state)
-    assert [e.event_type for e in events] == ["SuiteStepFinished"]
-    state = _apply(state, *events)
+    assert [_event_type_name(e) for e in events] == ["SuiteStepFinished"]
+    state = _apply(state, "suite_dec", *events)
     assert state.steps[0].status == SuiteStatus.PASSED
     assert state.active_run_id is None
 
 
 def test_decide_waiting_input_and_resume():
-    state = _apply(_initial_state(), *decide(c.BeginSuite(), _initial_state()))
-    state = _apply(state, *decide(c.StartStep(0), state))
-    state = _apply(state, *decide(c.LinkRun(0, "run_hom"), state))
+    state = _apply(_initial_state(), "suite_dec", *decide(c.BeginSuite(), _initial_state()))
+    state = _apply(state, "suite_dec", *decide(c.StartStep(0), state))
+    state = _apply(state, "suite_dec", *decide(c.LinkRun(0, "run_hom"), state))
 
-    state = _apply(state, *decide(c.MarkWaitingInput("run_hom", "OTP 입력"), state))
+    state = _apply(state, "suite_dec", *decide(c.MarkWaitingInput("run_hom", "OTP 입력"), state))
     assert state.status == SuiteStatus.WAITING_INPUT
     assert state.awaiting_input_run_id == "run_hom"
 
-    state = _apply(state, *decide(c.MarkResumed(), state))
+    state = _apply(state, "suite_dec", *decide(c.MarkResumed(), state))
     assert state.status == SuiteStatus.RUNNING
     assert state.awaiting_input_run_id is None
 
 
 def test_decide_finalize_cancel_remaining():
-    state = _apply(_initial_state(), *decide(c.BeginSuite(), _initial_state()))
-    state = _apply(state, *decide(c.StartStep(0), state))
-    state = _apply(state, *decide(c.RecordStepResult(0, SuiteStatus.ERROR), state))
+    state = _apply(_initial_state(), "suite_dec", *decide(c.BeginSuite(), _initial_state()))
+    state = _apply(state, "suite_dec", *decide(c.StartStep(0), state))
+    state = _apply(state, "suite_dec", *decide(c.RecordStepResult(0, SuiteStatus.ERROR), state))
 
     events = decide(c.FinalizeSuite(SuiteStatus.ERROR, cancel_remaining=True), state)
-    assert [e.event_type for e in events] == ["SuiteFinished"]
-    state = _apply(state, *events)
+    assert [_event_type_name(e) for e in events] == ["SuiteFinished"]
+    state = _apply(state, "suite_dec", *events)
     assert state.status == SuiteStatus.ERROR
     assert is_terminal(state)
     assert state.steps[1].status == SuiteStatus.CANCELLED  # 남은 스텝 봉인
@@ -130,6 +134,6 @@ def test_fold_equals_live_aggregate_full_suite():
     events += aggregate.pull_events()
 
     live = aggregate.to_snapshot()
-    folded = rebuild_state(events)
+    folded = rebuild_state(events, suite_id="suite_x")
     assert folded == live
     assert folded.status == SuiteStatus.ANOMALY

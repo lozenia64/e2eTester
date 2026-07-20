@@ -34,7 +34,11 @@ from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.platform.snapshot_rebuild import rebuild_missing_run_snapshots
 from app.registry.loader import ModuleRegistry
-from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
+from tests.eventing_helpers import (
+    make_outbox_relay,
+    make_projection_handlers,
+    run_events_as_envelopes,
+)
 
 
 class _RealtimeSink:
@@ -92,7 +96,7 @@ async def _finish_run(env: _Env, run_id: str) -> Run:
     events = aggregate.pull_events()
     finished = aggregate.persistable_state()
     await env.write_repo.save_run(finished, events=events)
-    await env.apply(events)
+    await env.apply(run_events_as_envelopes(run_id, events))
     return finished
 
 

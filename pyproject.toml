@@ -102,3 +102,12 @@ name = "Eventing platform does not import bounded contexts"
 type = "forbidden"
 source_modules = ["app.platform.eventing"]
 forbidden_modules = ["app.contexts"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMatchNotExhaustive = "error"
+include = [
+    "app/contexts/run/domain/decider.py",
+    "app/contexts/suite/domain/decider.py",
+]

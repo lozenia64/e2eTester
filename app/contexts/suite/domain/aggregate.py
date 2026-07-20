@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from app.contexts.suite.domain.events import (
+    SuiteCreated,
+    SuiteEvent,
+    SuiteEventRecord,
+    SuiteFinished,
+    SuiteResumed,
+    SuiteStarted,
+    SuiteStepFinished,
+    SuiteStepRunLinked,
+    SuiteStepStarted,
+    SuiteWaitingInput,
+)
 from app.core.enums import SuiteStatus
 from app.core.status_labels import SUITE_ANOMALY_STATUSES, SUITE_ERROR_STATUSES
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.domain import events as domain_events
-from app.domain.events import DomainEvent
 from app.domain.snapshots import SuiteSnapshot
 from app.domain.summary_fields import suite_summary_fields
 
@@ -66,7 +76,7 @@ class SuiteAggregate:
 
         self._state = suite
 
-        self._pending_events: list[DomainEvent] = []
+        self._pending_events: list[SuiteEventRecord] = []
 
     def to_snapshot(self) -> SuiteSnapshot:
         """현재 Suite 상태의 불변 읽기 스냅샷."""
@@ -78,7 +88,7 @@ class SuiteAggregate:
 
         return self._state
 
-    def pull_events(self) -> list[DomainEvent]:
+    def pull_events(self) -> list[SuiteEventRecord]:
         """누적된 도메인 이벤트를 꺼내고 내부 버퍼를 비운다(영속/outbox 기록 직전)."""
 
         pulled = list(self._pending_events)
@@ -93,23 +103,24 @@ class SuiteAggregate:
 
         aggregate = cls(suite)
 
-        aggregate._emit(
-            domain_events.suite_created(suite.suite_id, suite.triggered_by),
-        )
+        aggregate._emit(SuiteCreated(triggered_by=suite.triggered_by))
 
         return aggregate
 
-    def _emit(self, event: DomainEvent) -> None:
+    def _emit(self, event: SuiteEvent) -> None:
         """이벤트를 버퍼에 쌓는다 — 변이 **후** 호출되므로 요약은 사후 상태를 반영한다.
 
         Suite 요약 인덱스 프로젝션이 blob 을 재수화하지 않도록 모든 이벤트에
         ``suite_summary`` 섹션을 동봉한다(fat event; ``RunAggregate._emit`` 와 동형).
         """
-        event = replace(
-            event,
-            payload={**event.payload, "suite_summary": suite_summary_fields(self._state)},
+        self._pending_events.append(
+            SuiteEventRecord(
+                event=event,
+                suite_summary=suite_summary_fields(self._state),
+                event_id=uuid4().hex,
+                occurred_at=datetime.now(UTC),
+            )
         )
-        self._pending_events.append(event)
 
     # --- 조회(규칙/판정) --------------------------------------------------
 
@@ -159,7 +170,7 @@ class SuiteAggregate:
 
         self._state.started_at = datetime.now(UTC)
 
-        self._emit(domain_events.suite_started(self._state.suite_id))
+        self._emit(SuiteStarted())
 
     def start_step(self, index: int) -> SuiteStep:
         """다음 스텝을 RUNNING 으로 전이하고 현재 스텝 포인터를 옮긴다(아직 Run 미연결)."""
@@ -172,7 +183,7 @@ class SuiteAggregate:
 
         self._state.active_run_id = None
 
-        self._emit(domain_events.suite_step_started(self._state.suite_id, index))
+        self._emit(SuiteStepStarted(index))
 
         return step
 
@@ -184,10 +195,9 @@ class SuiteAggregate:
         self._state.active_run_id = run_id
 
         self._emit(
-            domain_events.suite_step_run_linked(
-                self._state.suite_id,
-                self._state.current_step_index,
-                run_id,
+            SuiteStepRunLinked(
+                step_index=self._state.current_step_index,
+                run_id=run_id,
             )
         )
 
@@ -196,13 +206,7 @@ class SuiteAggregate:
 
         step.status = SuiteStatus.ERROR
 
-        self._emit(
-            domain_events.suite_step_finished(
-                self._state.suite_id,
-                step_index,
-                error=error,
-            )
-        )
+        self._emit(SuiteStepFinished(step_index=step_index, error=error))
 
     def record_step_result(self, step: SuiteStep, status: SuiteStatus, *, step_index: int) -> None:
         """하위 Run 종료 결과를 스텝에 반영하고 활성/입력대기 포인터를 정리한다."""
@@ -215,7 +219,7 @@ class SuiteAggregate:
 
         self._state.awaiting_input_prompt = None
 
-        self._emit(domain_events.suite_step_finished(self._state.suite_id, step_index))
+        self._emit(SuiteStepFinished(step_index=step_index))
 
     def mark_waiting_input(self, run_id: str, prompt: str | None) -> None:
         """하위 Run 이 OTP 대기로 일시정지함 → Suite 도 입력 대기로 미러링한다."""
@@ -226,7 +230,7 @@ class SuiteAggregate:
 
         self._state.awaiting_input_prompt = prompt
 
-        self._emit(domain_events.suite_waiting_input(self._state.suite_id, run_id))
+        self._emit(SuiteWaitingInput(run_id=run_id))
 
     def mark_resumed(self) -> None:
         """하위 Run 이 입력 접수 후 재개됨 → Suite 를 RUNNING 으로 되돌린다."""
@@ -237,7 +241,7 @@ class SuiteAggregate:
 
         self._state.awaiting_input_prompt = None
 
-        self._emit(domain_events.suite_resumed(self._state.suite_id))
+        self._emit(SuiteResumed())
 
     def finalize(self, status: SuiteStatus, *, cancel_remaining: bool = False) -> None:
         """Suite 를 종료 상태로 봉인한다(영속·이벤트 발행은 호출자 책임).
@@ -261,7 +265,7 @@ class SuiteAggregate:
 
         self._state.awaiting_input_prompt = None
 
-        self._emit(domain_events.suite_finished(self._state.suite_id, status))
+        self._emit(SuiteFinished(status=status))
 
     def seal_interrupted(self) -> bool:
         """재기동으로 이어받을 수 없는 진행 중 Suite 를 CANCELLED 로 봉인한다.
@@ -289,6 +293,6 @@ class SuiteAggregate:
             if step.status in _SUITE_ACTIVE:
                 step.status = SuiteStatus.CANCELLED
 
-        self._emit(domain_events.suite_finished(self._state.suite_id, SuiteStatus.CANCELLED))
+        self._emit(SuiteFinished(status=SuiteStatus.CANCELLED))
 
         return True

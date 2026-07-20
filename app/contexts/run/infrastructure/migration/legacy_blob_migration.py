@@ -12,11 +12,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from uuid import uuid4
 
-from app.contexts.run.contracts.records import RunRecord
+from app.contexts.run.contracts.records import RunModuleRecord, RunRecord
+from app.contexts.run.domain.events import RunEventRecord, RunImported
 from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
-from app.domain import events as domain_events
 from app.domain.summary_fields import run_summary_fields
 from app.platform.eventing.support import SqliteDatabase
 
@@ -29,10 +31,8 @@ class MigrationReport:
     run_ids: list[str] = field(default_factory=list)
 
 
-def _module_wire(module) -> dict:
-    wire = module.model_dump(mode="json")
-    wire.pop("logs", None)
-    return wire
+def _module_wire(module) -> RunModuleRecord:
+    return RunModuleRecord.from_domain(module)
 
 
 def _normalize_failed(run) -> bool:
@@ -74,10 +74,16 @@ async def migrate_run_blobs(db: SqliteDatabase) -> MigrationReport:
         run = RunRecord.deserialize(data)
         if _normalize_failed(run):
             report.normalized_failed += 1
-        event = domain_events.run_imported(
-            run_id,
-            run_summary=run_summary_fields(run),
-            all_modules=[_module_wire(module) for module in run.modules],
+        summary = run_summary_fields(run)
+        event = RunEventRecord(
+            event=RunImported(
+                run_summary=summary,
+                all_modules=[_module_wire(module) for module in run.modules],
+            ),
+            run_summary=summary,
+            event_id=uuid4().hex,
+            occurred_at=datetime.now(UTC),
+            version=1,
         )
         # save_run: 정규화된 blob 재기록 + genesis 이벤트 append(stream_position=1) + 스냅샷 upsert.
         await write_repo.save_run(run, events=[event])

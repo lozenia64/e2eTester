@@ -5,10 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.contexts.suite.contracts.records import SuiteRecord
+from app.contexts.suite.domain.events import SuiteEventRecord
+from app.contexts.suite.infrastructure.codec import SuiteEventCodec
 from app.core.suite_models import SuiteRun
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.support import SqliteDatabase
+
+_CODEC = SuiteEventCodec()
 
 
 class SqliteSuiteWriteRepository:
@@ -19,13 +23,13 @@ class SqliteSuiteWriteRepository:
         self._outbox = SqliteOutbox(db)
 
     async def create_suite(
-        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+        self, suite: SuiteRun, *, events: list[SuiteEventRecord] | None = None
     ) -> SuiteRun:
         await self._persist(suite, events or [])
         return suite
 
     async def save_suite(
-        self, suite: SuiteRun, *, events: list[DomainEvent] | None = None
+        self, suite: SuiteRun, *, events: list[SuiteEventRecord] | None = None
     ) -> SuiteRun:
         await self._persist(suite, events or [])
         return suite
@@ -40,18 +44,20 @@ class SqliteSuiteWriteRepository:
             raise KeyError(suite_id)
         return SuiteRecord.deserialize(row["state_json"])
 
-    async def append_events(self, events: list[DomainEvent]) -> None:
+    async def append_events(self, suite_id: str, events: list[SuiteEventRecord]) -> None:
         """상태 스냅샷 없이 이벤트·아웃박스만 적재."""
         if not events:
             return
+        envelopes = [_CODEC.encode(suite_id, record) for record in events]
         async with await self._db.transaction() as tx:
-            self._append_events_sync(tx, events)
+            self._append_events_sync(tx, envelopes)
 
-    async def _persist(self, suite: SuiteRun, events: list[DomainEvent]) -> None:
+    async def _persist(self, suite: SuiteRun, events: list[SuiteEventRecord]) -> None:
         payload = SuiteRecord.serialize(suite)
+        envelopes = [_CODEC.encode(suite.suite_id, record) for record in events]
         async with await self._db.transaction() as tx:
-            if events:
-                self._append_events_sync(tx, events)
+            if envelopes:
+                self._append_events_sync(tx, envelopes)
             # 스냅샷 = 이벤트 폴드의 파생 캐시(유일 상태 저장소, Run 쓰기 경로와 동형).
             version = self._current_stream_position(tx, "Suite", suite.suite_id)
             tx.execute(
@@ -76,7 +82,7 @@ class SqliteSuiteWriteRepository:
         )
         return int(row["pos"]) if row is not None else 0
 
-    def _append_events_sync(self, tx, events: list[DomainEvent]) -> None:
+    def _append_events_sync(self, tx, events: list[EventEnvelope]) -> None:
         # 스트림별 stream_position 연속 부여(Run 쓰기 경로와 동형 — 낙관적 동시성 좌표).
         next_pos: dict[tuple[str, str], int] = {}
         event_rows = []

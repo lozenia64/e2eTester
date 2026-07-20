@@ -45,7 +45,7 @@ def test_begin_sets_running_and_started_at():
     assert aggregate.to_snapshot().status == RunStatus.RUNNING
     assert aggregate.to_snapshot().started_at is not None
     events = aggregate.pull_events()
-    assert any(event.event_type == "RunStarted" for event in events)
+    assert any(type(event.event).__name__ == "RunStarted" for event in events)
 
 
 def test_dependencies_satisfied_requires_all_passed():
@@ -174,7 +174,7 @@ def test_finalize_is_idempotent_no_duplicate_run_finished():
     aggregate.finalize(None)
     second_events = aggregate.pull_events()
     assert run.status == RunStatus.ANOMALY
-    assert sum(event.event_type == "RunFinished" for event in first_events) == 1
+    assert sum(type(event.event).__name__ == "RunFinished" for event in first_events) == 1
     assert second_events == []
 
 
@@ -257,7 +257,7 @@ def test_record_retry_increments_attempt_and_requeues():
     assert module.retry_count == 1
     assert module.status == ModuleStatus.QUEUED
     events = aggregate.pull_events()
-    assert any(event.event_type == "RunModuleRetried" for event in events)
+    assert any(type(event.event).__name__ == "RunModuleRetried" for event in events)
 
 
 def test_prepare_partial_rerun_resets_modules_from_index():
@@ -276,4 +276,4 @@ def test_prepare_partial_rerun_resets_modules_from_index():
     assert modules[1].status == ModuleStatus.PENDING
     assert modules[2].status == ModuleStatus.PENDING
     events = aggregate.pull_events()
-    assert any(event.event_type == "RunPartialRerunStarted" for event in events)
+    assert any(type(event.event).__name__ == "RunPartialRerunStarted" for event in events)

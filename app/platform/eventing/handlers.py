@@ -8,12 +8,12 @@ from datetime import UTC, datetime
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.schedule_time import schedule_day_label
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
-from app.domain.events import DomainEvent
 from app.domain.summary_fields import (
     MODULE_HISTORY_STATUSES,
     module_history_fields_from_wire,
     run_summary_fields,
 )
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.hydration import AggregateHydratorPort
 from app.platform.eventing.support import SqliteDatabase
 
@@ -146,7 +146,7 @@ class ProjectionHandlers:
         self._loaders = loaders
         self._cursors: dict[str, int] | None = None
 
-    async def apply(self, event: DomainEvent, sequence_id: int) -> None:
+    async def apply(self, event: EventEnvelope, sequence_id: int) -> None:
         cursors = await self._load_cursors()
         mutations: list[Mutation] = []
         advanced: list[str] = []
@@ -181,7 +181,7 @@ class ProjectionHandlers:
 
     # --- run_history_index --------------------------------------------------
 
-    async def _build_run_history_index(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_run_history_index(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type == "RunDeleted":
             return [("DELETE FROM run_history_index WHERE run_id = ?", (event.aggregate_id,))]
         summary = event.payload.get("run_summary")
@@ -194,7 +194,7 @@ class ProjectionHandlers:
             return [_run_history_upsert(run.run_id, run_summary_fields(run))]
         return self._build_run_history_index_legacy(event)
 
-    def _build_run_history_index_legacy(self, event: DomainEvent) -> list[Mutation]:
+    def _build_run_history_index_legacy(self, event: EventEnvelope) -> list[Mutation]:
         """요약이 없는 구(thin) 이벤트용 부분 갱신 — 마이그레이션 전 이력 재생 전용."""
         if event.event_type == "RunStarted":
             return [
@@ -240,7 +240,7 @@ class ProjectionHandlers:
 
     # --- suite_history_index --------------------------------------------------
 
-    async def _build_suite_history_index(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_suite_history_index(self, event: EventEnvelope) -> list[Mutation]:
         summary = event.payload.get("suite_summary")
         if summary is None or event.aggregate_type != "Suite":
             return []
@@ -279,7 +279,7 @@ class ProjectionHandlers:
 
     # --- module_history_index -------------------------------------------------
 
-    async def _build_module_history_index(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_module_history_index(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type == "RunDeleted":
             return [("DELETE FROM module_history_index WHERE run_id = ?", (event.aggregate_id,))]
         if event.event_type == "ModuleFailureAnalysisAttached":
@@ -333,7 +333,7 @@ class ProjectionHandlers:
 
     # --- anomaly_inbox_index ------------------------------------------------
 
-    async def _build_anomaly_inbox_index(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_anomaly_inbox_index(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type == "RunDeleted":
             return [("DELETE FROM anomaly_inbox_index WHERE run_id = ?", (event.aggregate_id,))]
         if event.event_type != "ModuleFinished":
@@ -374,7 +374,7 @@ class ProjectionHandlers:
 
     # --- daily_system_status ------------------------------------------------
 
-    async def _build_daily_system_status(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_daily_system_status(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type != "ModuleFinished":
             return []
         status = ModuleStatus(event.payload["status"])
@@ -409,7 +409,7 @@ class ProjectionHandlers:
 
     # --- stats_rollup -------------------------------------------------------
 
-    async def _build_stats_rollup(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_stats_rollup(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type != "RunFinished":
             return []
         status = RunStatus(event.payload["status"])
@@ -450,7 +450,7 @@ class ProjectionHandlers:
 
     # --- schedule_execution_history -----------------------------------------
 
-    async def _build_schedule_execution_history(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_schedule_execution_history(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type != "RunFinished":
             return []
         schedule_id = event.payload.get("schedule_id")
@@ -475,7 +475,7 @@ class ProjectionHandlers:
 
     # --- system_last_finished -----------------------------------------------
 
-    async def _build_system_last_finished(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_system_last_finished(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type != "RunFinished":
             return []
         status = RunStatus(event.payload["status"])
@@ -499,7 +499,7 @@ class ProjectionHandlers:
 
     # --- run_comparison_cache -----------------------------------------------
 
-    async def _build_run_comparison_cache(self, event: DomainEvent) -> list[Mutation]:
+    async def _build_run_comparison_cache(self, event: EventEnvelope) -> list[Mutation]:
         if event.event_type == "RunDeleted":
             return [("DELETE FROM run_comparison_cache WHERE run_id = ?", (event.aggregate_id,))]
         if event.event_type != "RunComparisonAttached":

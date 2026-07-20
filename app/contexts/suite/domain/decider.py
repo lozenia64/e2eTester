@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.suite.domain.events import SuiteEventRecord, SuiteSummaryWire
 from app.core.enums import SuiteStatus
-from app.domain.events import DomainEvent
 from app.domain.snapshots import SuiteSnapshot, SuiteStepSnapshot
 
 _TERMINAL = {
@@ -34,7 +34,7 @@ def _parse_dt(value: str | None) -> datetime | None:
     return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
-def _snapshot_from_summary(suite_id: str, summary: dict) -> SuiteSnapshot:
+def _snapshot_from_summary(suite_id: str, summary: SuiteSummaryWire) -> SuiteSnapshot:
     return SuiteSnapshot(
         suite_id=suite_id,
         status=SuiteStatus(summary["status"]),
@@ -50,7 +50,7 @@ def _snapshot_from_summary(suite_id: str, summary: dict) -> SuiteSnapshot:
             for step in summary.get("steps", [])
         ),
         current_step_index=summary.get("current_step_index", 0),
-        requested_at=_parse_dt(summary["requested_at"]),
+        requested_at=_parse_dt(summary["requested_at"]) or datetime(1970, 1, 1, tzinfo=UTC),
         started_at=_parse_dt(summary.get("started_at")),
         ended_at=_parse_dt(summary.get("ended_at")),
         active_run_id=summary.get("active_run_id"),
@@ -65,23 +65,22 @@ def _snapshot_from_summary(suite_id: str, summary: dict) -> SuiteSnapshot:
     )
 
 
-def evolve(state: SuiteSnapshot | None, event: DomainEvent) -> SuiteSnapshot | None:
+def evolve(
+    state: SuiteSnapshot | None, record: SuiteEventRecord, *, suite_id: str
+) -> SuiteSnapshot | None:
     """이벤트 한 건을 접어 새 Suite 상태를 만든다(순수).
 
     모든 Suite 이벤트가 ``suite_summary`` 로 전체 상태를 실어 나르므로, 최신 이벤트의 요약으로
     스냅샷을 통째로 재구성한다.
     """
-    summary = event.payload.get("suite_summary")
-    if summary is None:
-        return state
-    return _snapshot_from_summary(event.aggregate_id, summary)
+    return _snapshot_from_summary(suite_id, record.suite_summary)
 
 
-def rebuild_state(events: list[DomainEvent]) -> SuiteSnapshot | None:
+def rebuild_state(events: list[SuiteEventRecord], *, suite_id: str) -> SuiteSnapshot | None:
     """Suite 이벤트 스트림 전체를 접어 권위 있는 상태를 재구성한다(없으면 None)."""
     state: SuiteSnapshot | None = None
-    for event in events:
-        state = evolve(state, event)
+    for record in events:
+        state = evolve(state, record, suite_id=suite_id)
     return state
 
 

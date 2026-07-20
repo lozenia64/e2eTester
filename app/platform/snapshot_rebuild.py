@@ -15,8 +15,10 @@ from datetime import UTC, datetime
 
 from app.contexts.run.contracts.records import RunRecord
 from app.contexts.run.domain.decider import rebuild_state
+from app.contexts.run.infrastructure.codec import RunEventCodec
 from app.contexts.suite.contracts.records import SuiteRecord
 from app.contexts.suite.domain.decider import rebuild_state as rebuild_suite_state
+from app.contexts.suite.infrastructure.codec import SuiteEventCodec
 from app.platform.eventing.event_store import _row_to_event
 from app.platform.eventing.support import SqliteDatabase
 
@@ -68,14 +70,24 @@ async def _stream_position(db: SqliteDatabase, aggregate_type: str, aggregate_id
 
 def snapshot_state_json(run_id: str, events) -> str | None:
     """Run 이벤트 스트림을 접어 스냅샷 JSON(=blob 형태)을 만든다(없으면 None)."""
-    state = rebuild_state(events)
+    if not events:
+        return None
+    aggregate_id = run_id or events[0].aggregate_id
+    codec = RunEventCodec()
+    records = [codec.decode(event) for event in events]
+    state = rebuild_state(records, run_id=aggregate_id)
     if state is None:
         return None
     return RunRecord.serialize(state.to_run())
 
 
 def _suite_state_json(events) -> str | None:
-    state = rebuild_suite_state(events)
+    if not events:
+        return None
+    suite_id = events[0].aggregate_id
+    codec = SuiteEventCodec()
+    records = [codec.decode(event) for event in events]
+    state = rebuild_suite_state(records, suite_id=suite_id)
     if state is None:
         return None
     return SuiteRecord.serialize(state.to_suite())
