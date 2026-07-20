@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.contexts.run.application.service import RunService
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
@@ -16,9 +16,9 @@ from app.orchestrator.queries import RunQueries
 
 @dataclass
 class SchedulingContainer:
-    schedule_repository: SqliteScheduleRepository = field(init=False)
-    scheduler: SchedulerService = field(init=False)
-    retention_scheduler: RunRetentionScheduler | None = field(init=False, default=None)
+    schedule_repository: SqliteScheduleRepository
+    scheduler: SchedulerService | None = None
+    retention_scheduler: RunRetentionScheduler | None = None
 
 
 def compose_scheduler(

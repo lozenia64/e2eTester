@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.contexts.identity.service import UserService
 from app.contexts.insights.application.insights_service import InsightsService
@@ -26,24 +26,47 @@ from app.contexts.scheduling.scheduler import SchedulerService
 from app.core.settings import E2ESettings
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
+from app.platform.eventing.support import SqliteDatabase
 from app.registry.loader import ModuleRegistry
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 
+@dataclass(frozen=True)
+class InsightsRepositories:
+    module_settings_repository: SqliteModuleSettingsRepository
+    anomaly_handling_store: SqliteAnomalyHandlingStore
+    anomaly_inbox_query: SqliteAnomalyInboxQuery
+    daily_status_query: SqliteDailyStatusQuery
+    stats_query: SqliteStatsQuery
+
+
+def compose_insights_repositories(db_path: str, es_db: SqliteDatabase) -> InsightsRepositories:
+    return InsightsRepositories(
+        module_settings_repository=SqliteModuleSettingsRepository(db_path),
+        anomaly_handling_store=SqliteAnomalyHandlingStore(db_path),
+        anomaly_inbox_query=SqliteAnomalyInboxQuery(es_db),
+        daily_status_query=SqliteDailyStatusQuery(es_db),
+        stats_query=SqliteStatsQuery(es_db),
+    )
+
+
 @dataclass
 class InsightsContainer:
-    module_settings_repository: SqliteModuleSettingsRepository = field(init=False)
-    anomaly_handling_store: SqliteAnomalyHandlingStore = field(init=False)
-    anomaly_inbox_query: SqliteAnomalyInboxQuery = field(init=False)
-    daily_status_query: SqliteDailyStatusQuery = field(init=False)
-    stats_query: SqliteStatsQuery = field(init=False)
-    daily_queries: DailyDashboardQueries = field(init=False)
-    admin_dashboard_queries: AdminDashboardQueries = field(init=False)
-    stats_service: StatsService = field(init=False)
-    insights_service: InsightsService = field(init=False)
-    ops_service: OpsService = field(init=False)
+    repos: InsightsRepositories
+    daily_queries: DailyDashboardQueries | None = None
+    admin_dashboard_queries: AdminDashboardQueries | None = None
+    stats_service: StatsService | None = None
+    insights_service: InsightsService | None = None
+    ops_service: OpsService | None = None
+
+
+@dataclass(frozen=True)
+class InsightsServices:
+    stats_service: StatsService
+    insights_service: InsightsService
+    ops_service: OpsService
 
 
 def compose_insights(
@@ -61,7 +84,7 @@ def compose_insights(
     settings: E2ESettings,
     run_queue: ProfilePartitionedRunQueue,
     scheduler: SchedulerService,
-) -> InsightsContainer:
+) -> InsightsServices:
     stats_service = StatsService(
         stats_query=stats_query,
         suite_summary_query=suite_summary_query,
@@ -88,8 +111,8 @@ def compose_insights(
         run_queue=run_queue,
         scheduler=scheduler,
     )
-    container = InsightsContainer()
-    container.stats_service = stats_service
-    container.insights_service = insights_service
-    container.ops_service = ops_service
-    return container
+    return InsightsServices(
+        stats_service=stats_service,
+        insights_service=insights_service,
+        ops_service=ops_service,
+    )

@@ -7,6 +7,9 @@ import pytest
 from app.composition import container as container_mod
 from app.composition.container import AppContainer
 from app.contexts.healing.composition import compose_healing as real_compose_healing
+from app.contexts.insights.composition import InsightsRepositories
+from app.contexts.run.composition import RunRepositories
+from app.contexts.suite.composition import SuiteRepositories
 from app.core.settings import E2ESettings
 from app.execution.composition import (
     compose_execution_gateway as real_compose_execution_gateway,
@@ -14,6 +17,7 @@ from app.execution.composition import (
 from app.execution.composition import (
     compose_execution_runtime as real_compose_execution_runtime,
 )
+from app.orchestrator.queries import RunQueries
 from app.platform.eventing.bus import RunFinished
 from app.registry.loader import ModuleRegistry
 
@@ -66,6 +70,63 @@ async def test_container_build_start_stop_lifecycle(tmp_path) -> None:
     assert container.eventing.event_bus.handler_count(RunFinished) >= 1
     assert container.execution.run_queue.worker_count > 0
     assert container.outbox_relay is not None
-    assert callable(container.suite.suite_service.load_suite_finished_payload)
+    assert callable(container.suite.services.suite_service.load_suite_finished_payload)
 
     await container.stop()
+
+
+def test_wire_persistence_builds_repos_atomically(tmp_path) -> None:
+    """wire_persistence 직후 저장소는 즉시, 서비스는 아직 None."""
+    settings = E2ESettings(
+        E2E_DB_PATH=str(tmp_path / "atomic.db"),
+        E2E_EXECUTION_MODE="local",
+        E2E_REDIS_URL="",
+    )
+    container = AppContainer(settings=settings)
+    container.wire_persistence()
+
+    assert isinstance(container.run.repos, RunRepositories)
+    assert isinstance(container.run.run_queries, RunQueries)
+    assert container.run.services is None
+
+    assert isinstance(container.suite.repos, SuiteRepositories)
+    assert container.suite.services is None
+
+    assert isinstance(container.insights.repos, InsightsRepositories)
+    assert container.insights.stats_service is None
+    assert container.insights.insights_service is None
+    assert container.insights.ops_service is None
+    assert container.insights.daily_queries is None
+    assert container.insights.admin_dashboard_queries is None
+
+    assert container.preset.preset_repository is not None
+    assert container.preset.preset_service is None
+
+    assert container.scheduling.schedule_repository is not None
+    assert container.scheduling.scheduler is None
+    assert container.scheduling.retention_scheduler is None
+
+
+def test_wire_orchestration_and_read_models_fill_late_fields(tmp_path) -> None:
+    """wire_orchestration/wire_read_models 이후 순환 의존 필드가 모두 채워진다."""
+    settings = E2ESettings(
+        E2E_DB_PATH=str(tmp_path / "late.db"),
+        E2E_EXECUTION_MODE="local",
+        E2E_REDIS_URL="",
+    )
+    container = AppContainer(settings=settings)
+    container.wire_persistence()
+    container.wire_realtime()
+    container.wire_execution()
+    container.wire_orchestration()
+    container.wire_read_models()
+
+    assert container.run.services is not None
+    assert container.suite.services is not None
+    assert container.preset.preset_service is not None
+    assert container.scheduling.scheduler is not None
+    assert container.insights.daily_queries is not None
+    assert container.insights.admin_dashboard_queries is not None
+    assert container.insights.stats_service is not None
+    assert container.insights.insights_service is not None
+    assert container.insights.ops_service is not None

@@ -9,22 +9,22 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.contexts.healing.composition import HealingContainer, compose_healing
 from app.contexts.identity.composition import IdentityContainer, compose_identity
-from app.contexts.insights.composition import InsightsContainer, compose_insights
-from app.contexts.insights.infrastructure.sqlite_anomaly_handling_store import (
-    SqliteAnomalyHandlingStore,
+from app.contexts.insights.composition import (
+    InsightsContainer,
+    compose_insights,
+    compose_insights_repositories,
 )
-from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import SqliteAnomalyInboxQuery
-from app.contexts.insights.infrastructure.sqlite_daily_status_query import SqliteDailyStatusQuery
-from app.contexts.insights.infrastructure.sqlite_module_settings_repository import (
-    SqliteModuleSettingsRepository,
-)
-from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.preset.composition import (
     PresetContainer,
     compose_preset_repository,
     compose_preset_service,
 )
-from app.contexts.run.composition import RunContainer, compose_run_repositories, compose_run_service
+from app.contexts.run.composition import (
+    RunContainer,
+    compose_run_container,
+    compose_run_repositories,
+    compose_run_service,
+)
 from app.contexts.scheduling.composition import (
     SchedulingContainer,
     compose_retention_scheduler,
@@ -46,7 +46,7 @@ from app.execution.composition import (
     compose_execution_runtime,
 )
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
-from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
+from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
 from app.platform.eventing.bus import RunFinished
 from app.platform.eventing.composition import EventingContainer, compose_event_bus
 from app.platform.eventing.handlers import ProjectionHandlers
@@ -124,36 +124,19 @@ class AppContainer:
         self.identity = compose_identity(self.db_path)
 
         encryption_secret = self.settings.jwt_secret.get_secret_value()
-        run_repos = compose_run_repositories(self.es_db, self.db_path, encryption_secret)
-        self.run = RunContainer()
-        self.run.run_write_repo = run_repos.run_write_repo
-        self.run.run_summary_query = run_repos.run_summary_query
-        self.run.module_history_query = run_repos.module_history_query
-        self.run.suite_summary_query = run_repos.suite_summary_query
-        self.run.run_log_store = run_repos.run_log_store
-        self.run.run_control_store = run_repos.run_control_store
-        self.run.run_input_store = run_repos.run_input_store
-        self.run.session_checkpoint_store = run_repos.session_checkpoint_store
-
-        suite_repos = compose_suite_repositories(self.es_db, self.db_path, encryption_secret)
-        self.suite = SuiteContainer()
-        self.suite.suite_write_repo = suite_repos.suite_write_repo
-        self.suite.suite_repository = suite_repos.suite_repository
-        self.suite.suite_control_store = suite_repos.suite_control_store
-        self.suite.suite_input_store = suite_repos.suite_input_store
-
-        self.scheduling = SchedulingContainer()
-        self.scheduling.schedule_repository = SqliteScheduleRepository(self.db_path)
-
-        self.preset = PresetContainer()
-        self.preset.preset_repository = compose_preset_repository(self.db_path)
-
-        self.insights = InsightsContainer()
-        self.insights.module_settings_repository = SqliteModuleSettingsRepository(self.db_path)
-        self.insights.anomaly_handling_store = SqliteAnomalyHandlingStore(self.db_path)
-        self.insights.anomaly_inbox_query = SqliteAnomalyInboxQuery(self.es_db)
-        self.insights.daily_status_query = SqliteDailyStatusQuery(self.es_db)
-        self.insights.stats_query = SqliteStatsQuery(self.es_db)
+        self.run = compose_run_container(
+            compose_run_repositories(self.es_db, self.db_path, encryption_secret)
+        )
+        self.suite = SuiteContainer(
+            repos=compose_suite_repositories(self.es_db, self.db_path, encryption_secret)
+        )
+        self.scheduling = SchedulingContainer(
+            schedule_repository=SqliteScheduleRepository(self.db_path)
+        )
+        self.preset = PresetContainer(preset_repository=compose_preset_repository(self.db_path))
+        self.insights = InsightsContainer(
+            repos=compose_insights_repositories(self.db_path, self.es_db)
+        )
 
     def wire_realtime(self) -> None:
         self.realtime = compose_realtime(self.settings)
@@ -178,120 +161,117 @@ class AppContainer:
     def wire_orchestration(self) -> None:
         self.eventing = compose_event_bus(
             registry=self.registry,
-            run_write_repo=self.run.run_write_repo,
+            run_write_repo=self.run.repos.run_write_repo,
             system_codes=self.execution.system_codes,
             es_db=self.es_db,
         )
 
         run_svc = compose_run_service(
             registry=self.registry,
-            run_write_repo=self.run.run_write_repo,
-            run_summary_query=self.run.run_summary_query,
+            run_write_repo=self.run.repos.run_write_repo,
+            run_summary_query=self.run.repos.run_summary_query,
             realtime=self.realtime.realtime,
-            run_log_store=self.run.run_log_store,
+            run_log_store=self.run.repos.run_log_store,
             execution_gateway=self.execution.execution_gateway,
             event_bus=self.eventing.event_bus,
-            run_control_store=self.run.run_control_store,
-            run_input_store=self.run.run_input_store,
+            run_control_store=self.run.repos.run_control_store,
+            run_input_store=self.run.repos.run_input_store,
             run_queue=self.execution.run_queue,
             artifact_manager=self.execution.artifact_manager,
             healing_recorder=self.healing.healing_service,
             session_registry=self.execution.session_registry,
-            session_checkpoint_store=self.run.session_checkpoint_store,
+            session_checkpoint_store=self.run.repos.session_checkpoint_store,
         )
-        self.run.run_service = run_svc.run_service
+        self.run.services = run_svc
 
-        self.run.run_queries = RunQueries(
-            self.run.run_summary_query, self.run.run_write_repo, self.run.run_log_store
-        )
         self.insights.daily_queries = DailyDashboardQueries(
-            self.registry, self.insights.daily_status_query
+            self.registry, self.insights.repos.daily_status_query
         )
         self.insights.admin_dashboard_queries = AdminDashboardQueries(
-            self.registry, self.run.run_summary_query
+            self.registry, self.run.repos.run_summary_query
         )
 
         self.preset.preset_service = compose_preset_service(
-            self.preset.preset_repository, self.run.run_service
+            self.preset.preset_repository, run_svc.run_service
         )
 
         suite_svc = compose_suite_service(
             registry=self.registry,
-            run_commands=self.run.run_service,
-            suite_write_repo=self.suite.suite_write_repo,
-            suite_repository=self.suite.suite_repository,
+            run_commands=run_svc.run_service,
+            suite_write_repo=self.suite.repos.suite_write_repo,
+            suite_repository=self.suite.repos.suite_repository,
             suite_realtime=self.realtime.suite_realtime,
             event_bus=self.eventing.event_bus,
-            suite_control_store=self.suite.suite_control_store,
-            suite_input_store=self.suite.suite_input_store,
-            suite_summary_query=self.run.suite_summary_query,
+            suite_control_store=self.suite.repos.suite_control_store,
+            suite_input_store=self.suite.repos.suite_input_store,
+            suite_summary_query=self.run.repos.suite_summary_query,
         )
-        self.suite.suite_service = suite_svc.suite_service
+        self.suite.services = suite_svc
 
         self.scheduling.scheduler = compose_scheduler(
-            self.run.run_service,
-            self.suite.suite_service,
+            run_svc.run_service,
+            suite_svc.suite_service,
             self.scheduling.schedule_repository,
             self.run.run_queries,
         )
         realtime_projector = RealtimeProjector(
             self.realtime.realtime,
             self.realtime.suite_realtime,
-            run_loader=self.run.run_write_repo.get_run,
-            suite_loader=self.suite.suite_write_repo.get_suite,
-            log_store=self.run.run_log_store,
+            run_loader=self.run.repos.run_write_repo.get_run,
+            suite_loader=self.suite.repos.suite_write_repo.get_suite,
+            log_store=self.run.repos.run_log_store,
         )
         self.outbox_relay = OutboxRelay(
             SqliteOutbox(self.es_db),
-            ProjectionHandlers(self.es_db, self.run.run_write_repo),
-            self.run.run_write_repo,
+            ProjectionHandlers(self.es_db, self.run.repos.run_write_repo),
+            self.run.repos.run_write_repo,
             self.eventing.event_bus,
             realtime_projector,
-            log_store=self.run.run_log_store,
-            suite_finished_loader=self.suite.suite_service.load_suite_finished_payload,
+            log_store=self.run.repos.run_log_store,
+            suite_finished_loader=suite_svc.suite_service.load_suite_finished_payload,
         )
-        self.scheduling.retention_scheduler = compose_retention_scheduler(self.run.run_service)
+        self.scheduling.retention_scheduler = compose_retention_scheduler(run_svc.run_service)
 
     def wire_read_models(self) -> None:
-        insights = compose_insights(
-            stats_query=self.insights.stats_query,
-            suite_summary_query=self.run.suite_summary_query,
+        services = compose_insights(
+            stats_query=self.insights.repos.stats_query,
+            suite_summary_query=self.run.repos.suite_summary_query,
             registry=self.registry,
-            module_settings_repo=self.insights.module_settings_repository,
+            module_settings_repo=self.insights.repos.module_settings_repository,
             user_service=self.identity.user_service,
             schedule_repo=self.scheduling.schedule_repository,
-            run_summary_query=self.run.run_summary_query,
-            module_history_query=self.run.module_history_query,
-            anomaly_store=self.insights.anomaly_handling_store,
-            anomaly_query=self.insights.anomaly_inbox_query,
+            run_summary_query=self.run.repos.run_summary_query,
+            module_history_query=self.run.repos.module_history_query,
+            anomaly_store=self.insights.repos.anomaly_handling_store,
+            anomaly_query=self.insights.repos.anomaly_inbox_query,
             settings=self.settings,
             run_queue=self.execution.run_queue,
             scheduler=self.scheduling.scheduler,
         )
-        self.insights.stats_service = insights.stats_service
-        self.insights.insights_service = insights.insights_service
-        self.insights.ops_service = insights.ops_service
+        self.insights.stats_service = services.stats_service
+        self.insights.insights_service = services.insights_service
+        self.insights.ops_service = services.ops_service
 
     def apply_to_app_state(self, app: FastAPI) -> None:
         app.state.settings = self.settings
         app.state.user_service = self.identity.user_service
         app.state.healing_service = self.healing.healing_service
-        app.state.module_settings_repo = self.insights.module_settings_repository
+        app.state.module_settings_repo = self.insights.repos.module_settings_repository
         app.state.preset_service = self.preset.preset_service
-        app.state.run_service = self.run.run_service
+        app.state.run_service = self.run.services.run_service
         app.state.run_queries = self.run.run_queries
         app.state.daily_queries = self.insights.daily_queries
         app.state.admin_dashboard_queries = self.insights.admin_dashboard_queries
-        app.state.suite_summary_query = self.run.suite_summary_query
-        app.state.suite_service = self.suite.suite_service
+        app.state.suite_summary_query = self.run.repos.suite_summary_query
+        app.state.suite_service = self.suite.services.suite_service
         app.state.run_queue = self.execution.run_queue
         app.state.registry = self.registry
-        app.state.suite_repository = self.suite.suite_repository
+        app.state.suite_repository = self.suite.repos.suite_repository
         app.state.schedule_repository = self.scheduling.schedule_repository
         app.state.otp_relay_token = self.settings.otp_relay_token_str()
         app.state.otp_relay_regex = self.settings.otp_relay_regex
         app.state.stats_service = self.insights.stats_service
-        app.state.anomaly_store = self.insights.anomaly_handling_store
+        app.state.anomaly_store = self.insights.repos.anomaly_handling_store
         app.state.insights_service = self.insights.insights_service
         app.state.schedule_service = self.scheduling.scheduler
         app.state.ops_service = self.insights.ops_service
@@ -320,9 +300,9 @@ class AppContainer:
                 log_event="startup.snapshot_repair",
                 count=repaired,
             )
-        await backfill_run_history_index(self.es_db, self.run.run_write_repo)
-        module_rows = await backfill_module_history_index(self.es_db, self.run.run_write_repo)
-        legacy = await backfill_from_legacy_runs(self.es_db, self.run.run_write_repo)
+        await backfill_run_history_index(self.es_db, self.run.repos.run_write_repo)
+        module_rows = await backfill_module_history_index(self.es_db, self.run.repos.run_write_repo)
+        legacy = await backfill_from_legacy_runs(self.es_db, self.run.repos.run_write_repo)
         if module_rows:
             logger.info(
                 "누락 모듈 이력 backfill",
@@ -371,8 +351,8 @@ class AppContainer:
             outbox_relay_id=self.outbox_relay.relay_instance_id,
         )
 
-        interrupted_runs = await self.run.run_service.reconcile_interrupted_runs()
-        interrupted_suites = await self.suite.suite_service.reconcile_interrupted_suites()
+        interrupted_runs = await self.run.services.run_service.reconcile_interrupted_runs()
+        interrupted_suites = await self.suite.services.suite_service.reconcile_interrupted_suites()
         if interrupted_runs or interrupted_suites:
             logger.info(
                 "재기동으로 중단된 작업 정리",

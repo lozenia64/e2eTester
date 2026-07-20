@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.contexts.run.application.service import RunService
 from app.contexts.suite.application.service import SuiteService
@@ -19,11 +19,8 @@ from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 
 @dataclass
 class SuiteContainer:
-    suite_write_repo: SqliteSuiteWriteRepository = field(init=False)
-    suite_repository: SqliteSuiteRepository = field(init=False)
-    suite_control_store: SqliteSuiteControlStore = field(init=False)
-    suite_input_store: EncryptedSqliteSuiteInputStore = field(init=False)
-    suite_service: SuiteService = field(init=False)
+    repos: SuiteRepositories
+    services: SuiteServiceComposition | None = None
 
 
 @dataclass(frozen=True)

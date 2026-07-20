@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.contexts.healing.service import HealingService
 from app.contexts.run.application.service import RunService
@@ -30,16 +30,9 @@ from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 @dataclass
 class RunContainer:
-    run_write_repo: SqliteRunWriteRepository = field(init=False)
-    run_summary_query: SqliteRunSummaryQuery = field(init=False)
-    module_history_query: SqliteModuleHistoryQuery = field(init=False)
-    suite_summary_query: SqliteSuiteSummaryQuery = field(init=False)
-    run_log_store: SqliteRunLogStore = field(init=False)
-    run_control_store: SqliteRunControlStore = field(init=False)
-    run_input_store: EncryptedSqliteRunInputStore = field(init=False)
-    session_checkpoint_store: SqliteSessionCheckpointStore = field(init=False)
-    run_service: RunService = field(init=False)
-    run_queries: RunQueries = field(init=False)
+    repos: RunRepositories
+    run_queries: RunQueries
+    services: RunServiceComposition | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +64,11 @@ def compose_run_repositories(
             es_db, cipher=StorageStateCipher(encryption_secret)
         ),
     )
+
+
+def compose_run_container(repos: RunRepositories) -> RunContainer:
+    run_queries = RunQueries(repos.run_summary_query, repos.run_write_repo, repos.run_log_store)
+    return RunContainer(repos=repos, run_queries=run_queries)
 
 
 @dataclass(frozen=True)
