@@ -1,0 +1,97 @@
+"""Run 컨텍스트 읽기 모델 쿼리 행(row) 타입 + 질의 파라미터."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.core.enums import ModuleStatus, RunStatus
+
+
+@dataclass(frozen=True)
+class Page:
+    """LIMIT/OFFSET 페이지 파라미터(정렬은 포트 계약상 requested_at DESC 고정)."""
+
+    limit: int = 50
+    offset: int = 0
+
+
+@dataclass(frozen=True)
+class RunSummaryFilter:
+    """Run 요약 목록 질의 필터 — 전부 SQL WHERE 로 내려간다(파이썬 후처리 금지)."""
+
+    system_code: str | None = None
+    system_codes: frozenset[str] | None = None
+    statuses: frozenset[RunStatus] | None = None
+    user_id: str | None = None
+    user_name_query: str | None = None
+    schedule_id: str | None = None
+    suite_id: str | None = None
+    requested_since: datetime | None = None
+    requested_before: datetime | None = None
+    schedule_tagged_only: bool = False
+    triggered_by: str | None = None
+    run_id_query: str | None = None
+
+
+@dataclass(frozen=True)
+class RunSummaryRow:
+    """``run_history_index`` 한 행 — 목록 화면("진행 중 / 최근 Run")이 쓰는 모양 그대로."""
+
+    run_id: str
+    system_code: str
+    system_name: str | None
+    status: RunStatus
+    requested_at: datetime
+    started_at: datetime | None
+    ended_at: datetime | None
+    schedule_id: str | None
+    suite_id: str | None
+    created_by_user_id: str | None
+    created_by_user_name: str | None
+    triggered_by: str
+    awaiting_input_module_id: str | None
+    awaiting_input_prompt: str | None
+    module_total: int
+    module_defined_total: int
+    module_skipped: int
+    module_passed: int
+    current_module_name: str | None
+    failed_module_name: str | None
+
+
+@dataclass(frozen=True)
+class ModuleHistoryRow:
+    """``module_history_index`` 한 행 — 인사이트/통계/일간 소요시간의 모듈 실행 이력."""
+
+    run_id: str
+    module_id: str
+    system_code: str
+    module_name: str | None
+    status: ModuleStatus
+    message: str | None
+    started_at: datetime | None
+    ended_at: datetime | None
+    duration_ms: int | None
+    current_url: str | None
+    artifacts: tuple[str, ...]
+    ai_category: str | None
+    ai_summary: str | None
+    ai_action: str | None
+    suite_id: str | None
+    schedule_id: str | None
+    triggered_by: str | None
+    requested_at: datetime | None
+    created_by_user_id: str | None
+    created_by_user_name: str | None
+
+
+@dataclass(frozen=True)
+class RunComparisonRow:
+    """``run_comparison_cache`` 한 행 — 직전 Run 대비 모듈 상태 변화."""
+
+    run_id: str
+    baseline_run_id: str | None
+    newly_failed: tuple[str, ...]
+    recovered: tuple[str, ...]
+    still_failing: tuple[str, ...]

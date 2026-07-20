@@ -46,7 +46,7 @@ python3 scripts/ci/run_all_gates.py --profile platform --risk-flags pii,auth
 | AG-004 | `app/orchestrator/` 에서 `list_all_runs()` / `list_runs_since()` 금지 |
 | AG-005 | `app/` 에서 aggregate `.snapshot` / `.suite` 직접 접근 금지 (`domain`/`storage`/`tests` 제외) |
 | AG-006 | 스텝 계층(`app/automation`·`app/systems`·`app/runner`)에서 `print(` / `redirect_stdout` 금지 (전역 stdout 경합 방지 — `step_logging.log`·`ctx.log` 만; 매뉴얼 CLI `login_phone.py` 제외) |
-| AG-007 | 질의 포트(`app/storage/ports.py` `*QueryPort`)의 반환 타입에 `Run`/`SuiteRun` 엔티티 금지 (읽기 경로는 화면형 DTO 만) |
+| AG-007 | 질의 포트(`app/contexts/run/contracts/ports.py` 등 `*QueryPort`)의 반환 타입에 `Run`/`SuiteRun` 엔티티 금지 (읽기 경로는 화면형 DTO 만) |
 | AG-008 | 오케스트레이터 서비스(`run_service.py`·`suite_service.py`)에서 `run`/`suite`/`step`/`module` 필드 직접 대입 금지 (애그리거트가 유일한 상태 변이자) |
 | AG-009 | `app/contexts`·`app/api` 에서 실행 평면(`app.runner`/`automation`/`systems`) import 금지 (실행 평면 분리 — 결과 계약은 `app.execution.results`) |
 

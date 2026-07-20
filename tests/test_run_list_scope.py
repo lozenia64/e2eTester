@@ -7,20 +7,22 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.contexts.run.infrastructure.in_memory_run_log_store import InMemoryRunLogStore
+from app.contexts.run.infrastructure.in_memory_run_repository import InMemoryRunRepository
+from app.contexts.run.infrastructure.in_memory_run_summary_query import InMemoryRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.contexts.suite.application.service import SuiteService
 from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.orchestrator.queries import RunQueries
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
-from app.storage.run_log_store import InMemoryRunLogStore
-from app.storage.run_repository import InMemoryRunRepository
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 
 
 class _SuiteEnv:

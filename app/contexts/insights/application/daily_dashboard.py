@@ -23,9 +23,9 @@ from app.core.status_labels import (
 )
 
 if TYPE_CHECKING:
+    from app.contexts.insights.contracts.query_rows import DailyRunSummaryRow, DailyStatusRow
     from app.core.run_models import Run, RunModule
     from app.core.system_models import SystemDefinition
-    from app.storage.query_rows import DailyRunSummaryRow, DailyStatusRow
 
 # 모듈의 '오늘 점검 결과'로 채택하지 않는 상태(아직 도달 못 했거나 대상에서 제외).
 # 이 상태는 더 오래된 Run 쪽으로 계속 탐색한다.

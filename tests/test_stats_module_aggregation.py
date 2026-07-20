@@ -10,25 +10,28 @@ import pytest
 from app.contexts.insights.application.stats_service import StatsService
 from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.backfill.module_history_backfill import (
+    backfill_module_history_index,
+)
+from app.contexts.run.infrastructure.backfill.run_history_backfill import backfill_run_history_index
+from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.domain import events as domain_events
 from app.domain.summary_fields import run_summary_fields
 from app.platform.eventing.handlers import ProjectionHandlers, _run_history_upsert
-from app.platform.eventing.snapshot_rebuild import rebuild_missing_run_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.module_history_backfill import backfill_module_history_index
-from app.storage.run_history_backfill import backfill_run_history_index
-from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.platform.snapshot_rebuild import rebuild_missing_run_snapshots
+from tests.eventing_helpers import make_projection_handlers
 
 
 class _Env:
     def __init__(self, db: SqliteDatabase) -> None:
         self.db = db
         self.write_repo = SqliteRunWriteRepository(db)
-        self.projections = ProjectionHandlers(db, self.write_repo)
+        self.projections = make_projection_handlers(db, self.write_repo)
         self.sequence = 0
 
     async def apply(self, events) -> None:

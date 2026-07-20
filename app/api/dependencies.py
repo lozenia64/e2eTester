@@ -26,11 +26,11 @@ if TYPE_CHECKING:
     from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
     from app.contexts.scheduling.scheduler import SchedulerService
     from app.contexts.suite.application.service import SuiteService
+    from app.contexts.suite.contracts.ports import SuiteRepositoryPort, SuiteSummaryQueryPort
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
     from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import SuiteRepositoryPort, SuiteSummaryQueryPort
 
 
 def get_run_service(connection: HTTPConnection) -> RunService:

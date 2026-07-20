@@ -15,8 +15,8 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from app.platform.eventing.snapshot_rebuild import rebuild_all_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
+from app.platform.snapshot_rebuild import rebuild_all_snapshots
 
 
 async def main_async(db_path: str, *, validate: bool) -> int:

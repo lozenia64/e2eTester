@@ -6,6 +6,17 @@ from dataclasses import dataclass
 
 from app.contexts.healing.service import HealingService
 from app.contexts.run.application.service import RunService
+from app.contexts.run.infrastructure.encrypted_run_input_store import EncryptedSqliteRunInputStore
+from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
+from app.contexts.run.infrastructure.sqlite_run_control_store import SqliteRunControlStore
+from app.contexts.run.infrastructure.sqlite_run_log_store import SqliteRunLogStore
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.contexts.run.infrastructure.sqlite_session_checkpoint_store import (
+    SqliteSessionCheckpointStore,
+    StorageStateCipher,
+)
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
@@ -15,17 +26,6 @@ from app.platform.eventing.bus import EventBus
 from app.platform.eventing.support import SqliteDatabase
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.storage.encrypted_run_input_store import EncryptedSqliteRunInputStore
-from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_run_control_store import SqliteRunControlStore
-from app.storage.sqlite_run_log_store import SqliteRunLogStore
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_session_checkpoint_store import (
-    SqliteSessionCheckpointStore,
-    StorageStateCipher,
-)
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 
 @dataclass

@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.contracts.records import RunRecord
+from app.contexts.run.infrastructure.migration.legacy_blob_migration import migrate_run_blobs
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.platform.eventing.blob_migration import migrate_run_blobs
-from app.platform.eventing.snapshot_rebuild import rebuild_run_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.records import RunRecord
+from app.platform.snapshot_rebuild import rebuild_run_snapshots
 
 
 async def _seed_legacy_blob(db: SqliteDatabase, run: Run) -> None:

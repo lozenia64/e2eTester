@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from app.contexts.scheduling.scheduler import schedule_day_label
 from app.core.enums import ModuleStatus, RunStatus
+from app.core.schedule_time import schedule_day_label
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.events import DomainEvent
 from app.domain.summary_fields import (
@@ -14,8 +14,8 @@ from app.domain.summary_fields import (
     module_history_fields_from_wire,
     run_summary_fields,
 )
+from app.platform.eventing.hydration import AggregateHydratorPort
 from app.platform.eventing.support import SqliteDatabase
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 PROJECTION_NAMES = (
     "run_history_index",
@@ -140,10 +140,10 @@ class ProjectionHandlers:
     def __init__(
         self,
         db: SqliteDatabase,
-        write_repo: SqliteRunWriteRepository,
+        loaders: dict[str, AggregateHydratorPort],
     ) -> None:
         self._db = db
-        self._write_repo = write_repo
+        self._loaders = loaders
         self._cursors: dict[str, int] | None = None
 
     async def apply(self, event: DomainEvent, sequence_id: int) -> None:
@@ -177,7 +177,7 @@ class ProjectionHandlers:
         return self._cursors
 
     async def _load_run(self, run_id: str):
-        return await self._write_repo.get_run(run_id)
+        return await self._loaders["Run"].hydrate(run_id)
 
     # --- run_history_index --------------------------------------------------
 

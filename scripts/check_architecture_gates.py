@@ -56,14 +56,13 @@ def _domain_dirs() -> list[Path]:
 AGGREGATE_ALLOWED_PREFIXES = (
     "app/domain/",
     "app/contexts/",
-    "app/storage/",
     "tests/",
 )
 
 # AG-001: 포트 정의·테스트용 인메모리 구현만 허용(프로덕션 blob 스캔 어댑터는 삭제됨)
 LIST_RUNS_ALLOWED_SUFFIXES = (
-    "storage/ports.py",
-    "storage/run_repository.py",
+    "contexts/run/contracts/ports.py",
+    "contexts/run/infrastructure/in_memory_run_repository.py",
 )
 LIST_RUNS_PATTERN = re.compile(r"\.list_runs\s*\(")
 
@@ -176,7 +175,11 @@ REDIRECT_STDOUT_PATTERN = re.compile(r"redirect_stdout|redirect_stderr")
 
 # AG-007: *QueryPort 프로토콜 메서드는 도메인 엔티티(Run/SuiteRun)를 반환하지 않는다.
 # 화면형 행(Row DTO)만 반환하도록 강제해 blob 재수화 경로 부활을 타입 수준에서 봉쇄한다.
-PORTS_FILE = APP_DIR / "storage" / "ports.py"
+QUERY_PORT_FILES = (
+    APP_DIR / "contexts" / "run" / "contracts" / "ports.py",
+    APP_DIR / "contexts" / "suite" / "contracts" / "ports.py",
+    APP_DIR / "contexts" / "insights" / "infrastructure" / "ports.py",
+)
 QUERY_PORT_CLASS_PATTERN = re.compile(r"^class\s+(\w*QueryPort)\b")
 ANY_CLASS_PATTERN = re.compile(r"^class\s+\w+")
 ENTITY_RETURN_PATTERN = re.compile(r"->\s*(?:list\[)?(?:Run|SuiteRun)\b")
@@ -184,15 +187,20 @@ ENTITY_RETURN_PATTERN = re.compile(r"->\s*(?:list\[)?(?:Run|SuiteRun)\b")
 
 def check_ag007_query_ports_return_rows() -> list[str]:
     violations: list[str] = []
-    if not PORTS_FILE.is_file():
-        return violations
-    in_query_port = False
-    for line_no, line in enumerate(PORTS_FILE.read_text(encoding="utf-8").splitlines(), start=1):
-        if ANY_CLASS_PATTERN.match(line):
-            in_query_port = bool(QUERY_PORT_CLASS_PATTERN.match(line))
+    for ports_file in QUERY_PORT_FILES:
+        if not ports_file.is_file():
+            violations.append(f"AG-007: missing query port file `{_rel(ports_file)}`")
             continue
-        if in_query_port and ENTITY_RETURN_PATTERN.search(line):
-            violations.append(f"storage/ports.py:{line_no}: {line.strip()}")
+        in_query_port = False
+        rel = _rel(ports_file)
+        for line_no, line in enumerate(
+            ports_file.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if ANY_CLASS_PATTERN.match(line):
+                in_query_port = bool(QUERY_PORT_CLASS_PATTERN.match(line))
+                continue
+            if in_query_port and ENTITY_RETURN_PATTERN.search(line):
+                violations.append(f"{rel}:{line_no}: {line.strip()}")
     return violations
 
 

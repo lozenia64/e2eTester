@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from app.contexts.run.contracts.query_rows import RunComparisonRow
 from app.contexts.run.views.comparison import attach_comparison, comparison_summary_dict
-from app.storage.query_rows import RunComparisonRow
 
 
 def test_comparison_summary_dict_new_failure_badge() -> None:

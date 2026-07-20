@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.storage.query_rows import RunComparisonRow
+from app.contexts.run.contracts.query_rows import RunComparisonRow
 
 
 def comparison_summary_dict(row: RunComparisonRow | None) -> dict[str, Any] | None:

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.insights.contracts.query_rows import DailyRunSummaryRow, DailyStatusRow
 from app.core.enums import ModuleStatus, RunStatus
 from app.platform.eventing.support import SqliteDatabase
-from app.storage.query_rows import DailyRunSummaryRow, DailyStatusRow
 
 
 def _parse_dt(value: str) -> datetime:

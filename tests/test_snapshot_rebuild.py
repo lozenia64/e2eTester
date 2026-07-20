@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.contracts.records import RunRecord
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.platform.eventing.snapshot_rebuild import rebuild_run_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.records import RunRecord
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.platform.snapshot_rebuild import rebuild_run_snapshots
 
 
 def _run(run_id: str) -> Run:
@@ -154,10 +154,12 @@ async def test_verify_only_detects_no_mismatch_for_consistent_store(tmp_path: Pa
 async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
     """Suite 스트림도 이벤트 폴드로 스냅샷이 재구성된다(Run 과 동형)."""
     from app.contexts.suite.domain.aggregate import SuiteAggregate
+    from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+        SqliteSuiteWriteRepository,
+    )
     from app.core.enums import SuiteStatus
     from app.core.suite_models import SuiteRun, SuiteStep
-    from app.platform.eventing.snapshot_rebuild import rebuild_all_snapshots
-    from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+    from app.platform.snapshot_rebuild import rebuild_all_snapshots
 
     db = SqliteDatabase(tmp_path / "suite.db")
     await ensure_schema(db)

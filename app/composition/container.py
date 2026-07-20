@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.contexts.healing.composition import HealingContainer, compose_healing
 from app.contexts.identity.composition import IdentityContainer, compose_identity
 from app.contexts.insights.composition import (
@@ -25,6 +26,15 @@ from app.contexts.run.composition import (
     compose_run_repositories,
     compose_run_service,
 )
+from app.contexts.run.infrastructure.backfill.legacy_runs_projection_backfill import (
+    backfill_from_legacy_runs,
+)
+from app.contexts.run.infrastructure.backfill.module_history_backfill import (
+    backfill_module_history_index,
+)
+from app.contexts.run.infrastructure.backfill.run_history_backfill import backfill_run_history_index
+from app.contexts.run.infrastructure.failure_analysis_subscriber import FailureAnalysisSubscriber
+from app.contexts.run.infrastructure.hydration import RunHydrator, RunProjectionLoader
 from app.contexts.scheduling.composition import (
     SchedulingContainer,
     compose_retention_scheduler,
@@ -38,6 +48,7 @@ from app.contexts.suite.composition import (
     compose_suite_repositories,
     compose_suite_service,
 )
+from app.contexts.suite.infrastructure.hydration import SuiteHydrator
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
 from app.execution.composition import (
@@ -47,23 +58,20 @@ from app.execution.composition import (
 )
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
+from app.platform.db import DEFAULT_DB_PATH
 from app.platform.eventing.bus import RunFinished
 from app.platform.eventing.composition import EventingContainer, compose_event_bus
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.relay import OutboxRelay
-from app.platform.eventing.snapshot_rebuild import (
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
+from app.platform.snapshot_rebuild import (
     rebuild_missing_run_snapshots,
     repair_incomplete_run_snapshots,
 )
-from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.composition import RealtimeContainer, compose_realtime, should_use_redis_fanout
 from app.realtime.projector import RealtimeProjector
 from app.registry.loader import ModuleRegistry
-from app.storage.legacy_runs_projection_backfill import backfill_from_legacy_runs
-from app.storage.module_history_backfill import backfill_module_history_index
-from app.storage.run_history_backfill import backfill_run_history_index
-from app.storage.sqlite_support import DEFAULT_DB_PATH
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -160,11 +168,15 @@ class AppContainer:
 
     def wire_orchestration(self) -> None:
         self.eventing = compose_event_bus(
-            registry=self.registry,
-            run_write_repo=self.run.repos.run_write_repo,
             system_codes=self.execution.system_codes,
             es_db=self.es_db,
         )
+        failure_analyzer = GeminiFailureAnalyzer.from_env()
+        FailureAnalysisSubscriber(
+            failure_analyzer,
+            self.run.repos.run_write_repo,
+            self.registry,
+        ).register(self.eventing.event_bus)
 
         run_svc = compose_run_service(
             registry=self.registry,
@@ -221,14 +233,19 @@ class AppContainer:
             suite_loader=self.suite.repos.suite_write_repo.get_suite,
             log_store=self.run.repos.run_log_store,
         )
+        run_projection_loader = RunProjectionLoader(self.run.repos.run_write_repo)
         self.outbox_relay = OutboxRelay(
             SqliteOutbox(self.es_db),
-            ProjectionHandlers(self.es_db, self.run.repos.run_write_repo),
-            self.run.repos.run_write_repo,
-            self.eventing.event_bus,
-            realtime_projector,
-            log_store=self.run.repos.run_log_store,
-            suite_finished_loader=suite_svc.suite_service.load_suite_finished_payload,
+            ProjectionHandlers(self.es_db, loaders={"Run": run_projection_loader}),
+            hydrators={
+                "Run": RunHydrator(
+                    self.run.repos.run_write_repo,
+                    self.run.repos.run_log_store,
+                ),
+                "Suite": SuiteHydrator(suite_svc.suite_service),
+            },
+            event_bus=self.eventing.event_bus,
+            realtime=realtime_projector,
         )
         self.scheduling.retention_scheduler = compose_retention_scheduler(run_svc.run_service)
 

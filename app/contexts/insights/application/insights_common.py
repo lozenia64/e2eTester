@@ -16,7 +16,7 @@ from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSE
 if TYPE_CHECKING:
     from datetime import datetime, tzinfo
 
-    from app.storage.query_rows import (
+    from app.contexts.run.contracts.query_rows import (
         ModuleHistoryRow,
         RunComparisonRow,
         RunSummaryRow,

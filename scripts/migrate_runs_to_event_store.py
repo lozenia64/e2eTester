@@ -10,12 +10,12 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
+from app.contexts.run.infrastructure.backfill.run_history_backfill import backfill_run_history_index
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.domain import events as domain_events
 from app.platform.eventing.event_store import SqliteEventStore
 from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.run_history_backfill import backfill_run_history_index
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 
 async def migrate(db_path: str) -> None:

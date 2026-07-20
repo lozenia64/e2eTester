@@ -60,9 +60,11 @@ from app.core.status_labels import (
     suite_status_label,
 )
 from app.core.suite_models import SuiteRun
+from app.notifications.infrastructure.sqlite_email_notification_dedup import (
+    SqliteEmailNotificationDedupStore,
+)
 from app.notifications.report_renderer import render_run_report_html, render_suite_report_html
 from app.platform.artifact_manager import ArtifactManager
-from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 465

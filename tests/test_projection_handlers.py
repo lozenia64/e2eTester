@@ -11,6 +11,7 @@ from app.contexts.insights.infrastructure.sqlite_anomaly_inbox_query import Sqli
 from app.contexts.insights.infrastructure.sqlite_daily_status_query import SqliteDailyStatusQuery
 from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.contexts.scheduling.scheduler import schedule_today_label
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
@@ -18,7 +19,7 @@ from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
 def _sample_run(run_id: str = "run_proj") -> Run:
@@ -47,7 +48,7 @@ async def test_module_completed_updates_anomaly_and_daily_projections(tmp_path: 
     db = SqliteDatabase(tmp_path / "proj.db")
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
 
     run = _sample_run()
     aggregate = RunAggregate.for_new_run(run)
@@ -122,7 +123,7 @@ async def test_suite_events_project_suite_history_index(tmp_path: Path) -> None:
     db = SqliteDatabase(tmp_path / "suite_proj.db")
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
 
     suite = SuiteRun(
         suite_id="suite_proj",

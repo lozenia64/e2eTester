@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.domain.events import DomainEvent
 from app.platform.eventing.event_store import SqliteEventStore
 from app.platform.eventing.handlers import PROJECTION_NAMES, ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
 def _run_finished_event(run_id: str = "run_cursor") -> DomainEvent:
@@ -60,7 +61,7 @@ async def _make_handlers(tmp_path: Path, name: str) -> tuple[SqliteDatabase, Pro
     db = SqliteDatabase(tmp_path / name)
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
-    return db, ProjectionHandlers(db, write_repo)
+    return db, make_projection_handlers(db, write_repo)
 
 
 @pytest.mark.asyncio
@@ -72,7 +73,7 @@ async def test_duplicate_delivery_does_not_double_count_rollup(tmp_path: Path) -
     await projections.apply(event, 1)
     await projections.apply(event, 1)
     # 프로세스 재기동(커서 캐시 소실) 후 재전달도 동일해야 한다.
-    fresh = ProjectionHandlers(db, SqliteRunWriteRepository(db))
+    fresh = make_projection_handlers(db, SqliteRunWriteRepository(db))
     await fresh.apply(event, 1)
 
     row = await db.fetchone("SELECT passed_count FROM stats_rollup WHERE system_code = ?", ("hom",))
@@ -138,7 +139,7 @@ async def test_rebuild_replay_reproduces_identical_rows(tmp_path: Path) -> None:
     for table in (*live.keys(), "anomaly_inbox_index"):
         await db.execute(f"DELETE FROM {table}")
     await db.execute("DELETE FROM projection_cursor")
-    replayer = ProjectionHandlers(db, write_repo)
+    replayer = make_projection_handlers(db, write_repo)
     for entry in entries:
         await replayer.apply(entry.event, entry.sequence_id)
 

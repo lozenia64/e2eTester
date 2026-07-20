@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol
 
-from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.logging import get_logger
 from app.domain.events import DomainEvent
 from app.platform.eventing.bus import (
@@ -17,17 +18,24 @@ from app.platform.eventing.bus import (
     SuiteFinished,
 )
 from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.hydration import AggregateHydratorPort
 from app.platform.eventing.outbox import SqliteOutbox
-from app.realtime.projector import RealtimeProjector
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+
+if TYPE_CHECKING:
+    pass
 
 logger = get_logger(__name__)
 
-_EVENT_BUS_MAP: dict[str, type] = {
-    "RunFinished": RunFinished,
-    "RunWaitingInput": RunWaitingInput,
-    "RunResumed": RunResumed,
-    "SuiteFinished": SuiteFinished,
+
+class RealtimeApplyPort(Protocol):
+    async def apply(self, event: DomainEvent) -> None: ...
+
+
+_EVENT_BUS_MAP: dict[str, tuple[str, Callable[[object], object]]] = {
+    "RunFinished": ("Run", lambda run: RunFinished(run=run)),
+    "RunWaitingInput": ("Run", lambda run: RunWaitingInput(run=run)),
+    "RunResumed": ("Run", lambda run: RunResumed(run=run)),
+    "SuiteFinished": ("Suite", lambda payload: SuiteFinished(suite=payload[0], runs=payload[1])),
 }
 
 
@@ -38,24 +46,20 @@ class OutboxRelay:
         self,
         outbox: SqliteOutbox,
         projections: ProjectionHandlers,
-        write_repo: SqliteRunWriteRepository,
+        hydrators: dict[str, AggregateHydratorPort],
         event_bus: EventBus,
-        realtime: RealtimeProjector,
+        realtime: RealtimeApplyPort,
         *,
         poll_interval_seconds: float = 0.5,
         batch_size: int = 100,
-        log_store=None,
-        suite_finished_loader=None,
     ) -> None:
         self._outbox = outbox
         self._projections = projections
-        self._write_repo = write_repo
+        self._hydrators = hydrators
         self._event_bus = event_bus
         self._realtime = realtime
         self._poll_interval_seconds = poll_interval_seconds
         self._batch_size = batch_size
-        self._log_store = log_store
-        self._suite_finished_loader = suite_finished_loader
         self._running = False
         self._task: asyncio.Task | None = None
         self._claim_token = f"relay-{os.getpid()}-{uuid.uuid4().hex[:8]}"
@@ -129,27 +133,12 @@ class OutboxRelay:
                 await asyncio.sleep(self._poll_interval_seconds)
 
     async def _maybe_dispatch_event_bus(self, event: DomainEvent) -> None:
-        bus_type = _EVENT_BUS_MAP.get(event.event_type)
-        if bus_type is None:
+        entry = _EVENT_BUS_MAP.get(event.event_type)
+        if entry is None:
             return
-        if bus_type is RunFinished:
-            run = await self._hydrate_run(event.aggregate_id)
-            await self._event_bus.publish(RunFinished(run=run))
-        elif bus_type is RunWaitingInput:
-            run = await self._hydrate_run(event.aggregate_id)
-            await self._event_bus.publish(RunWaitingInput(run=run))
-        elif bus_type is RunResumed:
-            run = await self._hydrate_run(event.aggregate_id)
-            await self._event_bus.publish(RunResumed(run=run))
-        elif bus_type is SuiteFinished:
-            if self._suite_finished_loader is None:
-                return
-            suite, runs = await self._suite_finished_loader(event.aggregate_id)
-            await self._event_bus.publish(SuiteFinished(suite=suite, runs=runs))
-
-    async def _hydrate_run(self, run_id: str):
-        run = await self._write_repo.get_run(run_id)
-        if self._log_store is not None:
-            logs_by_module = await self._log_store.get_all(run_id)
-            RunAggregate(run).hydrate_logs(logs_by_module)
-        return run
+        aggregate_type, make_bus_event = entry
+        hydrator = self._hydrators.get(aggregate_type)
+        if hydrator is None:
+            return
+        payload = await hydrator.hydrate(event.aggregate_id)
+        await self._event_bus.publish(make_bus_event(payload))

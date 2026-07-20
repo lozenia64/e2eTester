@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
-from app.storage.suite_control_store import InMemorySuiteControlStore
+from app.contexts.suite.infrastructure.in_memory_suite_control_store import (
+    InMemorySuiteControlStore,
+)
+from app.contexts.suite.infrastructure.sqlite_suite_control_store import SqliteSuiteControlStore
 
 
 async def _exercise(store) -> None:

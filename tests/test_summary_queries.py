@@ -7,19 +7,20 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import FailureAnalysis, Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain.events import run_deleted
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.query_rows import Page, RunSummaryFilter
-from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
 def _run(run_id: str, *, user: str | None = "u1", name: str | None = "홍길동") -> Run:
@@ -49,7 +50,7 @@ class _Env:
     def __init__(self, db: SqliteDatabase) -> None:
         self.db = db
         self.write_repo = SqliteRunWriteRepository(db)
-        self.projections = ProjectionHandlers(db, self.write_repo)
+        self.projections = make_projection_handlers(db, self.write_repo)
         self.sequence = 0
 
     async def apply(self, events) -> None:

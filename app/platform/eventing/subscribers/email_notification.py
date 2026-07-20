@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 
 from app.core.status_labels import RUN_TERMINAL_OUTCOME_STATUSES, SUITE_TERMINAL_OUTCOME_STATUSES
+from app.notifications.infrastructure.sqlite_email_notification_dedup import (
+    SqliteEmailNotificationDedupStore,
+)
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.platform.eventing.bus import EventBus, RunFinished, SuiteFinished
-from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 
 class EmailNotificationSubscriber:

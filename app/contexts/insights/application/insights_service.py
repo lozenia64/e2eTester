@@ -31,10 +31,10 @@ from app.contexts.insights.application.insights_common import (
 )
 from app.contexts.insights.application.insights_health import build_system_health
 from app.contexts.insights.application.insights_timeline import build_system_timeline
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
 from app.contexts.run.views.actor import load_actor_context
 from app.core.enums import AnomalyState
 from app.core.run_models import AnomalyHandling
-from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
@@ -42,10 +42,11 @@ if TYPE_CHECKING:
         AnomalyHandlingStorePort,
         AnomalyInboxQueryPort,
     )
+    from app.contexts.run.contracts.ports import ModuleHistoryQueryPort, RunSummaryQueryPort
+    from app.contexts.run.contracts.query_rows import ModuleHistoryRow
     from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
+    from app.contexts.suite.contracts.ports import SuiteSummaryQueryPort
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import ModuleHistoryQueryPort, RunSummaryQueryPort, SuiteSummaryQueryPort
-    from app.storage.query_rows import ModuleHistoryRow
 
 # 시스템 인사이트(헬스 30일·타임라인·딥다이브)가 분석하는 최근 Run 상한.
 _SYSTEM_HISTORY_FETCH_LIMIT = 500

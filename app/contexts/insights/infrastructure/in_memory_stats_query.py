@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.contexts.insights.contracts.query_rows import StatsRollupRow
+from app.contexts.run.contracts.query_rows import ModuleHistoryRow, RunSummaryRow
+from app.contexts.run.infrastructure.in_memory_run_summary_query import _row_from_run
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
-from app.storage.in_memory_run_summary_query import _row_from_run
-from app.storage.query_rows import ModuleHistoryRow, RunSummaryRow, StatsRollupRow
 
 
 class InMemoryStatsQuery:

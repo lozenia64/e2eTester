@@ -10,15 +10,15 @@ from app.contexts.insights.infrastructure.module_settings_repository import (
 from app.contexts.insights.infrastructure.ports import StatsQueryPort
 from app.contexts.run.views.actor import load_actor_context
 from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
+from app.contexts.suite.contracts.ports import SuiteSummaryQueryPort
 from app.core.enums import ModuleStatus
 from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
-from app.storage.ports import SuiteSummaryQueryPort
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
+    from app.contexts.run.contracts.query_rows import ModuleHistoryRow
     from app.registry.loader import ModuleRegistry
-    from app.storage.query_rows import ModuleHistoryRow
 
 
 class StatsService:

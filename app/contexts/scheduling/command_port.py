@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.contexts.run.application.command_port import RunCommandPort
-from app.storage.query_rows import RunSummaryRow
+from app.contexts.run.contracts.query_rows import RunSummaryRow
 
 
 class ScheduleCommandPort(RunCommandPort, Protocol):

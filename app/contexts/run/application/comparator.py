@@ -7,7 +7,7 @@ from app.core.run_models import Run, RunComparison
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 
 if TYPE_CHECKING:
-    from app.storage.ports import RunSummaryQueryPort, RunWriteRepositoryPort
+    from app.contexts.run.contracts.ports import RunSummaryQueryPort, RunWriteRepositoryPort
 
 
 class RunComparator:

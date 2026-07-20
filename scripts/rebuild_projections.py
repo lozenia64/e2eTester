@@ -15,11 +15,12 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
+from app.contexts.run.infrastructure.hydration import RunProjectionLoader
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.platform.eventing.event_store import SqliteEventStore
 from app.platform.eventing.handlers import PROJECTION_NAMES, ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.platform.sqlite_connection import connect_sqlite
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 _PROJECTION_TABLES = (
     "run_history_index",
@@ -54,7 +55,7 @@ async def rebuild(db_path: str) -> int:
     try:
         await ensure_schema(db)
         write_repo = SqliteRunWriteRepository(db)
-        projections = ProjectionHandlers(db, write_repo)
+        projections = ProjectionHandlers(db, loaders={"Run": RunProjectionLoader(write_repo)})
         event_store = SqliteEventStore(db)
 
         for table in (*_PROJECTION_TABLES, "projection_cursor"):
