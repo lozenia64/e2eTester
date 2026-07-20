@@ -96,7 +96,7 @@ SuiteEvent = (
 @dataclass(frozen=True)
 class SuiteEventRecord:
     event: SuiteEvent
-    suite_summary: SuiteSummaryWire
+    suite_summary: SuiteSummaryWire | None
     event_id: str
     occurred_at: datetime
     version: int = 1

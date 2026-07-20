@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from app.contexts.suite.domain import commands as c
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.contexts.suite.domain.decider import decide, evolve, is_terminal, rebuild_state
+from app.contexts.suite.domain.events import SuiteEventRecord, SuiteStarted
 from app.core.enums import SuiteStatus
 from app.core.suite_models import SuiteRun, SuiteStep
 
@@ -137,3 +138,16 @@ def test_fold_equals_live_aggregate_full_suite():
     folded = rebuild_state(events, suite_id="suite_x")
     assert folded == live
     assert folded.status == SuiteStatus.ANOMALY
+
+
+def test_evolve_skips_null_suite_summary():
+    record = SuiteEventRecord(
+        event=SuiteStarted(),
+        suite_summary=None,
+        event_id="evt_thin_suite",
+        occurred_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+    )
+
+    state = evolve(None, record, suite_id="suite_thin")
+
+    assert state is None

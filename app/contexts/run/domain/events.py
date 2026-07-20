@@ -183,7 +183,7 @@ RunEvent = (
 @dataclass(frozen=True)
 class RunEventRecord:
     event: RunEvent
-    run_summary: RunSummaryWire
+    run_summary: RunSummaryWire | None
     event_id: str
     occurred_at: datetime
     version: int = 1

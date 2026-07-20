@@ -105,3 +105,34 @@ def test_suite_event_codec_roundtrip(event):
     assert decoded.suite_summary == record.suite_summary
     assert decoded.event_id == record.event_id
     assert decoded.version == record.version
+
+
+def test_decode_legacy_thin_event_without_suite_summary():
+    from app.platform.eventing.envelope import EventEnvelope
+
+    envelope = EventEnvelope(
+        event_id="evt_thin_suite",
+        aggregate_type="Suite",
+        aggregate_id=_SUITE_ID,
+        event_type="SuiteStarted",
+        payload={},
+        occurred_at=_NOW,
+    )
+
+    decoded = _CODEC.decode(envelope)
+
+    assert decoded.suite_summary is None
+    assert isinstance(decoded.event, SuiteStarted)
+
+
+def test_encode_omits_suite_summary_when_none():
+    record = SuiteEventRecord(
+        event=SuiteStarted(),
+        suite_summary=None,
+        event_id="evt_thin_suite",
+        occurred_at=_NOW,
+    )
+
+    envelope = _CODEC.encode(_SUITE_ID, record)
+
+    assert "suite_summary" not in envelope.payload

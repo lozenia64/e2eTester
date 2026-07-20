@@ -73,6 +73,8 @@ def evolve(
     모든 Suite 이벤트가 ``suite_summary`` 로 전체 상태를 실어 나르므로, 최신 이벤트의 요약으로
     스냅샷을 통째로 재구성한다.
     """
+    if record.suite_summary is None:
+        return state
     return _snapshot_from_summary(suite_id, record.suite_summary)
 
 

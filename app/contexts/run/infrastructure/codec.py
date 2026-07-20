@@ -58,9 +58,10 @@ class RunEventCodec:
     def encode(self, run_id: str, record: RunEventRecord) -> EventEnvelope:
         event_type = type(record.event).__name__
         payload = _event_to_payload(record.event)
-        payload["run_summary"] = record.run_summary
+        if record.run_summary is not None:
+            payload["run_summary"] = record.run_summary
         # 구 RunAggregate._emit 과 동치: payload 에 module/modules 키가 있을 때만(값 None/[] 포함).
-        if "module" in payload or "modules" in payload:
+        if record.run_summary is not None and ("module" in payload or "modules" in payload):
             payload["run_status"] = record.run_summary["status"]
         return EventEnvelope(
             event_id=record.event_id,
@@ -75,7 +76,7 @@ class RunEventCodec:
     def decode(self, envelope: EventEnvelope) -> RunEventRecord:
         cls = self._TYPES[envelope.event_type]
         payload = dict(envelope.payload)
-        run_summary = payload.pop("run_summary")
+        run_summary = payload.pop("run_summary", None)
         payload.pop("run_status", None)
         if cls is RunImported:
             payload["run_summary"] = run_summary

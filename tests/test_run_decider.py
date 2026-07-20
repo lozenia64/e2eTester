@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.run.contracts.records import RunModuleRecord
 from app.contexts.run.domain import commands as c
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.domain.decider import decide, evolve, is_terminal, rebuild_state
+from app.contexts.run.domain.events import RunCreated, RunEventRecord, RunStarted
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
 
@@ -354,3 +356,40 @@ def test_decide_full_run_fold_equals_live_aggregate():
     assert {m.module_id: m.status for m in state.modules} == {
         m.module_id: m.status for m in live.modules
     }
+
+
+def test_evolve_skips_null_run_summary():
+    record = RunEventRecord(
+        event=RunStarted(),
+        run_summary=None,
+        event_id="evt_thin_started",
+        occurred_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+    )
+
+    state = evolve(None, record, run_id="run_thin")
+
+    assert state.run_id == "run_thin"
+    assert state.status == RunStatus.PENDING
+
+
+def test_evolve_run_created_applies_modules_without_summary():
+    module = RunModuleRecord(
+        module_id="hom.login",
+        name="로그인",
+        group="auth",
+        order=1,
+        status=ModuleStatus.PENDING,
+    )
+    record = RunEventRecord(
+        event=RunCreated(system_code="hom", triggered_by="manual", all_modules=[module]),
+        run_summary=None,
+        event_id="evt_thin_created",
+        occurred_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+    )
+
+    state = evolve(None, record, run_id="run_thin")
+
+    assert state.run_id == "run_thin"
+    assert state.system_name == ""
+    assert len(state.modules) == 1
+    assert state.modules[0].module_id == "hom.login"

@@ -38,7 +38,8 @@ class SuiteEventCodec:
     def encode(self, suite_id: str, record: SuiteEventRecord) -> EventEnvelope:
         event_type = type(record.event).__name__
         payload = _event_to_payload(record.event)
-        payload["suite_summary"] = record.suite_summary
+        if record.suite_summary is not None:
+            payload["suite_summary"] = record.suite_summary
         return EventEnvelope(
             event_id=record.event_id,
             aggregate_type="Suite",
@@ -52,7 +53,7 @@ class SuiteEventCodec:
     def decode(self, envelope: EventEnvelope) -> SuiteEventRecord:
         cls = self._TYPES[envelope.event_type]
         payload = dict(envelope.payload)
-        suite_summary = payload.pop("suite_summary")
+        suite_summary = payload.pop("suite_summary", None)
         event = _payload_to_event(cls, payload)
         return SuiteEventRecord(
             event=event,

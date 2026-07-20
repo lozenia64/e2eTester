@@ -131,7 +131,10 @@ def _with_run_id(state: RunSnapshot, run_id: str) -> RunSnapshot:
 
 
 def _apply_summary(state: RunSnapshot, record: RunEventRecord, *, run_id: str) -> RunSnapshot:
-    return _apply_run_summary(_with_run_id(state, run_id), record.run_summary)
+    state = _with_run_id(state, run_id)
+    if record.run_summary is None:
+        return state
+    return _apply_run_summary(state, record.run_summary)
 
 
 _EMPTY = RunSnapshot(
@@ -163,7 +166,7 @@ def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) ->
     match event:
         case RunCreated() | RunImported():
             created = replace(_EMPTY, run_id=run_id)
-            created = _apply_run_summary(created, record.run_summary)
+            created = _apply_summary(created, record, run_id=run_id)
             return replace(
                 created,
                 modules=tuple(_module_from_record(module) for module in event.all_modules),

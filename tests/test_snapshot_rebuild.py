@@ -197,3 +197,65 @@ async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
         "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", ("Suite:suite_s",)
     )
     assert snap is not None
+
+
+def test_snapshot_state_json_survives_thin_legacy_events():
+    """레거시 thin 이벤트(run_summary 없음) 스트림도 KeyError 없이 폴드된다."""
+    from app.platform.eventing.envelope import EventEnvelope
+    from app.platform.snapshot_rebuild import snapshot_state_json
+
+    now = datetime(2026, 7, 12, 3, 0, tzinfo=UTC)
+    run_id = "run_thin_legacy"
+    module_wire = {
+        "module_id": "hom.access",
+        "name": "접속",
+        "group": "access",
+        "order": 0,
+        "status": ModuleStatus.PENDING.value,
+        "depends_on": [],
+        "retry_count": 0,
+        "attempt": 1,
+        "max_attempts": 1,
+        "message": "대기 중",
+        "artifact_count": 0,
+        "artifacts": [],
+        "dialog_messages": [],
+    }
+    events = [
+        EventEnvelope(
+            event_id="e1",
+            aggregate_type="Run",
+            aggregate_id=run_id,
+            event_type="RunCreated",
+            payload={
+                "system_code": "hom",
+                "triggered_by": "manual",
+                "all_modules": [module_wire],
+            },
+            occurred_at=now,
+        ),
+        EventEnvelope(
+            event_id="e2",
+            aggregate_type="Run",
+            aggregate_id=run_id,
+            event_type="RunFinished",
+            payload={
+                "status": RunStatus.PASSED.value,
+                "system_code": "hom",
+                "schedule_id": None,
+                "suite_id": None,
+                "requested_at": now.isoformat(),
+                "ended_at": now.isoformat(),
+                "created_by_user_id": None,
+            },
+            occurred_at=now,
+        ),
+    ]
+
+    state_json = snapshot_state_json(run_id, events)
+
+    assert state_json is not None
+    run = RunRecord.deserialize(state_json)
+    assert run.run_id == run_id
+    assert len(run.modules) == 1
+    assert run.modules[0].module_id == "hom.access"

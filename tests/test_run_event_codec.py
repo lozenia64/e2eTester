@@ -267,3 +267,38 @@ def test_run_event_codec_roundtrip(event):
     assert decoded.run_summary == record.run_summary
     assert decoded.event_id == record.event_id
     assert decoded.version == record.version
+
+
+def test_decode_legacy_thin_event_without_run_summary():
+    from app.platform.eventing.envelope import EventEnvelope
+
+    envelope = EventEnvelope(
+        event_id="evt_thin_created",
+        aggregate_type="Run",
+        aggregate_id=_RUN_ID,
+        event_type="RunCreated",
+        payload={
+            "system_code": "hom",
+            "triggered_by": "manual",
+            "all_modules": [],
+        },
+        occurred_at=_NOW,
+    )
+
+    decoded = _CODEC.decode(envelope)
+
+    assert decoded.run_summary is None
+    assert isinstance(decoded.event, RunCreated)
+
+
+def test_encode_omits_run_summary_when_none():
+    record = RunEventRecord(
+        event=RunStarted(),
+        run_summary=None,
+        event_id="evt_thin",
+        occurred_at=_NOW,
+    )
+
+    envelope = _CODEC.encode(_RUN_ID, record)
+
+    assert "run_summary" not in envelope.payload
