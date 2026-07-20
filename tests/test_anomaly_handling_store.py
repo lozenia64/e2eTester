@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.insights.infrastructure.sqlite_anomaly_handling_store import (
+    SqliteAnomalyHandlingStore,
+)
 from app.core.enums import AnomalyState
 from app.core.run_models import AnomalyHandling
-from app.storage.sqlite_anomaly_handling_store import SqliteAnomalyHandlingStore
 
 
 async def test_upsert_get_list_and_default_missing(tmp_path):

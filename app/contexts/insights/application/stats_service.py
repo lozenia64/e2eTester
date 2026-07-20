@@ -4,16 +4,16 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.contexts.insights.application.stats_charts import build_usage_charts
+from app.contexts.insights.infrastructure.module_settings_repository import (
+    ModuleSettingsRepositoryPort,
+)
+from app.contexts.insights.infrastructure.ports import StatsQueryPort
 from app.contexts.run.views.actor import load_actor_context
+from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
 from app.core.enums import ModuleStatus
 from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
-from app.storage.module_settings_repository import ModuleSettingsRepositoryPort
-from app.storage.ports import (
-    ScheduleRepositoryPort,
-    StatsQueryPort,
-    SuiteSummaryQueryPort,
-)
+from app.storage.ports import SuiteSummaryQueryPort
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService

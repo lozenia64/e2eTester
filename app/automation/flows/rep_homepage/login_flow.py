@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 from app.scenarios.rep_homepage.runtime import RepHomepageRuntime
 
 
-class LoginFlow:
+class LoginFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         steps = runtime.channel.steps

@@ -23,9 +23,9 @@ from app.core.requests import (
 from app.core.schedule_models import Schedule
 
 if TYPE_CHECKING:
+    from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
     from app.contexts.scheduling.scheduler import SchedulerService
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import ScheduleRepositoryPort
 
 
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])

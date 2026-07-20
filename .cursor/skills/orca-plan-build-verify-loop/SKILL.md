@@ -67,7 +67,12 @@ misrouted dispatch lands in someone else's live terminal.
    `claude-final-verify-brief.md`, embedded in the injected task spec). Follow
    that brief exactly: verify independently, then `worker_done` (PASS) or
    `escalation` (FAIL) to Grok — never trust Grok's PASS claim without
-   checking the diff yourself.
+   checking the diff yourself. This gate audits *two* things, not one: (a)
+   whether every plan item is actually implemented and covered by a test —
+   both, with no exceptions — and (b) whether Grok's own verification was
+   rigorous (item-by-item diff evidence in its PASS report) rather than a
+   rubber stamp on a green test run. A shallow Grok PASS is itself a FAIL
+   reason.
 4. If `claude_gate_iteration` reaches `max_claude_gate_iterations` without a
    clean PASS, stop escalating and report the blocker to the user directly
    instead of looping forever.
@@ -86,6 +91,13 @@ Cursor) — verifies strictly against the plan, `worker_done` PASS/FAIL to
 Cursor, and on PASS additionally dispatches the final-gate task to Claude
 Code. On receiving an `escalation` back from Claude Code, re-dispatches a fix
 task to Cursor with that feedback and restarts the inner loop.
+
+Verification here means checking each plan item against the diff/code for
+design-intent completeness, not just running tests — a green test suite is
+the starting point, not the proof. Per item: does the diff actually contain
+it (no silent omission), and does the change implement what the plan intended
+rather than a scoped-down/renamed/pass-through substitute (see
+`grok-verify-brief.md` for the exact checklist).
 
 ## Coordinator/worker rules (apply to whichever agent is acting)
 

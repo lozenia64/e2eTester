@@ -11,11 +11,11 @@ from app.contexts.run.domain.state_machine import (
     ResumeFromCheckpoint,
     RunStateMachine,
 )
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.execution.session_checkpoint import (
     InMemorySessionCheckpointStore,
     SessionCheckpoint,
 )
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_session_checkpoint_store import SqliteSessionCheckpointStore
 
 

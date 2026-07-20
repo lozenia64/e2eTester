@@ -31,9 +31,12 @@ if TYPE_CHECKING:
     from app.contexts.insights.application.ops_service import OpsService
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.run.application.service import RunService
+    from app.contexts.scheduling.infrastructure.ports import (
+        ScheduleRepositoryPort,
+        SuiteSummaryQueryPort,
+    )
     from app.orchestrator.queries import AdminDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import ScheduleRepositoryPort, SuiteSummaryQueryPort
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 

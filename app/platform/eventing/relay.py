@@ -9,9 +9,15 @@ import uuid
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.logging import get_logger
 from app.domain.events import DomainEvent
-from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput, SuiteFinished
-from app.eventsourcing.outbox import SqliteOutbox
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.bus import (
+    EventBus,
+    RunFinished,
+    RunResumed,
+    RunWaitingInput,
+    SuiteFinished,
+)
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.outbox import SqliteOutbox
 from app.realtime.projector import RealtimeProjector
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 

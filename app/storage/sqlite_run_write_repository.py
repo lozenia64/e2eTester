@@ -12,9 +12,9 @@ from datetime import UTC, datetime
 
 from app.core.run_models import Run
 from app.domain.events import DomainEvent
-from app.eventsourcing.event_store import SqliteEventStore
-from app.eventsourcing.outbox import SqliteOutbox
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.event_store import SqliteEventStore
+from app.platform.eventing.outbox import SqliteOutbox
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import RunRecord
 
 

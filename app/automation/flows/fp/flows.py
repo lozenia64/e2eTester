@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from app.automation.page_objects.fp import document_writing, identity_verification
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 
 
-class FpIdentityVerificationFlow:
+class FpIdentityVerificationFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         if not runtime.phone_auth_sms_requested:
@@ -33,7 +33,7 @@ class FpIdentityVerificationFlow:
         )
 
 
-class FpDocumentWritingFlow:
+class FpDocumentWritingFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         if not runtime.document_sms_requested:

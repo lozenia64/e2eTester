@@ -34,12 +34,12 @@ from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition
 
 if TYPE_CHECKING:
-    from app.registry.loader import ModuleRegistry
-    from app.storage.ports import (
+    from app.contexts.healing.infrastructure.ports import (
         HealingEventStorePort,
         HealingPatchStorePort,
         HealingPolicyStorePort,
     )
+    from app.registry.loader import ModuleRegistry
 
 logger = get_logger(__name__)
 

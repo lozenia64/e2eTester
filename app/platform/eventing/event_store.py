@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.domain.events import DomainEvent
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 
 
 @dataclass(frozen=True)

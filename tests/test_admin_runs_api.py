@@ -12,9 +12,9 @@ import pytest
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.domain.summary_fields import run_summary_fields
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.orchestrator.queries.run_queries import RunQueries
-from app.projections.handlers import _run_history_upsert
+from app.platform.eventing.handlers import _run_history_upsert
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.query_rows import RunSummaryFilter
 from app.storage.run_log_store import InMemoryRunLogStore
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery

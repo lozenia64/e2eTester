@@ -9,11 +9,11 @@ import pytest
 
 from app.core.enums import RunStatus
 from app.core.run_models import Run
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
 from app.notifications.run_completion_email import (
     EmailNotificationConfig,
     RunCompletionEmailNotifier,
 )
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 

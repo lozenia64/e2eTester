@@ -11,9 +11,9 @@ from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.domain.events import DomainEvent
-from app.eventsourcing.event_store import SqliteEventStore
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import PROJECTION_NAMES, ProjectionHandlers
+from app.platform.eventing.event_store import SqliteEventStore
+from app.platform.eventing.handlers import PROJECTION_NAMES, ProjectionHandlers
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 

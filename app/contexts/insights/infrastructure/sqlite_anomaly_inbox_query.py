@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.enums import ModuleStatus
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.query_rows import AnomalyInboxRow
 
 

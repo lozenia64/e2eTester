@@ -11,9 +11,9 @@ from _bootstrap import ensure_repo_root_on_path
 ensure_repo_root_on_path()
 
 from app.domain import events as domain_events
-from app.eventsourcing.event_store import SqliteEventStore
-from app.eventsourcing.outbox import SqliteOutbox
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.platform.eventing.event_store import SqliteEventStore
+from app.platform.eventing.outbox import SqliteOutbox
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.run_history_backfill import backfill_run_history_index
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 

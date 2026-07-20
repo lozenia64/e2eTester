@@ -8,16 +8,16 @@ from pathlib import Path
 import pytest
 
 from app.contexts.insights.application.stats_service import StatsService
+from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.system_models import ModuleDefinition, SystemDefinition
 from app.domain.summary_fields import module_history_fields, run_summary_fields
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import _module_history_upsert, _run_history_upsert
+from app.platform.eventing.handlers import _module_history_upsert, _run_history_upsert
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.module_history_backfill import backfill_module_history_index
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_stats_query import SqliteStatsQuery
 
 
 class _FakeSuiteSummaryQuery:

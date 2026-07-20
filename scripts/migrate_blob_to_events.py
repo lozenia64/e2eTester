@@ -14,8 +14,8 @@ from _bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
-from app.eventsourcing.blob_migration import migrate_run_blobs
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
+from app.platform.eventing.blob_migration import migrate_run_blobs
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from scripts.rebuild_projections import rebuild as rebuild_projections
 
 

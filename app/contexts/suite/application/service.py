@@ -25,7 +25,7 @@ from app.core.status_labels import (
 )
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.core.system_models import SystemDefinition
-from app.events.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
+from app.platform.eventing.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.realtime.ports import SuiteRealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
 from app.storage.ports import (

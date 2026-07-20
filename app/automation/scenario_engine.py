@@ -20,8 +20,11 @@ class ScenarioEngine:
     def has_flow(self, workflow_step: str) -> bool:
         return workflow_step in self._flows
 
+    def get_flow(self, workflow_step: str) -> Flow | None:
+        return self._flows.get(workflow_step)
+
     def run_step(self, workflow_step: str, ctx: AutomationContext) -> StepOutcome | None:
-        flow = self._flows.get(workflow_step)
+        flow = self.get_flow(workflow_step)
         if flow is None:
             return None
         return flow.run(ctx)

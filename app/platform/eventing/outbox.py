@@ -7,8 +7,8 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from app.domain.events import DomainEvent
-from app.eventsourcing.event_store import StoredEvent
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.event_store import StoredEvent
+from app.platform.eventing.support import SqliteDatabase
 
 # 미발행 행이 이 시간보다 오래 점유되면 다른 릴레이가 재청구할 수 있다.
 CLAIM_STALE_SECONDS = 120

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.query_rows import ModuleHistoryRow, RunSummaryRow, StatsRollupRow
 from app.storage.sqlite_module_history_query import _SELECT_COLUMNS as _MODULE_COLUMNS
 from app.storage.sqlite_module_history_query import _row_to_history

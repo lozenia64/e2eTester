@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepOutcome
 from app.scenarios.rep_homepage.runtime import RepHomepageRuntime
 
 
-class CompensationChargeFlow:
+class CompensationChargeFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
@@ -15,7 +15,7 @@ class CompensationChargeFlow:
         )
 
 
-class CompensationResultFlow:
+class CompensationResultFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
@@ -23,7 +23,7 @@ class CompensationResultFlow:
         )
 
 
-class CompensationCancelFlow:
+class CompensationCancelFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(
@@ -31,7 +31,7 @@ class CompensationCancelFlow:
         )
 
 
-class LongTermPolicyCertificateFlow:
+class LongTermPolicyCertificateFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime: RepHomepageRuntime = ctx.runtime  # type: ignore[assignment]
         return StepCompleted(

@@ -38,15 +38,13 @@ from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
-    from app.registry.loader import ModuleRegistry
-    from app.storage.ports import (
+    from app.contexts.insights.infrastructure.ports import (
         AnomalyHandlingStorePort,
         AnomalyInboxQueryPort,
-        ModuleHistoryQueryPort,
-        RunSummaryQueryPort,
-        ScheduleRepositoryPort,
-        SuiteSummaryQueryPort,
     )
+    from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
+    from app.registry.loader import ModuleRegistry
+    from app.storage.ports import ModuleHistoryQueryPort, RunSummaryQueryPort, SuiteSummaryQueryPort
     from app.storage.query_rows import ModuleHistoryRow
 
 # 시스템 인사이트(헬스 30일·타임라인·딥다이브)가 분석하는 최근 Run 상한.

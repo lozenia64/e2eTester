@@ -14,7 +14,7 @@ def test_local_mode_skips_redis_fanout_by_default() -> None:
     )
     container = AppContainer.build(settings)
     assert container._should_use_redis_fanout() is False
-    assert container.redis_fanout is None
+    assert container.realtime.redis_fanout is None
 
 
 def test_remote_mode_enables_redis_fanout() -> None:
@@ -24,7 +24,7 @@ def test_remote_mode_enables_redis_fanout() -> None:
     )
     container = AppContainer.build(settings)
     assert container._should_use_redis_fanout() is True
-    assert container.redis_fanout is not None
+    assert container.realtime.redis_fanout is not None
 
 
 def test_local_mode_opt_in_enables_redis_fanout() -> None:

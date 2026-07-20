@@ -23,17 +23,14 @@ if TYPE_CHECKING:
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.preset.application.service import PresetService
     from app.contexts.run.application.service import RunService
+    from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
     from app.contexts.scheduling.scheduler import SchedulerService
     from app.contexts.suite.application.service import SuiteService
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
     from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import (
-        ScheduleRepositoryPort,
-        SuiteRepositoryPort,
-        SuiteSummaryQueryPort,
-    )
+    from app.storage.ports import SuiteRepositoryPort, SuiteSummaryQueryPort
 
 
 def get_run_service(connection: HTTPConnection) -> RunService:

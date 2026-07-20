@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from app.automation.page_objects.hwtc import phone_auth, video_playback
-from app.automation.ports import AutomationContext
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepCompleted, StepNeedsInput, StepOutcome
 
 
-class HwtcMainAccessFlow:
+class HwtcMainAccessFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         return StepCompleted(phone_auth.run_main_access(runtime.page, runtime.base_url))
 
 
-class HwtcPhoneAuthFlow:
+class HwtcPhoneAuthFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         if not runtime.user_id or not runtime.password:
@@ -38,7 +38,7 @@ class HwtcPhoneAuthFlow:
         )
 
 
-class HwtcVideoPlaybackFlow:
+class HwtcVideoPlaybackFlow(Flow):
     def run(self, ctx: AutomationContext) -> StepOutcome:
         runtime = ctx.runtime
         return StepCompleted(video_playback.run(runtime.page, base_url=runtime.base_url))

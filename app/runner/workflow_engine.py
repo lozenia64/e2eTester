@@ -234,7 +234,7 @@ class BaseWorkflowExecutor(ABC):
         )
 
     def _dispatch_step(self, context: StepContext) -> StepOutcome:
-        """workflow_step 을 Automation BC 또는 레지스트리로 디스패치한다."""
+        """workflow_step 을 Automation BC(Flow 포트) 또는 레지스트리로 디스패치한다."""
         automation = self._automation
         if automation is not None:
             from app.automation.ports import AutomationContext

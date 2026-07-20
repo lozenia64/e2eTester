@@ -22,8 +22,8 @@ from app.domain.summary_fields import (
     module_history_fields,
     run_summary_fields,
 )
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import _module_history_upsert
+from app.platform.eventing.handlers import _module_history_upsert
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 

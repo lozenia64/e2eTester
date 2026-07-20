@@ -14,7 +14,7 @@ from app.domain.summary_fields import (
     module_history_fields_from_wire,
     run_summary_fields,
 )
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
 
 PROJECTION_NAMES = (

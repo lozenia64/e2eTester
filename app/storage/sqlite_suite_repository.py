@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.core.suite_models import SuiteRun
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.records import SuiteRecord
 
 

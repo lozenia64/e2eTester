@@ -13,8 +13,8 @@ from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import FailureAnalysis, Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.domain.events import run_deleted
-from app.eventsourcing.support import SqliteDatabase, ensure_schema
-from app.projections.handlers import ProjectionHandlers
+from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.storage.query_rows import Page, RunSummaryFilter
 from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
 from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery

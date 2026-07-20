@@ -6,7 +6,7 @@ import json
 from datetime import UTC, datetime
 
 from app.core.enums import SuiteStatus
-from app.eventsourcing.support import SqliteDatabase
+from app.platform.eventing.support import SqliteDatabase
 from app.storage.query_rows import SuiteStepRow, SuiteSummaryRow
 
 _SELECT_COLUMNS = """
