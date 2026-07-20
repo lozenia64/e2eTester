@@ -6,15 +6,19 @@ from dataclasses import dataclass
 
 from app.contexts.run.application.service import RunService
 from app.contexts.suite.application.service import SuiteService
+from app.contexts.suite.infrastructure.encrypted_suite_input_store import (
+    EncryptedSqliteSuiteInputStore,
+)
+from app.contexts.suite.infrastructure.sqlite_suite_control_store import SqliteSuiteControlStore
+from app.contexts.suite.infrastructure.sqlite_suite_repository import SqliteSuiteRepository
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.platform.eventing.bus import EventBus
 from app.platform.eventing.support import SqliteDatabase
 from app.realtime.adapter import SuiteRealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.storage.encrypted_suite_input_store import EncryptedSqliteSuiteInputStore
-from app.storage.sqlite_suite_control_store import SqliteSuiteControlStore
-from app.storage.sqlite_suite_repository import SqliteSuiteRepository
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
 
 
 @dataclass

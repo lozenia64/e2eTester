@@ -14,10 +14,32 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import assert_never
 
+from app.contexts.run.contracts.records import RunModuleRecord
+from app.contexts.run.domain.events import (
+    ModuleFailureAnalysisAttached,
+    ModuleFinished,
+    ModuleQueued,
+    ModuleStarted,
+    RunComparisonAttached,
+    RunCreated,
+    RunDeleted,
+    RunEventRecord,
+    RunFinished,
+    RunImported,
+    RunModuleBlocked,
+    RunModuleRetried,
+    RunModulesCancelled,
+    RunPartialRerunStarted,
+    RunResumed,
+    RunSealedInterrupted,
+    RunStarted,
+    RunSummaryWire,
+    RunWaitingInput,
+)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import FailureAnalysis, RunComparison
-from app.domain.events import DomainEvent
 from app.domain.snapshots import ModuleSnapshot, RunSnapshot
 
 # 종료(더 이상 전이하지 않는) Run 상태들.
@@ -67,7 +89,11 @@ def _module_from_wire(wire: dict) -> ModuleSnapshot:
     )
 
 
-def _apply_run_summary(state: RunSnapshot, summary: dict) -> RunSnapshot:
+def _module_from_record(module: RunModuleRecord) -> ModuleSnapshot:
+    return _module_from_wire(module.model_dump(mode="json"))
+
+
+def _apply_run_summary(state: RunSnapshot, summary: RunSummaryWire) -> RunSnapshot:
     """모든 상태 전이 이벤트에 동봉된 run_summary 로 런레벨 필드를 갱신한다."""
     comparison = summary.get("comparison")
     return replace(
@@ -90,12 +116,25 @@ def _apply_run_summary(state: RunSnapshot, summary: dict) -> RunSnapshot:
     )
 
 
-def _replace_module(state: RunSnapshot, wire: dict) -> RunSnapshot:
-    updated = _module_from_wire(wire)
+def _replace_module(state: RunSnapshot, module: RunModuleRecord) -> RunSnapshot:
+    updated = _module_from_record(module)
     modules = tuple(
-        updated if module.module_id == updated.module_id else module for module in state.modules
+        updated if item.module_id == updated.module_id else item for item in state.modules
     )
     return replace(state, modules=modules)
+
+
+def _with_run_id(state: RunSnapshot, run_id: str) -> RunSnapshot:
+    if state.run_id:
+        return state
+    return replace(state, run_id=run_id)
+
+
+def _apply_summary(state: RunSnapshot, record: RunEventRecord, *, run_id: str) -> RunSnapshot:
+    state = _with_run_id(state, run_id)
+    if record.run_summary is None:
+        return state
+    return _apply_run_summary(state, record.run_summary)
 
 
 _EMPTY = RunSnapshot(
@@ -119,54 +158,68 @@ _EMPTY = RunSnapshot(
 )
 
 
-def evolve(state: RunSnapshot | None, event: DomainEvent) -> RunSnapshot:
-    """이벤트 한 건을 접어 새 Run 상태를 만든다(순수).
-
-    규약:
-    - ``RunCreated`` : 빈 상태에서 초기화(런레벨은 run_summary, 모듈은 all_modules).
-    - ``all_modules`` 를 실은 벌크 전이(SealedInterrupted/PartialRerun): 모듈 전체 교체.
-    - ``modules``(RunModulesCancelled): 나열된 모듈만 교체.
-    - ``module``(단일 모듈 전이): 그 모듈만 교체.
-    - 모든 이벤트: run_summary 가 있으면 런레벨 필드 갱신(status/시각/awaiting/comparison 포함).
-    """
+def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) -> RunSnapshot:
+    """이벤트 한 건을 접어 새 Run 상태를 만든다(순수)."""
     base = state if state is not None else _EMPTY
-    payload = event.payload
+    event = record.event
 
-    # RunImported(레거시 마이그레이션 genesis)는 RunCreated 와 동일하게 빈 상태에서 최종 상태를
-    # 초기화한다 — run_summary 로 런레벨, all_modules 로 모듈 전체를 세운다.
-    if event.event_type in ("RunCreated", "RunImported"):
-        base = replace(_EMPTY, run_id=event.aggregate_id)
-        summary = payload.get("run_summary")
-        if summary is not None:
-            base = _apply_run_summary(base, summary)
-        base = replace(
-            base, modules=tuple(_module_from_wire(m) for m in payload.get("all_modules", []))
-        )
-        return base
+    match event:
+        case RunCreated() | RunImported():
+            created = replace(_EMPTY, run_id=run_id)
+            created = _apply_summary(created, record, run_id=run_id)
+            return replace(
+                created,
+                modules=tuple(_module_from_record(module) for module in event.all_modules),
+            )
+        case RunStarted() | RunFinished() | RunDeleted() | RunComparisonAttached():
+            return _apply_summary(base, record, run_id=run_id)
+        case (
+            RunSealedInterrupted(all_modules=modules) | RunPartialRerunStarted(all_modules=modules)
+        ):
+            state = _apply_summary(base, record, run_id=run_id)
+            if modules:
+                return replace(
+                    state, modules=tuple(_module_from_record(module) for module in modules)
+                )
+            return state
+        case RunModulesCancelled(modules=modules):
+            state = _apply_summary(base, record, run_id=run_id)
+            for module in modules:
+                state = _replace_module(state, module)
+            return state
+        case (
+            ModuleQueued(module=None)
+            | ModuleStarted(module=None)
+            | RunWaitingInput(module=None)
+            | RunResumed(module=None)
+            | RunModuleBlocked(module=None)
+            | RunModuleRetried(module=None)
+            | ModuleFailureAnalysisAttached(module=None)
+            | ModuleFinished(module=None)
+        ):
+            return _apply_summary(base, record, run_id=run_id)
+        case (
+            ModuleQueued(module=module)
+            | ModuleStarted(module=module)
+            | RunWaitingInput(module=module)
+            | RunResumed(module=module)
+            | RunModuleBlocked(module=module)
+            | RunModuleRetried(module=module)
+            | ModuleFailureAnalysisAttached(module=module)
+            | ModuleFinished(module=module)
+        ):
+            assert module is not None
+            state = _apply_summary(base, record, run_id=run_id)
+            return _replace_module(state, module)
+        case _:
+            assert_never(event)
 
-    if not base.run_id:
-        base = replace(base, run_id=event.aggregate_id)
 
-    summary = payload.get("run_summary")
-    if summary is not None:
-        base = _apply_run_summary(base, summary)
-
-    if "all_modules" in payload and payload["all_modules"]:
-        base = replace(base, modules=tuple(_module_from_wire(m) for m in payload["all_modules"]))
-    elif payload.get("modules"):
-        for wire in payload["modules"]:
-            base = _replace_module(base, wire)
-    elif payload.get("module"):
-        base = _replace_module(base, payload["module"])
-
-    return base
-
-
-def rebuild_state(events: list[DomainEvent]) -> RunSnapshot | None:
+def rebuild_state(events: list[RunEventRecord], *, run_id: str) -> RunSnapshot | None:
     """Run 이벤트 스트림 전체를 접어 권위 있는 상태를 재구성한다(없으면 None)."""
     state: RunSnapshot | None = None
-    for event in events:
-        state = evolve(state, event)
+    for record in events:
+        state = evolve(state, record, run_id=run_id)
     return state
 
 

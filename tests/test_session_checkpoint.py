@@ -11,12 +11,14 @@ from app.contexts.run.domain.state_machine import (
     ResumeFromCheckpoint,
     RunStateMachine,
 )
+from app.contexts.run.infrastructure.sqlite_session_checkpoint_store import (
+    SqliteSessionCheckpointStore,
+)
 from app.execution.session_checkpoint import (
     InMemorySessionCheckpointStore,
     SessionCheckpoint,
 )
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.sqlite_session_checkpoint_store import SqliteSessionCheckpointStore
 
 
 def test_rehydration_resumes_from_next_module_when_session_valid():

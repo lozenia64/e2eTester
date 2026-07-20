@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.contexts.run.contracts.records import RunModuleRecord
 from app.contexts.run.domain import commands as c
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.domain.decider import decide, evolve, is_terminal, rebuild_state
+from app.contexts.run.domain.events import RunCreated, RunEventRecord, RunStarted
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
 
@@ -49,8 +51,8 @@ def _run(run_id: str = "run_dec") -> Run:
     )
 
 
-def _fold(events) -> object:
-    return rebuild_state(events)
+def _fold(events, *, run_id: str = "run_dec") -> object:
+    return rebuild_state(events, run_id=run_id)
 
 
 def _drive_full_run(status_login: ModuleStatus) -> tuple[RunAggregate, list]:
@@ -83,7 +85,7 @@ def _drive_full_run(status_login: ModuleStatus) -> tuple[RunAggregate, list]:
 def test_evolve_reconstructs_live_snapshot_full_pass():
     aggregate, events = _drive_full_run(ModuleStatus.PASSED)
     live = aggregate.to_snapshot()
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_dec")
     assert folded == live
     assert folded.status == RunStatus.PASSED
     assert is_terminal(folded)
@@ -92,7 +94,7 @@ def test_evolve_reconstructs_live_snapshot_full_pass():
 def test_evolve_reconstructs_live_snapshot_with_anomaly():
     aggregate, events = _drive_full_run(ModuleStatus.ANOMALY)
     live = aggregate.to_snapshot()
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_dec")
     assert folded == live
     assert folded.status == RunStatus.ANOMALY
     # 모듈 진단 컨텍스트도 이벤트에서 복원된다(현재 URL·다이얼로그).
@@ -113,14 +115,14 @@ def test_evolve_reconstructs_waiting_input_and_resume():
     aggregate.mark_waiting_input(module, "OTP 필요", ["run_otp/hom.access/final.png"])
     events += aggregate.pull_events()
 
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_otp")
     assert folded == aggregate.to_snapshot()
     assert folded.status == RunStatus.WAITING_INPUT
     assert folded.awaiting_input_module_id == "hom.access"
 
     aggregate.resume_after_input(module)
     events += aggregate.pull_events()
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_otp")
     assert folded == aggregate.to_snapshot()
     assert folded.status == RunStatus.RUNNING
     assert folded.awaiting_input_module_id is None
@@ -136,7 +138,7 @@ def test_evolve_reconstructs_seal_interrupted():
     assert aggregate.seal_interrupted() is True
     events += aggregate.pull_events()
 
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_seal")
     assert folded == aggregate.to_snapshot()
     assert folded.status == RunStatus.CANCELLED
     assert all(
@@ -165,7 +167,7 @@ def test_evolve_reconstructs_comparison_and_failure_analysis():
     )
     events += aggregate.pull_events()
 
-    folded = _fold(events)
+    folded = _fold(events, run_id="run_dec")
     assert folded == aggregate.to_snapshot()
     assert folded.comparison is not None
     assert folded.comparison.newly_failed == ["로그인"]
@@ -175,7 +177,7 @@ def test_evolve_reconstructs_comparison_and_failure_analysis():
 
 
 def test_empty_stream_folds_to_none():
-    assert _fold([]) is None
+    assert rebuild_state([], run_id="run_empty") is None
 
 
 def test_single_run_created_event_initializes_modules():
@@ -183,7 +185,7 @@ def test_single_run_created_event_initializes_modules():
     aggregate = RunAggregate.for_new_run(run)
     created = aggregate.pull_events()
     assert len(created) == 1
-    folded = evolve(None, created[0])
+    folded = evolve(None, created[0], run_id="run_init")
     assert folded.run_id == "run_init"
     assert {m.module_id for m in folded.modules} == {"hom.access", "hom.login"}
     assert folded.status == RunStatus.PENDING
@@ -195,19 +197,19 @@ def test_single_run_created_event_initializes_modules():
 def _initial_state(run_id: str = "run_cmd"):
     """RunCreated 를 접은 초기 상태(=신규 Run 스냅샷)."""
     aggregate = RunAggregate.for_new_run(_run(run_id))
-    return rebuild_state(aggregate.pull_events())
+    return rebuild_state(aggregate.pull_events(), run_id=run_id)
 
 
-def _apply(state, *events):
+def _apply(state, *events, run_id: str = "run_cmd"):
     for event in events:
-        state = evolve(state, event)
+        state = evolve(state, event, run_id=run_id)
     return state
 
 
 def test_decide_begin_run_matches_aggregate():
     state = _initial_state()
     events = decide(c.BeginRun(), state)
-    assert [e.event_type for e in events] == ["RunStarted"]
+    assert [type(e.event).__name__ for e in events] == ["RunStarted"]
     after = _apply(state, *events)
     assert after.status == RunStatus.RUNNING
     assert after.started_at is not None
@@ -235,7 +237,7 @@ def test_decide_queue_start_record_reconstructs_module_transition():
         ),
         state,
     )
-    assert [e.event_type for e in events] == ["ModuleFinished"]
+    assert [type(e.event).__name__ for e in events] == ["ModuleFinished"]
     state = _apply(state, *events)
     module = next(m for m in state.modules if m.module_id == module_id)
     assert module.status == ModuleStatus.PASSED
@@ -246,13 +248,13 @@ def test_decide_queue_start_record_reconstructs_module_transition():
 def test_decide_pause_and_resume_for_input():
     state = _apply(_initial_state(), *decide(c.BeginRun(), _initial_state()))
     events = decide(c.PauseForInput("hom.access", "OTP 필요", ("a.png",)), state)
-    assert [e.event_type for e in events] == ["RunWaitingInput"]
+    assert [type(e.event).__name__ for e in events] == ["RunWaitingInput"]
     state = _apply(state, *events)
     assert state.status == RunStatus.WAITING_INPUT
     assert state.awaiting_input_module_id == "hom.access"
 
     events = decide(c.ResumeAfterInput("hom.access"), state)
-    assert [e.event_type for e in events] == ["RunResumed"]
+    assert [type(e.event).__name__ for e in events] == ["RunResumed"]
     state = _apply(state, *events)
     assert state.status == RunStatus.RUNNING
     assert state.awaiting_input_module_id is None
@@ -272,7 +274,7 @@ def test_decide_finalize_priority_error_over_anomaly():
     )
     state = _apply(state, *decide(c.FailModule("hom.login", "도구 오류"), state))
     events = decide(c.FinalizeRun(None), state)
-    assert [e.event_type for e in events] == ["RunFinished"]
+    assert [type(e.event).__name__ for e in events] == ["RunFinished"]
     state = _apply(state, *events)
     assert state.status == RunStatus.ERROR
     assert is_terminal(state)
@@ -281,7 +283,7 @@ def test_decide_finalize_priority_error_over_anomaly():
 def test_decide_cancel_modules_only_emits_for_changed():
     state = _apply(_initial_state(), *decide(c.BeginRun(), _initial_state()))
     events = decide(c.CancelModules(("hom.access", "hom.login")), state)
-    assert [e.event_type for e in events] == ["RunModulesCancelled"]
+    assert [type(e.event).__name__ for e in events] == ["RunModulesCancelled"]
     state = _apply(state, *events)
     assert all(m.status == ModuleStatus.CANCELLED for m in state.modules)
 
@@ -329,10 +331,10 @@ def test_decide_full_run_fold_equals_live_aggregate():
 
     # 동일 시나리오를 decide/evolve 로 구동.
     state = _initial_state("run_dec")
-    state = _apply(state, *decide(c.BeginRun(), state))
+    state = _apply(state, *decide(c.BeginRun(), state), run_id="run_dec")
     for module_id in ("hom.access", "hom.login"):
-        state = _apply(state, *decide(c.QueueModule(module_id), state))
-        state = _apply(state, *decide(c.StartModule(module_id), state))
+        state = _apply(state, *decide(c.QueueModule(module_id), state), run_id="run_dec")
+        state = _apply(state, *decide(c.StartModule(module_id), state), run_id="run_dec")
         state = _apply(
             state,
             *decide(
@@ -346,10 +348,48 @@ def test_decide_full_run_fold_equals_live_aggregate():
                 ),
                 state,
             ),
+            run_id="run_dec",
         )
-    state = _apply(state, *decide(c.FinalizeRun(None), state))
+    state = _apply(state, *decide(c.FinalizeRun(None), state), run_id="run_dec")
 
     assert state.status == live.status == RunStatus.PASSED
     assert {m.module_id: m.status for m in state.modules} == {
         m.module_id: m.status for m in live.modules
     }
+
+
+def test_evolve_skips_null_run_summary():
+    record = RunEventRecord(
+        event=RunStarted(),
+        run_summary=None,
+        event_id="evt_thin_started",
+        occurred_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+    )
+
+    state = evolve(None, record, run_id="run_thin")
+
+    assert state.run_id == "run_thin"
+    assert state.status == RunStatus.PENDING
+
+
+def test_evolve_run_created_applies_modules_without_summary():
+    module = RunModuleRecord(
+        module_id="hom.login",
+        name="로그인",
+        group="auth",
+        order=1,
+        status=ModuleStatus.PENDING,
+    )
+    record = RunEventRecord(
+        event=RunCreated(system_code="hom", triggered_by="manual", all_modules=[module]),
+        run_summary=None,
+        event_id="evt_thin_created",
+        occurred_at=datetime(2026, 7, 12, 3, 0, tzinfo=UTC),
+    )
+
+    state = evolve(None, record, run_id="run_thin")
+
+    assert state.run_id == "run_thin"
+    assert state.system_name == ""
+    assert len(state.modules) == 1
+    assert state.modules[0].module_id == "hom.login"

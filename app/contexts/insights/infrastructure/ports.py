@@ -5,15 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from app.core.run_models import AnomalyHandling
-from app.storage.query_rows import (
+from app.contexts.insights.contracts.query_rows import (
     AnomalyInboxRow,
     DailyRunSummaryRow,
     DailyStatusRow,
-    ModuleHistoryRow,
-    RunSummaryRow,
     StatsRollupRow,
 )
+from app.contexts.run.contracts.query_rows import ModuleHistoryRow, RunSummaryRow
+from app.core.run_models import AnomalyHandling
 
 
 class AnomalyHandlingStorePort(Protocol):

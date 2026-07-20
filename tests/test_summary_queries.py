@@ -4,22 +4,29 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.domain.events import RunDeleted, RunEventRecord
+from app.contexts.run.infrastructure.codec import RunEventCodec
+from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import FailureAnalysis, Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.domain.events import run_deleted
-from app.platform.eventing.handlers import ProjectionHandlers
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.query_rows import Page, RunSummaryFilter
-from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from tests.eventing_helpers import (
+    make_projection_handlers,
+    run_events_as_envelopes,
+    suite_events_as_envelopes,
+)
 
 
 def _run(run_id: str, *, user: str | None = "u1", name: str | None = "홍길동") -> Run:
@@ -49,10 +56,26 @@ class _Env:
     def __init__(self, db: SqliteDatabase) -> None:
         self.db = db
         self.write_repo = SqliteRunWriteRepository(db)
-        self.projections = ProjectionHandlers(db, self.write_repo)
+        self.projections = make_projection_handlers(db, self.write_repo)
         self.sequence = 0
 
-    async def apply(self, events) -> None:
+    async def apply(
+        self,
+        events,
+        *,
+        run_id: str | None = None,
+        suite_id: str | None = None,
+    ) -> None:
+        from app.contexts.suite.domain.events import SuiteEventRecord
+
+        if events and isinstance(events[0], RunEventRecord):
+            if run_id is None:
+                raise ValueError("run_id is required for RunEventRecord batches")
+            events = run_events_as_envelopes(run_id, events)
+        elif events and isinstance(events[0], SuiteEventRecord):
+            if suite_id is None:
+                raise ValueError("suite_id is required for SuiteEventRecord batches")
+            events = suite_events_as_envelopes(suite_id, events)
         for event in events:
             self.sequence += 1
             await self.projections.apply(event, self.sequence)
@@ -84,7 +107,7 @@ async def _finish_run(env: _Env, run_id: str, status: ModuleStatus, **run_kwargs
     aggregate.finalize(None)
     events = aggregate.pull_events()
     await env.write_repo.save_run(aggregate.persistable_state(), events=events)
-    await env.apply(events)
+    await env.apply(events, run_id=run_id)
 
 
 @pytest.mark.asyncio
@@ -94,7 +117,7 @@ async def test_run_summary_filters_and_paging(tmp_path: Path) -> None:
     run_a = _run("run_a")
     agg_a = RunAggregate.for_new_run(run_a)
     await env.write_repo.create_run(run_a, events=(events_a := agg_a.pull_events()))
-    await env.apply(events_a)
+    await env.apply(events_a, run_id="run_a")
 
     run_b = _run("run_b", user="u2", name="김철수")
     agg_b = RunAggregate.for_new_run(run_b)
@@ -114,7 +137,7 @@ async def test_run_summary_filters_and_paging(tmp_path: Path) -> None:
     agg_b.finish_timing(module)
     agg_b.finalize(None)
     await env.write_repo.save_run(agg_b.persistable_state(), events=(more_b := agg_b.pull_events()))
-    await env.apply(more_b)
+    await env.apply(more_b, run_id="run_b")
 
     query = SqliteRunSummaryQuery(env.db)
 
@@ -169,7 +192,7 @@ async def test_module_history_rows_and_ai_enrichment(tmp_path: Path) -> None:
             recommended_action="셀렉터 갱신",
         ),
     )
-    await env.apply(aggregate.pull_events())
+    await env.apply(aggregate.pull_events(), run_id="run_mod")
     rows = await history.list_for_runs(["run_mod"])
     assert rows[0].ai_category == "selector_broken"
     assert rows[0].ai_summary == "로그인 버튼 셀렉터가 깨졌습니다."
@@ -187,7 +210,16 @@ async def test_run_deleted_cleans_run_scoped_projections(tmp_path: Path) -> None
         return run_rows["c"], module_rows["c"], anomaly_rows["c"]
 
     assert await _counts() == (1, 1, 1)
-    await env.apply([run_deleted("run_del")])
+    deleted = RunEventCodec().encode(
+        "run_del",
+        RunEventRecord(
+            event=RunDeleted(),
+            run_summary={},
+            event_id=uuid4().hex,
+            occurred_at=datetime.now(UTC),
+        ),
+    )
+    await env.apply([deleted])
     assert await _counts() == (0, 0, 0)
     # 일간 현황은 "그날 점검했다"는 사실이므로 보존된다.
     daily = await env.db.fetchone("SELECT COUNT(*) AS c FROM daily_system_status")
@@ -209,7 +241,7 @@ async def test_suite_summary_rows(tmp_path: Path) -> None:
     aggregate.begin()
     step = aggregate.start_step(0)
     aggregate.link_run(step, "run_child")
-    await env.apply(aggregate.pull_events())
+    await env.apply(aggregate.pull_events(), suite_id="suite_q")
 
     query = SqliteSuiteSummaryQuery(env.db)
     rows = await query.list_summaries()

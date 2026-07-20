@@ -11,6 +11,9 @@ import pytest
 
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
+from app.notifications.infrastructure.sqlite_email_notification_dedup import (
+    SqliteEmailNotificationDedupStore,
+)
 from app.notifications.run_completion_email import (
     EmailNotificationConfig,
     RunCompletionEmailNotifier,
@@ -18,7 +21,6 @@ from app.notifications.run_completion_email import (
 from app.platform.eventing.bus import EventBus, RunFinished
 from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.sqlite_email_notification_dedup import SqliteEmailNotificationDedupStore
 
 
 def _passed_run(run_id: str = "run_email_dedup") -> Run:

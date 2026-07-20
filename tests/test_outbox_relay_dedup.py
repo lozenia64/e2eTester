@@ -8,6 +8,10 @@ from datetime import UTC, datetime
 import pytest
 
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.platform.eventing.bus import EventBus, RunFinished
@@ -17,8 +21,7 @@ from app.platform.eventing.relay import OutboxRelay
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
 def _sample_run(run_id: str = "run_outbox_dedup") -> Run:
@@ -48,7 +51,7 @@ async def test_concurrent_process_once_publishes_run_finished_once(tmp_path):
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
     suite_write_repo = SqliteSuiteWriteRepository(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
     outbox = SqliteOutbox(db)
     run_realtime = RealtimeNotificationAdapter()
     suite_realtime = SuiteRealtimeNotificationAdapter()
@@ -63,7 +66,7 @@ async def test_concurrent_process_once_publishes_run_finished_once(tmp_path):
     aggregate = RunAggregate.for_new_run(run)
     await write_repo.create_run(run, events=aggregate.pull_events())
 
-    bootstrap_relay = OutboxRelay(outbox, projections, write_repo, EventBus(), projector)
+    bootstrap_relay = make_outbox_relay(outbox, projections, write_repo, EventBus(), projector)
     await bootstrap_relay.process_once()
 
     aggregate = RunAggregate(await write_repo.get_run(run.run_id))
@@ -92,7 +95,9 @@ async def test_concurrent_process_once_publishes_run_finished_once(tmp_path):
     event_bus = EventBus()
     event_bus.subscribe(RunFinished, _count_run_finished)
 
-    relays = [OutboxRelay(outbox, projections, write_repo, event_bus, projector) for _ in range(4)]
+    relays = [
+        make_outbox_relay(outbox, projections, write_repo, event_bus, projector) for _ in range(4)
+    ]
     results = await asyncio.gather(*(relay.process_once() for relay in relays))
 
     assert sum(results) >= 1

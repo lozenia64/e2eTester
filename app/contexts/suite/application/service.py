@@ -7,6 +7,14 @@ from uuid import uuid4
 
 from app.contexts.run.application.command_port import RunCommandPort
 from app.contexts.scheduling.scheduler import schedule_today_start_utc
+from app.contexts.suite.contracts.ports import (
+    SuiteControlStorePort,
+    SuiteInputStorePort,
+    SuiteReadRepositoryPort,
+    SuiteSummaryQueryPort,
+    SuiteWriteRepositoryPort,
+)
+from app.contexts.suite.contracts.query_rows import SuiteSummaryRow
 from app.contexts.suite.domain.aggregate import SuiteAggregate
 from app.contexts.suite.domain.state_machine import (
     CancelSuite,
@@ -28,14 +36,6 @@ from app.core.system_models import SystemDefinition
 from app.platform.eventing.bus import EventBus, RunFinished, RunResumed, RunWaitingInput
 from app.realtime.ports import SuiteRealtimeNotificationPort
 from app.registry.loader import ModuleRegistry
-from app.storage.ports import (
-    SuiteControlStorePort,
-    SuiteInputStorePort,
-    SuiteReadRepositoryPort,
-    SuiteSummaryQueryPort,
-    SuiteWriteRepositoryPort,
-)
-from app.storage.query_rows import SuiteSummaryRow
 
 logger = get_logger(__name__)
 

@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
     from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
+    from app.contexts.suite.contracts.ports import SuiteSummaryQueryPort
+    from app.contexts.suite.contracts.query_rows import SuiteSummaryRow
     from app.core.schedule_models import Schedule
-    from app.storage.ports import SuiteSummaryQueryPort
-    from app.storage.query_rows import SuiteSummaryRow
 
 
 class RunActorSource(Protocol):

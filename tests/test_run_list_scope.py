@@ -7,20 +7,23 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.contexts.run.infrastructure.in_memory_run_log_store import InMemoryRunLogStore
+from app.contexts.run.infrastructure.in_memory_run_repository import InMemoryRunRepository
+from app.contexts.run.infrastructure.in_memory_run_summary_query import InMemoryRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.contexts.suite.application.service import SuiteService
 from app.contexts.suite.domain.aggregate import SuiteAggregate
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.core.enums import RunStatus, SuiteStatus
 from app.core.run_models import Run, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
 from app.orchestrator.queries import RunQueries
 from app.platform.eventing.handlers import ProjectionHandlers
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
-from app.storage.run_log_store import InMemoryRunLogStore
-from app.storage.run_repository import InMemoryRunRepository
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+from tests.eventing_helpers import suite_events_as_envelopes
 
 
 class _SuiteEnv:
@@ -30,8 +33,8 @@ class _SuiteEnv:
         self.projections = ProjectionHandlers(db, SqliteRunWriteRepository(db))
         self.sequence = 0
 
-    async def apply(self, events) -> None:
-        for event in events:
+    async def apply(self, suite_id: str, events) -> None:
+        for event in suite_events_as_envelopes(suite_id, events):
             self.sequence += 1
             await self.projections.apply(event, self.sequence)
 
@@ -58,7 +61,7 @@ async def _persist_suite(
     )
     aggregate = SuiteAggregate.for_new_suite(suite)
     await env.write_repo.create_suite(suite, events=(created := aggregate.pull_events()))
-    await env.apply(created)
+    await env.apply(suite_id, created)
 
     aggregate = SuiteAggregate(await env.write_repo.get_suite(suite_id))
     aggregate.begin()
@@ -69,7 +72,7 @@ async def _persist_suite(
         aggregate.finalize(SuiteStatus.PASSED)
     events = aggregate.pull_events()
     await env.write_repo.save_suite(aggregate.persistable_state(), events=events)
-    await env.apply(events)
+    await env.apply(suite_id, events)
 
 
 def _suite_service(query: SqliteSuiteSummaryQuery) -> SuiteService:

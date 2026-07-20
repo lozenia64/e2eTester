@@ -19,6 +19,13 @@ from app.contexts.run.application.planner import RunPlanner
 from app.contexts.scheduling.infrastructure.schedule_repository import InMemoryScheduleRepository
 from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
+from app.contexts.suite.infrastructure.in_memory_suite_control_store import (
+    InMemorySuiteControlStore,
+)
+from app.contexts.suite.infrastructure.in_memory_suite_input_store import InMemorySuiteInputStore
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.core.enums import RunStatus
 from app.core.requests import CreateSuiteScheduleRequest
 from app.core.run_models import Run, RunModule
@@ -30,9 +37,6 @@ from app.core.schedule_models import (
 from app.platform.eventing.bus import EventBus
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.registry.loader import ModuleRegistry
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
-from app.storage.suite_control_store import InMemorySuiteControlStore
-from app.storage.suite_input_store import InMemorySuiteInputStore
 
 ADMIN = User(
     user_id="admin_1",

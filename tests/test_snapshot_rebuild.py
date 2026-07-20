@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.contracts.records import RunRecord
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
-from app.platform.eventing.snapshot_rebuild import rebuild_run_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
-from app.storage.records import RunRecord
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.platform.snapshot_rebuild import rebuild_run_snapshots
 
 
 def _run(run_id: str) -> Run:
@@ -154,10 +154,12 @@ async def test_verify_only_detects_no_mismatch_for_consistent_store(tmp_path: Pa
 async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
     """Suite 스트림도 이벤트 폴드로 스냅샷이 재구성된다(Run 과 동형)."""
     from app.contexts.suite.domain.aggregate import SuiteAggregate
+    from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+        SqliteSuiteWriteRepository,
+    )
     from app.core.enums import SuiteStatus
     from app.core.suite_models import SuiteRun, SuiteStep
-    from app.platform.eventing.snapshot_rebuild import rebuild_all_snapshots
-    from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+    from app.platform.snapshot_rebuild import rebuild_all_snapshots
 
     db = SqliteDatabase(tmp_path / "suite.db")
     await ensure_schema(db)
@@ -195,3 +197,65 @@ async def test_suite_snapshot_rebuildable_from_events(tmp_path: Path) -> None:
         "SELECT state_json FROM aggregate_snapshots WHERE stream_id = ?", ("Suite:suite_s",)
     )
     assert snap is not None
+
+
+def test_snapshot_state_json_survives_thin_legacy_events():
+    """레거시 thin 이벤트(run_summary 없음) 스트림도 KeyError 없이 폴드된다."""
+    from app.platform.eventing.envelope import EventEnvelope
+    from app.platform.snapshot_rebuild import snapshot_state_json
+
+    now = datetime(2026, 7, 12, 3, 0, tzinfo=UTC)
+    run_id = "run_thin_legacy"
+    module_wire = {
+        "module_id": "hom.access",
+        "name": "접속",
+        "group": "access",
+        "order": 0,
+        "status": ModuleStatus.PENDING.value,
+        "depends_on": [],
+        "retry_count": 0,
+        "attempt": 1,
+        "max_attempts": 1,
+        "message": "대기 중",
+        "artifact_count": 0,
+        "artifacts": [],
+        "dialog_messages": [],
+    }
+    events = [
+        EventEnvelope(
+            event_id="e1",
+            aggregate_type="Run",
+            aggregate_id=run_id,
+            event_type="RunCreated",
+            payload={
+                "system_code": "hom",
+                "triggered_by": "manual",
+                "all_modules": [module_wire],
+            },
+            occurred_at=now,
+        ),
+        EventEnvelope(
+            event_id="e2",
+            aggregate_type="Run",
+            aggregate_id=run_id,
+            event_type="RunFinished",
+            payload={
+                "status": RunStatus.PASSED.value,
+                "system_code": "hom",
+                "schedule_id": None,
+                "suite_id": None,
+                "requested_at": now.isoformat(),
+                "ended_at": now.isoformat(),
+                "created_by_user_id": None,
+            },
+            occurred_at=now,
+        ),
+    ]
+
+    state_json = snapshot_state_json(run_id, events)
+
+    assert state_json is not None
+    run = RunRecord.deserialize(state_json)
+    assert run.run_id == run_id
+    assert len(run.modules) == 1
+    assert run.modules[0].module_id == "hom.access"

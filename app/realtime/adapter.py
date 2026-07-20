@@ -6,6 +6,7 @@ import asyncio
 
 from app.core.run_models import DashboardEvent
 from app.core.suite_models import SuiteEvent
+from app.realtime.listener_registry import ListenerRegistry
 from app.realtime.ports import RealtimeFanOutPort
 from app.realtime.redis_fanout import (
     deserialize_dashboard_event,
@@ -13,7 +14,6 @@ from app.realtime.redis_fanout import (
     serialize_dashboard_event,
     serialize_suite_event,
 )
-from app.storage.listener_registry import ListenerRegistry
 
 
 class RealtimeNotificationAdapter:

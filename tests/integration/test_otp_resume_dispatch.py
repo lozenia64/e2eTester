@@ -8,6 +8,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.contexts.run.application.service import RunService
+from app.contexts.run.infrastructure.in_memory_run_control_store import InMemoryRunControlStore
+from app.contexts.run.infrastructure.in_memory_run_input_store import InMemoryRunInputStore
+from app.contexts.run.infrastructure.in_memory_run_log_store import InMemoryRunLogStore
+from app.contexts.run.infrastructure.in_memory_run_repository import InMemoryRunRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.execution.composite_gateway import CompositeExecutionGateway
@@ -17,10 +21,6 @@ from app.platform.artifact_manager import ArtifactManager
 from app.platform.eventing.bus import EventBus
 from app.realtime.adapter import RealtimeNotificationAdapter
 from app.registry.loader import ModuleRegistry
-from app.storage.run_control_store import InMemoryRunControlStore
-from app.storage.run_input_store import InMemoryRunInputStore
-from app.storage.run_log_store import InMemoryRunLogStore
-from app.storage.run_repository import InMemoryRunRepository
 
 
 def _waiting_run() -> Run:

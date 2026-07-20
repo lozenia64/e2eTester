@@ -19,18 +19,18 @@ from app.contexts.insights.infrastructure.sqlite_module_settings_repository impo
     SqliteModuleSettingsRepository,
 )
 from app.contexts.insights.infrastructure.sqlite_stats_query import SqliteStatsQuery
+from app.contexts.run.infrastructure.sqlite_module_history_query import SqliteModuleHistoryQuery
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
     SqliteScheduleRepository,
 )
 from app.contexts.scheduling.scheduler import SchedulerService
+from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 from app.core.settings import E2ESettings
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
 from app.platform.eventing.support import SqliteDatabase
 from app.registry.loader import ModuleRegistry
-from app.storage.sqlite_module_history_query import SqliteModuleHistoryQuery
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
 
 
 @dataclass(frozen=True)

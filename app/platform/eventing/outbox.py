@@ -6,7 +6,7 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.event_store import StoredEvent
 from app.platform.eventing.support import SqliteDatabase
 
@@ -18,7 +18,7 @@ class SqliteOutbox:
     def __init__(self, db: SqliteDatabase) -> None:
         self._db = db
 
-    async def append_all(self, events: list[DomainEvent]) -> None:
+    async def append_all(self, events: list[EventEnvelope]) -> None:
         if not events:
             return
         rows = [
@@ -103,7 +103,7 @@ class SqliteOutbox:
                 claimed.append(
                     StoredEvent(
                         sequence_id=row["domain_sequence_id"],
-                        event=DomainEvent(
+                        event=EventEnvelope(
                             event_id=row["event_id"],
                             aggregate_type=row["aggregate_type"],
                             aggregate_id=row["aggregate_id"],
@@ -137,7 +137,7 @@ class SqliteOutbox:
             (event_id, claim_token),
         )
 
-    async def move_to_dead_letter(self, event: DomainEvent, error_message: str) -> None:
+    async def move_to_dead_letter(self, event: EventEnvelope, error_message: str) -> None:
         now = datetime.now(UTC).isoformat()
         async with await self._db.transaction() as tx:
             tx.execute(

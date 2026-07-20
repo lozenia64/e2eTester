@@ -37,7 +37,7 @@ testpaths = ["tests"]
 # 스크립트는 repo root bootstrap 후 app import (E402 의도적)
 "scripts/*" = ["E402"]
 # CLI 직접 실행용 backfill 모듈도 동일 bootstrap 패턴
-"app/storage/*_backfill.py" = ["E402"]
+"app/contexts/run/infrastructure/backfill/*_backfill.py" = ["E402"]
 # 테스트는 일부 import 미사용/픽스처 패턴을 허용
 "tests/*" = ["F401", "F811"]
 # Plotly 차트 설정은 dict(...) 형태가 관용적(공식 예제 스타일) — 리터럴 강제 제외
@@ -61,7 +61,6 @@ name = "Domain is pure (no I/O/infra imports)"
 type = "forbidden"
 source_modules = ["app.domain"]
 forbidden_modules = [
-    "app.storage",
     "app.execution",
     "app.api",
     "app.orchestrator",
@@ -97,3 +96,18 @@ name = "Contexts and API do not import the execution plane"
 type = "forbidden"
 source_modules = ["app.contexts", "app.api"]
 forbidden_modules = ["app.runner", "app.automation", "app.systems"]
+
+[[tool.importlinter.contracts]]
+name = "Eventing platform does not import bounded contexts"
+type = "forbidden"
+source_modules = ["app.platform.eventing"]
+forbidden_modules = ["app.contexts"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMatchNotExhaustive = "error"
+include = [
+    "app/contexts/run/domain/decider.py",
+    "app/contexts/suite/domain/decider.py",
+]

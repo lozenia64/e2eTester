@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.core.stats_models import ModuleSettings
-from app.storage.sqlite_support import JsonTableStore
+from app.platform.db import JsonTableStore
 
 
 class SqliteModuleSettingsRepository:

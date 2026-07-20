@@ -107,6 +107,7 @@ e2eTester/
         user_repository.py         # UserRepositoryPort + 인메모리 어댑터(테스트용)
         sqlite_user_repository.py  # SQLite 사용자 어댑터(기본 사용)
     core/
+      schedule_time.py             # schedule_day_label / resolve_schedule_timezone (프로젝션 결정성)
       enums.py                     # RunStatus/SuiteStatus/ModuleStatus (PASSED/ANOMALY/ERROR/...)
       env_utils.py
       logging.py                   # 구조적 로거 + 로그 컨텍스트 바인딩
@@ -127,6 +128,7 @@ e2eTester/
           state_machine.py         # RunStateMachine: Run 실행 결정 전이표 + decide_rehydration(순수)
           decider.py               # Run Decider: decide/evolve/rebuild_state (순수, 이벤트=진실)
           commands.py              # RunCommand 군(decide 입력 의도)
+          events.py                # RunEvent 판별 유니온 + RunEventRecord (타입화 도메인 이벤트)
         application/
           service.py               # RunService: 실행 순서·부작용 오케스트레이션(결정=StateMachine, 변경=Aggregate 위임)
           comparator.py            # RunComparator: 직전 Run 대비 비교(저장소 의존)
@@ -138,18 +140,56 @@ e2eTester/
           summary.py               # summarize_row: 최근 Run 요약 뷰(행 기반)
           actor.py                 # resolve_run_actor: 표시·집계용 실행자(user) 해석
           module_view.py           # ModuleView: 모듈 읽기 모델 프로젝션
+        contracts/
+          ports.py                 # RunWriteRepositoryPort / RunSummaryQueryPort / RunLogStorePort 등
+          query_rows.py            # RunSummaryRow / ModuleHistoryRow / Page / RunSummaryFilter 등
+          records.py               # RunRecord / RunModuleRecord (영속 DTO)
+        infrastructure/
+          sqlite_run_write_repository.py
+          codec.py                   # RunEventCodec: RunEventRecord ↔ EventEnvelope
+          sqlite_run_control_store.py
+          sqlite_run_log_store.py
+          sqlite_run_summary_query.py
+          sqlite_module_history_query.py
+          sqlite_session_checkpoint_store.py
+          encrypted_run_input_store.py
+          in_memory_run_repository.py
+          in_memory_run_control_store.py
+          in_memory_run_input_store.py
+          in_memory_run_log_store.py
+          in_memory_run_summary_query.py
+          run_snapshot_fallback.py
+          hydration.py             # RunHydrator / RunProjectionLoader
+          failure_analysis_subscriber.py
+          backfill/                # run_history_index / module_history_index 백필
+          migration/legacy_blob_migration.py
       suite/
         domain/
           aggregate.py             # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
           state_machine.py         # SuiteStateMachine: Suite 사가 결정 전이표(순수)
           decider.py               # Suite Decider: decide(cmd,state)→events / evolve (순수, 이벤트=진실)
           commands.py              # SuiteCommand 군(BeginSuite/StartStep/... — decide 입력 의도)
+          events.py                # SuiteEvent 판별 유니온 + SuiteEventRecord (타입화 도메인 이벤트)
         application/
           service.py               # SuiteService: 이벤트 기반 Saga(결정=StateMachine, 변경=Aggregate 위임)
         views/
           view.py                  # SuiteView: Suite 읽기 모델 프로젝션(RunView 와 동일 규율)
+        contracts/
+          ports.py                 # SuiteSummaryQueryPort / SuiteControlStorePort / SuiteWriteRepositoryPort 등
+          query_rows.py            # SuiteSummaryRow / SuiteStepRow
+          records.py               # SuiteRecord / SuiteStepRecord (영속 DTO)
+        infrastructure/
+          sqlite_suite_write_repository.py
+          codec.py                   # SuiteEventCodec: SuiteEventRecord ↔ EventEnvelope
+          sqlite_suite_repository.py
+          sqlite_suite_control_store.py
+          sqlite_suite_summary_query.py
+          encrypted_suite_input_store.py
+          in_memory_suite_repository.py
+          in_memory_suite_control_store.py
+          in_memory_suite_input_store.py
+          hydration.py             # SuiteHydrator (EventBus SuiteFinished payload)
     domain/                        # 공유 도메인 커널(run+suite 공용)
-      events.py                    # 도메인 이벤트 카탈로그(Run/Suite/RunImported)
       execution_policy.py          # ModuleExecutionPolicy / SystemExecutionPolicy (재시도·부분재실행·execution_profile)
       snapshots.py                 # RunSnapshot / SuiteSnapshot (frozen, aggregate.to_snapshot())
       summary_fields.py            # run_summary_fields / suite_summary_fields (fat event 요약)
@@ -157,20 +197,24 @@ e2eTester/
       container.py                 # AppContainer — 컴포지션 루트(저장소·게이트웨이·OutboxRelay·서비스 배선)
     platform/                      # 공유 인프라·기술 유틸(특정 컨텍스트 무소속)
       artifact_manager.py          # 아티팩트 경로·파일 관리(실행 평면 아님 — 오케스트레이션이 경로 계산)
+      db.py                        # JsonTableStore + DEFAULT_DB_PATH
+      snapshot_rebuild.py          # aggregate_snapshots 이벤트 폴드 재구성
+      security/
+        input_crypto.py            # AES-GCM 입력 암호화 프리미티브
       eventing/                    # 이벤트 소싱·아웃박스·도메인 버스·프로젝션 핸들러
+        envelope.py                # EventEnvelope: domain_events/outbox 직렬화 봉투(물리 계층)
         event_store.py             # SqliteEventStore (domain events append-only)
         outbox.py                  # SqliteOutbox (transactional outbox)
         relay.py                   # OutboxRelay → projection · EventBus · RealtimeProjector
+        hydration.py               # AggregateHydratorPort (제네릭 하이드레이션 포트)
         support.py                 # SqliteDatabase + projection 스키마
-        snapshot_rebuild.py        # aggregate_snapshots 이벤트 폴드 재구성
-        blob_migration.py          # 레거시 blob → 이벤트 스트림 1회성 이관
         bus.py                     # EventBus + RunFinished/RunWaitingInput/RunResumed/SuiteFinished
         handlers.py                # ProjectionHandlers (CQRS read-model 테이블 갱신)
         subscribers/
-          failure_analysis.py      # FailureAnalysisSubscriber (AI 실패 분석)
           email_notification.py    # EmailNotificationSubscriber (종료 메일)
     realtime/
       adapter.py                   # RealtimeNotificationPort 구현
+      listener_registry.py         # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       projector.py                 # RealtimeProjector (OutboxRelay가 WS fan-out 담당)
       ports.py                     # RealtimeNotificationPort
       redis_fanout.py              # Redis pub/sub fan-out (다중 API 프로세스)
@@ -201,6 +245,8 @@ e2eTester/
     notifications/
       run_completion_email.py
       report_renderer.py
+      infrastructure/
+        sqlite_email_notification_dedup.py
     contexts/insights/application/ # 운영 인텔리전스 컨텍스트(읽기 전용 — 프로젝션 소비)
       insights_service.py          # InsightsService: 운영 인텔리전스 얇은 I/O 인터프리터
       insights_anomalies.py        # 이상징후 인박스 목록 도출(순수 빌더)
@@ -213,6 +259,8 @@ e2eTester/
       stats_charts.py              # 통계 차트 데이터 구성
       ops_service.py               # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
       daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
+    contexts/insights/contracts/
+      query_rows.py                # AnomalyInboxRow / DailyStatusRow / StatsRollupRow 등
     contexts/insights/infrastructure/
       ports.py                   # StatsQueryPort / DailyStatusQueryPort / Anomaly* 포트
       sqlite_stats_query.py      # StatsQueryPort SQLite 어댑터
@@ -308,27 +356,6 @@ e2eTester/
       chbot/
         executor.py                # ChbotWorkflowExecutor
         manifest.yaml
-    storage/
-      ports.py                     # 저장소 포트(Protocol): Run/RunLog/RunControl/RunInput/Suite/SuiteControl/SuiteInput/Schedule 등
-      records.py                   # 영속 DTO + 매퍼(RunRecord/SuiteRecord 등): 도메인 ↔ 온디스크 스키마 분리, 로그 제외는 타입 수준
-      sqlite_support.py            # JsonTableStore (stdlib sqlite3 + asyncio.to_thread)
-      listener_registry.py         # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
-      sqlite_run_write_repository.py # RunWriteRepositoryPort + outbox 동시 기록
-      sqlite_run_summary_query.py  # RunSummaryQueryPort (run_history_index 화면형 행, SQL 필터/정렬/페이지)
-      sqlite_module_history_query.py # ModuleHistoryQueryPort (module_history_index 모듈 실행 이력 행)
-      sqlite_suite_summary_query.py # SuiteSummaryQueryPort (suite_history_index 요약 행)
-      in_memory_run_summary_query.py # RunSummaryQueryPort 인메모리 어댑터(테스트 전용)
-      sqlite_run_log_store.py      # SQLite 모듈 로그 append-only 어댑터(기본 사용, run_logs 테이블)
-      sqlite_run_control_store.py  # SQLite Run 제어 상태 어댑터(취소·OTP 재개, run_control 테이블)
-      sqlite_suite_repository.py   # SQLite Suite 어댑터(기본 사용)
-      sqlite_suite_control_store.py # SQLite Suite 제어 상태 어댑터(취소 의도, suite_control 테이블)
-      run_control_store.py         # 인메모리 Run 제어 상태 어댑터
-      run_input_store.py           # 인메모리 Run 입력값(PII) 어댑터(기본 사용)
-      suite_control_store.py       # 인메모리 Suite 제어 상태 어댑터
-      suite_input_store.py         # 인메모리 Suite 시스템별 입력값 어댑터(기본 사용)
-      run_repository.py            # 인메모리 Run 어댑터(테스트·영속 불요용)
-      run_log_store.py             # 인메모리 모듈 로그 어댑터
-      suite_repository.py          # 인메모리 Suite 어댑터
     web/
       templates/
         base.html

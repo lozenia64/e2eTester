@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.hydration import RunHydrator, RunProjectionLoader
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
+from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
+    SqliteSuiteWriteRepository,
+)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.platform.eventing.bus import EventBus
@@ -17,10 +24,7 @@ from app.platform.eventing.relay import OutboxRelay
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
 from app.realtime.projector import RealtimeProjector
-from app.storage.query_rows import Page, RunSummaryFilter
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.storage.sqlite_suite_write_repository import SqliteSuiteWriteRepository
+from tests.eventing_helpers import make_outbox_relay, make_projection_handlers
 
 
 def _sample_run(run_id: str = "run_test") -> Run:
@@ -52,7 +56,7 @@ async def test_run_create_projects_history_index(tmp_path: Path) -> None:
     write_repo = SqliteRunWriteRepository(db)
     suite_write_repo = SqliteSuiteWriteRepository(db)
     history = SqliteRunSummaryQuery(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
     outbox = SqliteOutbox(db)
     run_realtime = RealtimeNotificationAdapter()
     suite_realtime = SuiteRealtimeNotificationAdapter()
@@ -62,13 +66,7 @@ async def test_run_create_projects_history_index(tmp_path: Path) -> None:
         run_loader=write_repo.get_run,
         suite_loader=suite_write_repo.get_suite,
     )
-    relay = OutboxRelay(
-        outbox,
-        projections,
-        write_repo,
-        EventBus(),
-        projector,
-    )
+    relay = make_outbox_relay(outbox, projections, write_repo, EventBus(), projector)
 
     run = _sample_run()
     aggregate = RunAggregate.for_new_run(run)
@@ -99,7 +97,7 @@ async def test_relay_emits_realtime_ws_payload(tmp_path: Path) -> None:
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
     suite_write_repo = SqliteSuiteWriteRepository(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
     outbox = SqliteOutbox(db)
     run_realtime = RealtimeNotificationAdapter()
     suite_realtime = SuiteRealtimeNotificationAdapter()
@@ -109,7 +107,7 @@ async def test_relay_emits_realtime_ws_payload(tmp_path: Path) -> None:
         run_loader=write_repo.get_run,
         suite_loader=suite_write_repo.get_suite,
     )
-    relay = OutboxRelay(outbox, projections, write_repo, EventBus(), projector)
+    relay = make_outbox_relay(outbox, projections, write_repo, EventBus(), projector)
 
     run = _sample_run("run_ws")
     aggregate = RunAggregate.for_new_run(run)
@@ -133,11 +131,11 @@ async def test_projector_module_and_run_events_are_blob_free(tmp_path: Path) -> 
     db = SqliteDatabase(tmp_path / "blobfree.db")
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
-    projections = ProjectionHandlers(db, write_repo)
+    projections = make_projection_handlers(db, write_repo)
     outbox = SqliteOutbox(db)
     run_realtime = RealtimeNotificationAdapter()
     projector = RealtimeProjector(run_realtime, SuiteRealtimeNotificationAdapter())
-    relay = OutboxRelay(outbox, projections, write_repo, EventBus(), projector)
+    relay = make_outbox_relay(outbox, projections, write_repo, EventBus(), projector)
 
     run = _sample_run("run_bf")
     aggregate = RunAggregate.for_new_run(run)
@@ -201,10 +199,10 @@ async def test_outbox_dead_letter_on_projection_failure(tmp_path: Path) -> None:
     )
     relay = OutboxRelay(
         outbox,
-        BrokenProjections(db, write_repo),
-        write_repo,
-        EventBus(),
-        projector,
+        BrokenProjections(db, loaders={"Run": RunProjectionLoader(write_repo)}),
+        hydrators={"Run": RunHydrator(write_repo)},
+        event_bus=EventBus(),
+        realtime=projector,
     )
 
     run = _sample_run("run_dlq")

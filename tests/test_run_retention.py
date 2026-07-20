@@ -7,17 +7,17 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.contexts.run.application.service import RunService
+from app.contexts.run.infrastructure.in_memory_run_control_store import InMemoryRunControlStore
+from app.contexts.run.infrastructure.in_memory_run_input_store import InMemoryRunInputStore
+from app.contexts.run.infrastructure.in_memory_run_log_store import InMemoryRunLogStore
+from app.contexts.run.infrastructure.in_memory_run_repository import InMemoryRunRepository
+from app.contexts.run.infrastructure.in_memory_run_summary_query import InMemoryRunSummaryQuery
 from app.contexts.scheduling.run_retention import RunRetentionScheduler, RunRetentionService
 from app.core.enums import RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import RUN_DAILY_PURGE_STATUSES
 from app.platform.artifact_manager import ArtifactManager
 from app.registry.loader import ModuleRegistry
-from app.storage.in_memory_run_summary_query import InMemoryRunSummaryQuery
-from app.storage.run_control_store import InMemoryRunControlStore
-from app.storage.run_input_store import InMemoryRunInputStore
-from app.storage.run_log_store import InMemoryRunLogStore
-from app.storage.run_repository import InMemoryRunRepository
 
 
 class _NoopGateway:

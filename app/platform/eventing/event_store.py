@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.domain.events import DomainEvent
+from app.platform.eventing.envelope import EventEnvelope
 from app.platform.eventing.support import SqliteDatabase
 
 
@@ -21,11 +21,11 @@ class StoredEvent:
     """
 
     sequence_id: int
-    event: DomainEvent
+    event: EventEnvelope
 
 
-def _row_to_event(row) -> DomainEvent:
-    return DomainEvent(
+def _row_to_event(row) -> EventEnvelope:
+    return EventEnvelope(
         event_id=row["event_id"],
         aggregate_type=row["aggregate_type"],
         aggregate_id=row["aggregate_id"],
@@ -40,7 +40,7 @@ class SqliteEventStore:
     def __init__(self, db: SqliteDatabase) -> None:
         self._db = db
 
-    async def append_all(self, events: list[DomainEvent]) -> None:
+    async def append_all(self, events: list[EventEnvelope]) -> None:
         if not events:
             return
         rows = [
@@ -64,7 +64,9 @@ class SqliteEventStore:
             rows,
         )
 
-    async def list_for_aggregate(self, aggregate_type: str, aggregate_id: str) -> list[DomainEvent]:
+    async def list_for_aggregate(
+        self, aggregate_type: str, aggregate_id: str
+    ) -> list[EventEnvelope]:
         rows = await self._db.fetchall(
             """
             SELECT event_id, aggregate_type, aggregate_id, event_type, payload,

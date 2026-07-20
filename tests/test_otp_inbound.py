@@ -252,7 +252,7 @@ async def test_waiting_finder_falls_back_to_requested_at_for_legacy_pending():
 
 
 async def test_sqlite_control_store_stamps_and_roundtrips_paused_at(tmp_path):
-    from app.storage.sqlite_run_control_store import SqliteRunControlStore
+    from app.contexts.run.infrastructure.sqlite_run_control_store import SqliteRunControlStore
 
     store = SqliteRunControlStore(tmp_path / "control.db")
     before = datetime.now(UTC)

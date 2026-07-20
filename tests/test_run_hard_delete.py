@@ -8,7 +8,21 @@ from pathlib import Path
 import pytest
 
 from app.contexts.run.application.service import RunService
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
+from app.contexts.run.contracts.records import RunRecord
 from app.contexts.run.domain.aggregate import RunAggregate
+from app.contexts.run.infrastructure.backfill.legacy_runs_projection_backfill import (
+    backfill_from_legacy_runs,
+)
+from app.contexts.run.infrastructure.backfill.module_history_backfill import (
+    backfill_module_history_index,
+)
+from app.contexts.run.infrastructure.backfill.run_history_backfill import backfill_run_history_index
+from app.contexts.run.infrastructure.in_memory_run_control_store import InMemoryRunControlStore
+from app.contexts.run.infrastructure.in_memory_run_input_store import InMemoryRunInputStore
+from app.contexts.run.infrastructure.in_memory_run_log_store import InMemoryRunLogStore
+from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
+from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.execution.in_memory_job_queue import InMemoryJobQueue
@@ -17,19 +31,14 @@ from app.execution.simulated_gateway import SimulatedExecutionGateway
 from app.platform.artifact_manager import ArtifactManager
 from app.platform.eventing.bus import EventBus
 from app.platform.eventing.handlers import ProjectionHandlers
-from app.platform.eventing.snapshot_rebuild import rebuild_missing_run_snapshots
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
+from app.platform.snapshot_rebuild import rebuild_missing_run_snapshots
 from app.registry.loader import ModuleRegistry
-from app.storage.legacy_runs_projection_backfill import backfill_from_legacy_runs
-from app.storage.module_history_backfill import backfill_module_history_index
-from app.storage.query_rows import Page, RunSummaryFilter
-from app.storage.records import RunRecord
-from app.storage.run_control_store import InMemoryRunControlStore
-from app.storage.run_history_backfill import backfill_run_history_index
-from app.storage.run_input_store import InMemoryRunInputStore
-from app.storage.run_log_store import InMemoryRunLogStore
-from app.storage.sqlite_run_summary_query import SqliteRunSummaryQuery
-from app.storage.sqlite_run_write_repository import SqliteRunWriteRepository
+from tests.eventing_helpers import (
+    make_outbox_relay,
+    make_projection_handlers,
+    run_events_as_envelopes,
+)
 
 
 class _RealtimeSink:
@@ -41,7 +50,7 @@ class _Env:
     def __init__(self, db: SqliteDatabase) -> None:
         self.db = db
         self.write_repo = SqliteRunWriteRepository(db)
-        self.projections = ProjectionHandlers(db, self.write_repo)
+        self.projections = make_projection_handlers(db, self.write_repo)
         self.sequence = 0
 
     async def apply(self, events) -> None:
@@ -87,7 +96,7 @@ async def _finish_run(env: _Env, run_id: str) -> Run:
     events = aggregate.pull_events()
     finished = aggregate.persistable_state()
     await env.write_repo.save_run(finished, events=events)
-    await env.apply(events)
+    await env.apply(run_events_as_envelopes(run_id, events))
     return finished
 
 

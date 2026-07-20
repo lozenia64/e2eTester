@@ -1,13 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from app.contexts.run.contracts.records import RunModuleRecord
+from app.contexts.run.domain.events import (
+    ModuleFailureAnalysisAttached,
+    ModuleFinished,
+    ModuleQueued,
+    ModuleStarted,
+    RunComparisonAttached,
+    RunCreated,
+    RunEvent,
+    RunEventRecord,
+    RunFinished,
+    RunModuleBlocked,
+    RunModuleRetried,
+    RunModulesCancelled,
+    RunPartialRerunStarted,
+    RunResumed,
+    RunSealedInterrupted,
+    RunStarted,
+    RunWaitingInput,
+)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
-from app.domain import events as domain_events
-from app.domain.events import DomainEvent
 from app.domain.snapshots import RunSnapshot
 from app.domain.summary_fields import run_summary_fields
 
@@ -56,7 +74,7 @@ class RunAggregate:
     def __init__(self, run: Run) -> None:
         self._state = run
         self._modules_by_id = {module.module_id: module for module in run.modules}
-        self._pending_events: list[DomainEvent] = []
+        self._pending_events: list[RunEventRecord] = []
 
     def to_snapshot(self) -> RunSnapshot:
         """현재 Run 상태의 불변 읽기 스냅샷."""
@@ -66,7 +84,7 @@ class RunAggregate:
         """영속·이벤트 발행용 쓰기 모델(저장소 계층 전용)."""
         return self._state
 
-    def pull_events(self) -> list[DomainEvent]:
+    def pull_events(self) -> list[RunEventRecord]:
         """누적된 도메인 이벤트를 꺼내고 내부 버퍼를 비운다(영속/outbox 기록 직전)."""
         pulled = list(self._pending_events)
         self._pending_events.clear()
@@ -77,45 +95,45 @@ class RunAggregate:
         """신규 Run 생성 시 ``RunCreated`` 이벤트를 함께 산출한다."""
         aggregate = cls(run)
         aggregate._emit(
-            domain_events.run_created(
-                run.run_id,
-                run.system_code,
-                run.triggered_by,
+            RunCreated(
+                system_code=run.system_code,
+                triggered_by=run.triggered_by,
                 all_modules=aggregate._all_modules_wire(),
             )
         )
         return aggregate
 
-    def _emit(self, event: DomainEvent) -> None:
+    def _emit(self, event: RunEvent) -> None:
         """이벤트를 버퍼에 쌓는다 — 변이 **후** 호출되므로 요약은 사후 상태를 반영한다.
 
         요약 인덱스 프로젝션이 blob 을 재수화하지 않도록, 상태를 바꾸는 모든 이벤트에
         ``run_summary`` 섹션(파생 요약 필드)을 동봉한다(fat event). 모듈 본문(``module``/
         ``modules``)을 실은 이벤트에는 실시간 프로젝터의 ``module_*`` WS 봉투가 요구하는
-        Run 현재 상태(``run_status``)도 함께 싣는다(프로젝터가 blob 을 읽지 않도록).
+        Run 현재 상태(``run_status``)도 함께 싣는다(프로젝터가 blob 을 읽지 않도록 — codec).
 
         로그는 더 이상 도메인 이벤트가 아니므로(WP-B5), 모든 발행 이벤트가 상태 전이 =
         요약을 동봉한다(요약 생략 예외 없음).
         """
-        payload = dict(event.payload)
-        payload["run_summary"] = run_summary_fields(self._state)
-        if "module" in payload or "modules" in payload:
-            payload["run_status"] = self._state.status.value
-        self._pending_events.append(replace(event, payload=payload))
+        self._pending_events.append(
+            RunEventRecord(
+                event=event,
+                run_summary=run_summary_fields(self._state),
+                event_id=uuid4().hex,
+                occurred_at=datetime.now(UTC),
+            )
+        )
 
     @staticmethod
-    def _module_wire(module: RunModule) -> dict:
+    def _module_wire(module: RunModule) -> RunModuleRecord:
         """모듈의 공개 와이어 표현(``RunModule`` 직렬화, 로그 제외).
 
         로그는 별도 집합체(``RunLogStorePort``)가 소유하므로 이벤트에 싣지 않는다(발행 시점엔
         비어 있지만 명시적으로 배제해 계약을 못박는다). ``ModuleView.dump`` 의 ``module`` 항목과
         동일 형태이므로 실시간 프로젝터가 blob 없이 ``module_*`` WS payload 를 만든다.
         """
-        wire = module.model_dump(mode="json")
-        wire.pop("logs", None)
-        return wire
+        return RunModuleRecord.from_domain(module)
 
-    def _all_modules_wire(self) -> list[dict]:
+    def _all_modules_wire(self) -> list[RunModuleRecord]:
         """현재 전체 모듈의 와이어 스냅샷(벌크 전이 이벤트용 — evolve 완전성)."""
         return [self._module_wire(module) for module in self._state.modules]
 
@@ -178,14 +196,15 @@ class RunAggregate:
         """Run 실행 시작: RUNNING + started_at."""
         self._state.status = RunStatus.RUNNING
         self._state.started_at = datetime.now(UTC)
-        self._emit(domain_events.run_started(self._state.run_id))
+        self._emit(RunStarted())
 
     def block_for_dependencies(self, module: RunModule) -> None:
         module.status = ModuleStatus.BLOCKED
         module.message = "선행 모듈 실패로 인해 실행되지 않음"
         self._emit(
-            domain_events.run_module_blocked(
-                self._state.run_id, module.module_id, module=self._module_wire(module)
+            RunModuleBlocked(
+                module_id=module.module_id,
+                module=self._module_wire(module),
             )
         )
 
@@ -194,8 +213,9 @@ class RunAggregate:
         module.message = "실행 대기열에 등록됨"
         module.failure_analysis = None
         self._emit(
-            domain_events.module_queued(
-                self._state.run_id, module.module_id, module=self._module_wire(module)
+            ModuleQueued(
+                module_id=module.module_id,
+                module=self._module_wire(module),
             )
         )
 
@@ -205,8 +225,9 @@ class RunAggregate:
         module.message = "실행 준비 중"
         module.failure_analysis = None
         self._emit(
-            domain_events.module_started(
-                self._state.run_id, module.module_id, module=self._module_wire(module)
+            ModuleStarted(
+                module_id=module.module_id,
+                module=self._module_wire(module),
             )
         )
 
@@ -251,9 +272,8 @@ class RunAggregate:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis
         self._emit(
-            domain_events.module_failure_analysis_attached(
-                self._state.run_id,
-                module.module_id,
+            ModuleFailureAnalysisAttached(
+                module_id=module.module_id,
                 category=analysis.category if analysis else None,
                 user_summary=analysis.user_summary if analysis else None,
                 recommended_action=analysis.recommended_action if analysis else None,
@@ -266,9 +286,8 @@ class RunAggregate:
         self._state.comparison = comparison
         baseline_id = comparison.baseline_run_id if comparison.has_baseline else None
         self._emit(
-            domain_events.run_comparison_attached(
-                self._state.run_id,
-                baseline_id,
+            RunComparisonAttached(
+                baseline_run_id=baseline_id,
                 newly_failed=comparison.newly_failed,
                 recovered=comparison.recovered,
                 still_failing=comparison.still_failing,
@@ -301,10 +320,9 @@ class RunAggregate:
         module.duration_ms = None
         module.failure_analysis = None
         self._emit(
-            domain_events.run_module_retried(
-                self._state.run_id,
-                module.module_id,
-                module.attempt,
+            RunModuleRetried(
+                module_id=module.module_id,
+                attempt=module.attempt,
                 module=self._module_wire(module),
             )
         )
@@ -329,9 +347,8 @@ class RunAggregate:
             module.artifact_count = 0
             module.failure_analysis = None
         self._emit(
-            domain_events.run_partial_rerun_started(
-                self._state.run_id,
-                from_module_id,
+            RunPartialRerunStarted(
+                from_module_id=from_module_id,
                 all_modules=self._all_modules_wire(),
             )
         )
@@ -365,8 +382,9 @@ class RunAggregate:
         self._state.awaiting_input_module_id = module.module_id
         self._state.awaiting_input_prompt = "휴대폰으로 받은 OTP를 입력하세요."
         self._emit(
-            domain_events.run_waiting_input(
-                self._state.run_id, module.module_id, module=self._module_wire(module)
+            RunWaitingInput(
+                module_id=module.module_id,
+                module=self._module_wire(module),
             )
         )
 
@@ -378,8 +396,9 @@ class RunAggregate:
         module.status = ModuleStatus.QUEUED
         module.message = "OTP 입력이 접수되어 재개 대기 중"
         self._emit(
-            domain_events.run_resumed(
-                self._state.run_id, module.module_id, module=self._module_wire(module)
+            RunResumed(
+                module_id=module.module_id,
+                module=self._module_wire(module),
             )
         )
 
@@ -397,9 +416,8 @@ class RunAggregate:
             changed.append(module)
         if changed:
             self._emit(
-                domain_events.run_modules_cancelled(
-                    self._state.run_id,
-                    [module.module_id for module in changed],
+                RunModulesCancelled(
+                    module_ids=[module.module_id for module in changed],
                     modules=[self._module_wire(module) for module in changed],
                 )
             )
@@ -431,11 +449,7 @@ class RunAggregate:
             if module.status in _MODULE_ACTIVE:
                 module.status = ModuleStatus.CANCELLED
                 module.message = "서버 재시작으로 중단됨"
-        self._emit(
-            domain_events.run_sealed_interrupted(
-                self._state.run_id, all_modules=self._all_modules_wire()
-            )
-        )
+        self._emit(RunSealedInterrupted(all_modules=self._all_modules_wire()))
         self._emit_run_finished()
         return True
 
@@ -443,10 +457,9 @@ class RunAggregate:
 
     def _emit_module_completed(self, module: RunModule) -> None:
         self._emit(
-            domain_events.module_finished(
-                self._state.run_id,
-                module.module_id,
-                module.status,
+            ModuleFinished(
+                module_id=module.module_id,
+                status=module.status,
                 system_code=self._state.system_code,
                 schedule_id=self._state.schedule_id,
                 suite_id=self._state.suite_id,
@@ -464,9 +477,8 @@ class RunAggregate:
 
     def _emit_run_finished(self) -> None:
         self._emit(
-            domain_events.run_finished(
-                self._state.run_id,
-                self._state.status,
+            RunFinished(
+                status=self._state.status,
                 system_code=self._state.system_code,
                 schedule_id=self._state.schedule_id,
                 suite_id=self._state.suite_id,

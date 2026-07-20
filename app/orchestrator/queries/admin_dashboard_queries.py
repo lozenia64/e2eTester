@@ -11,13 +11,13 @@ from app.contexts.insights.application.admin_coverage_dashboard import (
     build_admin_coverage_dashboard,
     coverage_window_start_utc,
 )
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter
 from app.core.settings import get_settings
-from app.storage.query_rows import Page, RunSummaryFilter
 
 if TYPE_CHECKING:
+    from app.contexts.run.contracts.ports import RunSummaryQueryPort
+    from app.contexts.run.contracts.query_rows import RunSummaryRow
     from app.registry.loader import ModuleRegistry
-    from app.storage.ports import RunSummaryQueryPort
-    from app.storage.query_rows import RunSummaryRow
 
 _PAGE_SIZE = 500
 

@@ -29,8 +29,8 @@ from app.core.status_labels import (
 )
 
 if TYPE_CHECKING:
+    from app.contexts.insights.contracts.query_rows import AnomalyInboxRow
     from app.core.system_models import SystemDefinition
-    from app.storage.query_rows import AnomalyInboxRow
 
 
 @dataclass(frozen=True)

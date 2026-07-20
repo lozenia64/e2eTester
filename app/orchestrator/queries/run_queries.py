@@ -21,6 +21,7 @@ from app.contexts.insights.application.admin_run_history_heatmap import (
     HeatmapRunRow,
     build_user_system_heatmap,
 )
+from app.contexts.run.contracts.query_rows import Page, RunSummaryFilter, RunSummaryRow
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.views.comparison import attach_comparison
 from app.contexts.run.views.summary import summarize_row
@@ -28,18 +29,17 @@ from app.contexts.scheduling.scheduler import schedule_today_start_utc
 from app.core.enums import RunStatus
 from app.core.settings import get_settings
 from app.core.status_labels import ADMIN_DASHBOARD_RUN_STATUSES
-from app.storage.query_rows import Page, RunSummaryFilter, RunSummaryRow
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from app.contexts.run.views.actor import ActorContext
-    from app.core.run_models import Run
-    from app.storage.ports import (
+    from app.contexts.run.contracts.ports import (
         RunLogStorePort,
         RunSummaryQueryPort,
         RunWriteRepositoryPort,
     )
+    from app.contexts.run.views.actor import ActorContext
+    from app.core.run_models import Run
 
 ACTIVE_RUN_STATUSES = frozenset({RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT})
 

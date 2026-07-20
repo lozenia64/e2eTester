@@ -5,8 +5,8 @@ import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.contexts.run.contracts.query_rows import RunSummaryRow
 from app.contexts.scheduling.command_port import ScheduleCommandPort, ScheduleRunQueryPort
 from app.contexts.scheduling.cron import next_run_after, parse_cron
 from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
@@ -22,6 +22,7 @@ from app.contexts.scheduling.schedule_center import (
     expand_occurrences,
     match_occurrences,
 )
+from app.contexts.suite.contracts.query_rows import SuiteSummaryRow
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.logging import get_logger
 from app.core.requests import (
@@ -36,9 +37,8 @@ from app.core.schedule_models import (
     SUITE_SCHEDULE_SYSTEM_NAME,
     Schedule,
 )
-from app.core.settings import get_settings
+from app.core.schedule_time import resolve_schedule_timezone as _resolve_timezone
 from app.core.suite_models import SuiteRun
-from app.storage.query_rows import RunSummaryRow, SuiteSummaryRow
 
 DEFAULT_SCHEDULE_TIMEZONE = "Asia/Seoul"
 DEFAULT_TICK_SECONDS = 20
@@ -46,20 +46,6 @@ _ACTIVE_RUN_STATUSES = {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_
 _ACTIVE_SUITE_STATUSES = {SuiteStatus.PENDING, SuiteStatus.RUNNING, SuiteStatus.WAITING_INPUT}
 
 logger = get_logger(__name__)
-
-
-def _resolve_timezone() -> tuple[ZoneInfo, str]:
-    settings = get_settings()
-    name = (settings.schedule_tz or "").strip() or DEFAULT_SCHEDULE_TIMEZONE
-    try:
-        return ZoneInfo(name), name
-    except (ZoneInfoNotFoundError, ValueError):
-        logger.warning(
-            "알 수 없는 타임존, UTC 로 대체",
-            log_event="schedule.timezone_fallback",
-            timezone=name,
-        )
-        return ZoneInfo("UTC"), "UTC"
 
 
 def _new_trigger_token() -> str:
@@ -86,17 +72,6 @@ def schedule_today_label() -> str:
     """스케줄 타임존 기준 '오늘' 날짜 라벨(YYYY-MM-DD)."""
     tz, _ = _resolve_timezone()
     return datetime.now(tz).strftime("%Y-%m-%d")
-
-
-def schedule_day_label(moment: datetime) -> str:
-    """스케줄 타임존 기준 **해당 시각**의 날짜 라벨(YYYY-MM-DD).
-
-    프로젝션은 벽시계(오늘)가 아니라 이벤트 발생 시각으로 날짜를 귀속시켜야 리빌드
-    (과거 이벤트 재생) 시에도 같은 행이 재현된다 — 결정적 프로젝션의 전제.
-    """
-    tz, _ = _resolve_timezone()
-    aware = moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
-    return aware.astimezone(tz).strftime("%Y-%m-%d")
 
 
 class SchedulerService:

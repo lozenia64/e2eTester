@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from app.contexts.run.contracts.records import RunModuleRecord, RunRecord
+from app.contexts.suite.contracts.records import SuiteRecord
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.run_models import FailureAnalysis, Run, RunComparison, RunModule
 from app.core.suite_models import SuiteRun, SuiteStep
-from app.storage.records import RunModuleRecord, RunRecord, SuiteRecord
 
 
 def _run() -> Run:
