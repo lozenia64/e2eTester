@@ -86,6 +86,24 @@ def sort_systems_attention_first(system_views: list[dict[str, Any]]) -> list[dic
     )
 
 
+def system_summary_badge(system_view: dict[str, Any]) -> dict[str, str]:
+    counts = system_view.get("counts") or {}
+    total = system_view.get("module_total") or 0
+    if counts.get("error", 0) > 0:
+        return {"label": "점검실패", "tone": "error"}
+    if counts.get("anomaly", 0) > 0:
+        return {"label": "이상징후", "tone": "anomaly"}
+    if counts.get("running", 0) > 0:
+        return {"label": "진행 중", "tone": "running"}
+    if counts.get("other", 0) > 0:
+        return {"label": "주의", "tone": "blocked"}
+    if counts.get("not_inspected", 0) > 0:
+        return {"label": "미점검", "tone": "not_inspected"}
+    if total > 0 and counts.get("passed", 0) == total:
+        return {"label": "정상", "tone": "passed"}
+    return {"label": "미점검", "tone": "not_inspected"}
+
+
 _MODULE_ATTENTION_BUCKETS = frozenset({"error", "anomaly", "running"})
 
 

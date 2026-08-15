@@ -2,26 +2,26 @@
 <div class="dash-panel">
   <div class="flex items-start justify-between gap-3">
     <div>
-      <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">시스템 상세</p>
-      <h3 class="mt-1 text-lg font-bold text-gray-900">{{ system.system_name }}</h3>
-      <p class="mt-1 text-xs text-gray-500">{{ system.inspected }}/{{ system.module_total }} 모듈 점검 · 통과율 {{ system.pass_rate }}%</p>
+      <p class="dash-panel__eyebrow">시스템 상세</p>
+      <h3 class="dash-panel__title">{{ system.system_name }}</h3>
+      <p class="dash-panel__meta">{{ system.inspected }}/{{ system.module_total }} 모듈 점검 · 통과율 {{ system.pass_rate }}%</p>
     </div>
-    <button type="button" class="dash-panel__close rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+    <button type="button" class="dash-panel__close"
             onclick="window.dispatchEvent(new CustomEvent('dash-close-drawer'))"
             aria-label="닫기">✕</button>
   </div>
 
-  <ul class="mt-4 space-y-2">
+  <ul class="dash-panel__list">
     {% for mod in system.modules %}
-    <li class="flex items-center justify-between gap-2 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
-      <div class="min-w-0 flex items-center gap-2">
-        <span class="dash-panel-dot shrink-0" data-tone="{{ mod.tone }}"></span>
-        <span class="truncate text-sm font-medium text-gray-800">{{ mod.name }}</span>
+    <li class="dash-panel__item">
+      <div class="dash-panel__item-main">
+        <span class="dash-panel-dot" data-tone="{{ mod.tone }}"></span>
+        <span class="dash-panel__item-name">{{ mod.name }}</span>
       </div>
       <div class="flex shrink-0 items-center gap-2">
-        <span class="text-xs font-semibold text-gray-500">{{ mod.status_label }}</span>
+        <span class="dash-panel__item-status">{{ mod.status_label }}</span>
         {% if mod.run_id %}
-        <a href="/runs/{{ mod.run_id }}" class="text-xs font-semibold text-indigo-600 hover:underline">Run</a>
+        <a href="/runs/{{ mod.run_id }}" class="dash-panel__run-link">Run</a>
         {% endif %}
       </div>
     </li>
@@ -29,8 +29,7 @@
   </ul>
 
   {% if system.latest_run_id %}
-  <a href="/runs/{{ system.latest_run_id }}"
-     class="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+  <a href="/runs/{{ system.latest_run_id }}" class="dash-panel__cta">
     최근 Run 상세 보기
   </a>
   {% endif %}
