@@ -8,7 +8,6 @@ e2eTester의 GitHub Actions CI는 **순수 레이어 단위 테스트 + 문서/�
 | --- | --- |
 | 게이트 정의 | [`scripts/ci/gates.py`](../scripts/ci/gates.py) |
 | 로컬 전체 실행 | `python3 scripts/ci/run_all_gates.py` |
-| 오케스트레이터 QC | `.cursor/skills/e2e-orchestrator/scripts/run_gates.py` |
 | GitHub Actions | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 
 로컬에서 PR 전에 실행:
@@ -102,39 +101,20 @@ GitHub 저장소 **Settings → Rules → Rulesets** (또는 Branch protection r
 
 `ci / lint`·`ci / test`가 skip되면 GitHub는 해당 check를 “통과(skipped)”로 처리한다. merge queue 사용 시 skipped job이 required check로 설정되어 있어도 일반적으로 merge 가능하다. 문제가 있으면 ruleset에서 check 목록을 재검토한다.
 
-## e2e-orchestrator 연동
+## 로컬 preflight (변경 파일만)
 
-### Orchestrator Verification Tiers (T0–T3)
+PR 전 빠른 검증에는 `scripts/ci/gates.py` 의 변경 파일 전용 gate를 사용할 수 있다.
 
-멀티 에이전트 파이프라인은 PR CI와 동일 SSOT(`scripts/ci/gates.py`)를 사용하되, **4계층 shift-left 검증**으로 lint/format 실패를 QC 전에 차단한다.
-
-| Tier | 스크립트 | 시점 | 산출물 |
-| --- | --- | --- | --- |
-| T0 Research | `run_research_gate.py` | E0R (`e2e-researcher`) 직후 | `research-gate-report.json` |
-| T1 Planning | `run_planning_gate.py` | E08 직전 (마지막 planner 후) | `planning-gate-report.json` |
-| T2 Preflight | `run_preflight_gates.py` | E08 직후 (변경 파일 ruff only) | `preflight-report.json` |
-| T3 Full CI | `run_gates.py --fail-fast` | QC-T | `gates-report.json` |
-| T3 Mechanical | `run_mechanical_verdict.py` | QC 후, E09 전 | `mechanical-verdict.json` |
-
-Preflight 전용 gate: `ruff_changed`, `ruff_format_changed` (변경 `.py` 파일만).
-
-로컬 스모크:
+| Gate | 설명 |
+| --- | --- |
+| `ruff_changed` | git 변경 `.py` 파일만 ruff check |
+| `ruff_format_changed` | git 변경 `.py` 파일만 ruff format --check |
 
 ```bash
-python3 .cursor/skills/e2e-orchestrator/scripts/smoke_fixtures.py "$(pwd)"
-python3 -m pytest tests/test_orchestration_gates.py -q
+python3 scripts/ci/run_all_gates.py --profile full
 ```
 
-### 프로필별 Full CI gate
-
-| 프로필 | 게이트 |
-| --- | --- |
-| `step_fix`, `new_module`, `platform`, `healing_patch` | Tier 0–2 표준 |
-| `new_system` | Tier 0–2 + Tier 3 security |
-| `docs_only` | docs + architecture |
-| `risk_flags`: `pii`, `otp`, `auth` | 표준 + Tier 3 security |
-
-QC-T (`e2e-test-runner`)는 preflight 통과 확인 후 `run_gates.py --fail-fast` → `gates-report.json`을 생성한다. Release Judge(E09)는 `mechanical-verdict.json` passed 필수.
+`PROFILE_GATES` (`scripts/ci/gates.py`) 에서 프로필별 gate 목록을 정의한다. `docs_only` 는 `docs_consistency` + `architecture_gates` 만 실행한다.
 
 ## PR Definition of Done
 

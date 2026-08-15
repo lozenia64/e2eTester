@@ -33,10 +33,6 @@ python3 -m pytest tests/ -q                 # unit tests (pure domain/builders �
 # 1회성 데이터 이관(레거시 blob → 이벤트 스트림) 후 프로젝션 리빌드
 python3 scripts/migrate_blob_to_events.py   # runs blob → RunImported genesis + 스냅샷 (FAILED→ANOMALY)
 # 로컬 통합 기동(API + 워커, Redis 필요): python3 scripts/run_local.py
-
-# Project-local multi-agent orchestration (Cursor): **sole entry point**
-# "e2e-orchestrator 실행: <request>" — wraps dev-orchestrator + e2e skills + ~/.cursor/agents
-# See .cursor/skills/e2e-orchestrator/SKILL.md and unified-registry.md
 ```
 
 There is no build step. Automated checks are CI-gated in tiers (see `docs/CI.md`): (1) docs consistency guard (`scripts/check_docs_consistency.py`), which asserts machine-checkable facts (manifest module ids, API routes, env var names, default model chain) match the docs; (2) architecture policy gates (`scripts/check_architecture_gates.py`); (3) ruff lint/format; (4) the pytest unit suite in `tests/` covering the pure layers without a browser. Conditional security gates (pip-audit, bandit) run on auth/PII path changes or weekly schedule. Live-site behavioral verification remains manual: run the server and trigger a run from the web UI. Run artifacts (logs + screenshots) land in `artifacts/{run_id}/{module_id}/` (`execution.log`, `final.png`).
