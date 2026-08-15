@@ -99,6 +99,7 @@ async def _make_service(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.spec("SPEC-PLATFORM-004", "AC-002")
 async def test_log_goes_to_store_and_realtime_without_domain_events(tmp_path):
     service, run, module, realtime, write_repo = await _make_service(tmp_path)
     # 로그 경로가 이벤트 스토어를 건드리지 않음을 감시하기 위해 append_events 를 계수한다.

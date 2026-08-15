@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from app.contexts.run.contracts.records import RunModuleRecord, RunRecord
 from app.contexts.suite.contracts.records import SuiteRecord
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
@@ -60,6 +62,7 @@ def _run() -> Run:
 # --- 로그가 영속 스키마에서 구조적으로 제외됨 -------------------------------
 
 
+@pytest.mark.spec("SPEC-PLATFORM-002", "AC-003")
 def test_run_module_record_has_no_logs_field():
     # 타입 수준 사실: 영속 스키마에 logs 가 아예 없다.
     assert "logs" not in RunModuleRecord.model_fields

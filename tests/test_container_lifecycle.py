@@ -57,6 +57,7 @@ def test_wire_execution_initialization_order_7_8_9(tmp_path, monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.spec("SPEC-PLATFORM-001", "AC-002")
 async def test_container_build_start_stop_lifecycle(tmp_path) -> None:
     settings = E2ESettings(
         E2E_DB_PATH=str(tmp_path / "test.db"),

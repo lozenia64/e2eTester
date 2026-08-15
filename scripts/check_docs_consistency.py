@@ -8,14 +8,17 @@
 검사 항목:
   1. 시스템 manifest ↔ 시나리오 문서 1:1 대응 (docs/scenarios/{code}.md)
   2. manifest 의 모든 module_id 가 짝이 되는 시나리오 문서에 등장하는지
-  3. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
+  3. 시스템 manifest ↔ SDD Spec 1:1 대응 (docs/specs/systems/{code}.md)
+  4. manifest 의 모든 module_id 가 짝이 되는 SDD Spec에 등장하는지
+  5. docs/specs/README.md 인덱스의 .md 링크 대상 파일이 실재하는지
+  6. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
      — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
        `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
-  4. 코드가 읽는 환경변수가 docs/INSTALL.md 또는 .env.example 에 문서화되어 있는지
-  5. 기본 Gemini 모델 체인(코드 상수)이 docs/INSTALL.md / .env.example 와 일치하는지
-  6. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
-  7. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
-  8. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
+  6. 코드가 읽는 환경변수가 docs/INSTALL.md 또는 .env.example 에 문서화되어 있는지
+  7. 기본 Gemini 모델 체인(코드 상수)이 docs/INSTALL.md / .env.example 와 일치하는지
+  8. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
+  9. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
+  10. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
 
 사용법:
   python3 scripts/check_docs_consistency.py            # 전체 검사
@@ -59,6 +62,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MANIFEST_GLOB = "app/systems/*/manifest.yaml"
 SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
+SPECS_SYSTEMS_DIR = REPO_ROOT / "docs" / "specs" / "systems"
+SPECS_INDEX_DOC = REPO_ROOT / "docs" / "specs" / "README.md"
+SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
 README_DOC = REPO_ROOT / "README.md"
 INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
@@ -166,6 +172,77 @@ def check_scenario_lists_modules(manifests: dict[str, dict]) -> CheckResult:
                     f"(모듈 추가/이름변경 시 시나리오 문서 동시 갱신 필요)."
                 )
     result.details.append(f"module_id {checked}개를 시나리오 문서와 대조했습니다.")
+    return result
+
+
+def check_systems_have_specs(manifests: dict[str, dict]) -> CheckResult:
+    result = CheckResult("시스템 manifest ↔ SDD Spec 1:1 대응")
+    manifest_codes = set(manifests)
+    spec_codes = {p.stem for p in SPECS_SYSTEMS_DIR.glob("*.md") if not p.name.startswith("_")}
+
+    for code in sorted(manifest_codes - spec_codes):
+        result.problems.append(
+            f"manifest 는 있으나 SDD Spec 이 없음: docs/specs/systems/{code}.md 를 추가하세요."
+        )
+    for code in sorted(spec_codes - manifest_codes):
+        result.problems.append(
+            f"SDD Spec 은 있으나 등록된 manifest 가 없음: docs/specs/systems/{code}.md "
+            f"(app/systems/{code}/manifest.yaml 누락 또는 문서 삭제 필요)."
+        )
+    result.details.append(
+        f"manifest {len(manifest_codes)}개, SDD Spec {len(spec_codes)}개 확인: "
+        f"{', '.join(sorted(manifest_codes))}"
+    )
+    return result
+
+
+def check_spec_lists_modules(manifests: dict[str, dict]) -> CheckResult:
+    result = CheckResult("manifest module_id 가 SDD Spec 에 등장")
+    checked = 0
+    for code, data in sorted(manifests.items()):
+        spec_path = SPECS_SYSTEMS_DIR / f"{code}.md"
+        if not spec_path.exists():
+            continue  # check_systems_have_specs 에서 이미 보고됨
+        doc_text = _read(spec_path)
+        for module in data.get("modules", []):
+            module_id = module.get("module_id")
+            if not module_id:
+                continue
+            checked += 1
+            if module_id not in doc_text:
+                result.problems.append(
+                    f"[{code}] module_id `{module_id}` 가 docs/specs/systems/{code}.md 에 없음 "
+                    f"(모듈 추가/이름변경 시 SDD Spec 동시 갱신 필요)."
+                )
+    result.details.append(f"module_id {checked}개를 SDD Spec 과 대조했습니다.")
+    return result
+
+
+def check_spec_index_links_exist() -> CheckResult:
+    """docs/specs/README.md 인덱스에 나열된 Spec 파일이 실제로 존재하는지 검사."""
+    result = CheckResult("docs/specs/README.md 인덱스 링크 파일 실재")
+    if not SPECS_INDEX_DOC.exists():
+        result.problems.append("docs/specs/README.md 가 없습니다.")
+        return result
+    text = _read(SPECS_INDEX_DOC)
+    specs_root = SPECS_INDEX_DOC.parent
+    checked = 0
+    seen: set[str] = set()
+    for raw in SPEC_INDEX_LINK_RE.findall(text):
+        rel = raw.split("#", 1)[0].strip()
+        if not rel or rel.startswith("http"):
+            continue
+        if rel in seen:
+            continue
+        seen.add(rel)
+        checked += 1
+        target = specs_root / rel
+        if not target.is_file():
+            result.problems.append(
+                f"인덱스 링크 `{rel}` 대상 파일이 없음 "
+                f"(docs/specs/README.md 또는 Spec 파일 경로 갱신 필요)."
+            )
+    result.details.append(f"인덱스 .md 링크 {checked}개의 실재를 확인했습니다.")
     return result
 
 
@@ -400,6 +477,9 @@ def run_all() -> list[CheckResult]:
     return [
         check_systems_have_scenarios(manifests),
         check_scenario_lists_modules(manifests),
+        check_systems_have_specs(manifests),
+        check_spec_lists_modules(manifests),
+        check_spec_index_links_exist(),
         check_manifest_execution_profile(manifests),
         check_api_routes_documented(),
         check_env_vars_documented(),

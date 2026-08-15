@@ -6,6 +6,7 @@
 - 설치·env: `docs/INSTALL.md`, `.env.example`
 - CI: `docs/CI.md`
 - 시나리오: `docs/scenarios/{code}.md` (manifest 1:1)
+- 행동·AC Spec: `docs/specs/` (`docs/specs/README.md`)
 - 문서·PR DoD: `docs/DOCS_GOVERNANCE.md`
 
 ## 실행·검증

@@ -13,6 +13,7 @@
 | --- | --- | --- |
 | 아키텍처·API·폴더 트리 | `docs/E2E_ARCHITECTURE.md` | 링크만 |
 | 시나리오·모듈·입력 | `docs/scenarios/{code}.md` | 링크만 |
+| 행동·AC·Agent 개발 | `docs/specs/` | `docs/specs/README.md` |
 | 사용 안내 | `README.md` | 링크만 |
 | 설치·env | `docs/INSTALL.md`, `.env.example` | 링크만 |
 | OTP 중계기(안드로이드) | `docs/otp_relay.md` | INSTALL 은 env만 |
@@ -28,14 +29,14 @@
 python3 scripts/check_docs_consistency.py
 ```
 
-검사: manifest↔시나리오 1:1·module_id, API↔`docs/E2E_ARCHITECTURE.md` §5.2 양방향, env↔INSTALL/.env.example 양방향, §4 폴더 트리 실재.
+검사: manifest↔시나리오·manifest↔`docs/specs/systems/{code}.md` 1:1·module_id, API↔`docs/E2E_ARCHITECTURE.md` §5.2 양방향, env↔INSTALL/.env.example 양방향, §4 폴더 트리 실재.
 
 CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), 전체 게이트: [docs/CI.md](CI.md).
 
 ## PR 체크리스트
 
 - [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] manifest 변경 → `docs/scenarios/{code}.md` 동시 갱신
+- [ ] manifest 변경 → `docs/scenarios/{code}.md` + `docs/specs/systems/{code}.md` 동시 갱신
 - [ ] API 변경 → `docs/E2E_ARCHITECTURE.md` §5.2 갱신
 - [ ] env 변경 → `docs/INSTALL.md` + `.env.example`
 - [ ] SSOT 중복 서술 추가 금지(링크 참조)
@@ -46,5 +47,6 @@ CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), 전체 게이트:
 
 1. `app/systems/{code}/manifest.yaml`
 2. `docs/scenarios/{code}.md`
-3. env 필요 시 INSTALL/.env.example
-4. `python3 scripts/check_docs_consistency.py`
+3. `docs/specs/systems/{code}.md`
+4. env 필요 시 INSTALL/.env.example
+5. `python3 scripts/check_docs_consistency.py`
