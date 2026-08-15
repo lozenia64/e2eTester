@@ -62,6 +62,24 @@ def _rect_in_container(page, selector: str, *, container: str = ".dash") -> dict
     )
 
 
+def _assert_no_scroll(page, selector: str) -> None:
+    result = page.evaluate(
+        """(sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return { ok: false, reason: 'missing' };
+            const oy = getComputedStyle(el).overflowY;
+            return {
+                ok: el.scrollHeight <= el.clientHeight + 1 && oy !== 'auto' && oy !== 'scroll',
+                scrollHeight: el.scrollHeight,
+                clientHeight: el.clientHeight,
+                overflowY: oy,
+            };
+        }""",
+        selector,
+    )
+    assert result["ok"], f"{selector}: {result}"
+
+
 def _wait_for_server(host: str, port: int, *, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -260,17 +278,64 @@ def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
     assert box is not None and box["height"] >= 16 and box["width"] >= 120
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-005")
-def test_dashboard_zone_c_internal_scroll_document_fixed(page, live_server: str) -> None:
+@pytest.mark.spec("SPEC-UI-007", "AC-002")
+def test_dashboard_zone_c_fits_without_scroll(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
-    page.wait_for_selector("#dash-zone-matrix")
-    overflow = page.eval_on_selector(".dash__systems", "el => getComputedStyle(el).overflowY")
-    assert overflow == "auto"
-    metrics = page.evaluate(
+    page.wait_for_selector(".dash__systems")
+    _assert_no_scroll(page, ".dash__systems")
+    doc = page.evaluate(
         "() => ({ sh: document.documentElement.scrollHeight, ih: window.innerHeight })"
     )
-    assert metrics["sh"] <= metrics["ih"]
+    assert doc["sh"] <= doc["ih"]
+
+
+@pytest.mark.spec("SPEC-UI-007", "AC-002")
+def test_zone_c_no_internal_scroll_1280x720(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash__systems")
+    _assert_no_scroll(page, ".dash__systems")
+    has_scrollable = page.evaluate(
+        "() => document.querySelector('.dash__systems')?.dataset.scrollable"
+    )
+    assert has_scrollable in (None, "", "false")
+
+
+@pytest.mark.spec("SPEC-UI-007", "AC-003")
+def test_system_rows_equal_partition_1280x720(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-sys-row")
+    metrics = page.evaluate(
+        """() => {
+            const rows = [...document.querySelectorAll('.dash-sys-row')];
+            const heights = rows.map((r) => r.clientHeight);
+            const sys = document.querySelector('.dash__systems');
+            const gap = parseFloat(getComputedStyle(sys).rowGap || getComputedStyle(sys).gap) || 0;
+            const sum = heights.reduce((a, b) => a + b, 0) + gap * Math.max(0, heights.length - 1);
+            return {
+                heights,
+                spread: Math.max(...heights) - Math.min(...heights),
+                sum,
+                container: sys.clientHeight,
+            };
+        }"""
+    )
+    assert metrics["spread"] <= 2, metrics
+    assert abs(metrics["sum"] - metrics["container"]) <= 4, metrics
+
+
+@pytest.mark.spec("SPEC-UI-007", "AC-007")
+@pytest.mark.parametrize("width,height", [(1280, 720), (1920, 1080), (320, 568)])
+def test_no_data_scrollable_dataset(page, live_server: str, width: int, height: int) -> None:
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector("#dash-zone-matrix")
+    assert page.evaluate(
+        "() => !document.querySelector('.dash__systems')?.hasAttribute('data-scrollable')"
+        " || document.querySelector('.dash__systems').dataset.scrollable === 'false'"
+    )
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-003")
