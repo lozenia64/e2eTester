@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.contexts.run.domain.state_machine import (
     BlockModule,
     CancelRemaining,
@@ -29,6 +31,7 @@ def test_entry_cancel_takes_priority_over_dependencies():
     assert isinstance(decision, CancelRemaining)
 
 
+@pytest.mark.spec("SPEC-RUN-001", "AC-001")
 def test_entry_blocks_when_dependencies_unsatisfied():
     decision = RunStateMachine.decide_module_entry(
         cancel_requested=False, dependencies_satisfied=False
@@ -72,6 +75,7 @@ def test_post_step_cancel_overrides_pause():
     assert isinstance(decision, CancelRemaining)
 
 
+@pytest.mark.spec("SPEC-RUN-001", "AC-002")
 def test_post_step_rejects_input_not_declared_in_manifest():
     # 매니페스트가 일시정지를 허가하지 않은 모듈의 입력 요구 → 정책 위반(ERROR).
     decision = RunStateMachine.decide_post_step(
@@ -166,6 +170,7 @@ def test_partial_rerun_rejects_unknown_module():
     assert isinstance(decision, RejectInvalidResumePoint)
 
 
+@pytest.mark.spec("SPEC-RUN-002", "AC-002")
 def test_partial_rerun_rejects_when_not_allowed():
     decision = RunStateMachine.decide_partial_rerun(
         from_module_id="a",

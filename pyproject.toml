@@ -32,6 +32,9 @@ ignore = [
 # 수동 asyncio.run(scenario()) 래핑을 제거하기 위한 설정.
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "spec(spec_id, ac_id): SDD Spec 수용 기준 추적 (예: SPEC-RUN-001, AC-002)",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # 스크립트는 repo root bootstrap 후 app import (E402 의도적)

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.contexts.suite.domain.state_machine import (
     CancelSuite,
     FinalizeSuite,
@@ -30,6 +32,7 @@ def test_step_status_for_run_maps_each_run_outcome():
 # --- 하위 Run 종료 후 결정 ---------------------------------------------------
 
 
+@pytest.mark.spec("SPEC-SUITE-001", "AC-002")
 def test_after_run_finished_advances_on_normal_outcome():
     decision = SuiteStateMachine.decide_after_run_finished(
         run_status=RunStatus.PASSED, cancel_requested=False
@@ -67,6 +70,7 @@ def test_after_run_finished_records_error_outcome_before_advancing():
 # --- 다음 스텝 진입 결정 -----------------------------------------------------
 
 
+@pytest.mark.spec("SPEC-SUITE-001", "AC-001")
 def test_advance_starts_next_pending_step():
     decision = SuiteStateMachine.decide_advance(cancel_requested=False, next_pending_index=2)
     assert isinstance(decision, StartStep)
