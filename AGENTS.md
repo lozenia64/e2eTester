@@ -2,7 +2,7 @@
 
 ## SSOT
 
-- 아키텍처·API: `E2E_ARCHITECTURE.md`
+- 아키텍처·API: `docs/E2E_ARCHITECTURE.md`
 - 설치·env: `docs/INSTALL.md`, `.env.example`
 - CI: `docs/CI.md`
 - 시나리오: `docs/scenarios/{code}.md` (manifest 1:1)

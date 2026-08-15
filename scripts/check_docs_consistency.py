@@ -59,7 +59,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MANIFEST_GLOB = "app/systems/*/manifest.yaml"
 SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
-ARCHITECTURE_DOC = REPO_ROOT / "E2E_ARCHITECTURE.md"
+ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
 README_DOC = REPO_ROOT / "README.md"
 INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
