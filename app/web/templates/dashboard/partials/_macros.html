@@ -55,18 +55,20 @@
      tabindex="0"
      role="button"
      aria-label="{{ sys.system_name }} 상세 보기">
-  <div class="dash-sys-row__identity">
-    <span class="dash-sys-row__icon" data-tone="{{ badge.tone }}">{{ code_label }}</span>
-    <div class="dash-sys-row__text">
-      <span class="dash-sys-row__name">{{ sys.system_name }}</span>
-      <span class="dash-sys-row__meta">{{ sys.inspected }}/{{ sys.module_total }} 모듈</span>
+  <div class="dash-sys-row__header">
+    <div class="dash-sys-row__identity">
+      <span class="dash-sys-row__icon" data-tone="{{ badge.tone }}">{{ code_label }}</span>
+      <div class="dash-sys-row__text">
+        <span class="dash-sys-row__name">{{ sys.system_name }}</span>
+        <span class="dash-sys-row__meta">{{ sys.inspected }}/{{ sys.module_total }} 모듈</span>
+      </div>
     </div>
+    <span class="dash-sys-row__badge" data-tone="{{ badge.tone }}">{{ badge.label }}</span>
+    {% if show_cta %}
+    <a href="/runs/execute" class="dash-sys-row__cta" data-action="execute">점검 실행</a>
+    {% endif %}
+    <span class="dash-sys-row__chevron" aria-hidden="true">›</span>
   </div>
-  <span class="dash-sys-row__badge" data-tone="{{ badge.tone }}">{{ badge.label }}</span>
-  {% if show_cta %}
-  <a href="/runs/execute" class="dash-sys-row__cta" data-action="execute">점검 실행</a>
-  {% endif %}
-  <span class="dash-sys-row__chevron" aria-hidden="true">›</span>
   {{ module_segment_bar(sys) }}
   <div class="dash-sys-row__modules">
     {% for mod in sys.modules %}

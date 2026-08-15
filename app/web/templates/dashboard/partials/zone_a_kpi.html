@@ -1,40 +1,44 @@
 {# Zone A hero + Zone B stats + attention strip #}
 {% set t = data.totals %}
 <section id="dash-zone-hero" class="dash-hero">
-  <div class="dash-hero__text">
-    <h1 class="dash-hero__title">오늘의 점검 현황</h1>
-    <p class="dash-hero__meta">
-      {{ data.date_label }} · {{ t.passed }}/{{ t.modules }} 모듈 정상
-      {% if data.generated_at %}
-      · 갱신 {{ data.generated_at[11:16] }}
+  <div class="dash-hero__top">
+    <div class="dash-hero__text">
+      <h1 class="dash-hero__title">오늘의 점검 현황</h1>
+      <p class="dash-hero__meta">
+        {{ data.date_label }} · {{ t.passed }}/{{ t.modules }} 모듈 정상
+        {% if data.generated_at %}
+        · 갱신 {{ data.generated_at[11:16] }}
+        {% endif %}
+      </p>
+      {% if t.modules > 0 %}
+        {% if t.error > 0 %}
+      <p class="dash-hero__summary">점검실패 {{ t.error }}건 — 우선 확인이 필요합니다.</p>
+        {% elif t.anomaly > 0 %}
+      <p class="dash-hero__summary">이상징후 {{ t.anomaly }}건이 감지되었습니다.</p>
+        {% elif t.running > 0 %}
+      <p class="dash-hero__summary">{{ t.running }}개 모듈이 진행 중입니다.</p>
+        {% elif t.not_inspected == t.modules %}
+      <p class="dash-hero__summary">오늘 아직 점검이 시작되지 않았습니다.</p>
+        {% else %}
+      <p class="dash-hero__summary">오늘 점검이 정상적으로 완료되었습니다.</p>
+        {% endif %}
       {% endif %}
-    </p>
-    {% if t.modules > 0 %}
-      {% if t.error > 0 %}
-    <p class="dash-hero__summary">점검실패 {{ t.error }}건 — 우선 확인이 필요합니다.</p>
-      {% elif t.anomaly > 0 %}
-    <p class="dash-hero__summary">이상징후 {{ t.anomaly }}건이 감지되었습니다.</p>
-      {% elif t.running > 0 %}
-    <p class="dash-hero__summary">{{ t.running }}개 모듈이 진행 중입니다.</p>
-      {% elif t.not_inspected == t.modules %}
-    <p class="dash-hero__summary">오늘 아직 점검이 시작되지 않았습니다.</p>
-      {% else %}
-    <p class="dash-hero__summary">오늘 점검이 정상적으로 완료되었습니다.</p>
-      {% endif %}
-    {% endif %}
-  </div>
-  <div class="dash-hero__rate-block">
-    <span class="dash-hero__rate-label">통과율</span>
-    <div class="dash-hero__rate-wrap">
-      <span class="dash-hero__rate dash-kpi__value" data-target="{{ t.pass_rate }}">{{ t.pass_rate }}</span><span class="dash-hero__pct">%</span>
     </div>
-  </div>
-  <div class="dash-hero__actions">
-    <button id="dash-refresh" type="button" class="dash-refresh" aria-label="새로고침">
-      <svg class="dash-refresh__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-      새로고침
-    </button>
-    <span id="dash-htmx-busy" class="dash-htmx-indicator">갱신…</span>
+    <div class="dash-hero__aside">
+      <div class="dash-hero__rate-block">
+        <span class="dash-hero__rate-label">통과율</span>
+        <div class="dash-hero__rate-wrap">
+          <span class="dash-hero__rate dash-kpi__value" data-target="{{ t.pass_rate }}">{{ t.pass_rate }}</span><span class="dash-hero__pct">%</span>
+        </div>
+      </div>
+      <div class="dash-hero__actions">
+        <button id="dash-refresh" type="button" class="dash-refresh" aria-label="새로고침">
+          <svg class="dash-refresh__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          새로고침
+        </button>
+        <span id="dash-htmx-busy" class="dash-htmx-indicator">갱신…</span>
+      </div>
+    </div>
   </div>
 </section>
 

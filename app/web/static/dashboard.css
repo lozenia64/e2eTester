@@ -77,6 +77,8 @@ body:has(.dash) main > div {
   display: flex;
   flex-direction: column;
   gap: clamp(0.25rem, 0.6cqh, 0.625rem);
+  min-height: clamp(7rem, 18cqh, 11rem);
+  overflow: visible;
 }
 
 .dash-host-matrix {
@@ -98,29 +100,33 @@ body:has(.dash) main > div {
 
 /* ── Zone A — Hero ── */
 .dash-hero {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  align-items: end;
-  gap: 0.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.dash-hero__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .dash-hero__text {
-  grid-column: 1;
-  grid-row: 1 / 3;
-  min-width: 0;
+  flex: 1 1 12rem;
+  min-width: 12rem;
+}
+
+.dash-hero__aside {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
 }
 
 .dash-hero__rate-block {
-  grid-column: 2;
-  grid-row: 1;
   text-align: right;
-}
-
-.dash-hero__actions {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: end;
 }
 
 .dash-hero__rate-label {
@@ -139,6 +145,7 @@ body:has(.dash) main > div {
   letter-spacing: -0.03em;
   line-height: 1.1;
   color: var(--pl-text);
+  overflow: visible;
 }
 
 .dash-hero__meta {
@@ -182,7 +189,6 @@ body:has(.dash) main > div {
   align-items: center;
   gap: 0.5rem;
   padding-bottom: 0.25rem;
-  justify-self: end;
 }
 
 .dash-refresh {
@@ -229,7 +235,9 @@ body:has(.dash) main > div {
 /* ── Zone B — Stats strip ── */
 .dash-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
   gap: 1px;
   border-radius: clamp(0.625rem, 1.2cqh, 1rem);
   overflow: hidden;
@@ -240,8 +248,9 @@ body:has(.dash) main > div {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  min-width: 0;
   min-height: 56px;
-  padding: clamp(0.5rem, 1.2cqh, 1rem) clamp(0.625rem, 1.5cqi, 1.25rem);
+  padding: clamp(0.35rem, 1cqh, 1rem) clamp(0.35rem, 1.5cqi, 0.75rem);
   background: var(--pl-surface);
 }
 
@@ -261,6 +270,19 @@ body:has(.dash) main > div {
   font-size: max(0.75rem, clamp(0.625rem, 1.2cqh, 0.8125rem));
   font-weight: 700;
   color: var(--pl-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .dash-stats__value {
+    font-size: max(1rem, clamp(1rem, 2cqh, 1.5rem));
+  }
+
+  .dash-stats__label {
+    font-size: 0.6875rem;
+  }
 }
 
 /* ── Attention strip ── */
@@ -383,16 +405,14 @@ body:has(.dash) main > div {
 .dash-sys-row {
   flex: 0 0 auto;
   min-height: var(--dash-row-min-h, 88px);
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  grid-template-rows: auto auto auto;
-  align-items: center;
-  gap: 0.35rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   padding: clamp(0.35rem, 1cqh, 0.875rem) clamp(0.5rem, 1.5cqi, 1.25rem);
   border: 1px solid var(--pl-border);
   border-radius: clamp(0.625rem, 1.2cqh, 1rem);
   background: var(--pl-surface);
-  overflow: hidden;
+  overflow: visible;
   cursor: pointer;
   box-shadow: var(--pl-shadow-sm);
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
@@ -417,23 +437,29 @@ body:has(.dash) main > div {
   border-left-color: var(--st-blocked);
 }
 
+.dash-sys-row__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  flex-shrink: 0;
+}
+
 .dash-sys-row__identity {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 8rem;
+  max-width: 55%;
   display: flex;
   align-items: center;
   gap: clamp(0.375rem, 1cqi, 0.625rem);
 }
 
 .dash-sys-row__badge {
-  grid-column: 2;
-  grid-row: 1;
+  flex: 0 0 auto;
 }
 
 .dash-sys-row__cta {
-  grid-column: 3;
-  grid-row: 1;
+  flex: 0 0 auto;
   flex-shrink: 0;
   font-size: max(0.75rem, 0.75rem);
   font-weight: 700;
@@ -443,8 +469,8 @@ body:has(.dash) main > div {
 }
 
 .dash-sys-row__chevron {
-  grid-column: 4;
-  grid-row: 1;
+  flex: 0 0 auto;
+  margin-left: auto;
   font-size: 1.25rem;
   opacity: 0.35;
 }
@@ -454,8 +480,6 @@ body:has(.dash) main > div {
 }
 
 .dash-sys-row__segment {
-  grid-column: 1 / -1;
-  grid-row: 2;
   display: flex;
   gap: 1px;
   height: 4px;
@@ -482,8 +506,6 @@ body:has(.dash) main > div {
 }
 
 .dash-sys-row__modules {
-  grid-column: 1 / -1;
-  grid-row: 3;
   display: flex;
   align-items: center;
   gap: clamp(2px, 0.4cqi, 6px);
@@ -516,6 +538,7 @@ body:has(.dash) main > div {
 
 .dash-sys-row__name {
   display: block;
+  min-width: 4ch;
   font-size: max(0.875rem, clamp(0.75rem, 1.8cqh, 1rem));
   font-weight: 800;
   color: var(--pl-text);
@@ -528,6 +551,8 @@ body:has(.dash) main > div {
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
   width: clamp(1.75rem, 3.5cqh, 2.5rem);
   height: clamp(1.75rem, 3.5cqh, 2.5rem);
   border-radius: clamp(0.375rem, 0.8cqh, 0.75rem);
@@ -718,60 +743,20 @@ body:has(.dash) main > div {
 
 /* ── Mobile card internal stack ── */
 @media (max-width: 767px) {
-  .dash-hero__text {
-    grid-column: 1;
-    grid-row: 1 / 3;
+  .dash-hero__top {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .dash-hero__rate-block {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .dash-hero__actions {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
+  .dash-hero__aside {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
   }
 
   .dash-stats {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .dash-sys-row {
-    grid-template-columns: 1fr auto auto auto;
-    grid-template-rows: auto auto auto;
-  }
-
-  .dash-sys-row__identity {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .dash-sys-row__badge {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
-  }
-
-  .dash-sys-row__cta {
-    grid-column: 3;
-    grid-row: 1;
-  }
-
-  .dash-sys-row__chevron {
-    grid-column: 4;
-    grid-row: 1;
-  }
-
-  .dash-sys-row__segment {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .dash-sys-row__modules {
-    grid-column: 1 / -1;
-    grid-row: 3;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
