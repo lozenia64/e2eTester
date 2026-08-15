@@ -20,6 +20,7 @@ from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
+from app.contexts.insights.application.daily_dashboard import build_daily_dashboard
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import (
     FakeDailyDashboardQueries,
@@ -40,6 +41,25 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+def _rect_in_container(page, selector: str, *, container: str = ".dash") -> dict | None:
+    return page.evaluate(
+        """([sel, boxSel]) => {
+            const el = document.querySelector(sel);
+            const box = document.querySelector(boxSel);
+            if (!el || !box) return null;
+            const r = el.getBoundingClientRect();
+            const b = box.getBoundingClientRect();
+            return {
+                left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+                width: r.width, height: r.height,
+                inBox: r.left >= b.left - 1 && r.right <= b.right + 1
+                    && r.top >= b.top - 1 && r.bottom <= b.bottom + 1,
+            };
+        }""",
+        [selector, container],
+    )
 
 
 def _wait_for_server(host: str, port: int, *, timeout: float = 10.0) -> None:
@@ -106,6 +126,35 @@ def live_server(
     app = _build_dashboard_test_app(
         user=dashboard_user,
         dashboard_data=dashboard_data,
+        registry=registry,
+    )
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    _wait_for_server("127.0.0.1", port)
+    base_url = f"http://127.0.0.1:{port}"
+    yield base_url
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture(scope="module")
+def empty_day_live_server(
+    registry: ModuleRegistry,
+    dashboard_user: User,
+) -> str:
+    """All-not-inspected payload for HF-1 summary AC."""
+    data = build_daily_dashboard(
+        registry.list_systems(),
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+    )
+    port = _free_port()
+    app = _build_dashboard_test_app(
+        user=dashboard_user,
+        dashboard_data=data,
         registry=registry,
     )
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
@@ -243,3 +292,44 @@ def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
     page.wait_for_selector("#dash-zone-attention")
     assert page.locator("#dash-zone-attention").is_visible()
     assert page.locator('a.dash-attention__inbox[href="/anomalies"]').count() == 1
+
+
+@pytest.mark.spec("SPEC-UI-006", "AC-001")
+def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{empty_day_live_server}/")
+    page.wait_for_selector(".dash-hero__title")
+    rect = _rect_in_container(page, ".dash-hero__title")
+    assert rect and rect["width"] >= 120 and rect["height"] >= 16 and rect["inBox"]
+    assert "아직 점검이 시작되지 않았습니다" in page.locator(".dash-hero__summary").inner_text()
+    assert page.locator(".dash-hero__rate-label").is_visible()
+
+
+@pytest.mark.spec("SPEC-UI-006", "AC-002")
+def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-sys-row__icon")
+    icon = _rect_in_container(page, ".dash-sys-row__icon")
+    name = _rect_in_container(page, ".dash-sys-row__name")
+    assert icon and icon["width"] >= 24 and icon["height"] >= 24 and icon["inBox"]
+    assert name and name["width"] >= 40 and name["inBox"]
+    fs = page.eval_on_selector(
+        ".dash-sys-row__name",
+        "el => parseFloat(getComputedStyle(el).fontSize)",
+    )
+    assert fs >= 14
+
+
+@pytest.mark.spec("SPEC-UI-006", "AC-003")
+def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector("#dash-zone-stats .dash-stats__tile")
+    tiles = page.locator("#dash-zone-stats .dash-stats__tile")
+    assert tiles.count() == 4
+    for i in range(4):
+        sel = f"#dash-zone-stats .dash-stats__tile:nth-child({i + 1})"
+        rect = _rect_in_container(page, sel)
+        assert rect and rect["inBox"], f"tile {i} outside .dash"
+    assert tiles.first.locator(".dash-stats__label").inner_text() == "이상징후"

@@ -205,3 +205,12 @@ def test_matrix_fragment_error_system_has_attention_priority(client: TestClient)
     idx = html.index('data-system-code="hom"')
     row_chunk = html[idx : idx + 800]
     assert 'data-priority="attention"' in row_chunk
+
+
+@pytest.mark.spec("SPEC-UI-006", "AC-005")
+def test_fragments_include_visibility_wrappers(client: TestClient) -> None:
+    kpi = client.get("/api/dashboard/daily/fragments/kpi").text
+    matrix = client.get("/api/dashboard/daily/fragments/matrix").text
+    assert "dash-hero__top" in kpi
+    assert "dash-hero__aside" in kpi
+    assert "dash-sys-row__header" in matrix
