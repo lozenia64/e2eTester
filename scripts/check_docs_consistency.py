@@ -178,9 +178,7 @@ def check_scenario_lists_modules(manifests: dict[str, dict]) -> CheckResult:
 def check_systems_have_specs(manifests: dict[str, dict]) -> CheckResult:
     result = CheckResult("시스템 manifest ↔ SDD Spec 1:1 대응")
     manifest_codes = set(manifests)
-    spec_codes = {
-        p.stem for p in SPECS_SYSTEMS_DIR.glob("*.md") if not p.name.startswith("_")
-    }
+    spec_codes = {p.stem for p in SPECS_SYSTEMS_DIR.glob("*.md") if not p.name.startswith("_")}
 
     for code in sorted(manifest_codes - spec_codes):
         result.problems.append(
