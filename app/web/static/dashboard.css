@@ -77,8 +77,22 @@ body:has(.dash) main > div {
   display: flex;
   flex-direction: column;
   gap: clamp(0.25rem, 0.6cqh, 0.625rem);
-  min-height: clamp(7rem, 18cqh, 11rem);
-  overflow: visible;
+  overflow: hidden;
+  max-height: 42%;
+}
+
+#dash-host-kpi[data-kpi-compress="true"] {
+  gap: 0.25rem;
+}
+
+#dash-host-kpi[data-kpi-compress="true"] .dash-hero__title {
+  font-size: max(1rem, 1rem);
+}
+
+#dash-host-kpi[data-kpi-compress="true"] .dash-stats__tile {
+  min-height: 44px;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .dash-host-matrix {
@@ -381,15 +395,8 @@ body:has(.dash) main > div {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(4px, 0.6cqh, 8px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-}
-
-.dash__systems[data-scrollable="true"] {
-  mask-image: linear-gradient(to bottom, #000 0%, #000 92%, transparent 100%);
+  gap: clamp(2px, 0.6cqh, 8px);
+  overflow: hidden;
 }
 
 .dash__empty {
@@ -403,8 +410,8 @@ body:has(.dash) main > div {
 }
 
 .dash-sys-row {
-  flex: 0 0 auto;
-  min-height: var(--dash-row-min-h, 88px);
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -412,7 +419,7 @@ body:has(.dash) main > div {
   border: 1px solid var(--pl-border);
   border-radius: clamp(0.625rem, 1.2cqh, 1rem);
   background: var(--pl-surface);
-  overflow: visible;
+  overflow: hidden;
   cursor: pointer;
   box-shadow: var(--pl-shadow-sm);
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
@@ -511,6 +518,8 @@ body:has(.dash) main > div {
   gap: clamp(2px, 0.4cqi, 6px);
   min-width: 0;
   overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-wrap: nowrap;
 }
 
@@ -650,12 +659,6 @@ body:has(.dash) main > div {
 .dash-sys-row__badge[data-tone="not_inspected"] { background: #f4f4f5; color: var(--st-idle); }
 
 /* ── Density tiers ── */
-.dash__systems[data-density="comfortable"] { --dash-row-min-h: 88px; }
-.dash__systems[data-density="compact"] { --dash-row-min-h: 76px; }
-.dash__systems[data-density="dense"] { --dash-row-min-h: 64px; }
-.dash__systems[data-density="minimal"] { --dash-row-min-h: 56px; }
-.dash__systems[data-density="micro"] { --dash-row-min-h: 48px; }
-
 .dash__systems[data-density="compact"] .dash-sys-row {
   padding: 0.35rem 0.75rem;
 }
@@ -719,6 +722,7 @@ body:has(.dash) main > div {
   gap: 2px;
 }
 
+.dash__systems[data-density="dense"] .dash-sys-row__segment,
 .dash__systems[data-density="minimal"] .dash-sys-row__segment,
 .dash__systems[data-density="micro"] .dash-sys-row__segment {
   display: none;
@@ -726,6 +730,19 @@ body:has(.dash) main > div {
 
 .dash__systems[data-density="micro"] .dash-sys-row {
   padding: 0.25rem 0.5rem;
+}
+
+.dash:has(.dash__systems[data-density="micro"]) .dash-hero__summary {
+  display: none;
+}
+
+.dash__systems[data-density="micro"] .dash-sys-row__cta {
+  font-size: 0;
+}
+
+.dash__systems[data-density="micro"] .dash-sys-row__cta::after {
+  content: "점검";
+  font-size: 0.75rem;
 }
 
 .dash:has(.dash__systems[data-density="micro"]) .dash-hero__rate {
