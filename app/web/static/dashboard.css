@@ -31,9 +31,25 @@ body:has(.dash) {
 body:has(.dash) main,
 body:has(.dash) main > div {
   max-width: none;
-  padding: 0;
+  padding-top: 0;
+  padding-right: 0;
+  padding-bottom: 0;
   height: 100dvh;
   overflow: hidden;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  body:has(.dash) main {
+    padding-left: 16rem;
+    width: 100%;
+  }
+
+  body:has(.dash) main > div {
+    padding-left: 0;
+    width: 100%;
+    max-width: none;
+  }
 }
 
 @media (max-width: 767px) {
@@ -57,6 +73,12 @@ body:has(.dash) main > div {
     height: 100%;
     overflow: hidden;
   }
+
+  body:has(.dash) main,
+  body:has(.dash) main > div {
+    padding-left: 0;
+    width: 100%;
+  }
 }
 
 .dash {
@@ -64,6 +86,9 @@ body:has(.dash) main > div {
   container-name: dash;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
   gap: clamp(0.25rem, 0.8cqh, 0.75rem);
