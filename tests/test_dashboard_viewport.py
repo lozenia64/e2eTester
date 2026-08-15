@@ -43,6 +43,31 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
+def _sidebar_inset_metrics(page) -> dict:
+    return page.evaluate(
+        """() => {
+            const sb = document.querySelector('#app-sidebar');
+            const dash = document.querySelector('.dash');
+            const main = document.querySelector('main');
+            if (!sb || !dash || !main) return { ok: false, reason: 'missing' };
+            const sr = sb.getBoundingClientRect();
+            const dr = dash.getBoundingClientRect();
+            const mcs = getComputedStyle(main);
+            const overlapPx = Math.max(0, sr.right - dr.left);
+            return {
+                ok: overlapPx <= 1 && dr.left >= sr.right - 1,
+                dashLeft: dr.left,
+                sidebarRight: sr.right,
+                sidebarWidth: sr.width,
+                overlapPx,
+                mainPaddingLeft: mcs.paddingLeft,
+                dashWidth: dr.width,
+                innerWidth: window.innerWidth,
+            };
+        }"""
+    )
+
+
 def _rect_in_container(page, selector: str, *, container: str = ".dash") -> dict | None:
     return page.evaluate(
         """([sel, boxSel]) => {
@@ -398,3 +423,63 @@ def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
         rect = _rect_in_container(page, sel)
         assert rect and rect["inBox"], f"tile {i} outside .dash"
     assert tiles.first.locator(".dash-stats__label").inner_text() == "이상징후"
+
+
+@pytest.mark.spec("SPEC-UI-008", "AC-001")
+def test_dash_not_under_sidebar_1280x720(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector("#app-sidebar")
+    page.wait_for_selector(".dash")
+    m = _sidebar_inset_metrics(page)
+    assert m["ok"], m
+    assert m["overlapPx"] <= 1, m
+
+
+@pytest.mark.spec("SPEC-UI-008", "AC-002")
+def test_main_padding_left_desktop_1280x720(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector("main")
+    pl = page.eval_on_selector("main", "el => getComputedStyle(el).paddingLeft")
+    assert pl in ("256px", "16rem") or float(pl.replace("px", "")) >= 250, pl
+
+
+@pytest.mark.spec("SPEC-UI-008", "AC-003")
+def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-hero__title")
+    m = _sidebar_inset_metrics(page)
+    sw = m["sidebarWidth"]
+    title_left = page.eval_on_selector(".dash-hero__title", "el => el.getBoundingClientRect().left")
+    tile_left = page.eval_on_selector(
+        "#dash-zone-stats .dash-stats__tile:first-child",
+        "el => el.getBoundingClientRect().left",
+    )
+    assert title_left >= sw - 1, {"title_left": title_left, "sidebarWidth": sw}
+    assert tile_left >= sw - 1, {"tile_left": tile_left, "sidebarWidth": sw}
+    assert page.locator("#dash-zone-stats .dash-stats__tile:first-child .dash-stats__label").inner_text() == "이상징후"
+
+
+@pytest.mark.spec("SPEC-UI-008", "AC-004")
+def test_system_identity_right_of_sidebar(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-sys-row__icon")
+    sw = _sidebar_inset_metrics(page)["sidebarWidth"]
+    icon_left = page.eval_on_selector(".dash-sys-row__icon", "el => el.getBoundingClientRect().left")
+    name_left = page.eval_on_selector(".dash-sys-row__name", "el => el.getBoundingClientRect().left")
+    assert icon_left >= sw - 1
+    assert name_left >= sw - 1
+
+
+@pytest.mark.spec("SPEC-UI-008", "AC-005")
+def test_no_main_inset_mobile_390x844(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash")
+    pl = page.eval_on_selector("main", "el => getComputedStyle(el).paddingLeft")
+    assert pl == "0px", pl
+    dash_left = page.eval_on_selector(".dash", "el => el.getBoundingClientRect().left")
+    assert dash_left <= 1, dash_left
