@@ -427,7 +427,7 @@ e2eTester/
   pyproject.toml                   # ruff·pytest 설정
   README.md
   E2E_ARCHITECTURE.md
-  CLAUDE.md
+  AGENTS.md
 ```
 
 ## 5. 현재 계층별 역할

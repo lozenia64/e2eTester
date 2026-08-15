@@ -117,4 +117,4 @@ Run·Suite 이력과 cron 예약은 SQLite(`E2E_DB_PATH`, 기본 `data/e2etester
 | [E2E_ARCHITECTURE.md](../E2E_ARCHITECTURE.md) | 아키텍처·API·상태 모델 |
 | [CI.md](CI.md) | CI 게이트·로컬 검증 |
 | [otp_relay.md](otp_relay.md) | OTP SMS 중계기 |
-| [CLAUDE.md](../CLAUDE.md) | 코드베이스 작업 지침 (기여자·에이전트용) |
+| [AGENTS.md](../AGENTS.md) | 코드베이스 작업 지침 (기여자·에이전트용) |

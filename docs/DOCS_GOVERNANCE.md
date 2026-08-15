@@ -11,7 +11,7 @@
 - 종료 메일 본문 생성 방식이 `README.md`("Gemini가 HTML 생성")와 `E2E_ARCHITECTURE.md` §5.8("HTML은 고정 템플릿, Gemini는 콘텐츠 JSON만")에서 **상반되게** 기술됨.
 - `E2E_ARCHITECTURE.md` 의 폴더 트리가 실제 코드 구조와 어긋남(`access_common` 구성, `app/ai` 누락 파일).
 
-근본 원인은 **같은 사실이 `README.md`·`CLAUDE.md`·`E2E_ARCHITECTURE.md` 등 여러 문서에 중복 기술**되고, 이를 잡아낼 자동 장치가 없었다는 점이다.
+근본 원인은 **같은 사실이 `README.md`·`AGENTS.md`·`E2E_ARCHITECTURE.md` 등 여러 문서에 중복 기술**되고, 이를 잡아낼 자동 장치가 없었다는 점이다.
 
 ## 2. SSOT 매트릭스 (사실 영역별 소유 문서)
 
@@ -27,7 +27,7 @@
 | 설치·실행 방법, 선택 기능(AI/메일/예약) 사용법, 환경변수 카탈로그 | `docs/INSTALL.md` | 링크 참조 |
 | 환경변수 예시값 | `.env.example` | `docs/INSTALL.md` 가 의미·기본값 서술 |
 | OTP SMS 중계기 구성(안드로이드 측)·인입 엔드포인트 계약 상세 | `docs/otp_relay.md` | `docs/INSTALL.md` 는 서버 설정(환경변수)만 서술 + 링크 참조 |
-| 코드베이스 작업 지침(에이전트/기여자용 요약) | `CLAUDE.md` | 상세 사실은 위 소유 문서로 링크 |
+| 코드베이스 작업 지침(에이전트/기여자용 요약) | `AGENTS.md` | 상세 사실은 위 소유 문서로 링크 |
 | 런타임 기본값(모델 체인, 스케줄러 주기/TZ, 타임아웃 등) | **소스코드**(`app/...`) | 문서는 값이 아니라 출처(파일/상수)를 가리키거나 가드로 동기화 |
 | (역사 기록) 아키텍처 냉정 평가 스냅샷 | `docs/ARCHITECTURE_REVIEW_IDEAL.md` | **현재 상태의 근거로 인용 금지** — 시점 고정 평가 + 적용 현황 부록. 현재/목표 구조는 `E2E_ARCHITECTURE.md` 가 소유 |
 
