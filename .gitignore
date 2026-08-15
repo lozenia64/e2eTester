@@ -1,6 +1,6 @@
 # =============================================================================
 # e2eTester — 로컬·런타임 산출물은 추적하지 않는다.
-# 커밋 대상: 앱/워커 코드, tests/, docs/, .cursor/skills/, .env.example
+# 커밋 대상: 앱/워커 코드, tests/, docs/, .env.example
 # README "로컬 폴더" 표(data/, redis-data/, artifacts/)와 동기화 유지.
 # =============================================================================
 
@@ -44,11 +44,8 @@ dump.rdb
 .env.*.local
 !.env.example
 
-# --- Cursor: skills 는 커밋, 오케스트레이터 런타임·로컬 리포트는 제외 ---
-.cursor/orchestration/runs/
-.cursor/orchestration/loops/
-.cursor/gates-report.json
-.cursor/plans/
+# --- Cursor (로컬 IDE 설정 — 저장소에 포함하지 않음) ---
+.cursor/
 
 # --- Playwright / MCP 브라우저 프로브 ---
 .playwright-mcp/

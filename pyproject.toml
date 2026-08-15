@@ -45,7 +45,7 @@ testpaths = ["tests"]
 "app/contexts/insights/application/insights_charts.py" = ["C408"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "research", "artifacts", "data", ".cursor"]
+exclude_dirs = ["tests", "research", "artifacts", "data"]
 skips = ["B101"]  # assert in tests is fine; tests dir excluded anyway
 
 # 아키텍처 경계를 import 그래프로 강제(정규식 게이트 AG-002/003 을 계약으로 보강).

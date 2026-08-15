@@ -1,4 +1,4 @@
-"""CI gate SSOT — GitHub Actions, run_all_gates.py, e2e-orchestrator run_gates.py."""
+"""CI gate SSOT — GitHub Actions and scripts/ci/run_all_gates.py."""
 
 from __future__ import annotations
 
@@ -419,7 +419,7 @@ def extract_paths_from_markdown(text: str) -> list[str]:
     paths: list[str] = []
     for match in _PATH_IN_BACKTICKS.finditer(text):
         candidate = match.group(1).strip().replace("\\", "/")
-        if candidate.startswith(("app/", "docs/", "scripts/", "tests/", ".cursor/")):
+        if candidate.startswith(("app/", "docs/", "scripts/", "tests/")):
             paths.append(candidate)
     for match in _PATH_LIKE.finditer(text):
         candidate = match.group(1).strip().replace("\\", "/")
