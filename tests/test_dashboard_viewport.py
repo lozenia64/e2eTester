@@ -105,6 +105,26 @@ def _assert_no_scroll(page, selector: str) -> None:
     assert result["ok"], f"{selector}: {result}"
 
 
+def _wait_for_density_stable(page) -> None:
+    page.wait_for_function(
+        """() => {
+            const sys = document.querySelector('.dash__systems');
+            if (!sys || !sys.dataset.density) return false;
+            return sys.scrollHeight <= sys.clientHeight + 1;
+        }""",
+        timeout=20000,
+    )
+    page.wait_for_timeout(200)
+
+
+def _load_dashboard_1280x720(page, base_url: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{base_url}/")
+    page.wait_for_selector("#dash-zone-matrix[data-system-count='6']", timeout=15000)
+    page.wait_for_selector(".dash__systems")
+    _wait_for_density_stable(page)
+
+
 def _wait_for_server(host: str, port: int, *, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -305,9 +325,7 @@ def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
 
 @pytest.mark.spec("SPEC-UI-007", "AC-002")
 def test_dashboard_zone_c_fits_without_scroll(page, live_server: str) -> None:
-    page.set_viewport_size({"width": 1280, "height": 720})
-    page.goto(f"{live_server}/")
-    page.wait_for_selector(".dash__systems")
+    _load_dashboard_1280x720(page, live_server)
     _assert_no_scroll(page, ".dash__systems")
     doc = page.evaluate(
         "() => ({ sh: document.documentElement.scrollHeight, ih: window.innerHeight })"
@@ -317,9 +335,7 @@ def test_dashboard_zone_c_fits_without_scroll(page, live_server: str) -> None:
 
 @pytest.mark.spec("SPEC-UI-007", "AC-002")
 def test_zone_c_no_internal_scroll_1280x720(page, live_server: str) -> None:
-    page.set_viewport_size({"width": 1280, "height": 720})
-    page.goto(f"{live_server}/")
-    page.wait_for_selector(".dash__systems")
+    _load_dashboard_1280x720(page, live_server)
     _assert_no_scroll(page, ".dash__systems")
     has_scrollable = page.evaluate(
         "() => document.querySelector('.dash__systems')?.dataset.scrollable"
@@ -329,8 +345,7 @@ def test_zone_c_no_internal_scroll_1280x720(page, live_server: str) -> None:
 
 @pytest.mark.spec("SPEC-UI-007", "AC-003")
 def test_system_rows_equal_partition_1280x720(page, live_server: str) -> None:
-    page.set_viewport_size({"width": 1280, "height": 720})
-    page.goto(f"{live_server}/")
+    _load_dashboard_1280x720(page, live_server)
     page.wait_for_selector(".dash-sys-row")
     metrics = page.evaluate(
         """() => {

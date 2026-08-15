@@ -6,18 +6,35 @@
 
   const REFRESH_MS = 30000;
   const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const DENSITY_GAP_PX = 8;
   const $ = (sel, el = document) => el.querySelector(sel);
+
+  const TIER_ORDER = ["comfortable", "compact", "dense", "minimal", "micro"];
+  const TIER_MIN_H = {
+    comfortable: 92,
+    compact: 83,
+    dense: 70,
+    minimal: 56,
+    micro: 50,
+  };
 
   let densityObs = null;
   let densityTimer = null;
 
-  function computeDensityTierFromRowH(rowH) {
-    if (rowH >= 72) return "comfortable";
-    if (rowH >= 56) return "compact";
-    if (rowH >= 44) return "dense";
-    if (rowH >= 32) return "minimal";
+  function readContainerGapPx(container) {
+    const style = getComputedStyle(container);
+    return parseFloat(style.rowGap || style.gap) || 0;
+  }
+
+  function pickTierForRowH(rowH) {
+    for (const tier of TIER_ORDER) {
+      if (TIER_MIN_H[tier] <= rowH - 2) return tier;
+    }
     return "micro";
+  }
+
+  function tierIndex(tier) {
+    const idx = TIER_ORDER.indexOf(tier);
+    return idx >= 0 ? idx : TIER_ORDER.length - 1;
   }
 
   function syncKpiCompress() {
@@ -33,21 +50,50 @@
     strip.classList.toggle("dash-attention--compact", root.clientWidth < 400);
   }
 
-  function syncRowPartition(container, n) {
+  function syncRowPartition(container, n, gap) {
     const rows = container.querySelectorAll(".dash-sys-row");
     if (!rows.length) return;
 
-    const style = getComputedStyle(container);
-    const gap = parseFloat(style.rowGap || style.gap) || 0;
-    const rowClientH =
-      (container.clientHeight - gap * Math.max(0, n - 1)) / Math.max(n, 1);
+    const totalGap = gap * Math.max(0, n - 1);
+    const available = container.clientHeight - totalGap;
+    const base = Math.floor(available / Math.max(n, 1));
+    const remainder = available - base * n;
 
-    rows.forEach((row) => {
-      row.style.animation = "none";
-      row.style.transform = "none";
-      row.style.borderWidth = "0";
-      row.style.flex = `0 0 ${rowClientH}px`;
+    rows.forEach((row, index) => {
+      const rowH = base + (index < remainder ? 1 : 0);
+      row.style.flex = `0 0 ${rowH}px`;
     });
+  }
+
+  function applyDensityLayout(container, tier, n, gap) {
+    container.dataset.density = tier;
+    delete container.dataset.scrollable;
+    syncRowPartition(container, n, gap);
+  }
+
+  function containerFits(container) {
+    return container.scrollHeight <= container.clientHeight + 1;
+  }
+
+  function fitAndPartition(container, n) {
+    syncKpiCompress();
+    syncAttentionCompact();
+    void container.offsetHeight;
+
+    const gap = readContainerGapPx(container);
+    const rowH = (container.clientHeight - gap * Math.max(0, n - 1)) / Math.max(n, 1);
+    let tierIdx = tierIndex(pickTierForRowH(rowH));
+
+    applyDensityLayout(container, TIER_ORDER[tierIdx], n, gap);
+    void container.offsetHeight;
+
+    let retries = 0;
+    while (!containerFits(container) && tierIdx < TIER_ORDER.length - 1 && retries < 4) {
+      tierIdx += 1;
+      applyDensityLayout(container, TIER_ORDER[tierIdx], n, gap);
+      void container.offsetHeight;
+      retries += 1;
+    }
   }
 
   function updateDashboardDensity() {
@@ -58,14 +104,13 @@
       Number(container.dataset.systemCount) ||
       container.querySelectorAll(".dash-sys-row").length ||
       1;
-    const gap = DENSITY_GAP_PX * Math.max(0, n - 1);
-    const rowH = (container.clientHeight - gap) / Math.max(n, 1);
-    container.dataset.density = computeDensityTierFromRowH(rowH);
 
-    delete container.dataset.scrollable;
-    syncRowPartition(container, n);
-    syncKpiCompress();
-    syncAttentionCompact();
+    fitAndPartition(container, n);
+
+    requestAnimationFrame(() => {
+      fitAndPartition(container, n);
+      requestAnimationFrame(() => fitAndPartition(container, n));
+    });
   }
 
   function scheduleDensityUpdate() {
@@ -75,14 +120,16 @@
 
   function bindDensityObserver() {
     if (typeof ResizeObserver === "undefined") return;
-    const host = $("#dash-host-matrix", root);
-    if (!host) return;
+    const matrixHost = $("#dash-host-matrix", root);
+    const kpiHost = $("#dash-host-kpi", root);
+    if (!matrixHost) return;
 
     if (!densityObs) {
       densityObs = new ResizeObserver(() => scheduleDensityUpdate());
     }
     densityObs.disconnect();
-    densityObs.observe(host);
+    densityObs.observe(matrixHost);
+    if (kpiHost) densityObs.observe(kpiHost);
     updateDashboardDensity();
     scheduleDensityUpdate();
   }
@@ -133,8 +180,6 @@
 
     if (ev.target.id === "dash-host-kpi" || ev.target.closest("#dash-host-kpi")) {
       runHeroCountUp();
-      syncKpiCompress();
-      syncAttentionCompact();
       scheduleDensityUpdate();
     }
     if (ev.target.id === "dash-host-matrix" || ev.target.closest("#dash-host-matrix")) {
@@ -209,6 +254,4 @@
   bindDensityObserver();
   updateDashboardDensity();
   runHeroCountUp();
-  syncKpiCompress();
-  syncAttentionCompact();
 })();

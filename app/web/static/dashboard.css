@@ -705,6 +705,12 @@ body:has(.dash) main > div {
   border-radius: 0.375rem;
 }
 
+.dash__systems[data-density="dense"] .dash-sys-row__header,
+.dash__systems[data-density="minimal"] .dash-sys-row__header,
+.dash__systems[data-density="micro"] .dash-sys-row__header {
+  min-height: 1.75rem;
+}
+
 .dash__systems[data-density="dense"] .dash-mod__label {
   max-width: 6ch;
   overflow: hidden;
