@@ -283,7 +283,8 @@ def _load_dashboard_and_assert_no_scroll(page, base_url: str, width: int, height
 
 
 @pytest.mark.spec("SPEC-UI-004", "AC-001")
-@pytest.mark.spec("SPEC-UI-005", "AC-005")
+@pytest.mark.spec("SPEC-UI-007", "AC-001")
+@pytest.mark.spec("SPEC-UI-007", "AC-002")
 @pytest.mark.parametrize("width,height", VIEWPORTS_MOBILE)
 def test_dashboard_no_scroll_mobile(
     page,
@@ -295,14 +296,16 @@ def test_dashboard_no_scroll_mobile(
 
 
 @pytest.mark.spec("SPEC-UI-004", "AC-002")
-@pytest.mark.spec("SPEC-UI-005", "AC-005")
+@pytest.mark.spec("SPEC-UI-007", "AC-001")
+@pytest.mark.spec("SPEC-UI-007", "AC-002")
 def test_dashboard_no_scroll_1280x720(page, live_server: str) -> None:
     width, height = VIEWPORT_DESKTOP_720
     _load_dashboard_and_assert_no_scroll(page, live_server, width, height)
 
 
 @pytest.mark.spec("SPEC-UI-004", "AC-003")
-@pytest.mark.spec("SPEC-UI-005", "AC-005")
+@pytest.mark.spec("SPEC-UI-007", "AC-001")
+@pytest.mark.spec("SPEC-UI-007", "AC-002")
 def test_dashboard_no_scroll_1920x1080(page, live_server: str) -> None:
     width, height = VIEWPORT_DESKTOP_1080
     _load_dashboard_and_assert_no_scroll(page, live_server, width, height)
