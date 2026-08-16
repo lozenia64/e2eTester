@@ -153,43 +153,62 @@ row_h = (zoneC_clientHeight − gap × (N−1)) / N
 
 **구현:** `syncRowPartition`은 flex basis 적용 후 실측 `sum(clientHeight)+gaps`로 ±4px 보정 루프(최대 2회)를 수행한다. remainder는 앞쪽 행에 +1px 균등 분배(spread ≤ 2px). 시스템 카드 프레임은 레이아웃에 영향 없는 `inset box-shadow`로 그린다(`border`는 partition AC-003과 충돌).
 
-### 3.4 Density tier — row_h 기준 (SSOT)
+### 3.4 Density tier — content budget + row_h (SSOT)
 
-`ResizeObserver` → `#dash-zone-matrix`에 `data-density` 설정.
+`ResizeObserver` → `#dash-zone-matrix`(= `.dash__systems`)에 `data-density` 설정.
 
-**알고리즘 (`dashboard.js`):**
+**1단계 — row_h 계산 (tier 후보):**
 
 ```javascript
-const rowH = (container.clientHeight - gap * (n - 1)) / Math.max(n, 1);
-const tier = rowH >= 72 ? "comfortable"
-  : rowH >= 56 ? "compact"
-  : rowH >= 44 ? "dense"
-  : rowH >= 32 ? "minimal"
-  : "micro";
-container.dataset.density = tier;
+const gap = readContainerGapPx(container);
+const rowH = (container.clientHeight - gap * Math.max(0, n - 1)) / Math.max(n, 1);
 ```
 
-**`data-scrollable` / `dataset.scrollable` — 삭제.** fade `mask-image` — 삭제.
+**2단계 — 콘텐츠 예산으로 초기 tier (`pickTierForRowH`):**
 
-| tier | row_h | Zone C UI | Zone KPI 압축 |
-| --- | --- | --- | --- |
-| `comfortable` | ≥ 72px | segment bar + chip labels + header | 기본 |
-| `compact` | 56–71px | segment 3px, chip ellipsis 8ch | stats padding − |
-| `dense` | 44–55px | segment 숨김, chip 6ch | hero rate 축소 |
-| `minimal` | 32–43px | chips → dots, header 유지 | attention 1줄 compact |
-| `micro` | < 32px | dots only, meta 축소, CTA 텍스트 숨김(아이콘만) | hero title 1rem, stats min-h 40px |
+각 tier가 한 행에 필요로 하는 **최소 콘텐츠 높이(px)**:
 
-**UI-006 유지 (축소해도):**
+| tier | `TIER_MIN_H` |
+| --- | --- |
+| comfortable | 92 |
+| compact | 83 |
+| dense | 70 |
+| minimal | 56 |
+| micro | 50 |
 
-- 시스템명 `display:none` 금지
-- `dash-sys-row__header` flex 구조 유지
-- KPI 4타일 DOM 4개 유지
+```javascript
+const TIER_ORDER = ["comfortable", "compact", "dense", "minimal", "micro"];
+function pickTierForRowH(rowH) {
+  for (const tier of TIER_ORDER) {
+    if (TIER_MIN_H[tier] <= rowH - 2) return tier;
+  }
+  return "micro";
+}
+```
 
-**선택 숨김 (공간 확보, micro):**
+`rowH - 2`는 partition 반올림 여유(≤2px spread)이다.
 
-- `.dash-sys-row__segment` — `dense` 이하
-- `.dash-hero__summary` — `micro`에서만 숨김 (제목·메타는 유지)
-- `.dash-sys-row__cta` 글자 — `micro`에서 `점검`만 또는 아이콘 버튼
+**3단계 — overflow 시 tier 상향 (`containerFits` 루프):**
+
+```javascript
+function containerFits(container) {
+  return container.scrollHeight <= container.clientHeight + 1;
+}
+// fitAndPartition: applyDensityLayout 후 containerFits false이면
+// tierIdx += 1 (최대 4회) — 스크롤 대신 더 압축된 tier 적용
+```
+
+**4단계 — CSS tier 밴드 (표시·스타일 참조용):**
+
+| tier | 대표 row_h 밴드 | Zone C UI |
+| --- | --- | --- |
+| comfortable | ≥ 72px | segment + chip labels |
+| compact | 56–71px | segment 3px, chip ellipsis |
+| dense | 44–55px | segment 숨김 |
+| minimal | 32–43px | chips → dots |
+| micro | < 32px | dots only, summary 숨김 |
+
+> **참고:** 2단계 `TIER_MIN_H`가 4단계 row_h 밴드보다 **보수적**이다. 동일 row_h에서도 콘텐츠가 넘치면 3단계가 tier를 한 단계 더 내린다.
 
 ### 3.5 가로 수납
 
@@ -218,7 +237,7 @@ container.dataset.density = tier;
 
 공간 부족 시 순서:
 
-1. density tier 하향 (comfortable → micro)
+1. density tier 하향 — `pickTierForRowH(row_h)` + `containerFits` 상향 루프 (comfortable → micro)
 2. segment bar 숨김
 3. chip label → dots
 4. padding / font-size tier CSS
@@ -330,8 +349,8 @@ Then .dash__systems does not have data-scrollable="true"
 
 | ID | 요구사항 |
 | --- | --- |
-| NFR-001 | `dashboard.js` density 함수 단순화 (< row_h 기준 30줄) |
-| NFR-002 | `dashboard.css?v=4` cache bust |
+| NFR-001 | density 파이프라인(`fitAndPartition` + helpers) 단일 모듈 유지 — 임의 30줄 제한 폐기 |
+| NFR-002 | `dashboard.css?v=7`, `dashboard.js?v=22` cache bust (`dashboard.html`과 동기) |
 | NFR-003 | E2E: `.agents/skills/e2e-browser` — AC-002 육안·스냅샷으로 스크롤바 없음 확인 |
 | NFR-004 | `prefers-reduced-motion` 유지 |
 
@@ -383,3 +402,4 @@ return sys.scrollHeight <= sys.clientHeight + 1
 | 날짜 | 변경 | 작성자 |
 | --- | --- | --- |
 | 2026-08-15 | 초안 — 무스크롤 = 축소 수납 SSOT, UI-005/006 스크롤 폐기 | AI |
+| 2026-08-16 | §3.4 TIER_MIN_H + containerFits SSOT; AC-008 accent 이관 | AI |
