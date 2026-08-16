@@ -210,6 +210,16 @@ function containerFits(container) {
 
 > **참고:** 2단계 `TIER_MIN_H`가 4단계 row_h 밴드보다 **보수적**이다. 동일 row_h에서도 콘텐츠가 넘치면 3단계가 tier를 한 단계 더 내린다.
 
+**UI-006 유지 (축소해도):**
+- 시스템명 `display:none` 금지
+- `dash-sys-row__header` flex 구조 유지
+- KPI 4타일 DOM 4개 유지
+
+**선택 숨김 (공간 확보, micro):**
+- `.dash-sys-row__segment` — `dense` 이하
+- `.dash-hero__summary` — `micro`에서만 숨김
+- `.dash-sys-row__cta` 글자 — `micro`에서 아이콘 버튼
+
 ### 3.5 가로 수납
 
 - KPI 4타일: `grid-template-columns: repeat(4, minmax(0, 1fr))` (UI-006 유지)
@@ -360,7 +370,7 @@ Then .dash__systems does not have data-scrollable="true"
 
 | 유형 | 파일 | 내용 |
 | --- | --- | --- |
-| Playwright | `tests/test_dashboard_viewport.py` | AC-001~007 신규/갱신 |
+| Playwright | `tests/test_dashboard_viewport.py` | AC-001~008; `test_density_downgrades_on_resize_to_568` = AC-006 |
 | Fragment | `tests/test_dashboard_fragments_http.py` | 회귀 |
 | E2E 수동 | e2e-browser skill | 1280×720 실서버 — **스크롤바 없음** 체크리스트 |
 

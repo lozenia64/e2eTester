@@ -381,6 +381,46 @@ def test_no_data_scrollable_dataset(page, live_server: str, width: int, height: 
     )
 
 
+@pytest.mark.spec("SPEC-UI-007", "AC-006")
+def test_density_downgrades_on_resize_to_568(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector("#dash-zone-matrix[data-system-count='6']", timeout=15000)
+    _wait_for_density_stable(page)
+    density_tall = page.evaluate(
+        "() => document.querySelector('.dash__systems')?.dataset.density || ''"
+    )
+    # 6-system fixture: containerFits may already require micro at 1080p (plan risk note).
+    assert density_tall in ("comfortable", "compact", "dense", "minimal", "micro"), density_tall
+
+    page.set_viewport_size({"width": 1920, "height": 568})
+    page.wait_for_function(
+        """() => {
+            const d = document.querySelector('.dash__systems')?.dataset.density || '';
+            return ['dense', 'minimal', 'micro'].includes(d);
+        }""",
+        timeout=20000,
+    )
+    _wait_for_density_stable(page)
+
+    metrics = page.evaluate(
+        """() => {
+            const sys = document.querySelector('.dash__systems');
+            const de = document.documentElement;
+            return {
+                density: sys?.dataset.density || '',
+                docOk: de.scrollHeight <= window.innerHeight + 1,
+                zoneOk: sys && sys.scrollHeight <= sys.clientHeight + 1,
+                overflowY: sys ? getComputedStyle(sys).overflowY : '',
+            };
+        }"""
+    )
+    assert metrics["density"] in ("dense", "minimal", "micro"), metrics
+    assert metrics["docOk"], metrics
+    assert metrics["zoneOk"], metrics
+    assert metrics["overflowY"] == "hidden", metrics
+
+
 @pytest.mark.spec("SPEC-UI-005", "AC-003")
 def test_dashboard_system_name_min_font(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
