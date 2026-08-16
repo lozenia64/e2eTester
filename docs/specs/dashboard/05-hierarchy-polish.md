@@ -392,6 +392,11 @@ const tier = computeTierFromViewport(root.clientHeight, systemCount);
 | §3.4 `micro` attention 숨김 | 항상 1행 compact 표시 |
 | §3.4 `micro` system name 숨김 | **폐기** — 항상 표시 |
 | FR-004 공간 < 80px attention 숨김 | **폐기** → compact 1행 |
+| AC-005 Zone C `overflow-y: auto` | **폐기** → `SPEC-UI-007` AC-001·AC-002 |
+| AC-006 콘텐츠 기반 행 높이 88–120px | **폐기** → `SPEC-UI-007` AC-003 균등 분할 |
+| AC-009 `border-left-width: 3px` accent | **폐기** → `SPEC-UI-007` AC-008 inset box-shadow |
+| §3.4 `data-scrollable` + fade mask | **폐기** → `SPEC-UI-007` |
+| FR-004 Zone C 내부 스크롤 | **폐기** → `SPEC-UI-007` FR-001 |
 
 ---
 
@@ -439,6 +444,8 @@ Then "#dash-zone-stats .dash-stats__tile" count is 4
 
 ### AC-005: Zone C 내부 스크롤·문서 무스크롤 (P1)
 
+> **SUPERSEDED by `SPEC-UI-007` AC-001·AC-002** — Zone C 내부 스크롤·`data-scrollable` 폐기. 아래 Gherkin은 역사 기록용.
+
 ```gherkin
 Given viewport 1280×720 and 6 systems
 When dashboard loaded
@@ -450,6 +457,8 @@ Then ".dash__systems" dataset.scrollable is "true"
 ```
 
 ### AC-006: 카드 빈 공간 (P1)
+
+> **SUPERSEDED by `SPEC-UI-007` AC-003** — 균등 분할 모델로 대체. 아래 Gherkin은 역사 기록용.
 
 ```gherkin
 Given viewport 1920×1080 and 6 systems at comfortable tier
@@ -480,6 +489,8 @@ Then "#dash-zone-attention" is visible
 ```
 
 ### AC-009: 예외 accent (P2)
+
+> **SUPERSEDED by `SPEC-UI-007` AC-008** — `border-left` 대신 inset `box-shadow` accent. 아래 Gherkin은 역사 기록용.
 
 ```gherkin
 Given system with representative badge tone "error"
