@@ -421,6 +421,30 @@ def test_density_downgrades_on_resize_to_568(page, live_server: str) -> None:
     assert metrics["overflowY"] == "hidden", metrics
 
 
+@pytest.mark.spec("SPEC-UI-007", "AC-008")
+def test_attention_row_inset_accent_1280x720(page, live_server: str) -> None:
+    _load_dashboard_1280x720(page, live_server)
+    result = page.evaluate(
+        """() => {
+            const row = document.querySelector('.dash-sys-row[data-system-code="hom"]');
+            if (!row) return { ok: false, reason: 'no hom row' };
+            const cs = getComputedStyle(row);
+            const shadow = cs.boxShadow || '';
+            const borderLeft = cs.borderLeftWidth;
+            return {
+                ok: row.dataset.priority === 'attention'
+                    && shadow.includes('inset')
+                    && shadow.includes('3px')
+                    && (borderLeft === '0px' || cs.borderStyle === 'none'),
+                priority: row.dataset.priority,
+                boxShadow: shadow,
+                borderLeftWidth: borderLeft,
+            };
+        }"""
+    )
+    assert result["ok"], result
+
+
 @pytest.mark.spec("SPEC-UI-005", "AC-003")
 def test_dashboard_system_name_min_font(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})

@@ -346,6 +346,16 @@ Then data-density changes to dense, minimal, or micro
   And AC-001 and AC-002 still pass
 ```
 
+### AC-008: Attention accent inset (UI-005 AC-009 이관)
+
+```gherkin
+Given system with representative badge tone "error" (e.g. hom)
+When dashboard matrix loaded at 1280×720
+Then its ".dash-sys-row" has data-priority "attention"
+  And computed box-shadow contains "inset" and "3px"
+  And box-shadow does not use border-left for accent (border-width 0 or border none)
+```
+
 ### AC-007: No scrollable dataset
 
 ```gherkin

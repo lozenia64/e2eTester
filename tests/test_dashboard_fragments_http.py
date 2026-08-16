@@ -197,7 +197,7 @@ def test_matrix_fragment_renders_segment_and_chevron(client: TestClient) -> None
     assert "dash-mod__glyph" in html
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-009")
+@pytest.mark.spec("SPEC-UI-007", "AC-008")
 def test_matrix_fragment_error_system_has_attention_priority(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/matrix").text
     # hom has ERROR in _build_realistic_six_system_dashboard
