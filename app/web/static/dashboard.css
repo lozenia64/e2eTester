@@ -441,32 +441,44 @@ body:has(.dash) main > div {
   flex-direction: column;
   gap: 0.35rem;
   padding: clamp(0.35rem, 1cqh, 0.875rem) clamp(0.5rem, 1.5cqi, 1.25rem);
-  border: 1px solid var(--pl-border);
+  border: none;
   border-radius: clamp(0.625rem, 1.2cqh, 1rem);
   background: var(--pl-surface);
   overflow: hidden;
   cursor: pointer;
-  box-shadow: var(--pl-shadow-sm);
+  box-shadow: var(--pl-shadow-sm), inset 0 0 0 1px var(--pl-border);
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
   animation: dash-row-in 0.35s var(--ease-out) both;
 }
 
 .dash-sys-row[data-priority="attention"] {
-  border-left: 3px solid var(--st-error);
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-error);
   padding-left: calc(clamp(0.5rem, 1.5cqi, 1.25rem) - 3px);
 }
 
 .dash-sys-row[data-priority="attention"][data-accent-tone="anomaly"] {
-  border-left-color: var(--st-anomaly);
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-anomaly);
 }
 
 .dash-sys-row[data-priority="attention"][data-accent-tone="running"],
 .dash-sys-row[data-priority="attention"][data-accent-tone="waiting_input"] {
-  border-left-color: var(--st-running);
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-running);
 }
 
 .dash-sys-row[data-priority="attention"][data-accent-tone="blocked"] {
-  border-left-color: var(--st-blocked);
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-blocked);
 }
 
 .dash-sys-row__header {

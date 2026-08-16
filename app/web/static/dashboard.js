@@ -25,6 +25,38 @@
     return parseFloat(style.rowGap || style.gap) || 0;
   }
 
+  function measureFlexColumnGap(container, rows) {
+    const fallback = readContainerGapPx(container);
+    if (!rows.length) return fallback;
+    if (rows.length < 2) return fallback;
+    const first = rows[0];
+    const second = rows[1];
+    const measured = second.offsetTop - first.offsetTop - first.offsetHeight;
+    if (!Number.isFinite(measured) || measured < 0) return fallback;
+    return measured;
+  }
+
+  function measurePartitionSum(container, rows, gap) {
+    const heights = [...rows].map((row) => row.clientHeight);
+    const sum =
+      heights.reduce((acc, h) => acc + h, 0) +
+      gap * Math.max(0, heights.length - 1);
+    const containerH = container.clientHeight;
+    return { sum, container: containerH, delta: containerH - sum };
+  }
+
+  function distributeRowHeights(n, totalRowPixels) {
+    const count = Math.max(1, n);
+    const available = Math.max(0, Math.floor(totalRowPixels));
+    const base = Math.floor(available / count);
+    const remainder = available - base * count;
+    const heights = [];
+    for (let i = 0; i < count; i += 1) {
+      heights.push(base + (i < remainder ? 1 : 0));
+    }
+    return heights;
+  }
+
   function pickTierForRowH(rowH) {
     for (const tier of TIER_ORDER) {
       if (TIER_MIN_H[tier] <= rowH - 2) return tier;
@@ -50,19 +82,57 @@
     strip.classList.toggle("dash-attention--compact", root.clientWidth < 400);
   }
 
-  function syncRowPartition(container, n, gap) {
+  function applyRowFlexBasis(rows, heights) {
+    rows.forEach((row, index) => {
+      const h = heights[index] ?? heights[heights.length - 1] ?? 0;
+      row.style.flexGrow = "0";
+      row.style.flexShrink = "0";
+      row.style.flex = `0 0 ${h}px`;
+    });
+  }
+
+  function syncRowPartition(container, n, gapHint) {
     const rows = container.querySelectorAll(".dash-sys-row");
     if (!rows.length) return;
 
-    const totalGap = gap * Math.max(0, n - 1);
-    const available = container.clientHeight - totalGap;
-    const base = Math.floor(available / Math.max(n, 1));
-    const remainder = available - base * n;
+    const rowCount = Math.min(Math.max(1, n), rows.length);
+    const rowList = [...rows].slice(0, rowCount);
+    void container.offsetHeight;
 
-    rows.forEach((row, index) => {
-      const rowH = base + (index < remainder ? 1 : 0);
-      row.style.flex = `0 0 ${rowH}px`;
-    });
+    let gap = measureFlexColumnGap(container, rowList);
+    if (!Number.isFinite(gap) || gap < 0) {
+      gap = gapHint ?? readContainerGapPx(container);
+    }
+
+    const totalGap = gap * Math.max(0, rowCount - 1);
+    const available = Math.max(0, container.clientHeight - totalGap);
+    let heights = distributeRowHeights(rowCount, available);
+    applyRowFlexBasis(rowList, heights);
+    void container.offsetHeight;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      gap = measureFlexColumnGap(container, rowList);
+      const { delta } = measurePartitionSum(container, rowList, gap);
+      if (Math.abs(delta) <= 4) break;
+
+      if (delta > 0) {
+        const bump = Math.min(Math.floor(delta), rowCount);
+        heights = heights.map((h, i) => (i < bump ? h + 1 : h));
+        applyRowFlexBasis(rowList, heights);
+        void container.offsetHeight;
+        continue;
+      }
+
+      let excess = Math.min(Math.floor(-delta), rowCount);
+      for (let i = rowCount - 1; i >= 0 && excess > 0; i -= 1) {
+        if (heights[i] > 1) {
+          heights[i] -= 1;
+          excess -= 1;
+        }
+      }
+      applyRowFlexBasis(rowList, heights);
+      void container.offsetHeight;
+    }
   }
 
   function applyDensityLayout(container, tier, n, gap) {

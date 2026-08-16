@@ -151,6 +151,8 @@ row_h = (zoneC_clientHeight − gap × (N−1)) / N
 
 `N` = `data-system-count` (1~6).
 
+**구현:** `syncRowPartition`은 flex basis 적용 후 실측 `sum(clientHeight)+gaps`로 ±4px 보정 루프(최대 2회)를 수행한다. remainder는 앞쪽 행에 +1px 균등 분배(spread ≤ 2px). 시스템 카드 프레임은 레이아웃에 영향 없는 `inset box-shadow`로 그린다(`border`는 partition AC-003과 충돌).
+
 ### 3.4 Density tier — row_h 기준 (SSOT)
 
 `ResizeObserver` → `#dash-zone-matrix`에 `data-density` 설정.
