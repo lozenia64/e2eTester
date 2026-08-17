@@ -57,3 +57,22 @@ async def test_tier_zero_never_calls_recover_session():
 
     gateway = SimulatedExecutionGateway()
     assert gateway.recovery_calls == []
+
+
+async def test_composite_gateway_forwards_recover_session():
+    """합성 게이트웨이는 기본 False 를 쓰지 않고 모드별 어댑터로 되감기를 넘긴다."""
+    from app.execution.composite_gateway import CompositeExecutionGateway
+    from app.execution.simulated_gateway import SimulatedExecutionGateway
+
+    inner = SimulatedExecutionGateway()
+    gateway = CompositeExecutionGateway([inner])
+    handle = ExecutionHandle(execution_mode="simulated", session_id="s1")
+
+    recovered = await gateway.recover_session(
+        handle, RecoveryTier.RESET_TO_MODULE_ENTRY, "https://example.com/entry"
+    )
+
+    assert recovered is True
+    assert inner.recovery_calls == [
+        (RecoveryTier.RESET_TO_MODULE_ENTRY, "https://example.com/entry")
+    ]
