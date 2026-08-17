@@ -1,37 +1,11 @@
-{# Zone B — Cytoscape.js 라이브 파이프라인 매트릭스 #}
-<div id="dash-zone-matrix" class="dash-matrix-bento">
+{# Zone C — Premium Light system card list #}
+{% from "dashboard/partials/_macros.html" import system_row %}
+<div id="dash-zone-matrix" class="dash__systems" data-system-count="{{ data.systems|length }}">
   {% if not data.systems %}
-  <p class="py-10 text-center text-sm text-gray-500">표시할 시스템이 없습니다.</p>
+  <p class="dash__empty">표시할 시스템이 없습니다.</p>
   {% else %}
-  {% set t = data.totals %}
-
-  <header class="dash-matrix-bento__head">
-    <div>
-      <h2 class="dash-matrix-bento__title">점검 현황 매트릭스</h2>
-      <p class="dash-matrix-bento__sub">{{ t.systems }}개 시스템 · {{ t.modules }}개 모듈 · Cytoscape 라이브 파이프라인</p>
-    </div>
-    <div class="dash-matrix-bento__stats">
-      <div class="dash-matrix-stat" data-tone="passed">
-        <span class="dash-matrix-stat__val">{{ t.passed }}</span>
-        <span class="dash-matrix-stat__lbl">정상</span>
-      </div>
-      <div class="dash-matrix-stat" data-tone="anomaly">
-        <span class="dash-matrix-stat__val">{{ t.anomaly }}</span>
-        <span class="dash-matrix-stat__lbl">이상</span>
-      </div>
-      <div class="dash-matrix-stat" data-tone="error">
-        <span class="dash-matrix-stat__val">{{ t.error }}</span>
-        <span class="dash-matrix-stat__lbl">실패</span>
-      </div>
-      <div class="dash-matrix-stat" data-tone="idle">
-        <span class="dash-matrix-stat__val">{{ t.not_inspected }}</span>
-        <span class="dash-matrix-stat__lbl">미점검</span>
-      </div>
-    </div>
-    <a href="/runs/execute" class="dash-matrix-bento__cta">점검 실행 →</a>
-  </header>
-
-  <div id="dash-matrix-chart" class="dash-matrix-chart" role="region" aria-label="시스템별 모듈 점검 워크플로 그래프"></div>
-  <script type="application/json" id="dash-matrix-payload">{{ {"systems": data.systems} | tojson }}</script>
+  {% for sys in data.systems %}
+  {{ system_row(sys) }}
+  {% endfor %}
   {% endif %}
 </div>

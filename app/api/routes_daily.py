@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from app.api.dependencies import get_daily_queries
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
+from app.contexts.insights.application.daily_dashboard import system_summary_badge
 
 if TYPE_CHECKING:
     from app.orchestrator.queries import DailyDashboardQueries
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 templates = Jinja2Templates(directory="app/web/templates")
+templates.env.globals["system_summary_badge"] = system_summary_badge
 
 _FRAGMENT_TEMPLATES = {
     "kpi": "dashboard/partials/zone_a_kpi.html",

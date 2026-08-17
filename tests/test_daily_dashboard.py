@@ -7,11 +7,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.contexts.insights.application.daily_dashboard import (
     build_attention_items,
     build_daily_dashboard,
     sort_systems_attention_first,
     system_attention_rank,
+    system_summary_badge,
 )
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
@@ -179,3 +182,53 @@ def test_system_attention_rank_and_sort_helpers():
     assert sorted_codes == ["bad", "ok"]
     items = build_attention_items(views)
     assert items[0]["system_code"] == "bad"
+
+
+@pytest.mark.spec("SPEC-UI-004", "AC-006")
+def test_system_summary_badge_error_wins():
+    view = {
+        "counts": {"error": 1, "anomaly": 2, "running": 1, "other": 0, "not_inspected": 0, "passed": 0},
+        "module_total": 4,
+    }
+    badge = system_summary_badge(view)
+    assert badge == {"label": "점검실패", "tone": "error"}
+
+
+@pytest.mark.spec("SPEC-UI-004", "AC-006")
+def test_system_summary_badge_all_passed():
+    view = {
+        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0, "passed": 4},
+        "module_total": 4,
+    }
+    badge = system_summary_badge(view)
+    assert badge == {"label": "정상", "tone": "passed"}
+
+
+@pytest.mark.spec("SPEC-UI-004", "AC-006")
+def test_system_summary_badge_anomaly_wins_over_running():
+    view = {
+        "counts": {"error": 0, "anomaly": 1, "running": 2, "other": 0, "not_inspected": 0, "passed": 1},
+        "module_total": 4,
+    }
+    badge = system_summary_badge(view)
+    assert badge == {"label": "이상징후", "tone": "anomaly"}
+
+
+@pytest.mark.spec("SPEC-UI-004", "AC-006")
+def test_system_summary_badge_not_inspected_when_uninspected_modules():
+    view = {
+        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 2, "passed": 1},
+        "module_total": 3,
+    }
+    badge = system_summary_badge(view)
+    assert badge == {"label": "미점검", "tone": "not_inspected"}
+
+
+@pytest.mark.spec("SPEC-UI-004", "AC-006")
+def test_system_summary_badge_not_inspected_when_zero_modules():
+    view = {
+        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0, "passed": 0},
+        "module_total": 0,
+    }
+    badge = system_summary_badge(view)
+    assert badge == {"label": "미점검", "tone": "not_inspected"}

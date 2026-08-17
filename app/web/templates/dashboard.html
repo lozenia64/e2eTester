@@ -3,428 +3,44 @@
 {% block title %}일간 점검 대시보드{% endblock %}
 
 {% block content %}
-<style>
-  /* ── Viewport-fit shell (dashboard only) ── */
-  body:has(.dash) {
-    background:
-      radial-gradient(ellipse 70% 45% at 8% -5%, rgba(99, 102, 241, 0.09), transparent 55%),
-      radial-gradient(ellipse 55% 40% at 95% 0%, rgba(16, 185, 129, 0.07), transparent 50%),
-      #f8fafc;
-  }
-  body:has(.dash) main > div {
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100dvh - 3.25rem);
-    padding-top: clamp(0.75rem, 2vh, 1.5rem);
-    padding-bottom: clamp(0.5rem, 1vh, 1rem);
-    gap: 0;
-  }
-  @media (min-width: 768px) {
-    body:has(.dash) main > div { min-height: 100dvh; padding-top: clamp(1rem, 2vh, 2rem); }
-  }
-
-  .dash {
-    --st-passed: #10b981;
-    --st-anomaly: #f59e0b;
-    --st-error: #ef4444;
-    --st-running: #3b82f6;
-    --st-blocked: #f97316;
-    --st-idle: #94a3b8;
-    --st-track: #e2e8f0;
-    --ease-spring: cubic-bezier(.22, 1, .36, 1);
-    --matrix-radius: 1rem;
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    gap: clamp(0.375rem, 1.2vh, 0.875rem);
-  }
-  .dash-tone-passed { color: var(--st-passed); }
-  .dash-tone-anomaly { color: var(--st-anomaly); }
-  .dash-tone-error { color: var(--st-error); }
-  .dash-tone-running { color: var(--st-running); }
-  .dash-tone-not_inspected { color: var(--st-idle); }
-  .dash-kpi__value { font-variant-numeric: tabular-nums; }
-
-  .dash__top { flex-shrink: 0; }
-  .dash__top h1 { font-size: clamp(1.125rem, 2.5vw, 1.5rem); }
-  .dash__hosts { flex-shrink: 0; }
-  .dash-host-matrix {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* KPI strip — glass bento */
-  .dash-kpi-strip__inner {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.625rem 1rem;
-    border-radius: calc(var(--matrix-radius) + 2px);
-    border: 1px solid rgb(255 255 255 / 0.65);
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.88) 0%, rgb(248 250 252 / 0.72) 100%);
-    backdrop-filter: blur(14px);
-    padding: clamp(0.625rem, 1.4vh, 0.875rem) clamp(0.875rem, 2vw, 1.125rem);
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.8) inset,
-      0 8px 32px -12px rgb(79 70 229 / 0.18);
-  }
-  .dash-kpi-strip__hero {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-    padding-right: 0.875rem;
-    border-right: 1px solid rgb(148 163 184 / 0.25);
-  }
-  .dash-kpi-strip__rate {
-    font-size: clamp(1.25rem, 2.8vw, 1.75rem);
-    font-weight: 900;
-    line-height: 1;
-    background: linear-gradient(135deg, #312e81 0%, #4f46e5 55%, #10b981 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  .dash-kpi-strip__tile { display: flex; flex-direction: column; gap: 0.0625rem; }
-  .dash-kpi-strip__meta { margin-left: auto; text-align: right; font-size: 0.625rem; }
-
-  .dash-legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.625rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: #64748b;
-    flex-shrink: 0;
-  }
-  .dash-legend__pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: 9999px;
-    background: rgb(255 255 255 / 0.7);
-    border: 1px solid rgb(226 232 240 / 0.9);
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
-  }
-  .dash-legend__dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
-    box-shadow: 0 0 0 2px rgb(255 255 255 / 0.9);
-  }
-
-  /* Matrix bento — layered glass card */
-  .dash-matrix-bento {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    container-type: size;
-    container-name: dash-matrix;
-    border-radius: 1.25rem;
-    border: 1px solid rgb(255 255 255 / 0.55);
-    background: linear-gradient(165deg, rgb(255 255 255 / 0.92) 0%, rgb(248 250 252 / 0.78) 45%, rgb(238 242 255 / 0.65) 100%);
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.9) inset,
-      0 20px 50px -24px rgb(79 70 229 / 0.28);
-    overflow: hidden;
-    backdrop-filter: blur(10px);
-  }
-  .dash-matrix-bento__head {
-    flex-shrink: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.625rem 0.875rem;
-    padding: clamp(0.625rem, 1.6cqh, 1rem) clamp(0.875rem, 2.2cqi, 1.25rem);
-    border-bottom: 1px solid rgb(148 163 184 / 0.18);
-    background: rgb(255 255 255 / 0.55);
-    backdrop-filter: blur(12px);
-  }
-  .dash-matrix-bento__title {
-    font-size: 0.9375rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: #0f172a;
-  }
-  .dash-matrix-bento__sub {
-    margin-top: 0.125rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: #64748b;
-  }
-  .dash-matrix-bento__stats {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    margin-left: auto;
-  }
-  .dash-matrix-stat {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    border-radius: 9999px;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    background: rgb(255 255 255 / 0.85);
-    border: 1px solid rgb(226 232 240 / 0.95);
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
-  }
-  .dash-matrix-stat__val { font-variant-numeric: tabular-nums; font-weight: 800; }
-  .dash-matrix-stat[data-tone="passed"] .dash-matrix-stat__val { color: var(--st-passed); }
-  .dash-matrix-stat[data-tone="anomaly"] .dash-matrix-stat__val { color: var(--st-anomaly); }
-  .dash-matrix-stat[data-tone="error"] .dash-matrix-stat__val { color: var(--st-error); }
-  .dash-matrix-stat[data-tone="idle"] .dash-matrix-stat__val { color: var(--st-idle); }
-  .dash-matrix-stat__lbl { color: #9ca3af; }
-  .dash-matrix-bento__cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.35rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.6875rem;
-    font-weight: 800;
-    color: #fff;
-    text-decoration: none;
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-    box-shadow: 0 4px 14px -4px rgb(79 70 229 / 0.55);
-    transition: transform 0.15s var(--ease-spring), box-shadow 0.15s;
-  }
-  .dash-matrix-bento__cta:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px -4px rgb(79 70 229 / 0.6);
-  }
-
-  /* Cytoscape 파이프라인 캔버스 — React Flow 스타일 dot grid */
-  .dash-matrix-chart {
-    flex: 1 1 auto;
-    min-height: 0;
-    width: 100%;
-    position: relative;
-    background-color: #f8fafc;
-    background-image: radial-gradient(circle, rgb(148 163 184 / 0.35) 1px, transparent 1px);
-    background-size: 22px 22px;
-    background-position: 0 0;
-  }
-
-  /* HTML 노드 오버레이 (cytoscape-node-html-label) */
-  .dash-cy-html { pointer-events: all; }
-
-  .dash-flow-sys {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    box-sizing: border-box;
-    padding: 0.5rem 0.6rem;
-    border-radius: 0.75rem;
-    border: 1.5px solid var(--accent, #94a3b8);
-    background: rgb(255 255 255 / 0.82);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 18px -8px rgb(15 23 42 / 0.2);
-    cursor: pointer;
-    transition: transform 0.15s var(--ease-spring), box-shadow 0.15s;
-  }
-  .dash-flow-sys:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px -10px rgb(79 70 229 / 0.35);
-  }
-  .dash-flow-sys__ring {
-    flex-shrink: 0;
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 9999px;
-    font-size: 0.5625rem;
-    font-weight: 900;
-    color: var(--accent);
-    background: rgb(255 255 255 / 0.9);
-    border: 2px solid var(--accent);
-    font-variant-numeric: tabular-nums;
-  }
-  .dash-flow-sys__name {
-    font-size: 0.6875rem;
-    font-weight: 800;
-    line-height: 1.25;
-    color: #0f172a;
-    letter-spacing: -0.02em;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-  }
-
-  .dash-flow-node {
-    display: block;
-    box-sizing: border-box;
-    cursor: default;
-    filter: drop-shadow(0 4px 12px rgb(15 23 42 / 0.08));
-    transition: transform 0.15s var(--ease-spring), filter 0.15s;
-  }
-  .dash-flow-node[title*="Run 상세"] { cursor: pointer; }
-  .dash-flow-node[title*="Run 상세"]:hover {
-    transform: translateY(-2px) scale(1.03);
-    filter: drop-shadow(0 8px 20px rgb(15 23 42 / 0.14));
-  }
-  .dash-flow-node__body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-width: 0;
-    padding: 0.45rem 0.5rem;
-    border-radius: 0.625rem;
-    border: 1.5px solid var(--node, #94a3b8);
-    background: linear-gradient(145deg, rgb(255 255 255 / 0.95), rgb(248 250 252 / 0.88));
-    backdrop-filter: blur(8px);
-    text-align: center;
-  }
-  .dash-flow-node__label {
-    font-size: 0.6875rem;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    line-height: 1.25;
-    word-break: keep-all;
-    text-align: center;
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .dash-flow-node.is-wrap .dash-flow-node__label {
-    white-space: normal;
-    text-align: center;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-    width: 100%;
-  }
-  .dash-flow-node.is-idle .dash-flow-node__body {
-    border-style: dashed;
-    border-color: #cbd5e1;
-    background: rgb(255 255 255 / 0.65);
-  }
-  .dash-flow-node.is-idle .dash-flow-node__label { color: #64748b; }
-  .dash-flow-node:not(.is-idle) .dash-flow-node__body {
-    border-color: var(--node);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--node) 12%, #fff), #fff);
-  }
-  .dash-flow-node.is-live .dash-flow-node__body {
-    animation: dash-flow-pulse 1.6s ease-in-out infinite;
-  }
-
-  @keyframes dash-flow-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--node) 35%, transparent); }
-    50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--node) 8%, transparent); }
-  }
-
-  .dash-host-matrix > * {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .dash-panel-dot {
-    display: inline-block;
-    width: 0.625rem;
-    height: 0.625rem;
-    border-radius: 9999px;
-  }
-  .dash-panel-dot[data-tone="passed"] { background: var(--st-passed); }
-  .dash-panel-dot[data-tone="anomaly"] { background: var(--st-anomaly); }
-  .dash-panel-dot[data-tone="error"] { background: var(--st-error); }
-  .dash-panel-dot[data-tone="running"],
-  .dash-panel-dot[data-tone="waiting_input"] { background: var(--st-running); }
-  .dash-panel-dot[data-tone="blocked"],
-  .dash-panel-dot[data-tone="cancelled"],
-  .dash-panel-dot[data-tone="skipped"] { background: var(--st-blocked); }
-  .dash-panel-dot[data-tone="not_inspected"],
-  .dash-panel-dot[data-tone="pending"] { background: var(--st-idle); }
-
-  .dash-drawer {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    display: flex;
-    justify-content: flex-end;
-    background: rgb(15 23 42 / 0.35);
-    backdrop-filter: blur(2px);
-  }
-  .dash-drawer__panel {
-    width: min(24rem, 100vw);
-    height: 100%;
-    overflow-y: auto;
-    background: rgb(255 255 255 / 0.92);
-    backdrop-filter: blur(16px);
-    padding: 1.25rem;
-    box-shadow: -12px 0 40px rgb(15 23 42 / 0.14);
-    border-left: 1px solid rgb(255 255 255 / 0.6);
-  }
-
-  .dash-htmx-indicator.htmx-request { opacity: 1; }
-  .dash-htmx-indicator { opacity: 0; transition: opacity 0.2s; }
-  [x-cloak] { display: none !important; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dash-flow-node.is-live .dash-flow-node__body { animation: none; }
-  }
-</style>
+<link rel="stylesheet" href="/static/dashboard.css?v=7">
 
 <div class="dash"
      x-data="{ drawerOpen: false }"
      @dash-close-drawer.window="drawerOpen = false"
      @dash-open-drawer.window="drawerOpen = true">
 
-  <div class="dash__top flex flex-wrap items-end justify-between gap-2">
-    <div>
-      <p class="text-[10px] font-semibold uppercase tracking-wider text-indigo-600">Daily Inspection</p>
-      <h1 class="mt-0.5 font-bold tracking-tight text-gray-900">일간 점검 현황</h1>
-    </div>
-    <div class="flex items-center gap-2">
-      <span id="dash-date" class="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm"></span>
-      <button id="dash-refresh" type="button"
-              class="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm hover:bg-white">
-        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        새로고침
-      </button>
-      <span id="dash-htmx-busy" class="dash-htmx-indicator text-[10px] text-indigo-500">갱신…</span>
-    </div>
-  </div>
-
-  <div class="dash__hosts">
-    <div id="dash-host-kpi"
-         hx-get="/api/dashboard/daily/fragments/kpi"
-         hx-trigger="load, dash-refresh from:body"
-         hx-indicator="#dash-htmx-busy"
-         hx-swap="innerHTML">
-      <div class="h-10 animate-pulse rounded-xl bg-gray-100"></div>
+  <div id="dash-host-kpi"
+       hx-get="/api/dashboard/daily/fragments/kpi"
+       hx-trigger="load, dash-refresh from:body"
+       hx-indicator="#dash-htmx-busy"
+       hx-swap="innerHTML">
+    <div class="dash-hero" aria-hidden="true">
+      <div class="dash-hero__top">
+        <div class="dash-hero__text">
+          <h1 class="dash-hero__title">오늘의 점검 현황</h1>
+          <p class="dash-hero__meta">&nbsp;</p>
+        </div>
+        <div class="dash-hero__aside">
+          <div class="dash-hero__rate-block">&nbsp;</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="dash-legend">
-    <span class="dash-legend__pill"><span class="dash-legend__dot" style="background:var(--st-passed)"></span>정상</span>
-    <span class="dash-legend__pill"><span class="dash-legend__dot" style="background:var(--st-anomaly)"></span>이상징후</span>
-    <span class="dash-legend__pill"><span class="dash-legend__dot" style="background:var(--st-error)"></span>점검실패</span>
-    <span class="dash-legend__pill"><span class="dash-legend__dot" style="background:var(--st-running)"></span>진행 중</span>
-    <span class="dash-legend__pill"><span class="dash-legend__dot" style="background:var(--st-idle)"></span>미점검</span>
-  </div>
-
-  <div id="dash-host-matrix" class="dash-host-matrix"
+  <div id="dash-host-matrix"
+       class="dash-host-matrix"
        hx-get="/api/dashboard/daily/fragments/matrix"
        hx-trigger="load, dash-refresh from:body"
        hx-indicator="#dash-htmx-busy"
        hx-swap="innerHTML">
-    <div class="flex-1 animate-pulse rounded-2xl bg-gray-100 min-h-[12rem]"></div>
+    <div class="dash__systems" aria-hidden="true">
+      <div class="dash-sys-row" style="opacity:0.4"></div>
+    </div>
   </div>
 
-  <div id="dash-error" class="hidden shrink-0 rounded-xl border border-red-100 bg-red-50 p-4 text-center">
-    <p class="text-sm font-semibold text-red-700">점검 현황을 불러오지 못했습니다.</p>
+  <div id="dash-error" class="hidden">
+    <p>점검 현황을 불러오지 못했습니다.</p>
   </div>
 
   <div class="dash-drawer" x-show="drawerOpen" x-cloak @click.self="drawerOpen = false">
@@ -436,7 +52,5 @@
 {% block scripts %}
 <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
 <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/cytoscape-node-html-label@1.2.2/dist/cytoscape-node-html-label.js" defer></script>
-<script src="/static/dashboard.js?v=13" defer></script>
+<script src="/static/dashboard.js?v=22" defer></script>
 {% endblock %}

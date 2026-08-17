@@ -86,6 +86,11 @@
 | ID | 파일 | 요약 |
 | --- | --- | --- |
 | SPEC-UI-001 | [dashboard/01-daily-dashboard.md](dashboard/01-daily-dashboard.md) | 일간 점검 현황 (랜딩) |
+| SPEC-UI-004 | [dashboard/04-premium-light-redesign.md](dashboard/04-premium-light-redesign.md) | 일간 대시보드 Premium Light 리디자인 |
+| SPEC-UI-005 | [dashboard/05-hierarchy-polish.md](dashboard/05-hierarchy-polish.md) | 일간 대시보드 정보 위계·가독성 폴리시 (P0–P2) |
+| SPEC-UI-006 | [dashboard/06-visibility-hotfix.md](dashboard/06-visibility-hotfix.md) | 일간 대시보드 가시성 핫픽스 (히어로·Identity·KPI) |
+| SPEC-UI-007 | [dashboard/07-viewport-fit-no-scroll.md](dashboard/07-viewport-fit-no-scroll.md) | 무스크롤 = 축소 수납 (Viewport-Fit SSOT) |
+| SPEC-UI-008 | [dashboard/08-sidebar-shell-inset.md](dashboard/08-sidebar-shell-inset.md) | 사이드바 셸 인셋 — 본문 가림 교정 |
 | SPEC-UI-002 | [dashboard/02-execute-page.md](dashboard/02-execute-page.md) | 점검 실행·SUITE 카드 |
 | SPEC-UI-003 | [dashboard/03-run-suite-views.md](dashboard/03-run-suite-views.md) | Run/Suite 상세·이력·관리자 |
 
