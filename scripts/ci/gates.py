@@ -131,7 +131,7 @@ STANDARD_GATES: list[str] = [
 SECURITY_GATES: list[str] = ["pip_audit", "bandit_security"]
 
 # CI 는 pytest 대신 coverage 를 쓴다 — coverage 가 pytest --cov 를 한 번 실행해
-# 테스트 실행과 커버리지 측정을 겸하므로, 둘을 함께 넣으면 621개 테스트가 두 번 돈다.
+# 테스트 실행과 커버리지 측정을 겸하므로, 둘을 함께 넣으면 636개 테스트가 두 번 돈다.
 # 로컬 STANDARD_GATES 는 빠른 pytest 를 유지한다(측정 시 136초 vs 116초).
 CI_STANDARD_GATES: list[str] = [name for name in STANDARD_GATES if name != "pytest"] + ["coverage"]
 
