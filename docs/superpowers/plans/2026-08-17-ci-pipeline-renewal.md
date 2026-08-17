@@ -164,7 +164,7 @@ DOCS_ONLY_PATHS: list[str] = [
 `STANDARD_GATES` 리스트의 맨 앞(`"docs_consistency",` 앞)에 추가:
 
 ```python
-    "ci_config_valid",
+("ci_config_valid",)
 ```
 
 `PROFILE_GATES` 의 `"docs_only"` 항목을 교체:
@@ -215,7 +215,10 @@ def validate_ci_config(workspace: Path) -> list[str]:
     root = str(workspace)
 
     # 1) 경로 글롭이 최소 1개 실파일에 매칭되는가
-    for label, patterns in (("SECURITY_PATHS", SECURITY_PATHS), ("DOCS_ONLY_PATHS", DOCS_ONLY_PATHS)):
+    for label, patterns in (
+        ("SECURITY_PATHS", SECURITY_PATHS),
+        ("DOCS_ONLY_PATHS", DOCS_ONLY_PATHS),
+    ):
         for pattern in patterns:
             if not _glob.glob(pattern, root_dir=root, recursive=True):
                 problems.append(f"{label} 글롭이 아무 파일에도 매칭되지 않음: `{pattern}`")
@@ -526,9 +529,7 @@ skip_covered = false
 # CI 는 pytest 대신 coverage 를 쓴다 — coverage 가 pytest --cov 를 한 번 실행해
 # 테스트 실행과 커버리지 측정을 겸하므로, 둘을 함께 넣으면 621개 테스트가 두 번 돈다.
 # 로컬 STANDARD_GATES 는 빠른 pytest 를 유지한다(측정 시 136초 vs 116초).
-CI_STANDARD_GATES: list[str] = [
-    name for name in STANDARD_GATES if name != "pytest"
-] + ["coverage"]
+CI_STANDARD_GATES: list[str] = [name for name in STANDARD_GATES if name != "pytest"] + ["coverage"]
 ```
 
 - [ ] **Step 5: 게이트가 도는지 확인한다**
@@ -601,9 +602,7 @@ def test_code_change_runs_full_gates():
 
 
 def test_security_path_adds_security_gates():
-    gates = resolve_ci_gates(
-        ["app/platform/security/input_crypto.py"], event_name="pull_request"
-    )
+    gates = resolve_ci_gates(["app/platform/security/input_crypto.py"], event_name="pull_request")
     assert "pip_audit" in gates
     assert "bandit_security" in gates
 
