@@ -1,7 +1,7 @@
 # =============================================================================
 # e2eTester — 로컬·런타임 산출물은 추적하지 않는다.
-# 커밋 대상: 앱/워커 코드, tests/, docs/, .env.example
-# README "로컬 폴더" 표(data/, redis-data/, artifacts/)와 동기화 유지.
+# 커밋 대상: 앱/워커 코드, tests/, docs/, scripts/, research/, .env.example
+# 로컬 폴더(data/, redis-data/, artifacts/) 설명은 docs/INSTALL.md 와 동기화 유지.
 # =============================================================================
 
 # --- Python ---
@@ -39,10 +39,18 @@ dump.rdb
 *.db-shm
 
 # --- 비밀·로컬 환경 ---
+# .env.example 하나만 허용하고 나머지 .env* 는 전부 차단한다.
+# (구 규칙은 .env / .env.local / .env.*.local 만 막아 .env.production 같은
+#  파일이 추적 대상으로 남았다 — E2E_JWT_SECRET·앱 비밀번호가 들어가는 파일이다.)
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+
+# 키·인증서 자료는 저장소에 두지 않는다.
+*.pem
+*.key
+*.pfx
+*.p12
 
 # --- Cursor (로컬 IDE 설정 — 저장소에 포함하지 않음) ---
 .cursor/
@@ -51,6 +59,15 @@ dump.rdb
 .playwright-mcp/
 playwright-report/
 test-results/
+
+# --- 로그 ---
+# Run 별 execution.log 는 artifacts/ 아래라 이미 제외됨. 여기서는 루트에 떨어지는
+# 임시 로그(scripts/run_local.py, worker 수동 실행 등)를 막는다.
+*.log
+logs/
+# research/ 는 프로브 기록을 증거로 커밋해 온 폴더라 예외로 둔다
+# (예: research/hwtc/mcp_probe.log — 이미 추적 중).
+!research/**/*.log
 
 # --- OS / 에디터 ---
 .DS_Store
@@ -61,5 +78,14 @@ desktop.ini
 *.swp
 *~
 
-# --- 기타 AI 어시스턴트 로컬 상태 ---
+# 병합·편집 잔여물
+*.orig
+*.rej
+*.bak
+*.tmp
+
+# --- AI 어시스턴트 로컬 상태 ---
+# 추적하는 쪽: .agents/(공유 스킬 정의), AGENTS.md.
+# 무시하는 쪽: 아래 도구별 로컬 세션·산출물 디렉터리.
 .claude/
+.superpowers/
