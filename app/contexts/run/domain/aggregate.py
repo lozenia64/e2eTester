@@ -15,6 +15,7 @@ from app.contexts.run.domain.events import (
     RunEventRecord,
     RunFinished,
     RunModuleBlocked,
+    RunModuleRecovered,
     RunModuleRetried,
     RunModulesCancelled,
     RunPartialRerunStarted,
@@ -23,7 +24,7 @@ from app.contexts.run.domain.events import (
     RunStarted,
     RunWaitingInput,
 )
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.snapshots import RunSnapshot
@@ -309,7 +310,12 @@ class RunAggregate:
         module.duration_ms = self._duration_ms(module)
         self._emit_module_completed(module)
 
-    def record_retry(self, module: RunModule) -> None:
+    def record_retry(
+        self,
+        module: RunModule,
+        tier: RecoveryTier | None = None,
+        failure_signal: FailureSignal | None = None,
+    ) -> None:
         """정책상 재시도 — attempt 를 올리고 모듈을 다시 큐잉한다."""
         module.attempt += 1
         module.retry_count += 1
@@ -319,10 +325,28 @@ class RunAggregate:
         module.ended_at = None
         module.duration_ms = None
         module.failure_analysis = None
+        if tier is not None:
+            module.recovery_tiers.append(int(tier))
+        if failure_signal is not None:
+            module.failure_signals.append(str(failure_signal))
         self._emit(
             RunModuleRetried(
                 module_id=module.module_id,
                 attempt=module.attempt,
+                module=self._module_wire(module),
+            )
+        )
+
+    def record_recovered(self, module: RunModule) -> None:
+        """재시도를 거쳐 통과한 모듈에 복구 표식을 남긴다. 재시도가 없었으면 no-op."""
+        if module.retry_count == 0:
+            return
+        module.recovered = True
+        self._emit(
+            RunModuleRecovered(
+                module_id=module.module_id,
+                attempts=module.attempt,
+                tiers=list(module.recovery_tiers),
                 module=self._module_wire(module),
             )
         )

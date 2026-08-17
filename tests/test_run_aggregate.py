@@ -277,3 +277,52 @@ def test_prepare_partial_rerun_resets_modules_from_index():
     assert modules[2].status == ModuleStatus.PENDING
     events = aggregate.pull_events()
     assert any(type(event.event).__name__ == "RunPartialRerunStarted" for event in events)
+
+
+# --- 복구 가시성 -------------------------------------------------------------
+
+
+def test_record_retry_accumulates_tier_and_signal_history():
+    from app.core.enums import FailureSignal, RecoveryTier
+
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    module.max_attempts = 3
+    aggregate = RunAggregate(_run([module]))
+
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RESET_TO_MODULE_ENTRY, failure_signal=FailureSignal.DIALOG
+    )
+
+    assert module.recovery_tiers == [0, 1]
+    assert module.failure_signals == ["TIMEOUT", "DIALOG"]
+    assert module.recovered is False  # 아직 통과하지 않았다
+
+
+def test_record_recovered_marks_module_and_emits_event():
+    from app.contexts.run.domain.events import RunModuleRecovered
+    from app.core.enums import FailureSignal, RecoveryTier
+
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    module.max_attempts = 3
+    aggregate = RunAggregate(_run([module]))
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+
+    aggregate.record_recovered(module)
+
+    assert module.recovered is True
+    emitted = [r.event for r in aggregate.pull_events()]
+    assert any(isinstance(e, RunModuleRecovered) for e in emitted)
+
+
+def test_module_without_retry_is_not_marked_recovered():
+    module = _module("a", 0, status=ModuleStatus.PASSED)
+    aggregate = RunAggregate(_run([module]))
+
+    aggregate.record_recovered(module)
+
+    assert module.recovered is False

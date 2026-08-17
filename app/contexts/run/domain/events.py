@@ -134,6 +134,16 @@ class RunModuleRetried:
 
 
 @dataclass(frozen=True)
+class RunModuleRecovered:
+    """재시도를 거쳐 최종 통과한 모듈. 자동 복구가 무엇을 덮었는지 남기는 감사 기록이다."""
+
+    module_id: str
+    attempts: int
+    tiers: list[int] = field(default_factory=list)
+    module: RunModuleRecord | None = None
+
+
+@dataclass(frozen=True)
 class RunPartialRerunStarted:
     from_module_id: str
     all_modules: list[RunModuleRecord] = field(default_factory=list)
@@ -173,6 +183,7 @@ RunEvent = (
     | RunComparisonAttached
     | RunSealedInterrupted
     | RunModuleRetried
+    | RunModuleRecovered
     | RunPartialRerunStarted
     | ModuleFailureAnalysisAttached
     | RunImported

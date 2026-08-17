@@ -41,6 +41,11 @@ class RunModule(BaseModel):
     # 없이 분석을 재구성할 수 있도록 모듈에 영속한다.
     current_url: str | None = None
     dialog_messages: list[str] = Field(default_factory=list)
+    # 자동 복구 가시성(설계 §3.4). "통과했다"와 "불안정하다"는 직교하는 축이므로,
+    # 상태(PASSED/ANOMALY/ERROR)를 건드리지 않고 별도 필드로 표현한다.
+    recovered: bool = False
+    recovery_tiers: list[int] = Field(default_factory=list)
+    failure_signals: list[str] = Field(default_factory=list)
     failure_analysis: FailureAnalysis | None = None
 
 

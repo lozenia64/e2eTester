@@ -722,7 +722,11 @@ class RunService:
                             await self._recover_session_for_retry(
                                 run, module, handle, post.tier, module_entry_url
                             )
-                        aggregate.record_retry(module)
+                        aggregate.record_retry(
+                            module,
+                            tier=post.tier,
+                            failure_signal=execution_result.failure_signal,
+                        )
                         await self._persist(run, aggregate)
                         await asyncio.sleep(post.backoff_ms / 1000)
                         await self._transition_to_running(run, module)
@@ -730,6 +734,8 @@ class RunService:
                     assert isinstance(post, CompleteStep)
 
                     self._record_module_result(aggregate, module, execution_result)
+                    if execution_result.status is ModuleStatus.PASSED:
+                        aggregate.record_recovered(module)
                     aggregate.finish_timing(module)
                     await self._persist(run, aggregate)
                     break
