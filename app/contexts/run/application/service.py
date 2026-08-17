@@ -648,10 +648,15 @@ class RunService:
 
                 # 이 모듈에서 이미 시도한 복구 등급(등급 상승 판정 입력).
                 attempted_tiers: list[RecoveryTier] = []
+                # tier 1 되감기 지점. 매니페스트에 진입 URL 필드가 없으므로(설계 §3.3)
+                # 모듈 첫 실행 시점의 페이지 URL 을 런타임에서 잡아 둔다.
+                module_entry_url: str | None = None
                 while True:
                     execution_result = await self._gateway.run_step(
                         handle, run.run_id, definition, on_log
                     )
+                    if module_entry_url is None:
+                        module_entry_url = execution_result.current_url
 
                     # 자가 치유 시도가 보고되면 감사 이벤트로 영속하고 패치 제안을 만든다.
                     # 기록 실패가 점검 자체를 실패시키지 않도록 격리한다.
@@ -713,6 +718,10 @@ class RunService:
                         break
                     if isinstance(post, RetryModule):
                         attempted_tiers.append(post.tier)
+                        if post.tier is not RecoveryTier.RETRY_IN_PLACE:
+                            await self._recover_session_for_retry(
+                                run, module, handle, post.tier, module_entry_url
+                            )
                         aggregate.record_retry(module)
                         await self._persist(run, aggregate)
                         await asyncio.sleep(post.backoff_ms / 1000)
@@ -832,6 +841,42 @@ class RunService:
         if checkpoint is None:
             return None
         return checkpoint.storage_state
+
+    async def _recover_session_for_retry(
+        self,
+        run: Run,
+        module: RunModule,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> None:
+        """재시도 전 세션 되감기. 실패해도 재시도 자체는 진행한다(tier 0 폴백)."""
+        # 되감을 곳을 모른 채 세션을 버리는 것이 더 위험하므로 tier 0 으로 폴백한다(설계 §3.3).
+        if tier is RecoveryTier.RESET_TO_MODULE_ENTRY and entry_url is None:
+            logger.info(
+                "모듈 진입 URL 미확보 — 제자리 재시도로 폴백",
+                log_event="run.recovery.fallback",
+                run_id=run.run_id,
+                module_id=module.module_id,
+            )
+            return
+        try:
+            recovered = await self._gateway.recover_session(handle, tier, entry_url)
+        except Exception:
+            logger.exception(
+                "세션 되감기 실패 — 제자리 재시도로 진행",
+                log_event="run.recovery.failed",
+                run_id=run.run_id,
+                module_id=module.module_id,
+            )
+            return
+        logger.info(
+            "세션 되감기",
+            log_event="run.recovery.applied" if recovered else "run.recovery.unsupported",
+            run_id=run.run_id,
+            module_id=module.module_id,
+            recovery_tier=int(tier),
+        )
 
     async def _save_checkpoint(
         self, run: Run, *, module_index: int, handle: ExecutionHandle
