@@ -178,3 +178,79 @@ def test_partial_rerun_rejects_when_not_allowed():
         partial_rerun_allowed=False,
     )
     assert isinstance(decision, RejectInvalidResumePoint)
+
+
+# --- 복구 등급(RecoveryTier) 결정 --------------------------------------------
+
+from app.core.enums import FailureSignal, RecoveryTier  # noqa: E402
+
+
+def _failure_decision(**overrides):
+    kwargs = {
+        "step_status": ModuleStatus.ERROR,
+        "cancel_requested": False,
+        "current_attempt": 1,
+        "max_attempts": 3,
+        "retryable_on": frozenset({ModuleStatus.ERROR}),
+        "backoff_ms": 500,
+    }
+    kwargs.update(overrides)
+    return RunStateMachine.decide_post_step_failure(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("signal", "expected_tier"),
+    [
+        (FailureSignal.TIMEOUT, RecoveryTier.RETRY_IN_PLACE),
+        (FailureSignal.SELECTOR_MISS, RecoveryTier.RETRY_IN_PLACE),
+        (FailureSignal.UNKNOWN, RecoveryTier.RETRY_IN_PLACE),
+        (FailureSignal.DIALOG, RecoveryTier.RESET_TO_MODULE_ENTRY),
+        (FailureSignal.NAVIGATION, RecoveryTier.RESET_TO_MODULE_ENTRY),
+        (FailureSignal.SESSION_LOST, RecoveryTier.REPLAY_FROM_LOGIN),
+    ],
+)
+def test_signal_maps_to_base_tier(signal, expected_tier):
+    decision = _failure_decision(failure_signal=signal)
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is expected_tier
+
+
+def test_tier_escalates_when_same_tier_already_attempted():
+    """같은 등급으로 이미 실패했으면 한 단계 올린다."""
+    decision = _failure_decision(
+        failure_signal=FailureSignal.TIMEOUT,
+        attempted_tiers=(RecoveryTier.RETRY_IN_PLACE,),
+    )
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is RecoveryTier.RESET_TO_MODULE_ENTRY
+
+
+def test_tier_escalation_stops_at_replay_from_login():
+    decision = _failure_decision(
+        failure_signal=FailureSignal.TIMEOUT,
+        attempted_tiers=(
+            RecoveryTier.RETRY_IN_PLACE,
+            RecoveryTier.RESET_TO_MODULE_ENTRY,
+            RecoveryTier.REPLAY_FROM_LOGIN,
+        ),
+    )
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is RecoveryTier.REPLAY_FROM_LOGIN
+
+
+def test_site_signal_never_retries_even_when_policy_allows():
+    """설계 §3.5 안전 규칙 — 매니페스트가 ANOMALY 재시도를 켜도 도메인이 거부한다."""
+    decision = _failure_decision(
+        step_status=ModuleStatus.ANOMALY,
+        failure_signal=FailureSignal.SITE,
+        retryable_on=frozenset({ModuleStatus.ERROR, ModuleStatus.ANOMALY}),
+    )
+    assert isinstance(decision, CompleteStep)
+
+
+def test_default_signal_preserves_legacy_tier_zero_behaviour():
+    """호출부가 신호를 넘기지 않으면 현행 동작(tier 0)과 동일하다."""
+    decision = _failure_decision()
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is RecoveryTier.RETRY_IN_PLACE
+    assert decision.backoff_ms == 500

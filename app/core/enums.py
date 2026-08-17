@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 
 
 class RunStatus(StrEnum):
@@ -68,3 +68,14 @@ class FailureSignal(StrEnum):
     DIALOG = "DIALOG"  # 예기치 않은 다이얼로그·팝업
     SITE = "SITE"  # 사이트 이상(page object 의 의도적 RuntimeError) — 자동 복구 대상 아님
     UNKNOWN = "UNKNOWN"  # 미분류
+
+
+class RecoveryTier(IntEnum):
+    """모듈 재시도 전에 **세션을 어디까지 되감을지**. 값의 크기가 곧 비용·파괴력이다.
+
+    ``IntEnum`` 인 이유: 등급 상승(escalation)을 산술로 표현하기 위함이다.
+    """
+
+    RETRY_IN_PLACE = 0  # 되감기 없음 — backoff 후 같은 페이지에서 재시도(현행 동작)
+    RESET_TO_MODULE_ENTRY = 1  # 다이얼로그 정리 후 모듈 진입 URL 로 재이동
+    REPLAY_FROM_LOGIN = 2  # 세션 폐기·재개설 후 로그인 모듈부터 주행

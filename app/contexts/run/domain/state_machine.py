@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.core.enums import ModuleStatus
+from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier
 
 # --- 모듈 진입 결정 ----------------------------------------------------------
 
@@ -90,12 +90,41 @@ PostStepDecision = CancelRemaining | PauseForInput | CompleteStep | RejectUnexpe
 
 @dataclass(frozen=True)
 class RetryModule:
-    """정책상 재시도 가능 → 백오프 후 같은 모듈을 다시 실행한다."""
+    """정책상 재시도 가능 → 백오프 후 같은 모듈을 다시 실행한다.
+
+    ``tier`` 는 재시도 **전에** 세션을 어디까지 되감을지를 지시한다. 되감기 실행은
+    인터프리터(``RunService``)가 ``ExecutionGateway.recover_session`` 으로 위임한다.
+    """
 
     backoff_ms: int
+    tier: RecoveryTier = RecoveryTier.RETRY_IN_PLACE
 
 
 PostStepFailureDecision = CancelRemaining | PauseForInput | CompleteStep | RetryModule
+
+# 신호 → 기본 복구 등급(설계 §3.2). SITE 는 복구 대상이 아니므로 표에 없다.
+_SIGNAL_BASE_TIER: dict[FailureSignal, RecoveryTier] = {
+    FailureSignal.TIMEOUT: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.SELECTOR_MISS: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.UNKNOWN: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.DIALOG: RecoveryTier.RESET_TO_MODULE_ENTRY,
+    FailureSignal.NAVIGATION: RecoveryTier.RESET_TO_MODULE_ENTRY,
+    FailureSignal.SESSION_LOST: RecoveryTier.REPLAY_FROM_LOGIN,
+}
+
+
+def _escalated_tier(
+    failure_signal: FailureSignal, attempted_tiers: tuple[RecoveryTier, ...]
+) -> RecoveryTier:
+    """같은 등급으로 이미 실패했으면 한 단계 올린다(최대 REPLAY_FROM_LOGIN).
+
+    반복되는 타임아웃은 대개 페이지가 이미 잘못된 상태라는 뜻이므로, 같은 되감기를
+    반복하는 대신 되감기 범위를 넓힌다.
+    """
+    tier = _SIGNAL_BASE_TIER.get(failure_signal, RecoveryTier.RETRY_IN_PLACE)
+    while tier in attempted_tiers and tier < RecoveryTier.REPLAY_FROM_LOGIN:
+        tier = RecoveryTier(tier + 1)
+    return tier
 
 
 # --- 부분 재실행 결정 --------------------------------------------------------
@@ -177,6 +206,8 @@ class RunStateMachine:
         max_attempts: int,
         retryable_on: frozenset[ModuleStatus],
         backoff_ms: int,
+        failure_signal: FailureSignal = FailureSignal.UNKNOWN,
+        attempted_tiers: tuple[RecoveryTier, ...] = (),
     ) -> PostStepFailureDecision:
         if cancel_requested:
             return CancelRemaining()
@@ -184,8 +215,15 @@ class RunStateMachine:
             return CompleteStep()
         if step_status is ModuleStatus.PASSED:
             return CompleteStep()
+        # 설계 §3.5 안전 규칙 — 사이트 이상은 매니페스트의 retryable_on 설정과 **무관하게**
+        # 자동 재시도하지 않는다. 사이트 이상을 재시도로 덮으면 이 도구의 존재 이유가 무너진다.
+        if failure_signal is FailureSignal.SITE:
+            return CompleteStep()
         if step_status in retryable_on and current_attempt < max_attempts:
-            return RetryModule(backoff_ms=backoff_ms)
+            return RetryModule(
+                backoff_ms=backoff_ms,
+                tier=_escalated_tier(failure_signal, attempted_tiers),
+            )
         return CompleteStep()
 
     @staticmethod
