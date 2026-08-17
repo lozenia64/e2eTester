@@ -919,12 +919,16 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 이벤트별 base ref 는 아래를 쓴다.
 
-| 이벤트 | base ref |
-| --- | --- |
-| `pull_request` | `origin/${{ github.base_ref }}` |
-| `push` | `${{ github.event.before }}` |
-| `merge_group` | `origin/${{ github.event.merge_group.base_ref }}` |
-| `schedule` | (없음 — `plan.py` 가 전체 실행으로 판정) |
+| 이벤트 | base ref | 결과 |
+| --- | --- | --- |
+| `pull_request` | `origin/${{ github.base_ref }}` | 변경 파일 기반 부분 실행 |
+| `push` | `${{ github.event.before }}` | 변경 파일 기반 부분 실행 |
+| `merge_group` | **빈 문자열** | `plan.py` 가 전체 실행으로 판정 |
+| `schedule` | **빈 문자열** | 전체 + 보안 게이트 |
+
+`merge_group` 에 일부러 base ref 를 주지 않는다. 머지 큐는 부분집합이 아니라 전
+게이트를 도는 편이 안전하고, `plan.py` 는 빈 변경 목록을 이미 전체 실행으로
+판정한다. Step 2 의 `BASE_REF` 표현식이 이 표와 일치해야 한다.
 
 - [ ] **Step 2: `ci.yml` 을 통째로 교체한다**
 
