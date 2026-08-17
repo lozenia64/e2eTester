@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 from app.contexts.healing.models import HealingAction, HealingAttempt
+from app.core.enums import RecoveryTier
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.execution.protocol import (
@@ -15,6 +16,8 @@ from app.execution.protocol import (
     HeartbeatRequest,
     OpenSessionRequest,
     OpenSessionResponse,
+    RecoverSessionRequest,
+    RecoverSessionResponse,
     ResumeFromStepRequest,
     RunStepRequest,
     RunStepResponse,
@@ -181,6 +184,20 @@ class WorkerExecutionGateway(ExecutionGateway):
         except Exception:
             return None
         return response.get("storage_state")
+
+    async def recover_session(
+        self,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> bool:
+        request = RecoverSessionRequest(tier=int(tier), entry_url=entry_url)
+        response = await self._post_json(
+            f"/sessions/{handle.session_id}/recover",
+            request.model_dump(),
+            RecoverSessionResponse,
+        )
+        return response.recovered
 
     async def _post_json(self, path: str, payload: dict, response_type: type):
         url = f"{self._base_url}{path}"

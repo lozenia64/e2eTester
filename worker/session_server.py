@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from app.core.enums import RecoveryTier
 from app.core.system_models import ModuleDefinition
 from app.execution.results import StepExecutionResult
 from app.platform.artifact_manager import ArtifactManager
@@ -31,6 +32,9 @@ class _Session:
     runtime: Any
     executor: ThreadPoolExecutor
     run_id: str
+    # tier 2 되감기(런타임 재생성)에 필요한 최초 개설 인자.
+    input_data: dict[str, str]
+    module_id: str
     resume_module_index: int | None = None
     resume_workflow_step: str | None = None
 
@@ -89,6 +93,8 @@ class SessionServer:
             runtime=runtime,
             executor=thread_pool,
             run_id=run_id,
+            input_data=input_data,
+            module_id=module_id,
         )
         return session_id
 
@@ -172,6 +178,65 @@ class SessionServer:
         return await self._run_on_session_thread(
             session.executor, _storage_state_of, session.runtime
         )
+
+    async def recover(
+        self,
+        session_id: str,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> bool:
+        """재시도 전에 세션을 ``tier`` 만큼 되감는다. 되감았으면 True.
+
+        되감기 실패는 예외로 전파하지 않는다 — 호출자는 실패 시 제자리 재시도로 진행한다.
+        """
+        try:
+            session = self._require_session(session_id)
+        except Exception:
+            return False
+
+        if tier is RecoveryTier.RESET_TO_MODULE_ENTRY:
+            if entry_url is None:
+                return False
+            return await self._reset_to_entry(session, entry_url)
+        if tier is RecoveryTier.REPLAY_FROM_LOGIN:
+            return await self._reopen_session(session)
+        return False
+
+    async def _reset_to_entry(self, session: _Session, entry_url: str) -> bool:
+        """열린 다이얼로그 기록을 끊고 진입 URL 로 재이동한다."""
+
+        def _navigate() -> bool:
+            page = session.runtime.page
+            # 되감기 이후의 스텝이 과거 다이얼로그를 자기 것으로 오해하지 않도록 경계를 끊는다.
+            dialogs = getattr(session.runtime, "dialog_messages", None)
+            if dialogs is not None:
+                dialogs.clear()
+            page.goto(entry_url)
+            page.wait_for_load_state("domcontentloaded")
+            return True
+
+        try:
+            # Playwright sync 객체의 스레드 어피니티 때문에 세션 전용 풀에서 실행한다.
+            return await self._run_on_session_thread(session.executor, _navigate)
+        except Exception:
+            return False
+
+    async def _reopen_session(self, session: _Session) -> bool:
+        """런타임을 폐기하고 같은 session_id 로 다시 만든다(로그인부터 재주행하기 위함)."""
+        workflow_executor = self._executors[session.execution_mode]
+
+        def _rebuild():
+            workflow_executor.close_runtime(session.runtime)
+            # 세션을 폐기하므로 쿠키/storage_state 를 복원하지 않는다.
+            return workflow_executor.build_runtime(
+                session.input_data, session.run_id, session.module_id, None
+            )
+
+        try:
+            session.runtime = await self._run_on_session_thread(session.executor, _rebuild)
+        except Exception:
+            return False
+        return True
 
     def get_session_run_id(self, session_id: str) -> str | None:
         session = self._sessions.get(session_id)

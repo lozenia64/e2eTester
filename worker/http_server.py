@@ -8,6 +8,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from app.core.enums import RecoveryTier
 from app.execution.protocol import (
     CloseSessionRequest,
     ErrorResponse,
@@ -15,6 +16,8 @@ from app.execution.protocol import (
     HeartbeatResponse,
     OpenSessionRequest,
     OpenSessionResponse,
+    RecoverSessionRequest,
+    RecoverSessionResponse,
     ResumeFromStepRequest,
     RunStepRequest,
     RunStepResponse,
@@ -121,6 +124,19 @@ def create_http_app(
         except Exception as exc:
             return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
 
+    async def recover_session(request: Request) -> JSONResponse:
+        session_id = request.path_params["session_id"]
+        body = RecoverSessionRequest.model_validate(await request.json())
+        try:
+            recovered = await session_server.recover(
+                session_id, RecoveryTier(body.tier), body.entry_url
+            )
+            return JSONResponse(RecoverSessionResponse(recovered=recovered).model_dump())
+        except KeyError as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=404)
+        except Exception as exc:
+            return JSONResponse(ErrorResponse(detail=str(exc)).model_dump(), status_code=500)
+
     async def heartbeat(request: Request) -> JSONResponse:
         body = HeartbeatRequest.model_validate(await request.json())
         ok = False
@@ -145,6 +161,11 @@ def create_http_app(
             Route(
                 "/sessions/{session_id}/storage-state",
                 capture_storage_state,
+                methods=["POST"],
+            ),
+            Route(
+                "/sessions/{session_id}/recover",
+                recover_session,
                 methods=["POST"],
             ),
             Route("/sessions/close", close_session, methods=["POST"]),

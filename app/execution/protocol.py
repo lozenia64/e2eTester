@@ -74,6 +74,15 @@ class ResumeFromStepRequest(BaseModel):
     workflow_step: str
 
 
+class RecoverSessionRequest(BaseModel):
+    tier: int
+    entry_url: str | None = None
+
+
+class RecoverSessionResponse(BaseModel):
+    recovered: bool
+
+
 class ErrorResponse(BaseModel):
     detail: str
 
