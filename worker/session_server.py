@@ -226,11 +226,17 @@ class SessionServer:
         workflow_executor = self._executors[session.execution_mode]
 
         def _rebuild():
-            workflow_executor.close_runtime(session.runtime)
             # 세션을 폐기하므로 쿠키/storage_state 를 복원하지 않는다.
-            return workflow_executor.build_runtime(
+            # 새 런타임을 먼저 만들고, 실패하면 옛 런타임을 닫지 않는다(제자리 재시도).
+            new_runtime = workflow_executor.build_runtime(
                 session.input_data, session.run_id, session.module_id, None
             )
+            try:
+                workflow_executor.close_runtime(session.runtime)
+            except Exception:
+                # 새 런타임이 있으면 옛 런타임 누수가 닫힌 현재 세션보다 낫다.
+                pass
+            return new_runtime
 
         try:
             session.runtime = await self._run_on_session_thread(session.executor, _rebuild)

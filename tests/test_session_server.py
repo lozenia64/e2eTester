@@ -228,6 +228,27 @@ async def test_recover_tier_two_rebuilds_runtime(server):
     assert srv.get_session_run_id(session_id) == "run1"  # 세션 식별자는 유지된다
 
 
+async def test_recover_tier_two_keeps_old_runtime_if_rebuild_fails(server):
+    """두 번째 build_runtime 실패 시 옛 런타임을 닫지 않아 제자리 재시도가 가능하다."""
+    from app.core.enums import RecoveryTier
+
+    srv, fake = server
+    session_id = await srv.open_session("fake", {"id": "u1"}, "run1", "m1")
+    first_runtime = srv._require_session(session_id).runtime  # noqa: SLF001
+
+    def _fail_rebuild(*_args, **_kwargs):
+        raise RuntimeError("rebuild failed")
+
+    fake.build_runtime = _fail_rebuild
+
+    recovered = await srv.recover(session_id, RecoveryTier.REPLAY_FROM_LOGIN, None)
+
+    assert recovered is False
+    assert srv._require_session(session_id).runtime is first_runtime  # noqa: SLF001
+    assert first_runtime.closed is False
+    assert srv.get_session_run_id(session_id) == "run1"
+
+
 async def test_recover_unknown_session_returns_false(server):
     from app.core.enums import RecoveryTier
 
