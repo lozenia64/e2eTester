@@ -51,3 +51,20 @@ class AnomalyState(StrEnum):
     UNRESOLVED = "UNRESOLVED"  # 미확인
     ACKNOWLEDGED = "ACKNOWLEDGED"  # 확인함
     RESOLVED = "RESOLVED"  # 처리완료
+
+
+class FailureSignal(StrEnum):
+    """모듈 실패의 성격. 복구 등급(RecoveryTier) 선택의 유일한 입력이다.
+
+    분류는 실행 평면(``app/runner/failure_signal.py``)에서만 수행하고, 도메인은 이 enum 만
+    관찰한다. 도메인이 예외 메시지 문자열을 들여다보는 일(``StepOutcome`` 도입으로 걷어낸
+    안티패턴)이 재발하지 않도록 하는 경계다.
+    """
+
+    TIMEOUT = "TIMEOUT"  # 대기 시간 초과
+    SELECTOR_MISS = "SELECTOR_MISS"  # 요소를 찾지 못함
+    NAVIGATION = "NAVIGATION"  # 페이지 이동·로드 실패
+    SESSION_LOST = "SESSION_LOST"  # 세션·컨텍스트 소실, 로그인 만료
+    DIALOG = "DIALOG"  # 예기치 않은 다이얼로그·팝업
+    SITE = "SITE"  # 사이트 이상(page object 의 의도적 RuntimeError) — 자동 복구 대상 아님
+    UNKNOWN = "UNKNOWN"  # 미분류
