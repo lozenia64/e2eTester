@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Generic, TypeVar
-
-E = TypeVar("E")
 
 
-class ListenerRegistry(Generic[E]):
+class ListenerRegistry[E]:
     """key(run_id/suite_id) 별 WebSocket 리스너 큐 레지스트리.
 
     리스너 큐는 살아있는 WebSocket 연결에 묶인 프로세스-로컬 상태이므로 영속화 대상이

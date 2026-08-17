@@ -1,7 +1,7 @@
 [tool.ruff]
 # E2E 테스트 플랫폼 코드 품질 도구. black/flake8/isort/pyupgrade 를 단일 바이너리로 대체.
 # 실행: ruff check .   (자동 수정: ruff check --fix .)  /  포매터: ruff format .
-target-version = "py311"
+target-version = "py313"
 line-length = 100
 extend-exclude = [
     "research",   # throwaway 프로브 스크립트 (앱의 일부가 아님)
@@ -119,7 +119,7 @@ source_modules = ["app.platform.eventing"]
 forbidden_modules = ["app.contexts"]
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
 reportMatchNotExhaustive = "error"
 include = [
