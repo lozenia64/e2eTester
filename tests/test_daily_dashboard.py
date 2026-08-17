@@ -187,7 +187,14 @@ def test_system_attention_rank_and_sort_helpers():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_error_wins():
     view = {
-        "counts": {"error": 1, "anomaly": 2, "running": 1, "other": 0, "not_inspected": 0, "passed": 0},
+        "counts": {
+            "error": 1,
+            "anomaly": 2,
+            "running": 1,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 0,
+        },
         "module_total": 4,
     }
     badge = system_summary_badge(view)
@@ -197,7 +204,14 @@ def test_system_summary_badge_error_wins():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_all_passed():
     view = {
-        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0, "passed": 4},
+        "counts": {
+            "error": 0,
+            "anomaly": 0,
+            "running": 0,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 4,
+        },
         "module_total": 4,
     }
     badge = system_summary_badge(view)
@@ -207,7 +221,14 @@ def test_system_summary_badge_all_passed():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_anomaly_wins_over_running():
     view = {
-        "counts": {"error": 0, "anomaly": 1, "running": 2, "other": 0, "not_inspected": 0, "passed": 1},
+        "counts": {
+            "error": 0,
+            "anomaly": 1,
+            "running": 2,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 1,
+        },
         "module_total": 4,
     }
     badge = system_summary_badge(view)
@@ -217,7 +238,14 @@ def test_system_summary_badge_anomaly_wins_over_running():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_not_inspected_when_uninspected_modules():
     view = {
-        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 2, "passed": 1},
+        "counts": {
+            "error": 0,
+            "anomaly": 0,
+            "running": 0,
+            "other": 0,
+            "not_inspected": 2,
+            "passed": 1,
+        },
         "module_total": 3,
     }
     badge = system_summary_badge(view)
@@ -227,7 +255,14 @@ def test_system_summary_badge_not_inspected_when_uninspected_modules():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_not_inspected_when_zero_modules():
     view = {
-        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0, "passed": 0},
+        "counts": {
+            "error": 0,
+            "anomaly": 0,
+            "running": 0,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 0,
+        },
         "module_total": 0,
     }
     badge = system_summary_badge(view)

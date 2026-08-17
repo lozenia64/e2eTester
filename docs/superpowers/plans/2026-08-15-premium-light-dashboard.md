@@ -57,7 +57,14 @@
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_error_wins():
     view = {
-        "counts": {"error": 1, "anomaly": 2, "running": 1, "other": 0, "not_inspected": 0, "passed": 0},
+        "counts": {
+            "error": 1,
+            "anomaly": 2,
+            "running": 1,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 0,
+        },
         "module_total": 4,
     }
     badge = system_summary_badge(view)
@@ -67,7 +74,14 @@ def test_system_summary_badge_error_wins():
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_system_summary_badge_all_passed():
     view = {
-        "counts": {"error": 0, "anomaly": 0, "running": 0, "other": 0, "not_inspected": 0, "passed": 4},
+        "counts": {
+            "error": 0,
+            "anomaly": 0,
+            "running": 0,
+            "other": 0,
+            "not_inspected": 0,
+            "passed": 4,
+        },
         "module_total": 4,
     }
     badge = system_summary_badge(view)
@@ -119,6 +133,7 @@ Run: `python3 -m pytest tests/test_daily_dashboard.py -q`
 
 ```python
 from app.contexts.insights.application.daily_dashboard import system_summary_badge
+
 templates.env.globals["system_summary_badge"] = system_summary_badge
 ```
 
@@ -403,6 +418,7 @@ def test_matrix_fragment_renders_card_rows(client):
     assert "cytoscape" not in res.text
     assert "dash-matrix-chart" not in res.text
 
+
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_kpi_fragment_renders_hero(client):
     res = client.get("/api/dashboard/daily/fragments/kpi")
@@ -433,6 +449,7 @@ Fixture seeds:
 
 ```python
 VIEWPORTS = [(320, 568), (390, 844), (1280, 720), (1920, 1080)]
+
 
 @pytest.mark.spec("SPEC-UI-004", "AC-001")
 @pytest.mark.parametrize("width,height", VIEWPORTS)

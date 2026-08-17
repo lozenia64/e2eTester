@@ -101,8 +101,7 @@ P0 Spec부터 수용 기준과 단위 테스트를 연결한다:
 
 ```python
 @pytest.mark.spec("SPEC-RUN-001", "AC-002")
-def test_post_step_rejects_input_not_declared_in_manifest():
-    ...
+def test_post_step_rejects_input_not_declared_in_manifest(): ...
 ```
 
 - `tests/test_spec_traceability.py`가 모든 마커가 실제 Spec 파일·`### AC-NNN` 섹션을 가리키는지 검증한다.
