@@ -81,7 +81,7 @@ def main() -> int:
     passed = all(r["passed"] for r in results.values())
     report = {
         "passed": passed,
-        "profile": args.profile,
+        "profile": args.gate or args.profile,
         "risk_flags": risk_flags,
         "gates": results,
         "ran_at": datetime.now(UTC).isoformat(),
