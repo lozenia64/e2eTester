@@ -65,10 +65,53 @@ LOCAL_NETWORK_DISABLED_FEATURES: Final[tuple[str, ...]] = (
     "PrivateNetworkAccessPermissionPrompt",
 )
 
-# 연수원(SLS) self-defender 가 Playwright CDP 연결을 감지하면 alert("개발자 도구…")를 띄운다.
+# 사이트 방어 스크립트(연수원 SLS self-defender, 대표홈페이지 EVFW/AATIE)가 자동화를
+# 개발자도구로 오판하면 alert("개발자도구 …")를 반복 발생시킨다. alert 루프는 page.goto 를
+# 정지시켜 점검 Run 을 통째로 실패시킨다.
 # window.alert 패치(init script)는 무결성 검사에 걸려 로그인 AJAX 가 차단되므로 쓰지 않는다.
 # → add_dialog_logger 에서만 로그·dialog_messages 수집을 생략하고 accept() 한다.
-DEVTOOLS_BLOCK_ALERT_SUBSTRING: Final[str] = "개발자 도구"
+# 문구는 사이트마다 '개발자도구'(대표홈페이지)·'개발자 도구'(SLS)로 띄어쓰기가 달라, 공백을
+# 제거하고 비교한다.
+DEVTOOLS_BLOCK_ALERT_SUBSTRING: Final[str] = "개발자도구"
+
+# 대표홈페이지(EVFW) 방어 스크립트가 실제로 보는 신호는 **콘솔 인자 직렬화 지연** 이다.
+# Playwright 는 CDP Runtime 도메인을 항상 켜 두므로, console.table/log 에 넘긴 객체가 매번
+# 디버깅 클라이언트로 직렬화된다. 일반 크롬 대비 실측 차이:
+#   console.table(500 objects): 0.2ms (일반 크롬) → 20.6ms (Playwright)  = 약 100배
+# 방어 스크립트는 이 지연을 '개발자도구 열림' 으로 판정하고 규칙 AD-B-S-VE-TMP-5 를 발동해
+#   alert('개발자도구 사용을 차단하였습니다!!'); window.location.reload(true);
+# 를 실행한다. reload 루프 때문에 page.goto 가 끝나지 않고 점검이 통째로 실패한다.
+#
+# navigator.webdriver 위장·viewport/locale 정상화만으로는 해결되지 않음을 실사이트에서 확인했다
+# (지연이 남아 있으면 계속 차단). 객체를 덤프하는 콘솔 메서드만 무력화해 직렬화 비용을 없앤다.
+# console.error/warn/assert 는 진단 목적으로 남겨 둔다(방어 스크립트는 이들을 쓰지 않는다).
+CONSOLE_SERIALIZATION_GUARD_SCRIPT: Final[str] = """
+(() => {
+  const nativeLike = (name) => {
+    const fn = function () {};
+    Object.defineProperty(fn, 'name', { value: name, configurable: true });
+    fn.toString = () => 'function ' + name + '() { [native code] }';
+    return fn;
+  };
+  for (const name of ['table', 'log', 'dir', 'dirxml', 'group', 'groupCollapsed',
+                      'profile', 'profileEnd', 'trace', 'debug', 'info', 'count']) {
+    try {
+      console[name] = nativeLike(name);
+    } catch (error) {
+      /* 개별 메서드 교체 실패는 무시한다 */
+    }
+  }
+})();
+"""
+
+
+def add_console_serialization_guard(context) -> None:
+    """CDP 콘솔 직렬화 지연으로 개발자도구 오탐이 나지 않도록 콘솔 계측을 무력화한다."""
+    try:
+        context.add_init_script(CONSOLE_SERIALIZATION_GUARD_SCRIPT)
+        log("[step] Console serialization guard applied (devtools 오탐 차단)")
+    except Exception as exc:
+        log(f"[warn] Failed to apply console serialization guard: {exc}")
 
 
 def normalize_base_url(raw: str | None, default: str) -> str:
@@ -133,7 +176,7 @@ def resolve_playwright_mcp_user_data_dir(
 
 
 def is_devtools_block_dialog(message: str) -> bool:
-    return DEVTOOLS_BLOCK_ALERT_SUBSTRING in message
+    return DEVTOOLS_BLOCK_ALERT_SUBSTRING in re.sub(r"\s+", "", message or "")
 
 
 def launch_legacy_persistent_browser_context(
@@ -157,20 +200,28 @@ def launch_legacy_persistent_browser_context(
             "--disable-extensions",
             "--disable-component-extensions-with-background-pages",
         ],
-        "args": [f"--disable-features={disabled_features}"],
+        # --disable-blink-features=AutomationControlled: navigator.webdriver 를 실제 false 로
+        # 만든다(MCP-style launch 와 동일 처리). 다만 이것만으로 개발자도구 차단이 풀리지는
+        # 않는다 — 실제 트리거는 콘솔 직렬화 지연이며 add_console_serialization_guard 가 맡는다.
+        "args": [
+            f"--disable-features={disabled_features}",
+            PLAYWRIGHT_MCP_DISABLE_BLINK_FEATURE,
+        ],
     }
     try:
         log(
             f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({user_data_dir})"
         )
-        return playwright.chromium.launch_persistent_context(
+        context = playwright.chromium.launch_persistent_context(
             str(user_data_dir),
             channel=PREFERRED_BROWSER_CHANNEL,
             **common_args,
         )
     except Exception as exc:
         log(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
-        return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
+        context = playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
+    add_console_serialization_guard(context)
+    return context
 
 
 def launch_persistent_browser_context(
@@ -238,11 +289,13 @@ def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_
             f"[step] Launch Playwright MCP-style browser: {PREFERRED_BROWSER_CHANNEL} "
             f"({user_data_dir})"
         )
-        return playwright.chromium.launch_persistent_context(
+        context = playwright.chromium.launch_persistent_context(
             str(user_data_dir),
             channel=PREFERRED_BROWSER_CHANNEL,
             **common_args,
         )
+        add_console_serialization_guard(context)
+        return context
     except Exception as exc:
         message = str(exc)
         if "ProcessSingleton" in message or "exitCode=21" in message:
@@ -252,7 +305,9 @@ def launch_playwright_mcp_browser_context(playwright, headless: bool, user_data_
                 "E2E_PLAYWRIGHT_MCP_PROFILE_DIR 로 별도 프로필을 지정하세요."
             ) from exc
         log(f"[warn] Falling back to bundled Chromium (MCP-style): {exc}")
-        return playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
+        context = playwright.chromium.launch_persistent_context(str(user_data_dir), **common_args)
+        add_console_serialization_guard(context)
+        return context
 
 
 def apply_mobile_device_mode(playwright, page: Page) -> None:

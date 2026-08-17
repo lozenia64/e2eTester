@@ -13,7 +13,11 @@ from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.runner.step_logging import log
-from app.systems.access_common.browser import PC_VIEWPORT
+from app.systems.access_common.browser import (
+    PC_VIEWPORT,
+    add_console_serialization_guard,
+    is_devtools_block_dialog,
+)
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("hwgeneralins-login-result.png")
@@ -28,6 +32,9 @@ POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do"
 # 환경변수 E2E_USER_DATA_DIR 로 경로를 바꿀 수 있으며, 사용자의 실제 Chrome 프로파일을
 # 가리키게 하면 그 프로파일에 설치된 보안 확장을 그대로 사용할 수 있다.
 DEFAULT_USER_DATA_DIR: Final[Path] = Path.home() / ".e2etester" / "chrome-profile"
+
+# navigator.webdriver 를 실제 false 로 만드는 Chrome 플래그(스텔스 위조 스크립트 대체).
+DISABLE_AUTOMATION_CONTROLLED_FLAG: Final[str] = "--disable-blink-features=AutomationControlled"
 
 # Playwright 가 Chrome 실행 시 끄는 기본 feature 들(브라우저 안정화 목적). 아래에서
 # 로컬 네트워크 차단 해제를 추가할 때, Chromium 은 명령행에서 마지막 --disable-features
@@ -332,9 +339,25 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
 
 
 def add_dialog_logger(page: Page) -> list[str]:
+    """페이지 alert/confirm 을 수집·수락한다.
+
+    방어 스크립트의 '개발자도구 사용을 차단하였습니다' alert 는 수 초에 수십 번 반복되므로,
+    수락만 하고 기록·로그에서는 제외한다. 기록에 남기면 실행 로그를 뒤덮고
+    ``ensure_no_failure_dialogs`` 의 점검 판정까지 오염시킨다.
+    """
     messages: list[str] = []
+    devtools_block_count = 0
 
     def _handle(dialog) -> None:
+        nonlocal devtools_block_count
+        if is_devtools_block_dialog(dialog.message):
+            devtools_block_count += 1
+            if devtools_block_count == 1:
+                log(
+                    f"[warn] 사이트 방어 스크립트의 개발자도구 차단 alert 를 무시합니다: {dialog.message}"
+                )
+            dialog.accept()
+            return
         messages.append(dialog.message)
         log(f"[dialog] {dialog.message}")
         dialog.accept()
@@ -409,19 +432,27 @@ def launch_persistent_browser_context(
             "--disable-extensions",
             "--disable-component-extensions-with-background-pages",
         ],
-        # 로컬 네트워크 차단 해제(+ Playwright 기본 disable feature 들 유지).
-        "args": [f"--disable-features={disabled_features}"],
+        # 로컬 네트워크 차단 해제(+ Playwright 기본 disable feature 들 유지)와,
+        # navigator.webdriver 노출 차단(--enable-automation 제거만으로는 Blink 가 true 로 유지).
+        # 주의: webdriver 위장만으로는 EVFW 차단이 풀리지 않는다(실사이트 확인). 실제 트리거는
+        # 콘솔 직렬화 지연이며 ``add_console_serialization_guard`` 가 담당한다.
+        "args": [
+            f"--disable-features={disabled_features}",
+            DISABLE_AUTOMATION_CONTROLLED_FLAG,
+        ],
     }
     try:
         log(f"[step] Launch persistent browser context: {PREFERRED_BROWSER_CHANNEL} ({target_dir})")
-        return playwright.chromium.launch_persistent_context(
+        context = playwright.chromium.launch_persistent_context(
             str(target_dir),
             channel=PREFERRED_BROWSER_CHANNEL,
             **common_args,
         )
     except Exception as exc:
         log(f"[warn] Falling back to bundled Chromium persistent context: {exc}")
-        return playwright.chromium.launch_persistent_context(str(target_dir), **common_args)
+        context = playwright.chromium.launch_persistent_context(str(target_dir), **common_args)
+    add_console_serialization_guard(context)
+    return context
 
 
 def wait_timeout_with_log(page: Page, timeout_ms: int, reason: str) -> None:
@@ -453,9 +484,54 @@ def click_with_log(locator, description: str) -> None:
     locator.click()
 
 
+def document_is_usable(page: Page) -> bool:
+    """load 이벤트와 무관하게 문서가 실제로 그려졌는지 확인한다."""
+    try:
+        state = page.evaluate(
+            """
+            () => ({
+                readyState: document.readyState,
+                title: document.title || '',
+                textLength: (document.body && document.body.innerText || '').length,
+            })
+            """
+        )
+    except Exception:
+        return False
+    return state["readyState"] in {"interactive", "complete"} and (
+        state["textLength"] > 0 or bool(state["title"])
+    )
+
+
+def goto_tolerating_block_alert(page: Page, target_url: str, timeout_ms: int) -> None:
+    """차단 alert 루프에도 멈추지 않는 페이지 이동.
+
+    대표홈페이지 방어 스크립트(EVFW)가 자동화를 개발자도구로 오판하면
+    ``alert("개발자도구 사용을 차단하였습니다!!")`` 를 수 초에 수십 번 띄운다. alert 가 계속
+    끼어들면 ``domcontentloaded`` 정착이 지연돼 ``page.goto`` 가 타임아웃하지만, 문서 자체는
+    정상적으로 그려진다. 따라서 타임아웃 시 문서 상태를 직접 확인해 사용 가능하면 계속 진행하고,
+    정말 비어 있을 때만 원인을 명시한 오류를 던진다.
+    """
+    try:
+        page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
+        return
+    except PlaywrightTimeoutError:
+        if document_is_usable(page):
+            log(
+                "[warn] 사이트 방어 스크립트의 개발자도구 차단 alert 로 로드 완료 신호가 지연됐지만, "
+                "문서는 정상 표시되어 점검을 계속합니다."
+            )
+            return
+        raise RuntimeError(
+            f"페이지를 열지 못했습니다: {target_url} "
+            "(사이트 보안 프로그램이 자동화를 개발자도구 사용으로 차단했을 수 있습니다. "
+            "점검 PC 예외 등록 여부를 확인해 주세요.)"
+        ) from None
+
+
 def open_url(page: Page, target_url: str) -> None:
     log(f"[wait] Start direct navigation: {target_url} ({MAX_TIMEOUT_MS} ms default)")
-    page.goto(target_url, wait_until="domcontentloaded", timeout=MAX_TIMEOUT_MS)
+    goto_tolerating_block_alert(page, target_url, MAX_TIMEOUT_MS)
     log(f"[wait] End direct navigation: {target_url} -> {page.url}")
 
 
