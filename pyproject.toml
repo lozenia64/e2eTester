@@ -1,7 +1,7 @@
 [tool.ruff]
 # E2E 테스트 플랫폼 코드 품질 도구. black/flake8/isort/pyupgrade 를 단일 바이너리로 대체.
 # 실행: ruff check .   (자동 수정: ruff check --fix .)  /  포매터: ruff format .
-target-version = "py311"
+target-version = "py313"
 line-length = 100
 extend-exclude = [
     "research",   # throwaway 프로브 스크립트 (앱의 일부가 아님)
@@ -26,6 +26,18 @@ ignore = [
     "B904",  # except 내 raise ... from — 도입 1단계에선 보류. 자동화 step 코드 전반의
              # 예외 체이닝 정비는 별도 후속 작업으로 분리한다(점진 적용).
 ]
+
+# 커버리지 래칫 — 하락만 차단한다. 수치가 오르면 fail_under 를 올리는 PR 을 별도로 낸다
+# (자동 상향은 리뷰 없이 기준이 바뀌어 나중에 왜 빨간지 설명할 수 없게 된다).
+# 실측 58%(2026-08-17, 18416 구문 중 7647 미커버) 바로 아래인 57 에서 시작한다.
+# 정확히 58 로 잡으면 무해한 리팩터링에도 CI 가 빨개져 게이트가 우회당한다.
+[tool.coverage.run]
+source = ["app", "worker"]
+omit = ["*/__pycache__/*", "app/web/static/*"]
+
+[tool.coverage.report]
+fail_under = 57
+skip_covered = false
 
 [tool.pytest.ini_options]
 # async def 테스트를 자동으로 asyncio 코루틴으로 실행(마커 불필요).
@@ -107,7 +119,7 @@ source_modules = ["app.platform.eventing"]
 forbidden_modules = ["app.contexts"]
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
 reportMatchNotExhaustive = "error"
 include = [

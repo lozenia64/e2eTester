@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import ssl
 from collections.abc import Sequence
-from typing import TypeVar
 
 from google import genai
 from google.genai import types
@@ -18,8 +17,6 @@ from app.ai.gemini_http import (
     log_gemini_fallback_success,
     log_gemini_http_failure,
 )
-
-T = TypeVar("T", bound=BaseModel)
 
 
 def create_gemini_client(*, api_key: str, verify_ssl: bool = True) -> genai.Client:
@@ -58,7 +55,9 @@ def build_user_contents(
     return [types.Content(role="user", parts=parts)]
 
 
-def _parse_structured_response(response: types.GenerateContentResponse, schema: type[T]) -> T:
+def _parse_structured_response[T: BaseModel](
+    response: types.GenerateContentResponse, schema: type[T]
+) -> T:
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, schema):
         return parsed
@@ -70,7 +69,7 @@ def _parse_structured_response(response: types.GenerateContentResponse, schema: 
     return schema.model_validate_json(text)
 
 
-def generate_structured_with_fallback(
+def generate_structured_with_fallback[T: BaseModel](
     *,
     client: genai.Client,
     models: Sequence[str],

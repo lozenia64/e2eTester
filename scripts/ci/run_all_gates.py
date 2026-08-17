@@ -15,6 +15,8 @@ if str(ROOT) not in sys.path:
 
 from app.platform.stdio_utf8 import configure_stdio_utf8  # noqa: E402
 from scripts.ci.gates import (  # noqa: E402
+    GATE_COMMANDS,
+    PREFLIGHT_GATES,
     resolve_gates,
     run_gates,
 )
@@ -48,16 +50,28 @@ def main() -> int:
         action="store_true",
         help="Stop after first failing gate",
     )
+    parser.add_argument(
+        "--gate",
+        default=None,
+        help="단일 게이트만 실행 (GitHub Actions matrix leg 용)",
+    )
     args = parser.parse_args()
 
     workspace = Path(args.workspace).resolve()
     risk_flags = [f.strip() for f in args.risk_flags.split(",") if f.strip()]
 
-    try:
-        gate_names = resolve_gates(args.profile, risk_flags or None)
-    except KeyError as exc:
-        print(json.dumps({"error": exc.args[0] if exc.args else str(exc)}))
-        return 1
+    if args.gate:
+        known = set(GATE_COMMANDS) | set(PREFLIGHT_GATES)
+        if args.gate not in known:
+            print(json.dumps({"error": f"unknown gate: {args.gate}"}, ensure_ascii=False))
+            return 1
+        gate_names = [args.gate]
+    else:
+        try:
+            gate_names = resolve_gates(args.profile, risk_flags or None)
+        except KeyError as exc:
+            print(json.dumps({"error": exc.args[0] if exc.args else str(exc)}))
+            return 1
 
     if not gate_names:
         print(json.dumps({"passed": True, "profile": args.profile, "gates": {}}))
@@ -67,7 +81,7 @@ def main() -> int:
     passed = all(r["passed"] for r in results.values())
     report = {
         "passed": passed,
-        "profile": args.profile,
+        "profile": args.gate or args.profile,
         "risk_flags": risk_flags,
         "gates": results,
         "ran_at": datetime.now(UTC).isoformat(),
@@ -77,7 +91,16 @@ def main() -> int:
         out = Path(args.report)
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    print(json.dumps({"passed": passed, "profile": args.profile, "gate_count": len(results)}))
+    print(
+        json.dumps(
+            {
+                "passed": passed,
+                "profile": args.gate or args.profile,
+                "gate_count": len(results),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0 if passed else 1
 
 

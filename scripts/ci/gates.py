@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob as _glob
 import json
 import os
 import re
@@ -17,9 +18,33 @@ def _py(*parts: str) -> list[str]:
     return [sys.executable, *parts]
 
 
+# --- CI 경로 글롭 (SSOT) ---------------------------------------------------
+# ci.yml 에 두면 YAML 이라 테스트가 불가능하고, 코드 이동 시 조용히 유령 경로가 된다.
+# (2026-08-17: app/storage/ 가 이사한 뒤로 security 게이트가 발화하지 않고 있었다.)
+# 여기 두면 validate_ci_config() 가 실재성을 강제한다.
+SECURITY_PATHS: list[str] = [
+    "app/contexts/identity/**",
+    "app/platform/security/**",
+    "app/contexts/*/infrastructure/encrypted_*_input_store.py",
+    "app/api/routes_trigger.py",
+    "app/api/routes_otp.py",
+    "requirements.txt",
+    "requirements-dev.txt",
+]
+
+# 이 글롭에만 매칭되는 변경은 docs-only 로 판정한다.
+# `*.md` 가 반드시 필요하다 — fnmatch 는 `**/*.md` 로 루트의 README.md 를 매칭하지
+# 못한다(`**/` 가 슬래시를 요구). 실측 확인: fnmatch("README.md","**/*.md") == False.
+DOCS_ONLY_PATHS: list[str] = [
+    "docs/**",
+    "*.md",
+    "**/*.md",
+]
+
 # Gate name → shell command (run from workspace root)
 GATE_COMMANDS: dict[str, list[str]] = {
     "docs_consistency": _py("scripts/check_docs_consistency.py"),
+    "ci_config_valid": _py("scripts/ci/check_ci_config.py"),
     "architecture_gates": _py("scripts/check_architecture_gates.py"),
     "projection_validate": _py(
         "scripts/rebuild_projections.py",
@@ -43,6 +68,14 @@ GATE_COMMANDS: dict[str, list[str]] = {
     "ruff": _py("-m", "ruff", "check", "."),
     "ruff_format": _py("-m", "ruff", "format", "--check", "."),
     "pytest": _py("-m", "pytest", "tests/", "-q"),
+    "coverage": _py(
+        "-m",
+        "pytest",
+        "tests/",
+        "-q",
+        "--cov",
+        "--cov-report=term-missing:skip-covered",
+    ),
     "pip_audit": _py("-m", "pip_audit", "-r", "requirements.txt"),
     "bandit_security": _py(
         "-m",
@@ -51,6 +84,11 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "pyproject.toml",
         "-r",
         "app/contexts/identity",
+        # at-rest 암호화 구현체 — 원래 app/storage/ 에 있어 스캔 대상이었으나
+        # 이사 후 범위에서 누락돼 있었다(2026-08-17).
+        "app/platform/security",
+        "app/contexts/run/infrastructure/encrypted_run_input_store.py",
+        "app/contexts/suite/infrastructure/encrypted_suite_input_store.py",
         "app/api/routes_trigger.py",
         "app/api/routes_otp.py",
     ),
@@ -61,6 +99,7 @@ PREFLIGHT_GATES: list[str] = ["ruff_changed", "ruff_format_changed"]
 # Fail-fast tier (lower runs first in sequential local runner; CI jobs run in parallel per tier group)
 GATE_TIERS: dict[str, int] = {
     "docs_consistency": 0,
+    "ci_config_valid": 0,
     "ruff": 0,
     "ruff_format": 0,
     "ruff_changed": 0,
@@ -71,11 +110,13 @@ GATE_TIERS: dict[str, int] = {
     "projection_validate": 1,
     "snapshot_validate": 1,
     "pytest": 2,
+    "coverage": 2,
     "pip_audit": 3,
     "bandit_security": 3,
 }
 
 STANDARD_GATES: list[str] = [
+    "ci_config_valid",
     "docs_consistency",
     "architecture_gates",
     "import_contracts",
@@ -89,13 +130,18 @@ STANDARD_GATES: list[str] = [
 
 SECURITY_GATES: list[str] = ["pip_audit", "bandit_security"]
 
+# CI 는 pytest 대신 coverage 를 쓴다 — coverage 가 pytest --cov 를 한 번 실행해
+# 테스트 실행과 커버리지 측정을 겸하므로, 둘을 함께 넣으면 636개 테스트가 두 번 돈다.
+# 로컬 STANDARD_GATES 는 빠른 pytest 를 유지한다(측정 시 136초 vs 116초).
+CI_STANDARD_GATES: list[str] = [name for name in STANDARD_GATES if name != "pytest"] + ["coverage"]
+
 PROFILE_GATES: dict[str, list[str]] = {
     "step_fix": STANDARD_GATES,
     "new_module": STANDARD_GATES,
     "new_system": STANDARD_GATES + SECURITY_GATES,
     "platform": STANDARD_GATES,
     "healing_patch": STANDARD_GATES,
-    "docs_only": ["docs_consistency", "architecture_gates"],
+    "docs_only": ["ci_config_valid", "docs_consistency", "architecture_gates"],
     "spike": [],
     "full": STANDARD_GATES,
 }
@@ -425,3 +471,44 @@ def extract_paths_from_markdown(text: str) -> list[str]:
         candidate = match.group(1).strip().replace("\\", "/")
         paths.append(candidate)
     return paths
+
+
+def validate_ci_config(workspace: Path) -> list[str]:
+    """CI 설정 자체의 정합성을 검사한다. 반환값이 빈 리스트면 정상.
+
+    ci.yml 에 경로를 하드코딩하던 시절 `app/storage/*` 가 이사한 뒤에도 계속 참조되어
+    security 게이트가 조용히 죽어 있었다. 그 부류를 CI 가 스스로 잡게 하는 검사다.
+    """
+    problems: list[str] = []
+    root = str(workspace)
+
+    # 1) 경로 글롭이 최소 1개 실파일에 매칭되는가
+    for label, patterns in (
+        ("SECURITY_PATHS", SECURITY_PATHS),
+        ("DOCS_ONLY_PATHS", DOCS_ONLY_PATHS),
+    ):
+        for pattern in patterns:
+            if not _glob.glob(pattern, root_dir=root, recursive=True):
+                problems.append(f"{label} 글롭이 아무 파일에도 매칭되지 않음: `{pattern}`")
+
+    # 2) 게이트 명령의 파일 경로 인자가 실재하는가
+    for name, cmd in GATE_COMMANDS.items():
+        for arg in cmd[1:]:
+            if not arg.startswith(("app/", "scripts/", "tests/", "docs/")):
+                continue
+            if not (workspace / arg).exists():
+                problems.append(f"게이트 `{name}` 의 경로 인자가 실재하지 않음: `{arg}`")
+
+    known = set(GATE_COMMANDS) | set(PREFLIGHT_GATES)
+
+    # 3) 모든 게이트에 tier 가 지정돼 있는가 (누락 시 tier 99 로 조용히 밀린다)
+    for name in sorted(known - set(GATE_TIERS)):
+        problems.append(f"GATE_TIERS 에 tier 가 없는 게이트: `{name}`")
+
+    # 4) 프로필이 존재하지 않는 게이트를 참조하지 않는가
+    for profile, names in PROFILE_GATES.items():
+        for name in names:
+            if name not in known:
+                problems.append(f"프로필 `{profile}` 이 존재하지 않는 게이트를 참조: `{name}`")
+
+    return problems
