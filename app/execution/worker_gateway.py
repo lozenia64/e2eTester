@@ -129,6 +129,7 @@ class WorkerExecutionGateway(ExecutionGateway):
             last_error=response.last_error,
             screenshot_path=screenshot_path,
             healing_events=healing_events,
+            failure_signal=response.failure_signal,
         )
 
     async def submit_input(self, handle: ExecutionHandle, value: str) -> None:

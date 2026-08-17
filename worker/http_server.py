@@ -70,6 +70,7 @@ def create_http_app(
                 last_error=result.last_error,
                 screenshot_path=screenshot_path,
                 healing_events=healing_events,
+                failure_signal=result.failure_signal,
                 logs=logs,
             )
             return JSONResponse(response.model_dump(mode="json"))

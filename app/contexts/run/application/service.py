@@ -28,7 +28,7 @@ from app.contexts.run.domain.state_machine import (
     RetryModule,
     RunStateMachine,
 )
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import ModuleStatus, RecoveryTier, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.run_models import DashboardEvent, Run, RunModule
 from app.domain.execution_policy import module_policy_from_definition
@@ -646,6 +646,8 @@ class RunService:
                 async def on_log(line: str, current_module=module, current_run=run) -> None:
                     await self._handle_module_log(current_run, current_module, line)
 
+                # 이 모듈에서 이미 시도한 복구 등급(등급 상승 판정 입력).
+                attempted_tiers: list[RecoveryTier] = []
                 while True:
                     execution_result = await self._gateway.run_step(
                         handle, run.run_id, definition, on_log
@@ -684,6 +686,8 @@ class RunService:
                             max_attempts=module.max_attempts,
                             retryable_on=module_policy.retryable_on,
                             backoff_ms=module_policy.retry_backoff_ms,
+                            failure_signal=execution_result.failure_signal,
+                            attempted_tiers=tuple(attempted_tiers),
                         )
 
                     if isinstance(post, CancelRemaining):
@@ -708,6 +712,7 @@ class RunService:
                         )
                         break
                     if isinstance(post, RetryModule):
+                        attempted_tiers.append(post.tier)
                         aggregate.record_retry(module)
                         await self._persist(run, aggregate)
                         await asyncio.sleep(post.backoff_ms / 1000)

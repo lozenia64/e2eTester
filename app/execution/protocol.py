@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.core.enums import ModuleStatus
+from app.core.enums import FailureSignal, ModuleStatus
 from app.core.system_models import ModuleDefinition
 
 
@@ -48,6 +48,7 @@ class RunStepResponse(BaseModel):
     last_error: str | None = None
     screenshot_path: str | None = None
     healing_events: list[HealingAttemptPayload] = Field(default_factory=list)
+    failure_signal: FailureSignal = FailureSignal.UNKNOWN
     logs: list[str] = Field(default_factory=list)
 
 

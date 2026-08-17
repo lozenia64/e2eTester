@@ -53,3 +53,33 @@ def test_classification_never_raises():
             raise ValueError("str() 폭발")
 
     assert classify_failure(Nasty()) is FailureSignal.UNKNOWN
+
+
+# --- 결과 DTO 운반 -----------------------------------------------------------
+
+
+def test_step_execution_result_defaults_to_unknown_signal():
+    """기존 생성자 호출부가 무수정으로 동작해야 한다(하위호환)."""
+    from app.execution.results import StepExecutionResult
+
+    result = StepExecutionResult(
+        status="ERROR",
+        message="x",
+        artifacts=[],
+        current_url=None,
+        dialog_messages=[],
+    )
+    assert result.failure_signal is FailureSignal.UNKNOWN
+
+
+def test_step_execution_result_failure_helper_marks_site_signal():
+    """StepExecutionResult.failure() 는 ANOMALY 를 만드는 헬퍼이므로 SITE 다."""
+    from app.execution.results import StepExecutionResult
+
+    result = StepExecutionResult.failure(
+        message="사이트 이상",
+        current_url=None,
+        dialog_messages=[],
+        last_error="boom",
+    )
+    assert result.failure_signal is FailureSignal.SITE
