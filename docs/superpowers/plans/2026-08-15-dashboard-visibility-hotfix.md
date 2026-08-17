@@ -101,7 +101,9 @@ def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
     name = _rect_in_container(page, ".dash-sys-row__name")
     assert icon and icon["width"] >= 24 and icon["height"] >= 24 and icon["inBox"]
     assert name and name["width"] >= 40 and name["inBox"]
-    fs = page.eval_on_selector(".dash-sys-row__name", "el => parseFloat(getComputedStyle(el).fontSize)")
+    fs = page.eval_on_selector(
+        ".dash-sys-row__name", "el => parseFloat(getComputedStyle(el).fontSize)"
+    )
     assert fs >= 14
 
 

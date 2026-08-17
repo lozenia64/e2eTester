@@ -67,11 +67,17 @@ def _build_all_not_inspected_dashboard(registry: ModuleRegistry) -> dict:
 
 ```python
 @pytest.mark.spec("SPEC-UI-005", "AC-002")
-def test_kpi_fragment_renders_empty_day_summary(client: TestClient, registry: ModuleRegistry) -> None:
+def test_kpi_fragment_renders_empty_day_summary(
+    client: TestClient, registry: ModuleRegistry
+) -> None:
     data = _build_all_not_inspected_dashboard(registry)
     user = User(
-        user_id="u", email="u@t.local", name="U", role="user",
-        hashed_password="x", is_active=True,
+        user_id="u",
+        email="u@t.local",
+        name="U",
+        role="user",
+        hashed_password="x",
+        is_active=True,
         allowed_system_codes=[s.system_code for s in registry.list_systems()],
         created_at=GEN_AT,
     )

@@ -68,8 +68,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
+      # 버전은 requirements-dev.txt 가 SSOT. 여기에 범위를 다시 적으면 dependabot 이
+      # requirements-dev.txt 만 올릴 때 CI 와 로컬 포맷 결과가 갈린다(실제 발생 이력).
       - name: Install Ruff
-        run: python3 -m pip install "ruff>=0.15,<0.16"
+        run: python3 -m pip install "$(grep -E '^ruff' requirements-dev.txt)"
 
       - name: Lint (ruff check)
         run: ruff check --output-format=github .

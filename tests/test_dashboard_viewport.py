@@ -240,9 +240,7 @@ def browser():
         browser = playwright.chromium.launch()
     except Exception as exc:
         playwright.stop()
-        pytest.skip(
-            f"Chromium 미설치 — python3 -m playwright install chromium 후 재실행: {exc}"
-        )
+        pytest.skip(f"Chromium 미설치 — python3 -m playwright install chromium 후 재실행: {exc}")
     yield browser
     browser.close()
     playwright.stop()
@@ -541,7 +539,12 @@ def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
     )
     assert title_left >= sw - 1, {"title_left": title_left, "sidebarWidth": sw}
     assert tile_left >= sw - 1, {"tile_left": tile_left, "sidebarWidth": sw}
-    assert page.locator("#dash-zone-stats .dash-stats__tile:first-child .dash-stats__label").inner_text() == "이상징후"
+    assert (
+        page.locator(
+            "#dash-zone-stats .dash-stats__tile:first-child .dash-stats__label"
+        ).inner_text()
+        == "이상징후"
+    )
 
 
 @pytest.mark.spec("SPEC-UI-008", "AC-004")
@@ -550,8 +553,12 @@ def test_system_identity_right_of_sidebar(page, live_server: str) -> None:
     page.goto(f"{live_server}/")
     page.wait_for_selector(".dash-sys-row__icon")
     sw = _sidebar_inset_metrics(page)["sidebarWidth"]
-    icon_left = page.eval_on_selector(".dash-sys-row__icon", "el => el.getBoundingClientRect().left")
-    name_left = page.eval_on_selector(".dash-sys-row__name", "el => el.getBoundingClientRect().left")
+    icon_left = page.eval_on_selector(
+        ".dash-sys-row__icon", "el => el.getBoundingClientRect().left"
+    )
+    name_left = page.eval_on_selector(
+        ".dash-sys-row__name", "el => el.getBoundingClientRect().left"
+    )
     assert icon_left >= sw - 1
     assert name_left >= sw - 1
 
