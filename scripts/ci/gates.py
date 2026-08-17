@@ -68,6 +68,14 @@ GATE_COMMANDS: dict[str, list[str]] = {
     "ruff": _py("-m", "ruff", "check", "."),
     "ruff_format": _py("-m", "ruff", "format", "--check", "."),
     "pytest": _py("-m", "pytest", "tests/", "-q"),
+    "coverage": _py(
+        "-m",
+        "pytest",
+        "tests/",
+        "-q",
+        "--cov",
+        "--cov-report=term-missing:skip-covered",
+    ),
     "pip_audit": _py("-m", "pip_audit", "-r", "requirements.txt"),
     "bandit_security": _py(
         "-m",
@@ -102,6 +110,7 @@ GATE_TIERS: dict[str, int] = {
     "projection_validate": 1,
     "snapshot_validate": 1,
     "pytest": 2,
+    "coverage": 2,
     "pip_audit": 3,
     "bandit_security": 3,
 }
@@ -120,6 +129,13 @@ STANDARD_GATES: list[str] = [
 ]
 
 SECURITY_GATES: list[str] = ["pip_audit", "bandit_security"]
+
+# CI 는 pytest 대신 coverage 를 쓴다 — coverage 가 pytest --cov 를 한 번 실행해
+# 테스트 실행과 커버리지 측정을 겸하므로, 둘을 함께 넣으면 621개 테스트가 두 번 돈다.
+# 로컬 STANDARD_GATES 는 빠른 pytest 를 유지한다(측정 시 136초 vs 116초).
+CI_STANDARD_GATES: list[str] = [
+    name for name in STANDARD_GATES if name != "pytest"
+] + ["coverage"]
 
 PROFILE_GATES: dict[str, list[str]] = {
     "step_fix": STANDARD_GATES,
