@@ -29,14 +29,14 @@ ignore = [
 
 # 커버리지 래칫 — 하락만 차단한다. 수치가 오르면 fail_under 를 올리는 PR 을 별도로 낸다
 # (자동 상향은 리뷰 없이 기준이 바뀌어 나중에 왜 빨간지 설명할 수 없게 된다).
-# 실측 58%(2026-08-17, 18416 구문 중 7647 미커버) 바로 아래인 57 에서 시작한다.
-# 정확히 58 로 잡으면 무해한 리팩터링에도 CI 가 빨개져 게이트가 우회당한다.
+# 실측 59%(2026-08-18, 자동 복구 루프 도입 후, 18661 구문 중 7643 미커버) 바로 아래인 59 로 상향한다.
+# 정확히 59.04 로 잡으면 무해한 리팩터링에도 CI 가 빨개져 게이트가 우회당한다.
 [tool.coverage.run]
 source = ["app", "worker"]
 omit = ["*/__pycache__/*", "app/web/static/*"]
 
 [tool.coverage.report]
-fail_under = 57
+fail_under = 59
 skip_covered = false
 
 [tool.pytest.ini_options]
