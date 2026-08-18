@@ -134,7 +134,9 @@ class Run(BaseModel):
     comparison: RunComparison | None = None
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
-    # 자동 재실행으로 생성된 Run 이면 원본 Run 의 id. 이력에서 한 쌍으로 보이게 한다.
+    # 이 Run 이 자동 재실행으로 이어지고 있으면 자기 자신의 run_id(현재 구현은 기존
+    # 부분 재실행 진입점을 그대로 재사용해 제자리에서 재개하므로 별도의 새 Run 을
+    # 만들지 않는다 — 다른 Run 을 가리키지 않는다). 자동 재실행 연쇄를 막는 근거로만 쓰인다.
     auto_rerun_of: str | None = None
 
 
