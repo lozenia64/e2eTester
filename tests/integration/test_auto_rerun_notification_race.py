@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -57,6 +58,7 @@ from app.notifications.run_completion_email import (
     RunCompletionEmailNotifier,
 )
 from app.platform.eventing.bus import EventBus, RunFinished
+from app.platform.eventing.outbox import SqliteOutbox
 from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 from app.realtime.adapter import RealtimeNotificationAdapter, SuiteRealtimeNotificationAdapter
@@ -276,7 +278,7 @@ class _RelayOnFinishRepo(SqliteRunWriteRepository):
         return result
 
 
-async def _build_real_pipeline(tmp_path, *, start_queue: bool):
+async def _build_real_pipeline(tmp_path, *, start_queue: bool) -> SimpleNamespace:
     db = SqliteDatabase(tmp_path / "race.db")
     await ensure_schema(db)
     write_repo = _RelayOnFinishRepo(db)
@@ -289,7 +291,7 @@ async def _build_real_pipeline(tmp_path, *, start_queue: bool):
     )
     event_bus = EventBus()
     relay = make_outbox_relay(
-        __import__("app.platform.eventing.outbox", fromlist=["SqliteOutbox"]).SqliteOutbox(db),
+        SqliteOutbox(db),
         make_projection_handlers(db, write_repo),
         write_repo,
         event_bus,
@@ -338,7 +340,17 @@ async def _build_real_pipeline(tmp_path, *, start_queue: bool):
         queue.set_run_job_handler(lambda descriptor: _record(queued, descriptor))
         queue.start()
 
-    return service, run, relay, dispatched, mock_sender, notifier, queued, queue
+    return SimpleNamespace(
+        db=db,
+        service=service,
+        run=run,
+        relay=relay,
+        dispatched=dispatched,
+        mock_sender=mock_sender,
+        notifier=notifier,
+        queued=queued,
+        queue=queue,
+    )
 
 
 @pytest.mark.asyncio
@@ -348,31 +360,24 @@ async def test_relay_winning_the_race_does_not_send_premature_operator_alert(tmp
     수정 전에는 이 시점의 하이드레이션이 ``auto_rerun_pending=False`` 를 봤고, 운영자 알림이
     ``run_operator`` dedup 키를 선점해 재실행의 진짜 최종 결과가 영원히 통보되지 않았다.
     """
-    (
-        service,
-        run,
-        _relay,
-        dispatched,
-        mock_sender,
-        notifier,
-        queued,
-        queue,
-    ) = await _build_real_pipeline(tmp_path, start_queue=True)
+    pipeline = await _build_real_pipeline(tmp_path, start_queue=True)
     monkeypatch.setattr(
         "app.platform.eventing.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
-        lambda *_args, **_kwargs: notifier,
+        lambda *_args, **_kwargs: pipeline.notifier,
     )
 
-    await service._execute_run(run.run_id, {"browser_mode": "headless"}, start_index=0, handle=None)
-    await queue.join()
-    await queue.stop()
+    await pipeline.service._execute_run(
+        pipeline.run.run_id, {"browser_mode": "headless"}, start_index=0, handle=None
+    )
+    await pipeline.queue.join()
+    await pipeline.queue.stop()
     await asyncio.sleep(0.05)
 
-    assert dispatched, "릴레이가 RunFinished 를 디스패치하지 않았다(테스트 하네스 문제)"
-    assert dispatched[0] == (RunStatus.ERROR, True)
-    mock_sender.send.assert_not_called()
+    assert pipeline.dispatched, "릴레이가 RunFinished 를 디스패치하지 않았다(테스트 하네스 문제)"
+    assert pipeline.dispatched[0] == (RunStatus.ERROR, True)
+    pipeline.mock_sender.send.assert_not_called()
     # 재실행은 실제로 큐잉됐다(플래그가 거짓 억제가 아님을 함께 못박는다).
-    assert [descriptor.run_id for descriptor in queued] == [run.run_id]
+    assert [descriptor.run_id for descriptor in pipeline.queued] == [pipeline.run.run_id]
 
 
 @pytest.mark.asyncio
@@ -384,31 +389,29 @@ async def test_failed_auto_rerun_enqueue_still_delivers_operator_alert(tmp_path,
     아웃박스는 이미 발행한 행을 다시 처리하지 않으므로, 플래그만 되돌려서는 알림이 영영
     나가지 않는다.
     """
-    (
-        service,
-        run,
-        _relay,
-        dispatched,
-        mock_sender,
-        notifier,
-        _queued,
-        _queue,
-    ) = await _build_real_pipeline(tmp_path, start_queue=False)
+    pipeline = await _build_real_pipeline(tmp_path, start_queue=False)
     monkeypatch.setattr(
         "app.platform.eventing.subscribers.email_notification.RunCompletionEmailNotifier.from_env",
-        lambda *_args, **_kwargs: notifier,
+        lambda *_args, **_kwargs: pipeline.notifier,
     )
 
-    await service._execute_run(run.run_id, {"browser_mode": "headless"}, start_index=0, handle=None)
+    await pipeline.service._execute_run(
+        pipeline.run.run_id, {"browser_mode": "headless"}, start_index=0, handle=None
+    )
     await asyncio.sleep(0.05)
 
     # 첫 디스패치는 대기 상태를 보고 알림을 건너뛰었다(경합이 실제로 발생했다는 증거).
-    assert dispatched[0] == (RunStatus.ERROR, True)
+    assert pipeline.dispatched[0] == (RunStatus.ERROR, True)
     # 보상 발행 덕분에 '종료 + 대기 아님' 상태가 다시 디스패치됐다.
-    assert (RunStatus.ERROR, False) in dispatched[1:]
+    assert (RunStatus.ERROR, False) in pipeline.dispatched[1:]
     # 그리고 운영자 알림이 정확히 한 번 나갔다(진짜 최종 결과가 삼켜지지 않았다).
-    mock_sender.send.assert_called_once()
+    pipeline.mock_sender.send.assert_called_once()
 
-    final = await service._write_repo.get_run(run.run_id)
+    final = await pipeline.service._write_repo.get_run(pipeline.run.run_id)
     assert final.status is RunStatus.ERROR
     assert final.auto_rerun_pending is False
+
+    # 보상으로 늘어난 두 번째 RunFinished 가 프로젝션·실시간 프로젝터를 깨뜨리지 않는다
+    # (깨졌다면 릴레이가 그 행을 dead letter 로 보냈을 것이다).
+    await pipeline.relay.process_once()
+    assert await pipeline.db.fetchall("SELECT event_id FROM outbox_dead_letter") == []
