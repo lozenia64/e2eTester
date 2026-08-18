@@ -22,6 +22,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -175,7 +176,13 @@ def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) ->
                 created,
                 modules=tuple(_module_from_record(module) for module in event.all_modules),
             )
-        case RunStarted() | RunFinished() | RunDeleted() | RunComparisonAttached():
+        case (
+            RunStarted()
+            | RunFinished()
+            | RunDeleted()
+            | RunComparisonAttached()
+            | RunAutoRerunTriggered()
+        ):
             return _apply_summary(base, record, run_id=run_id)
         case (
             RunSealedInterrupted(all_modules=modules) | RunPartialRerunStarted(all_modules=modules)

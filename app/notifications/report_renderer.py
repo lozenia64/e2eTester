@@ -256,9 +256,9 @@ def _module_table(modules: list[dict]) -> str:
         # 실패 계열 아님). plain-text 본문의 "자동 복구된 모듈: ..." 문구와 같은 어휘.
         recovery_badge = (
             f'<br><span style="display:inline-block;margin-top:4px;padding:2px 8px;'
-            f'border-radius:999px;background:{WARN_SOFT_BG};color:{WARN_COLOR};'
+            f"border-radius:999px;background:{WARN_SOFT_BG};color:{WARN_COLOR};"
             f'font-size:11px;font-weight:700;">자동 복구됨 '
-            f'({module.get("retry_count") or 0}회 재시도)</span>'
+            f"({module.get('retry_count') or 0}회 재시도)</span>"
             if module.get("recovered")
             else ""
         )

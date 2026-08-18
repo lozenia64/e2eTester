@@ -75,6 +75,4 @@ class CompositeExecutionGateway(ExecutionGateway):
         tier: RecoveryTier,
         entry_url: str | None,
     ) -> bool:
-        return await self._for_mode(handle.execution_mode).recover_session(
-            handle, tier, entry_url
-        )
+        return await self._for_mode(handle.execution_mode).recover_session(handle, tier, entry_url)
