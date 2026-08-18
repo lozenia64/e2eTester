@@ -1,4 +1,4 @@
-"""RunEventCodec payload 키 집합 불변 테스트 — 18개 Run 이벤트 전부."""
+"""RunEventCodec payload 키 집합 불변 테스트 — 19개 Run 이벤트 전부."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -196,6 +197,10 @@ def _expects_run_status(event) -> bool:
         ),
         (RunImported(run_summary=_SUMMARY, all_modules=[_MODULE]), {"all_modules"}),
         (RunDeleted(), set()),
+        (
+            RunAutoRerunTriggered(original_run_id="run_prev", from_module_id="hom.login"),
+            {"original_run_id", "from_module_id"},
+        ),
     ],
 )
 def test_run_event_payload_key_invariant(event, expected_keys):
@@ -263,6 +268,7 @@ def test_run_created_does_not_carry_run_status():
         ModuleFailureAnalysisAttached(module_id="hom.login", module=_MODULE),
         RunImported(run_summary=_SUMMARY, all_modules=[_MODULE]),
         RunDeleted(),
+        RunAutoRerunTriggered(original_run_id="run_prev", from_module_id="hom.login"),
     ],
 )
 def test_run_event_codec_roundtrip(event):

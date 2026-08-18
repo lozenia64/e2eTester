@@ -254,3 +254,24 @@ def test_default_signal_preserves_legacy_tier_zero_behaviour():
     assert isinstance(decision, RetryModule)
     assert decision.tier is RecoveryTier.RETRY_IN_PLACE
     assert decision.backoff_ms == 500
+
+
+def test_tier_two_budget_exhaustion_downgrades_to_tier_one():
+    """로그인 재주행은 비싸다 — Run 당 예산을 넘으면 등급을 낮춘다(설계 §3.6)."""
+    decision = _failure_decision(
+        failure_signal=FailureSignal.SESSION_LOST,
+        tier2_used=2,
+        tier2_budget=2,
+    )
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is RecoveryTier.RESET_TO_MODULE_ENTRY
+
+
+def test_tier_two_allowed_while_budget_remains():
+    decision = _failure_decision(
+        failure_signal=FailureSignal.SESSION_LOST,
+        tier2_used=1,
+        tier2_budget=2,
+    )
+    assert isinstance(decision, RetryModule)
+    assert decision.tier is RecoveryTier.REPLAY_FROM_LOGIN

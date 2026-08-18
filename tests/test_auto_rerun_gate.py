@@ -44,3 +44,12 @@ def test_auto_rerun_does_not_chain():
 
 def test_exhausted_budget_skips():
     assert isinstance(_decide(budget_remaining=0), SkipAutoRerun)
+
+
+def test_auto_rerun_emits_event_with_original_run_id():
+    from app.contexts.run.domain.events import RunAutoRerunTriggered
+
+    event = RunAutoRerunTriggered(original_run_id="run1", from_module_id="m2")
+
+    assert event.original_run_id == "run1"
+    assert event.from_module_id == "m2"

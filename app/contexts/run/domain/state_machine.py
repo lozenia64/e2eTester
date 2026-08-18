@@ -231,6 +231,8 @@ class RunStateMachine:
         backoff_ms: int,
         failure_signal: FailureSignal = FailureSignal.UNKNOWN,
         attempted_tiers: tuple[RecoveryTier, ...] = (),
+        tier2_used: int = 0,
+        tier2_budget: int = 2,
     ) -> PostStepFailureDecision:
         if cancel_requested:
             return CancelRemaining()
@@ -243,10 +245,11 @@ class RunStateMachine:
         if failure_signal is FailureSignal.SITE:
             return CompleteStep()
         if step_status in retryable_on and current_attempt < max_attempts:
-            return RetryModule(
-                backoff_ms=backoff_ms,
-                tier=_escalated_tier(failure_signal, attempted_tiers),
-            )
+            tier = _escalated_tier(failure_signal, attempted_tiers)
+            # 로그인 재주행은 비싸므로 Run 당 예산을 넘기면 한 단계 낮춘다(설계 §3.6).
+            if tier is RecoveryTier.REPLAY_FROM_LOGIN and tier2_used >= tier2_budget:
+                tier = RecoveryTier.RESET_TO_MODULE_ENTRY
+            return RetryModule(backoff_ms=backoff_ms, tier=tier)
         return CompleteStep()
 
     @staticmethod

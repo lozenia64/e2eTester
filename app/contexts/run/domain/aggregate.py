@@ -9,6 +9,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunEvent,
@@ -277,6 +278,22 @@ class RunAggregate:
         """
         self._state.auto_rerun_of = auto_rerun_of
 
+    def mark_auto_rerun_pending(self, from_module_id: str) -> None:
+        """자동 재실행이 큐잉됐음을 표시하고 감사 이벤트를 남긴다(설계 R4).
+
+        완료 메일 발송 판정(``RunCompletionEmailNotifier.send_run_completion``)이 이 플래그를
+        보고 원본 Run 의 알림을 보류한다 — 재실행이 이어받은 같은 Run 의 최종 결과가 진짜
+        결과이므로, 여기서도 메일을 보내면 담당자에게 중복 도달한다. 큐잉이 실제로 성공한
+        뒤에만 호출돼야 한다(호출자 책임 — 실패하면 원본 알림이 정상 발송돼야 한다).
+        """
+        self._state.auto_rerun_pending = True
+        self._emit(
+            RunAutoRerunTriggered(
+                original_run_id=self._state.run_id,
+                from_module_id=from_module_id,
+            )
+        )
+
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis
@@ -365,6 +382,11 @@ class RunAggregate:
         self._state.ended_at = None
         self._state.awaiting_input_module_id = None
         self._state.awaiting_input_prompt = None
+        # R4 — 이 Run 이 자동 재실행 대기 중이었다면(auto_rerun_pending=True) 그 대기는 여기서
+        # 끝난다: 재실행이 실제로 다시 도는 순간부터는 "이 Run의 결과가 최종인가"를 이번
+        # 실행의 종료가 새로 결정해야 한다. 리셋하지 않으면 자동 재실행이 다시 실패로 끝나도
+        # 완료 메일이 영원히 억제된다(진짜 최종 결과가 통보되지 않는 사일런트 실패).
+        self._state.auto_rerun_pending = False
         from_module_id = ordered_modules[from_index].module_id
         for module in ordered_modules[from_index:]:
             if module.status is ModuleStatus.SKIPPED:
@@ -463,6 +485,12 @@ class RunAggregate:
         self._state.awaiting_input_module_id = None
         self._state.awaiting_input_prompt = None
         self._state.status = self.compute_final_status(forced_status)
+        # R4 — 새로운 종료마다 낡은 "자동 재실행 대기" 표식부터 지운다. 이 Run 이 이전
+        # 자동 재실행의 재개였다면(prepare_partial_rerun 이후 이 지점까지 온 것), 지금이 그
+        # 재실행의 진짜 결과다. 표식을 지우지 않으면 RunService 가 이번에는 재실행을 다시
+        # 걸지 않기로(연쇄 차단) 판단할 때 완료/운영자 알림이 영원히 억제된다(설계 R4 위반).
+        # 이번 종료에서 또 자동 재실행을 걸기로 하면 RunService 가 즉시 다시 세운다.
+        self._state.auto_rerun_pending = False
         self._emit_run_finished()
         return self._state.status
 

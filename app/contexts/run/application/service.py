@@ -703,6 +703,10 @@ class RunService:
                             backoff_ms=module_policy.retry_backoff_ms,
                             failure_signal=execution_result.failure_signal,
                             attempted_tiers=tuple(attempted_tiers),
+                            tier2_used=sum(
+                                1 for t in attempted_tiers if t is RecoveryTier.REPLAY_FROM_LOGIN
+                            ),
+                            tier2_budget=self._settings.recovery_tier2_budget,
                         )
 
                     if isinstance(post, CancelRemaining):
@@ -727,20 +731,28 @@ class RunService:
                         )
                         break
                     if isinstance(post, RetryModule):
-                        attempted_tiers.append(post.tier)
-                        if post.tier is not RecoveryTier.RETRY_IN_PLACE:
-                            await self._recover_session_for_retry(
-                                run, module, handle, post.tier, module_entry_url
+                        if self._run_deadline_exceeded(run):
+                            logger.info(
+                                "Run 실행 시간 상한 초과 — 재시도 중단",
+                                log_event="run.recovery.deadline",
+                                run_id=run.run_id,
                             )
-                        aggregate.record_retry(
-                            module,
-                            tier=post.tier,
-                            failure_signal=execution_result.failure_signal,
-                        )
-                        await self._persist(run, aggregate)
-                        await asyncio.sleep(post.backoff_ms / 1000)
-                        await self._transition_to_running(run, module)
-                        continue
+                            post = CompleteStep()
+                        else:
+                            attempted_tiers.append(post.tier)
+                            if post.tier is not RecoveryTier.RETRY_IN_PLACE:
+                                await self._recover_session_for_retry(
+                                    run, module, handle, post.tier, module_entry_url
+                                )
+                            aggregate.record_retry(
+                                module,
+                                tier=post.tier,
+                                failure_signal=execution_result.failure_signal,
+                            )
+                            await self._persist(run, aggregate)
+                            await asyncio.sleep(post.backoff_ms / 1000)
+                            await self._transition_to_running(run, module)
+                            continue
                     assert isinstance(post, CompleteStep)
 
                     self._record_module_result(aggregate, module, execution_result)
@@ -857,6 +869,13 @@ class RunService:
         if checkpoint is None:
             return None
         return checkpoint.storage_state
+
+    def _run_deadline_exceeded(self, run: Run) -> bool:
+        """Run 총 실행 시간 상한 초과 여부. 미설정(None)이면 항상 False(기존 동작)."""
+        limit = self._settings.run_max_duration_s
+        if limit is None or run.started_at is None:
+            return False
+        return (datetime.now(UTC) - run.started_at).total_seconds() > limit
 
     async def _recover_session_for_retry(
         self,
@@ -1039,7 +1058,7 @@ class RunService:
         if failed is None:
             return
         try:
-            await self.rerun_from_module(
+            resumed_run = await self.rerun_from_module(
                 run_id=run.run_id,
                 from_module_id=failed.module_id,
                 auto_rerun_of=run.run_id,
@@ -1050,6 +1069,14 @@ class RunService:
                 log_event="run.auto_rerun.failed",
                 run_id=run.run_id,
             )
+            return
+        # 큐잉이 실제로 성공했을 때만 대기 플래그를 세운다(R4) — 실패하면 원본 Run 의 정상
+        # 완료 알림이 그대로 발송돼야 한다. ``rerun_from_module`` 이 이미 이 Run(같은 run_id,
+        # 제자리 재개)을 RUNNING 으로 되돌려 영속했으므로, 그 최신 스냅샷(``resumed_run``) 위에
+        # 이어 붙여야 그 재설정을 되돌려쓰지 않는다(오래된 ``run`` 객체를 다시 저장하면 안 됨).
+        aggregate = RunAggregate(resumed_run)
+        aggregate.mark_auto_rerun_pending(from_module_id=failed.module_id)
+        await self._persist(resumed_run, aggregate)
 
     # --- 로그 기록 --------------------------------------------------------
 

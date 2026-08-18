@@ -107,6 +107,8 @@ class E2ESettings(BaseSettings):
     auto_rerun_enabled: bool = Field(default=False, validation_alias="E2E_AUTO_RERUN_ENABLED")
     # Run 총 실행 시간 상한(초). None 이면 무제한 — 기본값이 기존 동작을 유지한다.
     run_max_duration_s: int | None = Field(default=None, validation_alias="E2E_RUN_MAX_DURATION_S")
+    # Run 당 로그인 재주행(tier 2) 허용 횟수(설계 §3.6).
+    recovery_tier2_budget: int = Field(default=2, validation_alias="E2E_RECOVERY_TIER2_BUDGET")
 
     # Playwright 프로필
     user_data_dir: str | None = Field(default=None, validation_alias="E2E_USER_DATA_DIR")

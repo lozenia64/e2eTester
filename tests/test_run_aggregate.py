@@ -165,6 +165,16 @@ def test_finalize_seals_run():
     assert run.awaiting_input_prompt is None
 
 
+def test_finalize_clears_auto_rerun_pending():
+    """R4 — 새 종료마다 낡은 대기 표식을 지운다(그러지 않으면 재실행이 다시 실패해도
+    완료/운영자 알림이 영원히 억제된다)."""
+    module = _module("a", 0, status=ModuleStatus.ERROR)
+    run = _run([module], status=RunStatus.RUNNING)
+    run.auto_rerun_pending = True
+    RunAggregate(run).finalize(None)
+    assert run.auto_rerun_pending is False
+
+
 def test_finalize_is_idempotent_no_duplicate_run_finished():
     module = _module("a", 0, status=ModuleStatus.ANOMALY)
     run = _run([module], status=RunStatus.RUNNING)
@@ -277,6 +287,37 @@ def test_prepare_partial_rerun_resets_modules_from_index():
     assert modules[2].status == ModuleStatus.PENDING
     events = aggregate.pull_events()
     assert any(type(event.event).__name__ == "RunPartialRerunStarted" for event in events)
+
+
+def test_prepare_partial_rerun_clears_auto_rerun_pending():
+    """R4 — 재실행이 실제로 다시 돌기 시작하면 대기 플래그를 내린다.
+
+    내리지 않으면 이 재실행이 다시 실패로 끝나도 완료 메일이 영원히 억제된다(진짜 최종
+    결과가 통보되지 않는 사일런트 실패 — 설계상 절대 있어서는 안 됨).
+    """
+    modules = [_module("a", 0, status=ModuleStatus.ERROR)]
+    run = _run(modules, status=RunStatus.ERROR)
+    run.auto_rerun_pending = True
+    aggregate = RunAggregate(run)
+
+    aggregate.prepare_partial_rerun(0, modules)
+
+    assert run.auto_rerun_pending is False
+
+
+def test_mark_auto_rerun_pending_sets_flag_and_emits_audit_event():
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.ERROR)
+    aggregate = RunAggregate(run)
+
+    aggregate.mark_auto_rerun_pending(from_module_id="a")
+
+    assert run.auto_rerun_pending is True
+    events = aggregate.pull_events()
+    assert len(events) == 1
+    event = events[0].event
+    assert type(event).__name__ == "RunAutoRerunTriggered"
+    assert event.original_run_id == run.run_id
+    assert event.from_module_id == "a"
 
 
 # --- 복구 가시성 -------------------------------------------------------------

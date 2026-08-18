@@ -138,6 +138,9 @@ async def test_scheduled_error_run_auto_reruns_in_place_when_enabled(tmp_path):
     assert finished.auto_rerun_of == finished.run_id
     # 재시도 attempt 카운터도 부분 재실행으로 1로 리셋된 뒤 다시 소진되어 있어야 한다.
     assert finished.modules[0].attempt == 1
+    # R4 — 재실행이 실제로 다시 돌아 끝났으면 대기 플래그는 내려가 있어야 한다. 내려가지
+    # 않으면 이 두 번째(진짜 최종) ERROR 의 완료/운영자 알림이 영원히 억제된다.
+    assert finished.auto_rerun_pending is False
 
 
 @pytest.mark.asyncio

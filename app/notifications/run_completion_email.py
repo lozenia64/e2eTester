@@ -719,6 +719,12 @@ class RunCompletionEmailNotifier:
     def send_run_completion(self, run: Run) -> None:
         if run.suite_id:
             return
+        # R4 — 자동 재실행이 예정된 Run 은 알림을 보류한다. 재실행 Run 의 결과가
+        # 최종 결과이므로, 원본과 재실행이 각각 메일을 보내면 담당자에게 중복으로 도달한다.
+        # ERROR 상태는 아래 분기에서 send_run_operator_alert 로 즉시 리다이렉트되므로, 이
+        # 가드는 그 분기보다 반드시 앞에 있어야 한다(그러지 않으면 R4 가 무력화된다).
+        if run.auto_rerun_pending:
+            return
         if run.status in RUN_ERROR_STATUSES:
             self.send_run_operator_alert(run)
             return

@@ -169,6 +169,14 @@ class RunDeleted:
     pass
 
 
+@dataclass(frozen=True)
+class RunAutoRerunTriggered:
+    """도구 오류로 끝난 예약 Run 이 자동 재실행을 발동시켰다(감사 기록)."""
+
+    original_run_id: str
+    from_module_id: str
+
+
 RunEvent = (
     RunCreated
     | RunStarted
@@ -188,6 +196,7 @@ RunEvent = (
     | ModuleFailureAnalysisAttached
     | RunImported
     | RunDeleted
+    | RunAutoRerunTriggered
 )
 
 

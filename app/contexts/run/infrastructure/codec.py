@@ -12,6 +12,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -55,6 +56,7 @@ class RunEventCodec:
         "ModuleFailureAnalysisAttached": ModuleFailureAnalysisAttached,
         "RunImported": RunImported,
         "RunDeleted": RunDeleted,
+        "RunAutoRerunTriggered": RunAutoRerunTriggered,
     }
 
     def encode(self, run_id: str, record: RunEventRecord) -> EventEnvelope:
@@ -197,6 +199,11 @@ def _event_to_payload(event: RunEvent) -> dict[str, Any]:
         event, ModuleQueued | ModuleStarted | RunWaitingInput | RunResumed | RunModuleBlocked
     ):
         return {"module_id": event.module_id, "module": _module_to_wire(event.module)}
+    if isinstance(event, RunAutoRerunTriggered):
+        return {
+            "original_run_id": event.original_run_id,
+            "from_module_id": event.from_module_id,
+        }
     raise TypeError(f"unsupported Run event: {type(event).__name__}")
 
 

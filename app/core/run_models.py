@@ -138,6 +138,8 @@ class Run(BaseModel):
     # 부분 재실행 진입점을 그대로 재사용해 제자리에서 재개하므로 별도의 새 Run 을
     # 만들지 않는다 — 다른 Run 을 가리키지 않는다). 자동 재실행 연쇄를 막는 근거로만 쓰인다.
     auto_rerun_of: str | None = None
+    # 자동 재실행이 큐잉되어 이 Run 의 결과가 최종이 아님을 알린다(알림 보류용).
+    auto_rerun_pending: bool = False
 
 
 class DashboardEvent(BaseModel):
