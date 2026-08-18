@@ -199,7 +199,6 @@ async def test_recover_tier_one_navigates_to_entry_url(server):
     assert runtime.dialog_messages == []
 
 
-@pytest.mark.spec("SPEC-RUN-006", "AC-005")
 async def test_recover_tier_one_without_entry_url_is_noop(server):
     from app.core.enums import RecoveryTier
 

@@ -280,15 +280,16 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | AC-002 | 단위 | `tests/test_run_state_machine.py::test_site_signal_never_retries_even_when_policy_allows` | `retryable_on` 이 `ANOMALY` 를 허용해도 `SITE` 는 재시도 금지 |
 | AC-003 | 단위 | `tests/test_run_state_machine.py::test_tier_escalates_when_same_tier_already_attempted` | 같은 tier 반복 실패 시 한 단계 상승 |
 | AC-004 | 단위 | `tests/test_run_detail_recovery_badge.py::test_run_detail_shows_recovered_badge` | Run 상세 HTML 에 "자동 복구됨"/`badge--recovered` 노출 |
-| AC-005 | 단위 | `tests/test_session_server.py::test_recover_tier_one_without_entry_url_is_noop` | `entry_url=None` 이면 tier 1 되감기가 no-op(재이동 없음, `recovered=False`) |
-| AC-006 | 단위 | `tests/test_auto_rerun_gate.py::test_scheduled_error_run_triggers_auto_rerun` | 예약·`ERROR`·예산 잔여 → `TriggerAutoRerun` |
+| AC-005 | 단위 | `tests/test_otp_recovery_guard.py::test_reset_to_module_entry_without_entry_url_skips_rewind` | `entry_url=None` 이면 `RunService._recover_session_for_retry` 가 `gateway.recover_session` 자체를 호출하지 않고 되감기를 생략(제자리 재시도로 폴백) |
+| AC-006 | 단위 | `tests/test_auto_rerun_gate.py::test_auto_rerun_queues_and_auto_rerun_of_is_self_referential` | 큐잉 표시(`auto_rerun_pending`)와 `auto_rerun_of` 가 자기 자신(원본) `run_id` 를 가리키는지 애그리거트 수준에서 검증 |
 | AC-007 | 단위 | `tests/test_run_state_machine.py::test_tier_two_budget_exhaustion_downgrades_to_tier_one` | tier 2 예산 소진 시 `RESET_TO_MODULE_ENTRY` 로 강등 |
 | — | 단위 | `tests/test_run_state_machine.py` | tier 상승 상한(`REPLAY_FROM_LOGIN` 에서 멈춤)·기본 신호 tier 0 하위호환 |
 | — | 단위 | `tests/test_run_aggregate.py` | `record_retry`/`record_recovered`(재시도 이력 누적·`RunModuleRecovered` 발행)·`mark_auto_rerun_pending` |
 | — | 단위 | `tests/test_recovery_tier_execution.py` | `ExecutionGateway.recover_session` 기본 구현·`CompositeExecutionGateway` 위임 배선 |
-| — | 단위 | `tests/test_session_server.py` | tier 1(진입 URL 재이동)·tier 2(런타임 재구축, 재개설 실패 시 옛 런타임 유지) 워커 동작 |
+| — | 단위 | `tests/test_session_server.py` | tier 1(진입 URL 재이동, `entry_url=None` 시 `SessionServer.recover()` 자체의 no-op 포함)·tier 2(런타임 재구축, 재개설 실패 시 옛 런타임 유지) 워커 동작 |
 | — | 단위 | `tests/test_otp_recovery_guard.py` | R3 — OTP 중계 미설정 시 tier 2 되감기 생략 |
-| — | 단위 | `tests/test_auto_rerun_gate.py` | `ANOMALY`/수동 실행/연쇄/예산 소진 시 `SkipAutoRerun` |
+| — | 단위 | `tests/test_auto_rerun_gate.py` | `ANOMALY`/수동 실행/연쇄/예산 소진 시 `SkipAutoRerun`, 순수 결정(`TriggerAutoRerun`) |
+| 통합 | `tests/integration/test_auto_rerun_wiring.py::test_scheduled_error_run_auto_reruns_in_place_when_enabled` | `RunService` 전체 실행 경로로 자동 재실행·`auto_rerun_of` 를 종단간 검증(traceability 스캔 대상 밖 — `tests/` 최상위가 아님) |
 | CI 게이트 | `tests/test_spec_traceability.py` | 본 Spec 의 `@pytest.mark.spec` 마커 ↔ AC 섹션 정합 |
 | CI 게이트 | `scripts/check_docs_consistency.py` | env 변수(`E2E_AUTO_RERUN_ENABLED` 등) 문서화 정합 |
 

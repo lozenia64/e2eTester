@@ -169,3 +169,29 @@ async def test_otp_relay_token_blank_after_strip_counts_as_not_configured(tmp_pa
     )
 
     assert inner_gateway.recovery_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.spec("SPEC-RUN-006", "AC-005")
+async def test_reset_to_module_entry_without_entry_url_skips_rewind(tmp_path):
+    """AC-005 — tier 1(``RESET_TO_MODULE_ENTRY``) 결정인데 모듈 진입 URL 을 확보하지
+    못했으면(``entry_url=None``), ``RunService._recover_session_for_retry`` 는
+    ``gateway.recover_session`` 자체를 호출하지 않고 곧장 반환한다 — 되감기를 생략하고
+    제자리 재시도(tier 0)로 진행한다(``service.py`` 의 entry_url 미확보 가드,
+    ``tests/test_session_server.py::test_recover_tier_one_without_entry_url_is_noop`` 는
+    한 계층 아래인 ``SessionServer.recover()`` 자체의 no-op 만 검증하고 이 가드는
+    다루지 않는다). tier 1 이므로 R3(OTP 안전장치, ``REPLAY_FROM_LOGIN`` 전용)와는 무관하다.
+    """
+    settings = E2ESettings(_env_file=None)
+    inner_gateway = SimulatedExecutionGateway()
+    service = _build_service(
+        inner_gateway=inner_gateway, requires_user_input=False, settings=settings, tmp_path=tmp_path
+    )
+    run = _run()
+    handle = ExecutionHandle(execution_mode="simulated", session_id="s1")
+
+    await service._recover_session_for_retry(
+        run, run.modules[0], handle, RecoveryTier.RESET_TO_MODULE_ENTRY, None
+    )
+
+    assert inner_gateway.recovery_calls == []
