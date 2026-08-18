@@ -78,4 +78,7 @@ class RecoveryTier(IntEnum):
 
     RETRY_IN_PLACE = 0  # 되감기 없음 — backoff 후 같은 페이지에서 재시도(현행 동작)
     RESET_TO_MODULE_ENTRY = 1  # 다이얼로그 정리 후 모듈 진입 URL 로 재이동
-    REPLAY_FROM_LOGIN = 2  # 세션 폐기·재개설 후 로그인 모듈부터 주행
+    # 설계 의도는 "세션 폐기·재개설 후 로그인 모듈부터 주행"이지만, 현행 구현
+    # (worker/session_server.py::_reopen_session)은 런타임 재구축까지만 한다 — 로그인 재주행은
+    # 아직 없다(SPEC-RUN-006 FR-004 '현행 구현 한계'). 이름은 목표 상태를 가리킨다.
+    REPLAY_FROM_LOGIN = 2

@@ -222,7 +222,15 @@ class SessionServer:
             return False
 
     async def _reopen_session(self, session: _Session) -> bool:
-        """런타임을 폐기하고 같은 session_id 로 다시 만든다(로그인부터 재주행하기 위함)."""
+        """런타임을 폐기하고 같은 session_id 로 다시 만든다.
+
+        **주의 — 이름(`REPLAY_FROM_LOGIN`)과 달리 로그인 모듈을 다시 주행하지는 않는다.**
+        여기서 하는 일은 브라우저 런타임 재구축까지다. 따라서 공용 `user_data_dir` 을 쓰는
+        레거시 시스템에서는 Chromium 프로필 잠금으로 재구축이 실패해 tier 0 으로 안전하게
+        폴백하고, 그 외 시스템에서는 새 컨텍스트에 쿠키가 없어 재시도가 미인증으로 실패한다 —
+        현재 tier 2 에 실질적 복구 이득이 없는 이유다. 재개설 성공 후 로그인 모듈을 다시
+        태우는 것은 후속 작업이다(SPEC-RUN-006 FR-004 의 '현행 구현 한계' 참고).
+        """
         workflow_executor = self._executors[session.execution_mode]
 
         def _rebuild():

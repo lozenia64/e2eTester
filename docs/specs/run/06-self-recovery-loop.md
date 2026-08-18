@@ -27,7 +27,7 @@
 **In scope:**
 
 - 실패 신호 분류(`FailureSignal`) → 복구 등급(`RecoveryTier`) 결정 → 등급 상승(escalation)
-- `ExecutionGateway.recover_session` 을 통한 tier 1(모듈 진입 URL 재이동)·tier 2(세션 재개설·로그인 재주행) 되감기
+- `ExecutionGateway.recover_session` 을 통한 tier 1(모듈 진입 URL 재이동)·tier 2(세션 재개설) 되감기 — tier 2 의 "로그인 재주행"은 아직 구현되지 않았다(FR-004 의 현행 구현 한계 참고)
 - 되감기 실패·진입 URL 미확보 시 tier 0(제자리 재시도) 폴백
 - 복구 가시성(`recovered`/`recovery_tiers`/`failure_signals`) 및 노출 지점(Run 상세 배지·일간 현황·완료 메일)
 - Run 수준 자동 재실행 게이트(`decide_auto_rerun`) — 예약 Run·`ERROR`·예산 잔여일 때만
@@ -87,6 +87,21 @@
 | --- | --- |
 | 1 (`RESET_TO_MODULE_ENTRY`) | 열린 다이얼로그 기록 정리 → `page.goto(entry_url)` |
 | 2 (`REPLAY_FROM_LOGIN`) | 기존 런타임 폐기 → 같은 `session_id` 로 재개설(재개설 실패 시 옛 런타임 유지) |
+
+> **현행 구현 한계 — tier 2 는 아직 "로그인 재주행"이 아니다(정직한 서술).**
+> 등급 이름(`REPLAY_FROM_LOGIN`)과 설계 의도는 "세션을 버리고 다시 열어 **로그인 모듈부터
+> 다시 주행한 뒤** 실패 모듈을 재시도한다"이지만, 실제 `worker/session_server.py` 의
+> `_reopen_session` 은 **브라우저 런타임 재구축까지만** 한다 — 로그인 모듈을 다시 태우는
+> 코드는 어디에도 없다. 결과적으로:
+> - `launch_persistent_context` + 공용 `user_data_dir` 을 쓰는 레거시 3종(HOM/FP/HRP)은
+>   재구축이 Chromium 프로필 잠금에 걸려 실패하고, 워커가 옛 런타임을 유지한 채 tier 0
+>   (제자리 재시도)으로 안전하게 폴백한다(크래시는 없다).
+> - 그 외 시스템은 새 컨텍스트에 쿠키가 없어 재시도가 **미인증 상태로** 실행되고 결국 실패한다.
+>
+> 즉 **현재 tier 2 는 `SESSION_LOST` 에 대해 tier 0 이상의 실질적 복구 이득을 주지 않는다.**
+> 진짜 수정(재개설 성공 후 로그인 모듈 재주행)은 이 브랜치 범위 밖의 후속 작업이다. 그래서
+> 계획서 **Step 4(실브라우저 tier 1/2 수동 검증)** 는 여전히 필수 게이트로 남는다 — 운영에서
+> `E2E_EXECUTION_MODE=remote` 또는 `auto_rerun_enabled=true` 를 켜기 전에 반드시 수행해야 한다.
 
 **비즈니스 규칙:**
 
