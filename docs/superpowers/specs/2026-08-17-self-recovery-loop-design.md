@@ -64,9 +64,7 @@ if isinstance(post, RetryModule):
 ```python
 if storage_state_valid:
     return ResumeFromCheckpoint(from_index=checkpoint_module_index + 1)
-return ReplayFromLogin(
-    from_index=login_module_index if login_module_index is not None else 0
-)
+return ReplayFromLogin(from_index=login_module_index if login_module_index is not None else 0)
 ```
 
 그러나 이 함수는 **프로세스 재기동 복구 경로**(`reconcile_interrupted_runs`, `SPEC-RUN-004`)에서만 호출된다. 실패 재시도 경로는 이 판정을 전혀 쓰지 않는다.
@@ -128,13 +126,13 @@ except Exception as exc:
 
 ```python
 class FailureSignal(StrEnum):
-    TIMEOUT       = "TIMEOUT"        # 대기 시간 초과
+    TIMEOUT = "TIMEOUT"  # 대기 시간 초과
     SELECTOR_MISS = "SELECTOR_MISS"  # 요소를 찾지 못함
-    NAVIGATION    = "NAVIGATION"     # 페이지 이동·로드 실패
-    SESSION_LOST  = "SESSION_LOST"   # 세션·로그인 만료, 컨텍스트 소실
-    DIALOG        = "DIALOG"         # 예기치 않은 다이얼로그·팝업
-    SITE          = "SITE"           # 사이트 이상 (RuntimeError → ANOMALY)
-    UNKNOWN       = "UNKNOWN"        # 미분류
+    NAVIGATION = "NAVIGATION"  # 페이지 이동·로드 실패
+    SESSION_LOST = "SESSION_LOST"  # 세션·로그인 만료, 컨텍스트 소실
+    DIALOG = "DIALOG"  # 예기치 않은 다이얼로그·팝업
+    SITE = "SITE"  # 사이트 이상 (RuntimeError → ANOMALY)
+    UNKNOWN = "UNKNOWN"  # 미분류
 ```
 
 **분류 위치:** `app/runner/workflow_engine.py` 의 `execute_step` except 절. 여기가 **예외 객체 자체를 볼 수 있는 유일한 지점**이며, 이미 `ANOMALY`/`ERROR` 를 가르고 있는 곳이다.

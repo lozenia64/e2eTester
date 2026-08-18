@@ -102,7 +102,7 @@ def test_target_closed_is_session_lost():
     [
         ('waiting for selector "#btn" failed', FailureSignal.SELECTOR_MISS),
         ("net::ERR_CONNECTION_RESET at https://example.com", FailureSignal.NAVIGATION),
-        ("navigation to \"https://x\" is interrupted", FailureSignal.NAVIGATION),
+        ('navigation to "https://x" is interrupted', FailureSignal.NAVIGATION),
         ("Browser has been closed", FailureSignal.SESSION_LOST),
     ],
 )
@@ -623,13 +623,13 @@ Run: `python3 -m grep -n "StepExecutionResult(" app/execution/worker_gateway.py`
 해당 생성자 호출에 아래 인자를 추가한다:
 
 ```python
-            failure_signal=payload.failure_signal,
+failure_signal = (payload.failure_signal,)
 ```
 
 같은 파일에서 워커 측이 `RunStepResponse` 를 만드는 곳(`worker/http_server.py`)에도 대칭으로 추가한다:
 
 ```python
-        failure_signal=result.failure_signal,
+failure_signal = (result.failure_signal,)
 ```
 
 - [ ] **Step 7: 인터프리터가 신호를 도메인에 전달**
@@ -865,17 +865,15 @@ from app.core.enums import RecoveryTier
 `service.py` 의 `RetryModule` 처리 블록을 교체한다.
 
 ```python
-                    if isinstance(post, RetryModule):
-                        attempted_tiers.append(post.tier)
-                        if post.tier is not RecoveryTier.RETRY_IN_PLACE:
-                            await self._recover_session_for_retry(
-                                run, module, handle, post.tier, module_entry_url
-                            )
-                        aggregate.record_retry(module)
-                        await self._persist(run, aggregate)
-                        await asyncio.sleep(post.backoff_ms / 1000)
-                        await self._transition_to_running(run, module)
-                        continue
+if isinstance(post, RetryModule):
+    attempted_tiers.append(post.tier)
+    if post.tier is not RecoveryTier.RETRY_IN_PLACE:
+        await self._recover_session_for_retry(run, module, handle, post.tier, module_entry_url)
+    aggregate.record_retry(module)
+    await self._persist(run, aggregate)
+    await asyncio.sleep(post.backoff_ms / 1000)
+    await self._transition_to_running(run, module)
+    continue
 ```
 
 `RunService` 클래스에 헬퍼를 추가한다.
@@ -1076,64 +1074,66 @@ from app.core.enums import RecoveryTier
 `capture_storage_state` 아래에 메서드를 추가한다.
 
 ```python
-    async def recover(
-        self,
-        session_id: str,
-        tier: RecoveryTier,
-        entry_url: str | None,
-    ) -> bool:
-        """재시도 전에 세션을 ``tier`` 만큼 되감는다. 되감았으면 True.
+async def recover(
+    self,
+    session_id: str,
+    tier: RecoveryTier,
+    entry_url: str | None,
+) -> bool:
+    """재시도 전에 세션을 ``tier`` 만큼 되감는다. 되감았으면 True.
 
-        되감기 실패는 예외로 전파하지 않는다 — 호출자는 실패 시 제자리 재시도로 진행한다.
-        """
-        try:
-            session = self._require_session(session_id)
-        except Exception:
-            return False
-
-        if tier is RecoveryTier.RESET_TO_MODULE_ENTRY:
-            if entry_url is None:
-                return False
-            return await self._reset_to_entry(session, entry_url)
-        if tier is RecoveryTier.REPLAY_FROM_LOGIN:
-            return await self._reopen_session(session)
+    되감기 실패는 예외로 전파하지 않는다 — 호출자는 실패 시 제자리 재시도로 진행한다.
+    """
+    try:
+        session = self._require_session(session_id)
+    except Exception:
         return False
 
-    async def _reset_to_entry(self, session: _Session, entry_url: str) -> bool:
-        """열린 다이얼로그 기록을 끊고 진입 URL 로 재이동한다."""
-
-        def _navigate() -> bool:
-            page = session.runtime.page
-            # 되감기 이후의 스텝이 과거 다이얼로그를 자기 것으로 오해하지 않도록 경계를 끊는다.
-            dialogs = getattr(session.runtime, "dialog_messages", None)
-            if dialogs is not None:
-                dialogs.clear()
-            page.goto(entry_url)
-            page.wait_for_load_state("domcontentloaded")
-            return True
-
-        try:
-            # session.executor 는 **ThreadPoolExecutor**(세션 전용 단일 스레드 풀)다.
-            # Playwright sync 객체의 스레드 어피니티 때문에 반드시 이 풀에서 실행해야 한다.
-            return await self._run_on_session_thread(session.executor, _navigate)
-        except Exception:
+    if tier is RecoveryTier.RESET_TO_MODULE_ENTRY:
+        if entry_url is None:
             return False
+        return await self._reset_to_entry(session, entry_url)
+    if tier is RecoveryTier.REPLAY_FROM_LOGIN:
+        return await self._reopen_session(session)
+    return False
 
-    async def _reopen_session(self, session: _Session) -> bool:
-        """런타임을 폐기하고 같은 session_id 로 다시 만든다(로그인부터 재주행하기 위함)."""
-        workflow_executor = self._executors[session.execution_mode]
 
-        def _rebuild():
-            workflow_executor.close_runtime(session.runtime)
-            return workflow_executor.build_runtime(
-                session.input_data, session.run_id, session.module_id
-            )
+async def _reset_to_entry(self, session: _Session, entry_url: str) -> bool:
+    """열린 다이얼로그 기록을 끊고 진입 URL 로 재이동한다."""
 
-        try:
-            session.runtime = await self._run_on_session_thread(session.executor, _rebuild)
-        except Exception:
-            return False
+    def _navigate() -> bool:
+        page = session.runtime.page
+        # 되감기 이후의 스텝이 과거 다이얼로그를 자기 것으로 오해하지 않도록 경계를 끊는다.
+        dialogs = getattr(session.runtime, "dialog_messages", None)
+        if dialogs is not None:
+            dialogs.clear()
+        page.goto(entry_url)
+        page.wait_for_load_state("domcontentloaded")
         return True
+
+    try:
+        # session.executor 는 **ThreadPoolExecutor**(세션 전용 단일 스레드 풀)다.
+        # Playwright sync 객체의 스레드 어피니티 때문에 반드시 이 풀에서 실행해야 한다.
+        return await self._run_on_session_thread(session.executor, _navigate)
+    except Exception:
+        return False
+
+
+async def _reopen_session(self, session: _Session) -> bool:
+    """런타임을 폐기하고 같은 session_id 로 다시 만든다(로그인부터 재주행하기 위함)."""
+    workflow_executor = self._executors[session.execution_mode]
+
+    def _rebuild():
+        workflow_executor.close_runtime(session.runtime)
+        return workflow_executor.build_runtime(
+            session.input_data, session.run_id, session.module_id
+        )
+
+    try:
+        session.runtime = await self._run_on_session_thread(session.executor, _rebuild)
+    except Exception:
+        return False
+    return True
 ```
 
 **`_Session` 확장이 필요하다.** 현재 `_Session`(`worker/session_server.py:26`)은 `execution_mode`·`runtime`·`executor`(스레드 풀)·`run_id` 만 보관하며, `build_runtime(input_data, run_id, module_id)` 재호출에 필요한 **`input_data` 와 `module_id` 가 없다.** 두 필드를 추가한다.
@@ -1173,12 +1173,10 @@ class RecoverSessionResponse(BaseModel):
 `worker/http_server.py` 에 라우트를 추가한다 (기존 라우트 등록 패턴을 따를 것).
 
 ```python
-    @app.post("/sessions/{session_id}/recover", response_model=RecoverSessionResponse)
-    async def recover_session(session_id: str, request: RecoverSessionRequest):
-        recovered = await server.recover(
-            session_id, RecoveryTier(request.tier), request.entry_url
-        )
-        return RecoverSessionResponse(recovered=recovered)
+@app.post("/sessions/{session_id}/recover", response_model=RecoverSessionResponse)
+async def recover_session(session_id: str, request: RecoverSessionRequest):
+    recovered = await server.recover(session_id, RecoveryTier(request.tier), request.entry_url)
+    return RecoverSessionResponse(recovered=recovered)
 ```
 
 - [ ] **Step 5: `WorkerExecutionGateway.recover_session` 구현**
@@ -1186,17 +1184,15 @@ class RecoverSessionResponse(BaseModel):
 `app/execution/worker_gateway.py` 에 추가한다 (기존 HTTP 호출 헬퍼 패턴을 따를 것).
 
 ```python
-    async def recover_session(
-        self,
-        handle: ExecutionHandle,
-        tier: RecoveryTier,
-        entry_url: str | None,
-    ) -> bool:
-        payload = RecoverSessionRequest(tier=int(tier), entry_url=entry_url)
-        response = await self._post(
-            f"/sessions/{handle.session_id}/recover", payload.model_dump()
-        )
-        return RecoverSessionResponse.model_validate(response).recovered
+async def recover_session(
+    self,
+    handle: ExecutionHandle,
+    tier: RecoveryTier,
+    entry_url: str | None,
+) -> bool:
+    payload = RecoverSessionRequest(tier=int(tier), entry_url=entry_url)
+    response = await self._post(f"/sessions/{handle.session_id}/recover", payload.model_dump())
+    return RecoverSessionResponse.model_validate(response).recovered
 ```
 
 - [ ] **Step 6: 테스트 통과 확인**
@@ -1257,8 +1253,12 @@ def test_record_retry_accumulates_tier_and_signal_history():
 
     aggregate, module = _aggregate_with_single_module()
 
-    aggregate.record_retry(module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT)
-    aggregate.record_retry(module, tier=RecoveryTier.RESET_TO_MODULE_ENTRY, failure_signal=FailureSignal.DIALOG)
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RESET_TO_MODULE_ENTRY, failure_signal=FailureSignal.DIALOG
+    )
 
     assert module.recovery_tiers == [0, 1]
     assert module.failure_signals == ["TIMEOUT", "DIALOG"]
@@ -1270,7 +1270,9 @@ def test_record_recovered_marks_module_and_emits_event():
     from app.core.enums import FailureSignal, RecoveryTier
 
     aggregate, module = _aggregate_with_single_module()
-    aggregate.record_retry(module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT)
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
 
     aggregate.record_recovered(module)
 
@@ -1330,46 +1332,47 @@ class RunModuleRecovered:
 `app/contexts/run/domain/aggregate.py` — `record_retry` 를 교체하고 `record_recovered` 를 추가한다.
 
 ```python
-    def record_retry(
-        self,
-        module: RunModule,
-        tier: RecoveryTier | None = None,
-        failure_signal: FailureSignal | None = None,
-    ) -> None:
-        """정책상 재시도 — attempt 를 올리고 모듈을 다시 큐잉한다."""
-        module.attempt += 1
-        module.retry_count += 1
-        module.status = ModuleStatus.QUEUED
-        module.message = f"재시도 {module.attempt}/{module.max_attempts}"
-        module.started_at = None
-        module.ended_at = None
-        module.duration_ms = None
-        module.failure_analysis = None
-        if tier is not None:
-            module.recovery_tiers.append(int(tier))
-        if failure_signal is not None:
-            module.failure_signals.append(str(failure_signal))
-        self._emit(
-            RunModuleRetried(
-                module_id=module.module_id,
-                attempt=module.attempt,
-                module=self._module_wire(module),
-            )
+def record_retry(
+    self,
+    module: RunModule,
+    tier: RecoveryTier | None = None,
+    failure_signal: FailureSignal | None = None,
+) -> None:
+    """정책상 재시도 — attempt 를 올리고 모듈을 다시 큐잉한다."""
+    module.attempt += 1
+    module.retry_count += 1
+    module.status = ModuleStatus.QUEUED
+    module.message = f"재시도 {module.attempt}/{module.max_attempts}"
+    module.started_at = None
+    module.ended_at = None
+    module.duration_ms = None
+    module.failure_analysis = None
+    if tier is not None:
+        module.recovery_tiers.append(int(tier))
+    if failure_signal is not None:
+        module.failure_signals.append(str(failure_signal))
+    self._emit(
+        RunModuleRetried(
+            module_id=module.module_id,
+            attempt=module.attempt,
+            module=self._module_wire(module),
         )
+    )
 
-    def record_recovered(self, module: RunModule) -> None:
-        """재시도를 거쳐 통과한 모듈에 복구 표식을 남긴다. 재시도가 없었으면 no-op."""
-        if module.retry_count == 0:
-            return
-        module.recovered = True
-        self._emit(
-            RunModuleRecovered(
-                module_id=module.module_id,
-                attempts=module.attempt,
-                tiers=list(module.recovery_tiers),
-                module=self._module_wire(module),
-            )
+
+def record_recovered(self, module: RunModule) -> None:
+    """재시도를 거쳐 통과한 모듈에 복구 표식을 남긴다. 재시도가 없었으면 no-op."""
+    if module.retry_count == 0:
+        return
+    module.recovered = True
+    self._emit(
+        RunModuleRecovered(
+            module_id=module.module_id,
+            attempts=module.attempt,
+            tiers=list(module.recovery_tiers),
+            module=self._module_wire(module),
         )
+    )
 ```
 
 import 에 `FailureSignal`, `RecoveryTier`, `RunModuleRecovered` 를 추가한다.
@@ -1968,8 +1971,8 @@ Expected: FAIL — `TypeError: decide_post_step_failure() got an unexpected keyw
 `app/contexts/run/domain/state_machine.py` — `decide_post_step_failure` 시그니처에 두 인자를 추가한다.
 
 ```python
-        tier2_used: int = 0,
-        tier2_budget: int = 2,
+tier2_used: int = (0,)
+tier2_budget: int = (2,)
 ```
 
 `_escalated_tier` 호출을 예산 반영 버전으로 바꾼다.
@@ -2176,8 +2179,7 @@ Task 2·8·9 에서 작성한 테스트에 마커를 단다.
 
 ```python
 @pytest.mark.spec("SPEC-RUN-006", "AC-002")
-def test_site_signal_never_retries_even_when_policy_allows():
-    ...
+def test_site_signal_never_retries_even_when_policy_allows(): ...
 ```
 
 AC-001·003·004·005·006·007 도 대응 테스트에 각각 부착한다.
