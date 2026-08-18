@@ -31,13 +31,20 @@ I/O 와 뒤섞여, 상태머신이 코드 형태로만 존재했다). 이 모듈
   부분 재실행(decide_partial_rerun):
     invalid module / not allowed          → RejectInvalidResumePoint
     그 외                                  → ResumeFromModule
+
+  Run 수준 자동 재실행(decide_auto_rerun):
+    run_status != ERROR                   → SkipAutoRerun (ANOMALY 는 사이트 이상 — 절대 재실행 안 함)
+    triggered_by != "schedule"            → SkipAutoRerun (수동 실행은 판단을 뺏지 않음)
+    is_auto_rerun                         → SkipAutoRerun (자동 재실행의 연쇄 차단)
+    budget_remaining <= 0                 → SkipAutoRerun
+    그 외                                  → TriggerAutoRerun
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier
+from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier, RunStatus
 
 # --- 모듈 진입 결정 ----------------------------------------------------------
 
@@ -165,6 +172,22 @@ class ReplayFromLogin:
 RehydrationDecision = ResumeFromCheckpoint | ReplayFromLogin
 
 
+# --- Run 수준 자동 재실행 결정 -----------------------------------------------
+
+
+@dataclass(frozen=True)
+class TriggerAutoRerun:
+    """도구 오류로 끝난 예약 Run 을 1회 자동 재실행한다."""
+
+
+@dataclass(frozen=True)
+class SkipAutoRerun:
+    """자동 재실행 조건에 해당하지 않는다."""
+
+
+AutoRerunDecision = TriggerAutoRerun | SkipAutoRerun
+
+
 class RunStateMachine:
     """Run 실행의 결정 규칙(전이표). 상태(불리언/상태값)만 받아 명령을 돌려주는 순수 함수 모음.
 
@@ -260,3 +283,27 @@ class RunStateMachine:
         return ReplayFromLogin(
             from_index=login_module_index if login_module_index is not None else 0
         )
+
+    @staticmethod
+    def decide_auto_rerun(
+        *,
+        run_status: RunStatus,
+        triggered_by: str,
+        is_auto_rerun: bool,
+        budget_remaining: int,
+    ) -> AutoRerunDecision:
+        """Run 종료 후 자동 재실행 여부(설계 §3.6).
+
+        ``ANOMALY`` 는 사이트 이상이므로 **절대** 자동 재실행하지 않는다. 수동 실행은
+        사람이 보고 있으므로 판단을 뺏지 않는다. 자동 재실행이 다시 자동 재실행을
+        낳는 연쇄도 차단한다.
+        """
+        if run_status is not RunStatus.ERROR:
+            return SkipAutoRerun()
+        if triggered_by != "schedule":
+            return SkipAutoRerun()
+        if is_auto_rerun:
+            return SkipAutoRerun()
+        if budget_remaining <= 0:
+            return SkipAutoRerun()
+        return TriggerAutoRerun()

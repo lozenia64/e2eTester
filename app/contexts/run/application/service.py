@@ -27,10 +27,12 @@ from app.contexts.run.domain.state_machine import (
     ResumeFromModule,
     RetryModule,
     RunStateMachine,
+    TriggerAutoRerun,
 )
 from app.core.enums import ModuleStatus, RecoveryTier, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.run_models import DashboardEvent, Run, RunModule
+from app.core.settings import E2ESettings
 from app.domain.execution_policy import module_policy_from_definition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.execution.session_checkpoint import SessionCheckpoint, SessionCheckpointStorePort
@@ -88,6 +90,7 @@ class RunService:
         healing_recorder: HealingRecorder | None = None,
         session_registry: RedisSessionRegistry | None = None,
         session_checkpoint_store: SessionCheckpointStorePort | None = None,
+        settings: E2ESettings | None = None,
     ) -> None:
         self._registry = registry
         self._write_repo = write_repo
@@ -117,6 +120,10 @@ class RunService:
         # Phase C: 모듈 경계·OTP 일시정지 시 세션 storage_state 를 내구 체크포인트로 저장하는
         # 선택 협력자. 미주입/게이트웨이 미지원이면 캡처는 no-op(None)이라 기존 흐름과 동일하다.
         self._session_checkpoint_store = session_checkpoint_store
+        # 자동 재실행 게이트(설계 §3.6)·OTP 안전장치(R3)가 참조하는 설정. 미주입 시 기본값으로
+        # 구성해 기존 호출부(테스트 포함)를 깨지 않는다 — 기본값은 auto_rerun_enabled=False 라
+        # 동작이 바뀌지 않는다.
+        self._settings = settings or E2ESettings()
 
     # --- 조회 -------------------------------------------------------------
 
@@ -503,6 +510,7 @@ class RunService:
         *,
         user_id: str | None = None,
         user_name: str | None = None,
+        auto_rerun_of: str | None = None,
     ) -> Run:
         run = await self._write_repo.get_run(run_id)
         if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
@@ -531,6 +539,8 @@ class RunService:
         aggregate.prepare_partial_rerun(decision.from_index, ordered_modules)
         # 귀속 사용자 갱신도 애그리거트(유일 변이자)를 거친다(직접 run.X= 금지).
         aggregate.reassign_owner(user_id, user_name)
+        if auto_rerun_of is not None:
+            aggregate.set_auto_rerun_of(auto_rerun_of)
         await self._persist(run, aggregate)
         await self._run_queue.enqueue_run_job(
             RunJobDescriptor(
@@ -857,6 +867,16 @@ class RunService:
         entry_url: str | None,
     ) -> None:
         """재시도 전 세션 되감기. 실패해도 재시도 자체는 진행한다(tier 0 폴백)."""
+        # R3 — 로그인 재주행 경로에 사람 입력이 필요한 모듈이 있는데 OTP 중계가 없으면
+        # tier 2 는 무인 실행을 멈추게 한다. 되감지 말고 실패를 확정하는 편이 낫다.
+        if tier is RecoveryTier.REPLAY_FROM_LOGIN and self._requires_manual_input(run):
+            if not self._settings.otp_relay_token_str():
+                logger.info(
+                    "OTP 중계 미설정 — 로그인 재주행 생략",
+                    log_event="run.recovery.skipped_otp",
+                    run_id=run.run_id,
+                )
+                return
         # 되감을 곳을 모른 채 세션을 버리는 것이 더 위험하므로 tier 0 으로 폴백한다(설계 §3.3).
         if tier is RecoveryTier.RESET_TO_MODULE_ENTRY and entry_url is None:
             logger.info(
@@ -883,6 +903,11 @@ class RunService:
             module_id=module.module_id,
             recovery_tier=int(tier),
         )
+
+    def _requires_manual_input(self, run: Run) -> bool:
+        """이 Run 의 시스템이 사람 입력(OTP 등)을 요구하는 모듈을 하나라도 갖는지(설계 R3)."""
+        system = self._registry.get_system(run.system_code)
+        return any(d.requires_user_input for d in system.modules)
 
     async def _save_checkpoint(
         self, run: Run, *, module_index: int, handle: ExecutionHandle
@@ -993,6 +1018,38 @@ class RunService:
             suite_id=run.suite_id,
             schedule_id=run.schedule_id,
         )
+        # Run 수준 자동 재실행 게이트(설계 §3.6). 도구 오류(ERROR)로 끝난 예약 Run 만, 그것도
+        # auto_rerun_enabled 일 때만 1회 대상이 된다 — 기본값 False 라 도입 자체는 기존 동작을
+        # 바꾸지 않는다.
+        decision = RunStateMachine.decide_auto_rerun(
+            run_status=final_status,
+            triggered_by=run.triggered_by,
+            is_auto_rerun=run.auto_rerun_of is not None,
+            budget_remaining=1 if self._settings.auto_rerun_enabled else 0,
+        )
+        if isinstance(decision, TriggerAutoRerun):
+            await self._enqueue_auto_rerun(run)
+
+    async def _enqueue_auto_rerun(self, run: Run) -> None:
+        """실패 모듈부터 1회 자동 재실행한다(설계 §3.6). 실패해도 원본 Run 결과는 보존한다."""
+        failed = next(
+            (m for m in run.modules if m.status in (ModuleStatus.ERROR, ModuleStatus.FAILED)),
+            None,
+        )
+        if failed is None:
+            return
+        try:
+            await self.rerun_from_module(
+                run_id=run.run_id,
+                from_module_id=failed.module_id,
+                auto_rerun_of=run.run_id,
+            )
+        except Exception:
+            logger.exception(
+                "자동 재실행 큐잉 실패",
+                log_event="run.auto_rerun.failed",
+                run_id=run.run_id,
+            )
 
     # --- 로그 기록 --------------------------------------------------------
 

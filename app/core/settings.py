@@ -102,6 +102,12 @@ class E2ESettings(BaseSettings):
     otp_relay_token: SecretStr | None = Field(default=None, validation_alias="E2E_OTP_RELAY_TOKEN")
     otp_relay_regex: str | None = Field(default=None, validation_alias="E2E_OTP_RELAY_REGEX")
 
+    # 자동 재실행(설계 §3.6)
+    # 예약 Run 이 도구 오류(ERROR)로 끝났을 때 1회 자동 재실행할지.
+    auto_rerun_enabled: bool = Field(default=False, validation_alias="E2E_AUTO_RERUN_ENABLED")
+    # Run 총 실행 시간 상한(초). None 이면 무제한 — 기본값이 기존 동작을 유지한다.
+    run_max_duration_s: int | None = Field(default=None, validation_alias="E2E_RUN_MAX_DURATION_S")
+
     # Playwright 프로필
     user_data_dir: str | None = Field(default=None, validation_alias="E2E_USER_DATA_DIR")
     workspace_dir: str | None = Field(default=None, validation_alias="E2E_WORKSPACE_DIR")
@@ -114,6 +120,7 @@ class E2ESettings(BaseSettings):
         "failure_analyzer_enabled",
         "gemini_ssl_verify",
         "run_retention_enabled",
+        "auto_rerun_enabled",
         mode="before",
     )
     @classmethod

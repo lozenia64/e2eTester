@@ -134,6 +134,8 @@ class Run(BaseModel):
     comparison: RunComparison | None = None
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
+    # 자동 재실행으로 생성된 Run 이면 원본 Run 의 id. 이력에서 한 쌍으로 보이게 한다.
+    auto_rerun_of: str | None = None
 
 
 class DashboardEvent(BaseModel):

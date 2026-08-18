@@ -269,6 +269,14 @@ class RunAggregate:
         if user_name is not None:
             self._state.created_by_user_name = user_name
 
+    def set_auto_rerun_of(self, auto_rerun_of: str) -> None:
+        """이 Run 이 자동 재실행으로 생성됐음을 원본 Run id 로 기록한다(설계 §3.6).
+
+        직접 변이 금지 — 유일 변이자 경로. 이벤트를 내지 않는 순수 상태 변이다(자동
+        재실행 자체는 별도 부분 재실행 실행 이벤트로 이미 스트림에 남는다).
+        """
+        self._state.auto_rerun_of = auto_rerun_of
+
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis

@@ -193,6 +193,7 @@ class AppContainer:
             healing_recorder=self.healing.healing_service,
             session_registry=self.execution.session_registry,
             session_checkpoint_store=self.run.repos.session_checkpoint_store,
+            settings=self.settings,
         )
         self.run.services = run_svc
 

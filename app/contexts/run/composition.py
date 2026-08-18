@@ -17,6 +17,7 @@ from app.contexts.run.infrastructure.sqlite_session_checkpoint_store import (
     StorageStateCipher,
 )
 from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteSuiteSummaryQuery
+from app.core.settings import E2ESettings
 from app.execution.composite_gateway import CompositeExecutionGateway
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.execution.redis_session_registry import RedisSessionRegistry
@@ -92,6 +93,7 @@ def compose_run_service(
     healing_recorder: HealingService,
     session_registry: RedisSessionRegistry | None,
     session_checkpoint_store: SqliteSessionCheckpointStore,
+    settings: E2ESettings | None = None,
 ) -> RunServiceComposition:
     run_service = RunService(
         registry=registry,
@@ -108,6 +110,7 @@ def compose_run_service(
         healing_recorder=healing_recorder,
         session_registry=session_registry,
         session_checkpoint_store=session_checkpoint_store,
+        settings=settings,
     )
     if isinstance(run_queue, ProfilePartitionedRunQueue):
         run_queue.set_run_job_handler(run_service.dispatch_run_job)
