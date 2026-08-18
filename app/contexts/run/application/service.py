@@ -607,6 +607,12 @@ class RunService:
         resume_storage_state = await self._load_resume_storage_state(run, start_index, handle)
 
         forced_status: RunStatus | None = None
+        # 로그인 재주행(tier 2) 예산은 **Run 단위** 비용 가드다(설계 §3.6 / R6 —
+        # settings.recovery_tier2_budget 주석·docs/INSTALL.md·docs/E2E_ARCHITECTURE.md 모두
+        # "Run 당"이라고 규정한다). 따라서 카운터는 모듈 루프 **밖**에 있어야 한다. 모듈 루프
+        # 안에서 세면 모듈마다 0으로 리셋되어, 매니페스트의 max_attempts 가 작은 한 예산이
+        # 절대 걸리지 않는다(가드가 사실상 무력해진다).
+        tier2_used = 0
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
                 current_module = module
@@ -656,7 +662,9 @@ class RunService:
                 async def on_log(line: str, current_module=module, current_run=run) -> None:
                     await self._handle_module_log(current_run, current_module, line)
 
-                # 이 모듈에서 이미 시도한 복구 등급(등급 상승 판정 입력).
+                # 이 모듈에서 이미 시도한 복구 등급(등급 **상승** 판정 입력) — 등급 상승은
+                # 한 모듈의 재시도 시퀀스 안에서만 의미가 있으므로 모듈 스코프가 맞다.
+                # tier 2 **예산**(tier2_used)과 혼동하지 말 것: 예산은 Run 스코프다.
                 attempted_tiers: list[RecoveryTier] = []
                 # tier 1 되감기 지점. 매니페스트에 진입 URL 필드가 없으므로(설계 §3.3)
                 # 모듈 첫 실행 시점의 페이지 URL 을 런타임에서 잡아 둔다.
@@ -703,9 +711,7 @@ class RunService:
                             backoff_ms=module_policy.retry_backoff_ms,
                             failure_signal=execution_result.failure_signal,
                             attempted_tiers=tuple(attempted_tiers),
-                            tier2_used=sum(
-                                1 for t in attempted_tiers if t is RecoveryTier.REPLAY_FROM_LOGIN
-                            ),
+                            tier2_used=tier2_used,
                             tier2_budget=self._settings.recovery_tier2_budget,
                         )
 
@@ -740,6 +746,10 @@ class RunService:
                             post = CompleteStep()
                         else:
                             attempted_tiers.append(post.tier)
+                            # 실제로 tier 2 로 재시도할 때만 Run 예산을 소진한다(강등된
+                            # 재시도는 예산을 쓰지 않는다).
+                            if post.tier is RecoveryTier.REPLAY_FROM_LOGIN:
+                                tier2_used += 1
                             if post.tier is not RecoveryTier.RETRY_IN_PLACE:
                                 await self._recover_session_for_retry(
                                     run, module, handle, post.tier, module_entry_url

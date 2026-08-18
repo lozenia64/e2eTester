@@ -97,7 +97,7 @@
 
 ### FR-005: tier 2 예산
 
-**설명:** 로그인 재주행(tier 2)은 비용이 크므로, 같은 모듈의 재시도 시퀀스 안에서 이미 사용한 `REPLAY_FROM_LOGIN` 횟수가 `E2E_RECOVERY_TIER2_BUDGET`(기본 2) 이상이면 결정을 한 단계 낮춘 `RESET_TO_MODULE_ENTRY` 로 강등한다.
+**설명:** 로그인 재주행(tier 2)은 비용이 크므로, **한 Run 에서** 이미 사용한 `REPLAY_FROM_LOGIN` 횟수가 `E2E_RECOVERY_TIER2_BUDGET`(기본 2) 이상이면 결정을 한 단계 낮춘 `RESET_TO_MODULE_ENTRY` 로 강등한다. 예산 카운터는 모듈 루프 **밖**(Run 스코프)에 있으므로 여러 모듈에 걸쳐 누적된다 — 모듈마다 리셋되면 매니페스트의 `max_attempts` 가 작은 한 예산이 절대 걸리지 않아 비용 가드가 무력해진다. 등급 **상승** 판정 입력인 `attempted_tiers` 는 이와 별개로 모듈 스코프를 유지한다(한 모듈의 재시도 시퀀스 안에서만 의미가 있다).
 
 ### FR-006: OTP 안전장치 (R3)
 
@@ -284,6 +284,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | AC-005 | 단위 | `tests/test_otp_recovery_guard.py::test_reset_to_module_entry_without_entry_url_skips_rewind` | `entry_url=None` 이면 `RunService._recover_session_for_retry` 가 `gateway.recover_session` 자체를 호출하지 않고 되감기를 생략(제자리 재시도로 폴백) |
 | AC-006 | 단위 | `tests/test_auto_rerun_gate.py::test_auto_rerun_queues_and_auto_rerun_of_is_self_referential` | 큐잉 표시(`auto_rerun_pending`)와 `auto_rerun_of` 가 자기 자신(원본) `run_id` 를 가리키는지 애그리거트 수준에서 검증 |
 | AC-007 | 단위 | `tests/test_run_state_machine.py::test_tier_two_budget_exhaustion_downgrades_to_tier_one` | tier 2 예산 소진 시 `RESET_TO_MODULE_ENTRY` 로 강등 |
+| AC-007 | 통합 | `tests/integration/test_tier2_budget_scope.py::test_tier_two_budget_is_shared_across_modules_in_one_run` | 예산 카운터가 **Run 스코프**임을 종단 검증 — 모듈 A 가 예산을 소진하면 모듈 B 의 첫 tier 2 시도가 강등된다(traceability 스캔 대상 밖 — `tests/` 최상위가 아님) |
 | — | 단위 | `tests/test_run_state_machine.py` | tier 상승 상한(`REPLAY_FROM_LOGIN` 에서 멈춤)·기본 신호 tier 0 하위호환 |
 | — | 단위 | `tests/test_run_aggregate.py` | `record_retry`/`record_recovered`(재시도 이력 누적·`RunModuleRecovered` 발행)·`mark_auto_rerun_pending` |
 | — | 단위 | `tests/test_recovery_tier_execution.py` | `ExecutionGateway.recover_session` 기본 구현·`CompositeExecutionGateway` 위임 배선 |
