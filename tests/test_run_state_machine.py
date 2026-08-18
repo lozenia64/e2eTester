@@ -198,6 +198,7 @@ def _failure_decision(**overrides):
     return RunStateMachine.decide_post_step_failure(**kwargs)
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-001")
 @pytest.mark.parametrize(
     ("signal", "expected_tier"),
     [
@@ -215,6 +216,7 @@ def test_signal_maps_to_base_tier(signal, expected_tier):
     assert decision.tier is expected_tier
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-003")
 def test_tier_escalates_when_same_tier_already_attempted():
     """같은 등급으로 이미 실패했으면 한 단계 올린다."""
     decision = _failure_decision(
@@ -238,6 +240,7 @@ def test_tier_escalation_stops_at_replay_from_login():
     assert decision.tier is RecoveryTier.REPLAY_FROM_LOGIN
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-002")
 def test_site_signal_never_retries_even_when_policy_allows():
     """설계 §3.5 안전 규칙 — 매니페스트가 ANOMALY 재시도를 켜도 도메인이 거부한다."""
     decision = _failure_decision(
@@ -256,6 +259,7 @@ def test_default_signal_preserves_legacy_tier_zero_behaviour():
     assert decision.backoff_ms == 500
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-007")
 def test_tier_two_budget_exhaustion_downgrades_to_tier_one():
     """로그인 재주행은 비싸다 — Run 당 예산을 넘으면 등급을 낮춘다(설계 §3.6)."""
     decision = _failure_decision(

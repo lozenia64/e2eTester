@@ -32,6 +32,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 - 동시 실행: `E2E_RUN_CONCURRENCY_HEAVY`(2), `E2E_RUN_CONCURRENCY_LIGHT`(4), `E2E_RUN_CONCURRENCY_INTERACTIVE`(2)
 - 재기동 시 진행 중 Run 은 `CANCELLED`(체크포인트 있으면 복구 가능)
 - ERROR·CANCELLED Run 자동 삭제: `E2E_RUN_RETENTION_CRON` (기본 `0 3 * * *`, `E2E_SCHEDULE_TZ`)
+- 자동 복구 루프: `E2E_AUTO_RERUN_ENABLED`(기본 `false`) — 예약 Run 이 `ERROR` 로 끝나면 실패 모듈부터 1회 자동 재실행. `E2E_RECOVERY_TIER2_BUDGET`(기본 `2`) — Run 당 로그인 재주행(tier 2) 허용 횟수, 넘으면 한 단계 낮춘 등급으로 재시도. `E2E_RUN_MAX_DURATION_S`(기본 무제한) — Run 총 실행 시간 상한(초), 넘으면 재시도를 중단
 
 ## 환경변수 (요약)
 
@@ -42,6 +43,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 | `E2E_DB_PATH` / `E2E_SQLITE_BUSY_TIMEOUT_MS` | SQLite |
 | `E2E_SCHEDULE_TZ` | cron·일간 대시보드 TZ |
 | `E2E_RUN_RETENTION_ENABLED` / `E2E_RUN_RETENTION_CRON` | 실패 Run 자동 삭제 |
+| `E2E_AUTO_RERUN_ENABLED` / `E2E_RUN_MAX_DURATION_S` / `E2E_RECOVERY_TIER2_BUDGET` | 자동 복구 루프(예약 Run 자동 재실행·실행 시간 상한·로그인 재주행 예산) |
 | `E2E_RUN_CONCURRENCY` / `E2E_RUN_CONCURRENCY_HEAVY` / `E2E_RUN_CONCURRENCY_LIGHT` / `E2E_RUN_CONCURRENCY_INTERACTIVE` | 동시 Run |
 | `E2E_EXECUTION_MODE` / `E2E_REDIS_URL` / `E2E_WORKER_BASE_URL` / `E2E_WORKER_CONCURRENCY` / `E2E_SESSION_LEASE_TTL` | 워커·Redis |
 | `E2E_LOG_LEVEL` / `E2E_LOG_FORMAT` | structlog |

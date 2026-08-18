@@ -23,6 +23,7 @@ def _decide(**overrides):
     return RunStateMachine.decide_auto_rerun(**kwargs)
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-006")
 def test_scheduled_error_run_triggers_auto_rerun():
     assert isinstance(_decide(), TriggerAutoRerun)
 

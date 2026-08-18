@@ -17,6 +17,7 @@ Browser → FastAPI (app/main.py, AppContainer)
 
 - **API / 워커 분리:** API 프로세스에 Playwright 없음. `E2E_EXECUTION_MODE=remote` + Redis + `scripts/run_local.py`.
 - **공유 브라우저 세션:** Run 내 모듈 순차 실행, OTP 일시정지 시 세션 유지. 체크포인트(`SessionCheckpointStorePort`)로 재기동 복구 가능.
+- **자동 복구 루프(`SPEC-RUN-006`):** 모듈이 `ERROR` 로 실패하면 실패 신호(`FailureSignal`)에 따라 복구 등급(`RecoveryTier`)을 골라 재시도 전 세션을 되감는다 — tier 0(제자리 재시도) → tier 1(`ExecutionGateway.recover_session` 으로 모듈 진입 URL 재이동) → tier 2(세션 재개설·로그인 재주행, Run 당 `E2E_RECOVERY_TIER2_BUDGET` 예산). `ANOMALY`(사이트 이상)는 안전 규칙으로 절대 자동 복구하지 않는다. 재시도로 통과한 모듈은 `recovered` 플래그로 Run 상세·일간 현황·완료 메일에 노출된다. 예약 Run 이 `ERROR` 로 끝나면 `E2E_AUTO_RERUN_ENABLED` 설정 시 실패 모듈부터 1회 자동 재실행(같은 Run 을 제자리 재개, `E2E_RUN_MAX_DURATION_S` 상한 적용)한다.
 - **Suite:** 이벤트 기반 Saga. `RunCommandPort` 로 하위 Run 구동. `selected_system_codes` 로 시스템 부분 선택.
 - **종료 3분류:** `PASSED`(정상) / `ANOMALY`(사이트 이상) / `ERROR`(도구 실패). 우선순위 ERROR > ANOMALY > PASSED.
 - **CQRS:** 쓰기 `RunWriteRepositoryPort` + 이벤트. 읽기 `*QueryPort` projection 테이블. REST/WS 는 `RunView`/`SuiteView` 만.

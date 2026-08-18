@@ -81,6 +81,7 @@ def clean_client() -> TestClient:
         yield client
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-004")
 def test_run_detail_shows_recovered_badge(recovered_client: TestClient) -> None:
     html = recovered_client.get("/runs/run1").text
 
