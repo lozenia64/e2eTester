@@ -290,10 +290,12 @@ def _module_view_from_row(
 ) -> dict[str, Any]:
     status = status_row.last_status if status_row is not None else None
     run_id = status_row.last_run_id if status_row is not None else None
+    recovered = bool(status_row.recovered) if status_row is not None else False
     if status in _NON_RESULT_STATUSES:
         status = None
         run_id = None
         duration_ms = None
+        recovered = False
     tone = module_status_badge_tone(status) if status is not None else "not_inspected"
     label = module_status_label(status) if status is not None else "미점검"
     return {
@@ -307,10 +309,8 @@ def _module_view_from_row(
         "bucket": _module_bucket(status),
         "run_id": run_id,
         "duration_ms": duration_ms,
-        # `daily_system_status` 프로젝션(DailyStatusRow)은 아직 recovered 컬럼을 들고
-        # 있지 않다 — 항상 False. 라이브 Run 객체를 직접 쓰는 _module_view 경로만
-        # 자동 복구 표식을 채운다(별도 프로젝션 확장 필요, 이 태스크 범위 밖).
-        "recovered": False,
+        # 자동 복구 가시성(설계 §3.4) — `daily_system_status` 프로젝션의 recovered 컬럼에서 읽는다.
+        "recovered": recovered,
     }
 
 

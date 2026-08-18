@@ -401,6 +401,8 @@ async def ensure_schema(db: SqliteDatabase) -> None:
         },
     )
     await _ensure_columns(db, "daily_system_status", {"duration_ms": "INTEGER"})
+    # 자동 복구 가시성(설계 §3.4) — 재시도를 거쳐 통과했는지 일간 현황에도 반영한다.
+    await _ensure_columns(db, "daily_system_status", {"recovered": "INTEGER"})
     await _ensure_columns(db, "module_history_index", {"ai_action": "TEXT"})
     # 기존 배포 DB 의 domain_events 에 stream_position 컬럼을 증분 추가한다(낙관적 동시성 위치).
     # NULL 로 시작하며 append 경로가 스트림별 위치를 채운다(부분 UNIQUE 인덱스는 NULL 을 무시).
