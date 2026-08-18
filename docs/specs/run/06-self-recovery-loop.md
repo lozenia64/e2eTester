@@ -138,8 +138,9 @@
 
 1. `TriggerAutoRerun` 이면 실패(ERROR/FAILED) 모듈부터 기존 부분 재실행 경로(`rerun_from_module`)를 재사용해 **같은 `run_id`** 로 제자리 재개한다 — 새 Run 을 만들지 않는다.
 2. `auto_rerun_of` 는 그래서 항상 **자기 자신의 `run_id`** 를 가리키는 자기 참조 필드다(별도 원본 Run 을 가리키지 않는다). 자동 재실행 연쇄를 막는 근거(`is_auto_rerun` 판정)로만 쓰인다.
-3. 자동 재실행 큐잉이 실패해도 예외를 흡수하고 로그만 남긴다 — 원본 Run 의 결과·완료 알림은 그대로 보존된다.
-4. 큐잉이 실제로 성공했을 때만 `auto_rerun_pending` 플래그를 세운다(R4의 전제 조건).
+3. 자동 재실행 큐잉이 실패해도 예외를 흡수하고 로그만 남긴다 — 원본 Run 의 결과는 그대로 보존되고, 완료/운영자 알림은 보상 발행으로 되살아난다(아래 5).
+4. 자동 재실행 **결정**(`TriggerAutoRerun` + 재개 가능한 실패 모듈 존재)은 `finalize()` **이전**에 내리고, `auto_rerun_pending` 플래그는 `RunFinished` 와 **같은 persist(=같은 트랜잭션)** 로 영속한다. `OutboxRelay` 는 같은 프로세스의 asyncio 태스크로 폴링하다가 `RunFinished` 아웃박스 행을 보는 즉시 Run 을 새로 하이드레이션해 알림을 판정하고 그 행을 **정확히 한 번만** 디스패치하므로, 두 쓰기 사이에 `await` 경계가 있으면 릴레이가 `pending=false` 를 보고 운영자 알림을 먼저 보내 dedup 키를 선점한다 — 그러면 재실행의 진짜 최종 결과가 영영 통보되지 않는다.
+5. 애초에 큐잉이 성립할 수 없는 Run(재개 지점이 `partial_rerun_allowed=false` 등)은 `decide_partial_rerun` 으로 **미리** 걸러 대기 표식을 아예 세우지 않는다. 그럼에도 큐잉이 실패하면(큐 미기동 등) 보상 트랜잭션 `RunAggregate.reannounce_finished` 로 종료를 한 번 더 발행한다 — 아웃박스가 이미 발행한 행을 재처리하지 않으므로 플래그만 되돌려서는 새 알림 디스패치가 생기지 않기 때문이다. 중복 발송은 알림 계층의 dedup 클레임이 막는다.
 
 ### FR-010: 알림 중복 방지 (R4)
 
@@ -259,8 +260,9 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | tier 2 필요한데 `requires_user_input` 모듈 + OTP 중계 미설정 | 되감기 생략(R3) — 실패가 빠르게 확정됨 | — |
 | tier 2 예산(`E2E_RECOVERY_TIER2_BUDGET`) 소진 | `RESET_TO_MODULE_ENTRY` 로 강등 | — |
 | Run 실행 시간 상한(`E2E_RUN_MAX_DURATION_S`) 초과 | 재시도 중단, `CompleteStep` 강제 | — |
-| 자동 재실행 큐잉 중 예외 | 원본 Run 결과·완료 알림 보존, 로그만 기록 | — |
-| 자동 재실행 성공 큐잉 | `auto_rerun_pending=true`, 완료 메일은 dedup 스토어로 1건만 발송(R4) | — |
+| 재개 지점이 `partial_rerun_allowed=false` | 자동 재실행 생략 — 대기 표식을 세우지 않고 원본 알림 정상 발송 | — |
+| 자동 재실행 큐잉 중 예외 | 원본 Run 결과 보존, 로그 기록 + `reannounce_finished` 보상 발행으로 종료 알림 복구(필요하면 진행 중으로 되감긴 Run 을 `ERROR` 로 재봉인) | — |
+| 자동 재실행 성공 큐잉 | `auto_rerun_pending=true` 가 `RunFinished` 와 같은 트랜잭션으로 보이고, 완료 메일은 dedup 스토어로 1건만 발송(R4) | — |
 | 매니페스트가 `retryable_on` 에 `ANOMALY` 를 선언 | `SITE` 신호는 여전히 무조건 `CompleteStep`(FR-003) | — |
 
 ## 8. 비기능 요구사항 (NFR)
@@ -286,7 +288,8 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | AC-007 | 단위 | `tests/test_run_state_machine.py::test_tier_two_budget_exhaustion_downgrades_to_tier_one` | tier 2 예산 소진 시 `RESET_TO_MODULE_ENTRY` 로 강등 |
 | AC-007 | 통합 | `tests/integration/test_tier2_budget_scope.py::test_tier_two_budget_is_shared_across_modules_in_one_run` | 예산 카운터가 **Run 스코프**임을 종단 검증 — 모듈 A 가 예산을 소진하면 모듈 B 의 첫 tier 2 시도가 강등된다(traceability 스캔 대상 밖 — `tests/` 최상위가 아님) |
 | — | 단위 | `tests/test_run_state_machine.py` | tier 상승 상한(`REPLAY_FROM_LOGIN` 에서 멈춤)·기본 신호 tier 0 하위호환 |
-| — | 단위 | `tests/test_run_aggregate.py` | `record_retry`/`record_recovered`(재시도 이력 누적·`RunModuleRecovered` 발행)·`mark_auto_rerun_pending` |
+| — | 단위 | `tests/test_run_aggregate.py` | `record_retry`/`record_recovered`(재시도 이력 누적·`RunModuleRecovered` 발행)·`mark_auto_rerun_pending`·`finalize`+`mark_auto_rerun_pending` 단일 배치·`reannounce_finished`(종료 재발행·되감긴 Run 재봉인) |
+| — | 통합 | `tests/integration/test_auto_rerun_notification_race.py` | R4 경합 — ① `RunFinished` 를 실은 persist 가 이미 `auto_rerun_pending=true` 를 담는지, ② 릴레이가 경합에서 이겨도 조기 운영자 알림이 나가지 않는지, ③ 큐잉 실패 시 보상 발행으로 운영자 알림이 정확히 1건 발송되는지를 실제 SQLite·아웃박스·릴레이·EventBus·알림기로 종단 검증(SMTP 전송만 대체) |
 | — | 단위 | `tests/test_recovery_tier_execution.py` | `ExecutionGateway.recover_session` 기본 구현·`CompositeExecutionGateway` 위임 배선 |
 | — | 단위 | `tests/test_session_server.py` | tier 1(진입 URL 재이동, `entry_url=None` 시 `SessionServer.recover()` 자체의 no-op 포함)·tier 2(런타임 재구축, 재개설 실패 시 옛 런타임 유지) 워커 동작 |
 | — | 단위 | `tests/test_otp_recovery_guard.py` | R3 — OTP 중계 미설정 시 tier 2 되감기 생략 |

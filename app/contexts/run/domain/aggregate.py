@@ -279,12 +279,20 @@ class RunAggregate:
         self._state.auto_rerun_of = auto_rerun_of
 
     def mark_auto_rerun_pending(self, from_module_id: str) -> None:
-        """자동 재실행이 큐잉됐음을 표시하고 감사 이벤트를 남긴다(설계 R4).
+        """자동 재실행을 걸기로 **결정**했음을 표시하고 감사 이벤트를 남긴다(설계 R4).
 
         완료 메일 발송 판정(``RunCompletionEmailNotifier.send_run_completion``)이 이 플래그를
         보고 원본 Run 의 알림을 보류한다 — 재실행이 이어받은 같은 Run 의 최종 결과가 진짜
-        결과이므로, 여기서도 메일을 보내면 담당자에게 중복 도달한다. 큐잉이 실제로 성공한
-        뒤에만 호출돼야 한다(호출자 책임 — 실패하면 원본 알림이 정상 발송돼야 한다).
+        결과이므로, 여기서도 메일을 보내면 담당자에게 중복 도달한다.
+
+        **``finalize()`` 와 같은 persist(=같은 트랜잭션)에서 호출돼야 한다.** ``OutboxRelay``
+        는 같은 프로세스의 태스크로 폴링하다가 ``RunFinished`` 아웃박스 행을 보는 즉시 Run 을
+        새로 하이드레이션해 알림 판정을 내리므로, 두 쓰기 사이에 ``await`` 경계가 있으면
+        릴레이가 ``pending=False`` 를 보고 운영자 알림을 먼저 보내 dedup 키를 선점한다
+        (그러면 진짜 최종 결과가 영영 통보되지 않는다 — R4 가 막으려는 실패 그 자체).
+
+        큐잉이 그 뒤에 실패하면 플래그를 되돌리는 것만으로는 부족하다(아웃박스는 이미 발행한
+        행을 다시 처리하지 않는다) — ``reannounce_finished`` 로 종료를 한 번 더 알려야 한다.
         """
         self._state.auto_rerun_pending = True
         self._emit(
@@ -293,6 +301,28 @@ class RunAggregate:
                 from_module_id=from_module_id,
             )
         )
+
+    def reannounce_finished(self, fallback_status: RunStatus) -> RunStatus:
+        """자동 재실행 큐잉 실패에 대한 보상 — 대기 표식을 내리고 종료를 **다시** 알린다(R4).
+
+        ``OutboxRelay`` 는 청구한 아웃박스 행을 정확히 한 번만 디스패치한다. 그 한 번이
+        ``auto_rerun_pending=True`` 를 보고 알림을 건너뛴 뒤라면, 플래그를 False 로 되돌려도
+        새 디스패치는 생기지 않는다 — 종료 사실을 담은 ``RunFinished`` 를 한 건 더 발행해야
+        릴레이가 지금 상태로 다시 하이드레이션해 알림 판정을 되풀이한다. 중복 발송은 알림
+        계층의 dedup 클레임(``run``/``run_operator`` 키)이 막는다.
+
+        Run 이 아직 종료 상태가 아니면(부분 재실행 준비까지는 성공하고 큐잉에서 실패한 경우)
+        먼저 ``fallback_status`` 로 다시 봉인한다 — 그 Run 을 실행할 워커가 없으므로 종료로
+        되돌려야 결과가 통보되고, 진행 중으로 남겨두면 아무도 알림을 내지 않는다.
+        """
+        if self._state.status not in _RUN_TERMINAL:
+            self._state.ended_at = datetime.now(UTC)
+            self._state.awaiting_input_module_id = None
+            self._state.awaiting_input_prompt = None
+            self._state.status = fallback_status
+        self._state.auto_rerun_pending = False
+        self._emit_run_finished()
+        return self._state.status
 
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""

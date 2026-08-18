@@ -1032,7 +1032,30 @@ class RunService:
         final_status = aggregate.compute_final_status(forced_status)
         if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
             aggregate.attach_comparison(await self._comparator.compute(run))
+        # Run 수준 자동 재실행 게이트(설계 §3.6). 도구 오류(ERROR)로 끝난 예약 Run 만, 그것도
+        # auto_rerun_enabled 일 때만 1회 대상이 된다 — 기본값 False 라 도입 자체는 기존 동작을
+        # 바꾸지 않는다.
+        #
+        # R4 경합 차단 — 이 판정은 ``finalize()`` **이전**에 내린다. 판정 입력(final_status·
+        # triggered_by·auto_rerun_of·예산)이 전부 finalize 이전에 확정돼 있으므로 순서를
+        # 앞당겨도 결과가 달라지지 않는다. 이렇게 해야 대기 표식을 ``RunFinished`` 와 **같은
+        # persist(=같은 트랜잭션)** 로 실을 수 있다. ``OutboxRelay`` 는 같은 프로세스의
+        # asyncio 태스크(기본 0.5초 폴링)로, ``RunFinished`` 아웃박스 행을 보는 즉시 Run 을
+        # 새로 하이드레이션해 알림 판정을 내리고 그 행을 정확히 한 번만 디스패치한다. 두 쓰기
+        # 사이에 await 경계가 있으면 릴레이가 ``pending=False`` 를 보고 운영자 알림을 먼저
+        # 보내 dedup 키를 선점하고, 재실행의 진짜 최종 결과는 영영 통보되지 않는다.
+        decision = RunStateMachine.decide_auto_rerun(
+            run_status=final_status,
+            triggered_by=run.triggered_by,
+            is_auto_rerun=run.auto_rerun_of is not None,
+            budget_remaining=1 if self._settings.auto_rerun_enabled else 0,
+        )
+        auto_rerun_target = (
+            self._auto_rerun_target(run) if isinstance(decision, TriggerAutoRerun) else None
+        )
         final_status = aggregate.finalize(forced_status)
+        if auto_rerun_target is not None:
+            aggregate.mark_auto_rerun_pending(from_module_id=auto_rerun_target.module_id)
         await self._persist(run, aggregate)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.
@@ -1047,28 +1070,62 @@ class RunService:
             suite_id=run.suite_id,
             schedule_id=run.schedule_id,
         )
-        # Run 수준 자동 재실행 게이트(설계 §3.6). 도구 오류(ERROR)로 끝난 예약 Run 만, 그것도
-        # auto_rerun_enabled 일 때만 1회 대상이 된다 — 기본값 False 라 도입 자체는 기존 동작을
-        # 바꾸지 않는다.
-        decision = RunStateMachine.decide_auto_rerun(
-            run_status=final_status,
-            triggered_by=run.triggered_by,
-            is_auto_rerun=run.auto_rerun_of is not None,
-            budget_remaining=1 if self._settings.auto_rerun_enabled else 0,
-        )
-        if isinstance(decision, TriggerAutoRerun):
-            await self._enqueue_auto_rerun(run)
+        if auto_rerun_target is not None:
+            await self._enqueue_auto_rerun(run, auto_rerun_target)
 
-    async def _enqueue_auto_rerun(self, run: Run) -> None:
-        """실패 모듈부터 1회 자동 재실행한다(설계 §3.6). 실패해도 원본 Run 결과는 보존한다."""
+    def _auto_rerun_target(self, run: Run) -> RunModule | None:
+        """자동 재실행을 걸 실패 모듈. 큐잉이 성립할 수 없으면 ``None``.
+
+        ``rerun_from_module`` 이 거부할 조건(모듈 부재·``partial_rerun_allowed=False`` 등)을
+        **미리** 같은 순수 규칙(``decide_partial_rerun``)으로 확인한다 — 규칙을 복제하는 게
+        아니라 같은 함수를 한 번 더 평가하는 것이다. 이렇게 하면 애초에 큐잉될 수 없는 Run 은
+        대기 표식을 세웠다가 되돌리는 왕복 없이 곧바로 정상 알림 경로로 간다(``ERROR`` 상태
+        모듈 중 ``partial_rerun_allowed=False`` 는 실제 매니페스트에 존재하는 흔한 설정이다).
+        """
         failed = next(
             (m for m in run.modules if m.status in (ModuleStatus.ERROR, ModuleStatus.FAILED)),
             None,
         )
         if failed is None:
-            return
+            return None
         try:
-            resumed_run = await self.rerun_from_module(
+            system = self._registry.get_system(run.system_code)
+        except KeyError:
+            return None
+        definition = next(
+            (d for d in system.modules if d.module_id == failed.module_id),
+            None,
+        )
+        if definition is None:
+            return None
+        decision = RunStateMachine.decide_partial_rerun(
+            from_module_id=failed.module_id,
+            module_ids_in_order=[
+                module.module_id for module in self._planner.ordered_selected_run_modules(run)
+            ],
+            partial_rerun_allowed=definition.partial_rerun_allowed,
+        )
+        if isinstance(decision, RejectInvalidResumePoint):
+            logger.info(
+                "부분 재실행 불가 모듈 — 자동 재실행 생략",
+                log_event="run.auto_rerun.not_resumable",
+                run_id=run.run_id,
+                module_id=failed.module_id,
+            )
+            return None
+        return failed
+
+    async def _enqueue_auto_rerun(self, run: Run, failed: RunModule) -> None:
+        """실패 모듈부터 1회 자동 재실행한다(설계 §3.6). 실패해도 원본 Run 결과는 보존한다.
+
+        호출 시점에 ``auto_rerun_pending`` 은 이미 ``RunFinished`` 와 같은 트랜잭션으로 True 로
+        영속돼 있다(R4 경합 차단). 큐잉이 성공하면 ``rerun_from_module`` 의
+        ``prepare_partial_rerun`` 이 Run 을 ``RUNNING`` 으로 되돌리며 표식을 내리고, 그때부터는
+        "아직 끝나지 않은 Run" 이라는 사실 자체가 알림을 보류시킨다 — 이번 재실행의 종료가
+        진짜 최종 결과를 알린다.
+        """
+        try:
+            await self.rerun_from_module(
                 run_id=run.run_id,
                 from_module_id=failed.module_id,
                 auto_rerun_of=run.run_id,
@@ -1079,14 +1136,43 @@ class RunService:
                 log_event="run.auto_rerun.failed",
                 run_id=run.run_id,
             )
+            await self._compensate_failed_auto_rerun(run.run_id)
+
+    async def _compensate_failed_auto_rerun(self, run_id: str) -> None:
+        """큐잉 실패 보상 — 원본 Run 의 종료 알림 경로를 되살린다(R4).
+
+        ``auto_rerun_pending`` 을 내리는 것만으로는 부족하다: 아웃박스는 이미 발행한 행을 다시
+        처리하지 않으므로(dispatch-once), 그 한 번의 디스패치가 대기 상태를 보고 알림을
+        건너뛰었다면 다시 볼 기회가 없다. 그래서 종료 사실을 **새 ``RunFinished`` 로 한 번 더
+        발행**한다 — 릴레이는 이 새 행을 디스패치하며 지금 상태(대기 아님)로 다시
+        하이드레이션하므로 알림이 정상 발송된다. 이미 알림이 나갔던 경우의 중복은 알림 계층의
+        dedup 클레임이 막는다.
+
+        계층 경계는 지킨다 — 애플리케이션이 알림 어댑터를 직접 호출하지 않고 도메인 사실을 한
+        건 더 남길 뿐이며, 배달은 여전히 아웃박스 릴레이 → EventBus 구독자가 한다. 최신
+        스냅샷을 다시 읽는 이유는 ``rerun_from_module`` 이 중간까지 진행하며 Run 을 이미
+        변경했을 수 있어서다(오래된 ``run`` 객체를 저장하면 그 변경을 되돌려쓴다).
+        """
+        try:
+            fresh = await self._write_repo.get_run(run_id)
+            aggregate = RunAggregate(fresh)
+            status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+            await self._persist(fresh, aggregate)
+        except Exception:
+            # 보상까지 실패하면 이 Run 의 알림은 실제로 유실된다 — 조용히 넘기지 않고 운영자가
+            # 찾을 수 있는 전용 로그 이벤트를 남긴다. 다만 종료 처리 자체를 무너뜨리지는 않는다.
+            logger.exception(
+                "자동 재실행 큐잉 실패 보상 실패 — 종료 알림 유실 가능",
+                log_event="run.auto_rerun.compensation_failed",
+                run_id=run_id,
+            )
             return
-        # 큐잉이 실제로 성공했을 때만 대기 플래그를 세운다(R4) — 실패하면 원본 Run 의 정상
-        # 완료 알림이 그대로 발송돼야 한다. ``rerun_from_module`` 이 이미 이 Run(같은 run_id,
-        # 제자리 재개)을 RUNNING 으로 되돌려 영속했으므로, 그 최신 스냅샷(``resumed_run``) 위에
-        # 이어 붙여야 그 재설정을 되돌려쓰지 않는다(오래된 ``run`` 객체를 다시 저장하면 안 됨).
-        aggregate = RunAggregate(resumed_run)
-        aggregate.mark_auto_rerun_pending(from_module_id=failed.module_id)
-        await self._persist(resumed_run, aggregate)
+        logger.info(
+            "자동 재실행 큐잉 실패 보상 — 종료 재발행",
+            log_event="run.auto_rerun.compensated",
+            run_id=run_id,
+            status=status.value,
+        )
 
     # --- 로그 기록 --------------------------------------------------------
 

@@ -320,6 +320,66 @@ def test_mark_auto_rerun_pending_sets_flag_and_emits_audit_event():
     assert event.from_module_id == "a"
 
 
+def test_finalize_and_mark_auto_rerun_pending_produce_one_atomic_batch():
+    """R4 — 종료와 대기 표식은 한 배치(=한 트랜잭션)로 영속돼야 한다.
+
+    ``finalize()`` 가 표식을 지운 **뒤** ``mark_auto_rerun_pending`` 이 다시 세우는 순서가
+    지켜져야 하고(반대면 표식이 지워진 채 남는다), 두 이벤트가 같은 ``pull_events`` 배치에
+    들어와야 릴레이가 ``RunFinished`` 를 보는 순간 이미 ``pending=True`` 를 하이드레이션한다.
+    """
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.RUNNING)
+    aggregate = RunAggregate(run)
+
+    aggregate.finalize(None)
+    aggregate.mark_auto_rerun_pending(from_module_id="a")
+
+    assert run.status == RunStatus.ERROR
+    assert run.auto_rerun_pending is True
+    batch = [type(event.event).__name__ for event in aggregate.pull_events()]
+    assert batch == ["RunFinished", "RunAutoRerunTriggered"]
+
+
+def test_reannounce_finished_reemits_run_finished_and_clears_flag():
+    """R4 보상 — 이미 종료된 Run 은 상태를 건드리지 않고 종료만 다시 알린다.
+
+    아웃박스는 발행한 행을 재처리하지 않으므로, 대기 표식만 되돌려서는 새 알림 디스패치가
+    생기지 않는다 — 새 ``RunFinished`` 를 한 건 더 내야 릴레이가 다시 하이드레이션한다.
+    """
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.ERROR)
+    run.auto_rerun_pending = True
+    ended_at = run.ended_at
+    aggregate = RunAggregate(run)
+
+    status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+
+    assert status == RunStatus.ERROR
+    assert run.auto_rerun_pending is False
+    assert run.ended_at == ended_at  # 이미 종료된 Run 의 종료 시각은 다시 쓰지 않는다.
+    assert [type(event.event).__name__ for event in aggregate.pull_events()] == ["RunFinished"]
+
+
+def test_reannounce_finished_reseals_run_that_was_rewound_for_rerun():
+    """부분 재실행 준비까지 성공하고 큐잉에서 실패하면, 되감긴 Run 을 다시 봉인해야 한다.
+
+    그 Run 을 실행할 워커가 없으므로 진행 중으로 남겨두면 아무도 알림을 내지 않는다
+    (알림 구독자는 비종료 상태를 그냥 건너뛴다).
+    """
+    modules = [_module("a", 0, status=ModuleStatus.ERROR)]
+    run = _run(modules, status=RunStatus.ERROR)
+    aggregate = RunAggregate(run)
+    aggregate.prepare_partial_rerun(0, modules)
+    aggregate.pull_events()
+    assert run.status == RunStatus.RUNNING
+
+    status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+
+    assert status == RunStatus.ERROR
+    assert run.status == RunStatus.ERROR
+    assert run.ended_at is not None
+    assert run.auto_rerun_pending is False
+    assert [type(event.event).__name__ for event in aggregate.pull_events()] == ["RunFinished"]
+
+
 # --- 복구 가시성 -------------------------------------------------------------
 
 
