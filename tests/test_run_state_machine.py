@@ -251,6 +251,25 @@ def test_site_signal_never_retries_even_when_policy_allows():
     assert isinstance(decision, CompleteStep)
 
 
+@pytest.mark.spec("SPEC-RUN-006", "AC-002")
+def test_anomaly_status_never_retries_even_when_signal_is_not_site():
+    """NFR-001 — 사이트 이상(ANOMALY)은 **신호와 무관하게** 재시도 대상이 아니다.
+
+    실행 평면의 두 판정이 어긋날 수 있다: ``workflow_engine`` 은 ``except RuntimeError`` 로
+    ANOMALY 를 가르므로 **하위 클래스**(예: ``NotImplementedError``)도 ANOMALY 가 되지만,
+    ``classify_failure`` 는 ``type(exc) is RuntimeError`` 라는 **정확 타입** 검사라 그 경우
+    ``SITE`` 가 아니라 ``UNKNOWN`` 을 돌려준다. 신호만 보고 막으면 매니페스트가
+    ``retryable_on: [ANOMALY]`` 를 켰을 때 사이트 이상이 tier 0 으로 재시도된다 —
+    "어떤 매니페스트 설정으로도 사이트 이상은 재시도되지 않는다"는 불변이 실제로 깨진다.
+    """
+    decision = _failure_decision(
+        step_status=ModuleStatus.ANOMALY,
+        failure_signal=FailureSignal.UNKNOWN,
+        retryable_on=frozenset({ModuleStatus.ERROR, ModuleStatus.ANOMALY}),
+    )
+    assert isinstance(decision, CompleteStep)
+
+
 def test_default_signal_preserves_legacy_tier_zero_behaviour():
     """호출부가 신호를 넘기지 않으면 현행 동작(tier 0)과 동일하다."""
     decision = _failure_decision()

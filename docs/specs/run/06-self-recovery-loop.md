@@ -267,7 +267,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 
 | ID | 요구사항 |
 | --- | --- |
-| NFR-001 | `SITE` 신호는 어떤 매니페스트 설정으로도 재시도 대상이 될 수 없다(이중 강제 안전 규칙) |
+| NFR-001 | 사이트 이상은 어떤 매니페스트 설정으로도 재시도 대상이 될 수 없다 — `SITE` **신호**와 `ANOMALY` **상태** 양쪽으로 막는다(이중 강제 안전 규칙). 상태로도 막는 이유: `workflow_engine` 은 `except RuntimeError`(하위 클래스 포함)로 `ANOMALY` 를 가르지만 `classify_failure` 는 `type(exc) is RuntimeError`(정확 타입)로 `SITE` 를 판정하므로, `RuntimeError` 하위 클래스는 `ANOMALY` + `UNKNOWN` 조합이 되어 신호 검사만으로는 걸러지지 않는다 |
 | NFR-002 | 신규 `RunModule`/이벤트 필드는 전부 기본값을 가져 기존 이벤트 스트림 재생·`test_run_event_codec.py` 하위호환을 깨지 않는다 |
 | NFR-003 | `E2E_RUN_MAX_DURATION_S`/`E2E_AUTO_RERUN_ENABLED` 기본값은 각각 무제한/`false` — 도입 자체가 기존 동작을 바꾸지 않는다 |
 | NFR-004 | `recover_session` 미구현 어댑터는 기본 `False` — 기존 어댑터 무변경 |
@@ -278,6 +278,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | --- | --- | --- | --- |
 | AC-001 | 단위 | `tests/test_run_state_machine.py::test_signal_maps_to_base_tier` | 신호 → 기본 tier 매핑 전수(파라미터화, `SESSION_LOST`→`REPLAY_FROM_LOGIN` 포함) |
 | AC-002 | 단위 | `tests/test_run_state_machine.py::test_site_signal_never_retries_even_when_policy_allows` | `retryable_on` 이 `ANOMALY` 를 허용해도 `SITE` 는 재시도 금지 |
+| AC-002 | 단위 | `tests/test_run_state_machine.py::test_anomaly_status_never_retries_even_when_signal_is_not_site` | `RuntimeError` 하위 클래스처럼 `ANOMALY` + 비-`SITE` 신호 조합도 재시도 금지(NFR-001 의 상태 측 강제) |
 | AC-003 | 단위 | `tests/test_run_state_machine.py::test_tier_escalates_when_same_tier_already_attempted` | 같은 tier 반복 실패 시 한 단계 상승 |
 | AC-004 | 단위 | `tests/test_run_detail_recovery_badge.py::test_run_detail_shows_recovered_badge` | Run 상세 HTML 에 "자동 복구됨"/`badge--recovered` 노출 |
 | AC-005 | 단위 | `tests/test_otp_recovery_guard.py::test_reset_to_module_entry_without_entry_url_skips_rewind` | `entry_url=None` 이면 `RunService._recover_session_for_retry` 가 `gateway.recover_session` 자체를 호출하지 않고 되감기를 생략(제자리 재시도로 폴백) |

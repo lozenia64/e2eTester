@@ -25,6 +25,7 @@ I/O 와 뒤섞여, 상태머신이 코드 형태로만 존재했다). 이 모듈
 
   단계 실패 후(decide_post_step_failure):
     cancel_requested                      → CancelRemaining
+    SITE 신호 또는 ANOMALY 상태           → CompleteStep (사이트 이상 — 매니페스트 무관 비재시도)
     retryable 이고 attempt < max_attempts → RetryModule
     그 외                                  → CompleteStep
 
@@ -240,9 +241,18 @@ class RunStateMachine:
             return CompleteStep()
         if step_status is ModuleStatus.PASSED:
             return CompleteStep()
-        # 설계 §3.5 안전 규칙 — 사이트 이상은 매니페스트의 retryable_on 설정과 **무관하게**
-        # 자동 재시도하지 않는다. 사이트 이상을 재시도로 덮으면 이 도구의 존재 이유가 무너진다.
-        if failure_signal is FailureSignal.SITE:
+        # 설계 §3.5 안전 규칙(NFR-001) — 사이트 이상은 매니페스트의 retryable_on 설정과
+        # **무관하게** 자동 재시도하지 않는다. 사이트 이상을 재시도로 덮으면 이 도구의 존재
+        # 이유가 무너진다.
+        #
+        # 신호(SITE)와 상태(ANOMALY) 둘 다로 막는다: 실행 평면의 두 판정 기준이 미세하게
+        # 다르기 때문이다. ``workflow_engine`` 은 ``except RuntimeError`` 로 ANOMALY 를
+        # 가르므로 하위 클래스(예: ``NotImplementedError``)도 ANOMALY 가 되지만,
+        # ``classify_failure`` 는 ``type(exc) is RuntimeError`` 라는 정확 타입 검사라 그때는
+        # ``SITE`` 가 아닌 ``UNKNOWN`` 이 나온다. 신호만 보면 그 틈으로 사이트 이상이 tier 0
+        # 재시도에 걸린다. ``ANOMALY`` 는 이 시스템이 사이트 이상에 붙이는 상태 그 자체이므로
+        # (``app/core/status_labels.py``) 상태로도 함께 막아야 불변이 실제로 성립한다.
+        if failure_signal is FailureSignal.SITE or step_status is ModuleStatus.ANOMALY:
             return CompleteStep()
         if step_status in retryable_on and current_attempt < max_attempts:
             tier = _escalated_tier(failure_signal, attempted_tiers)
