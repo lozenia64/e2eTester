@@ -12,6 +12,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -20,6 +21,7 @@ from app.contexts.run.domain.events import (
     RunFinished,
     RunImported,
     RunModuleBlocked,
+    RunModuleRecovered,
     RunModuleRetried,
     RunModulesCancelled,
     RunPartialRerunStarted,
@@ -49,10 +51,12 @@ class RunEventCodec:
         "RunComparisonAttached": RunComparisonAttached,
         "RunSealedInterrupted": RunSealedInterrupted,
         "RunModuleRetried": RunModuleRetried,
+        "RunModuleRecovered": RunModuleRecovered,
         "RunPartialRerunStarted": RunPartialRerunStarted,
         "ModuleFailureAnalysisAttached": ModuleFailureAnalysisAttached,
         "RunImported": RunImported,
         "RunDeleted": RunDeleted,
+        "RunAutoRerunTriggered": RunAutoRerunTriggered,
     }
 
     def encode(self, run_id: str, record: RunEventRecord) -> EventEnvelope:
@@ -176,6 +180,13 @@ def _event_to_payload(event: RunEvent) -> dict[str, Any]:
             "attempt": event.attempt,
             "module": _module_to_wire(event.module),
         }
+    if isinstance(event, RunModuleRecovered):
+        return {
+            "module_id": event.module_id,
+            "attempts": event.attempts,
+            "tiers": list(event.tiers),
+            "module": _module_to_wire(event.module),
+        }
     if isinstance(event, ModuleFailureAnalysisAttached):
         return {
             "module_id": event.module_id,
@@ -188,6 +199,11 @@ def _event_to_payload(event: RunEvent) -> dict[str, Any]:
         event, ModuleQueued | ModuleStarted | RunWaitingInput | RunResumed | RunModuleBlocked
     ):
         return {"module_id": event.module_id, "module": _module_to_wire(event.module)}
+    if isinstance(event, RunAutoRerunTriggered):
+        return {
+            "original_run_id": event.original_run_id,
+            "from_module_id": event.from_module_id,
+        }
     raise TypeError(f"unsupported Run event: {type(event).__name__}")
 
 
@@ -211,7 +227,7 @@ def _payload_to_event(cls: type, payload: dict[str, Any]) -> RunEvent:
         kwargs["all_modules"] = [_wire_to_module(w) for w in kwargs.get("all_modules", [])]
     elif cls is RunModulesCancelled:
         kwargs["modules"] = [_wire_to_module(w) for w in kwargs.get("modules", [])]
-    elif cls is RunModuleRetried:
+    elif cls in {RunModuleRetried, RunModuleRecovered}:
         kwargs["module"] = _wire_to_module(kwargs.get("module"))
     elif cls is ModuleFailureAnalysisAttached:
         kwargs["module"] = _wire_to_module(kwargs.get("module"))

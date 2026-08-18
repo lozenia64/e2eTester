@@ -176,6 +176,24 @@ def test_evolve_reconstructs_comparison_and_failure_analysis():
     assert login.failure_analysis.category == "selector_broken"
 
 
+def test_evolve_folds_auto_rerun_triggered_audit_event_without_crashing():
+    """RunAutoRerunTriggered(감사 전용, module 필드 없음)도 evolve 크래시 없이 접힌다.
+
+    이 이벤트는 module 을 싣지 않으므로 모듈 버킷(둘 다) 어디에도 안 걸린다 — 요약만
+    재적용하는 RunStarted/RunFinished 류 버킷에 속해야 한다. 거기 빠지면 evolve 의
+    ``case _: assert_never(event)`` 가 실제로 ``AssertionError`` 를 던져, 자동 재실행이
+    실제로 발동하는 순간 스냅샷 재구성(리플레이)이 프로덕션에서 크래시한다.
+    """
+    aggregate, events = _drive_full_run(ModuleStatus.ANOMALY)
+    aggregate.mark_auto_rerun_pending(from_module_id="hom.login")
+    events += aggregate.pull_events()
+
+    assert [type(e.event).__name__ for e in events][-1] == "RunAutoRerunTriggered"
+
+    folded = _fold(events, run_id="run_dec")  # assert_never 라면 여기서 AssertionError.
+    assert folded == aggregate.to_snapshot()
+
+
 def test_empty_stream_folds_to_none():
     assert rebuild_state([], run_id="run_empty") is None
 

@@ -165,6 +165,16 @@ def test_finalize_seals_run():
     assert run.awaiting_input_prompt is None
 
 
+def test_finalize_clears_auto_rerun_pending():
+    """R4 — 새 종료마다 낡은 대기 표식을 지운다(그러지 않으면 재실행이 다시 실패해도
+    완료/운영자 알림이 영원히 억제된다)."""
+    module = _module("a", 0, status=ModuleStatus.ERROR)
+    run = _run([module], status=RunStatus.RUNNING)
+    run.auto_rerun_pending = True
+    RunAggregate(run).finalize(None)
+    assert run.auto_rerun_pending is False
+
+
 def test_finalize_is_idempotent_no_duplicate_run_finished():
     module = _module("a", 0, status=ModuleStatus.ANOMALY)
     run = _run([module], status=RunStatus.RUNNING)
@@ -277,3 +287,143 @@ def test_prepare_partial_rerun_resets_modules_from_index():
     assert modules[2].status == ModuleStatus.PENDING
     events = aggregate.pull_events()
     assert any(type(event.event).__name__ == "RunPartialRerunStarted" for event in events)
+
+
+def test_prepare_partial_rerun_clears_auto_rerun_pending():
+    """R4 — 재실행이 실제로 다시 돌기 시작하면 대기 플래그를 내린다.
+
+    내리지 않으면 이 재실행이 다시 실패로 끝나도 완료 메일이 영원히 억제된다(진짜 최종
+    결과가 통보되지 않는 사일런트 실패 — 설계상 절대 있어서는 안 됨).
+    """
+    modules = [_module("a", 0, status=ModuleStatus.ERROR)]
+    run = _run(modules, status=RunStatus.ERROR)
+    run.auto_rerun_pending = True
+    aggregate = RunAggregate(run)
+
+    aggregate.prepare_partial_rerun(0, modules)
+
+    assert run.auto_rerun_pending is False
+
+
+def test_mark_auto_rerun_pending_sets_flag_and_emits_audit_event():
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.ERROR)
+    aggregate = RunAggregate(run)
+
+    aggregate.mark_auto_rerun_pending(from_module_id="a")
+
+    assert run.auto_rerun_pending is True
+    events = aggregate.pull_events()
+    assert len(events) == 1
+    event = events[0].event
+    assert type(event).__name__ == "RunAutoRerunTriggered"
+    assert event.original_run_id == run.run_id
+    assert event.from_module_id == "a"
+
+
+def test_finalize_and_mark_auto_rerun_pending_produce_one_atomic_batch():
+    """R4 — 종료와 대기 표식은 한 배치(=한 트랜잭션)로 영속돼야 한다.
+
+    ``finalize()`` 가 표식을 지운 **뒤** ``mark_auto_rerun_pending`` 이 다시 세우는 순서가
+    지켜져야 하고(반대면 표식이 지워진 채 남는다), 두 이벤트가 같은 ``pull_events`` 배치에
+    들어와야 릴레이가 ``RunFinished`` 를 보는 순간 이미 ``pending=True`` 를 하이드레이션한다.
+    """
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.RUNNING)
+    aggregate = RunAggregate(run)
+
+    aggregate.finalize(None)
+    aggregate.mark_auto_rerun_pending(from_module_id="a")
+
+    assert run.status == RunStatus.ERROR
+    assert run.auto_rerun_pending is True
+    batch = [type(event.event).__name__ for event in aggregate.pull_events()]
+    assert batch == ["RunFinished", "RunAutoRerunTriggered"]
+
+
+def test_reannounce_finished_reemits_run_finished_and_clears_flag():
+    """R4 보상 — 이미 종료된 Run 은 상태를 건드리지 않고 종료만 다시 알린다.
+
+    아웃박스는 발행한 행을 재처리하지 않으므로, 대기 표식만 되돌려서는 새 알림 디스패치가
+    생기지 않는다 — 새 ``RunFinished`` 를 한 건 더 내야 릴레이가 다시 하이드레이션한다.
+    """
+    run = _run([_module("a", 0, status=ModuleStatus.ERROR)], status=RunStatus.ERROR)
+    run.auto_rerun_pending = True
+    ended_at = run.ended_at
+    aggregate = RunAggregate(run)
+
+    status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+
+    assert status == RunStatus.ERROR
+    assert run.auto_rerun_pending is False
+    assert run.ended_at == ended_at  # 이미 종료된 Run 의 종료 시각은 다시 쓰지 않는다.
+    assert [type(event.event).__name__ for event in aggregate.pull_events()] == ["RunFinished"]
+
+
+def test_reannounce_finished_reseals_run_that_was_rewound_for_rerun():
+    """부분 재실행 준비까지 성공하고 큐잉에서 실패하면, 되감긴 Run 을 다시 봉인해야 한다.
+
+    그 Run 을 실행할 워커가 없으므로 진행 중으로 남겨두면 아무도 알림을 내지 않는다
+    (알림 구독자는 비종료 상태를 그냥 건너뛴다).
+    """
+    modules = [_module("a", 0, status=ModuleStatus.ERROR)]
+    run = _run(modules, status=RunStatus.ERROR)
+    aggregate = RunAggregate(run)
+    aggregate.prepare_partial_rerun(0, modules)
+    aggregate.pull_events()
+    assert run.status == RunStatus.RUNNING
+
+    status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+
+    assert status == RunStatus.ERROR
+    assert run.status == RunStatus.ERROR
+    assert run.ended_at is not None
+    assert run.auto_rerun_pending is False
+    assert [type(event.event).__name__ for event in aggregate.pull_events()] == ["RunFinished"]
+
+
+# --- 복구 가시성 -------------------------------------------------------------
+
+
+def test_record_retry_accumulates_tier_and_signal_history():
+    from app.core.enums import FailureSignal, RecoveryTier
+
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    module.max_attempts = 3
+    aggregate = RunAggregate(_run([module]))
+
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RESET_TO_MODULE_ENTRY, failure_signal=FailureSignal.DIALOG
+    )
+
+    assert module.recovery_tiers == [0, 1]
+    assert module.failure_signals == ["TIMEOUT", "DIALOG"]
+    assert module.recovered is False  # 아직 통과하지 않았다
+
+
+def test_record_recovered_marks_module_and_emits_event():
+    from app.contexts.run.domain.events import RunModuleRecovered
+    from app.core.enums import FailureSignal, RecoveryTier
+
+    module = _module("a", 0, status=ModuleStatus.RUNNING)
+    module.max_attempts = 3
+    aggregate = RunAggregate(_run([module]))
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+
+    aggregate.record_recovered(module)
+
+    assert module.recovered is True
+    emitted = [r.event for r in aggregate.pull_events()]
+    assert any(isinstance(e, RunModuleRecovered) for e in emitted)
+
+
+def test_module_without_retry_is_not_marked_recovered():
+    module = _module("a", 0, status=ModuleStatus.PASSED)
+    aggregate = RunAggregate(_run([module]))
+
+    aggregate.record_recovered(module)
+
+    assert module.recovered is False

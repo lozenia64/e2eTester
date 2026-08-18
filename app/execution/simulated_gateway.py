@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from uuid import uuid4
 
-from app.core.enums import ModuleStatus
+from app.core.enums import ModuleStatus, RecoveryTier
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.execution.results import StepExecutionResult
@@ -30,6 +30,8 @@ class SimulatedExecutionGateway(ExecutionGateway):
         # 체크포인트 재개 시 open_session 으로 흘러든 storage_state 를 세션별로 기록한다.
         # 브라우저가 없어 실제 복원은 못 하지만, 재수화 배선이 끝까지 이어졌음을 테스트가 검증한다.
         self.restored_storage_states: dict[str, str] = {}
+        # 테스트 관찰용 — 어떤 등급으로 몇 번 되감았는지.
+        self.recovery_calls: list[tuple[RecoveryTier, str | None]] = []
 
     def supports(self, execution_mode: str) -> bool:
         return execution_mode == self.SIMULATED_MODE
@@ -114,3 +116,12 @@ class SimulatedExecutionGateway(ExecutionGateway):
     async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
         """브라우저 없이 체크포인트 시맨틱을 재현한다(WP-C5) — 세션 식별 가능한 결정적 가짜 상태."""
         return f'{{"simulated_session": "{handle.session_id}"}}'
+
+    async def recover_session(
+        self,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> bool:
+        self.recovery_calls.append((tier, entry_url))
+        return True

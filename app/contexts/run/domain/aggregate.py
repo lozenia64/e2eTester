@@ -9,12 +9,14 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunEvent,
     RunEventRecord,
     RunFinished,
     RunModuleBlocked,
+    RunModuleRecovered,
     RunModuleRetried,
     RunModulesCancelled,
     RunPartialRerunStarted,
@@ -23,7 +25,7 @@ from app.contexts.run.domain.events import (
     RunStarted,
     RunWaitingInput,
 )
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.status_labels import MODULE_ANOMALY_STATUSES, MODULE_ERROR_STATUSES
 from app.domain.snapshots import RunSnapshot
@@ -268,6 +270,60 @@ class RunAggregate:
         if user_name is not None:
             self._state.created_by_user_name = user_name
 
+    def set_auto_rerun_of(self, auto_rerun_of: str) -> None:
+        """이 Run 이 자동 재실행으로 생성됐음을 원본 Run id 로 기록한다(설계 §3.6).
+
+        직접 변이 금지 — 유일 변이자 경로. 이벤트를 내지 않는 순수 상태 변이다(자동
+        재실행 자체는 별도 부분 재실행 실행 이벤트로 이미 스트림에 남는다).
+        """
+        self._state.auto_rerun_of = auto_rerun_of
+
+    def mark_auto_rerun_pending(self, from_module_id: str) -> None:
+        """자동 재실행을 걸기로 **결정**했음을 표시하고 감사 이벤트를 남긴다(설계 R4).
+
+        완료 메일 발송 판정(``RunCompletionEmailNotifier.send_run_completion``)이 이 플래그를
+        보고 원본 Run 의 알림을 보류한다 — 재실행이 이어받은 같은 Run 의 최종 결과가 진짜
+        결과이므로, 여기서도 메일을 보내면 담당자에게 중복 도달한다.
+
+        **``finalize()`` 와 같은 persist(=같은 트랜잭션)에서 호출돼야 한다.** ``OutboxRelay``
+        는 같은 프로세스의 태스크로 폴링하다가 ``RunFinished`` 아웃박스 행을 보는 즉시 Run 을
+        새로 하이드레이션해 알림 판정을 내리므로, 두 쓰기 사이에 ``await`` 경계가 있으면
+        릴레이가 ``pending=False`` 를 보고 운영자 알림을 먼저 보내 dedup 키를 선점한다
+        (그러면 진짜 최종 결과가 영영 통보되지 않는다 — R4 가 막으려는 실패 그 자체).
+
+        큐잉이 그 뒤에 실패하면 플래그를 되돌리는 것만으로는 부족하다(아웃박스는 이미 발행한
+        행을 다시 처리하지 않는다) — ``reannounce_finished`` 로 종료를 한 번 더 알려야 한다.
+        """
+        self._state.auto_rerun_pending = True
+        self._emit(
+            RunAutoRerunTriggered(
+                original_run_id=self._state.run_id,
+                from_module_id=from_module_id,
+            )
+        )
+
+    def reannounce_finished(self, fallback_status: RunStatus) -> RunStatus:
+        """자동 재실행 큐잉 실패에 대한 보상 — 대기 표식을 내리고 종료를 **다시** 알린다(R4).
+
+        ``OutboxRelay`` 는 청구한 아웃박스 행을 정확히 한 번만 디스패치한다. 그 한 번이
+        ``auto_rerun_pending=True`` 를 보고 알림을 건너뛴 뒤라면, 플래그를 False 로 되돌려도
+        새 디스패치는 생기지 않는다 — 종료 사실을 담은 ``RunFinished`` 를 한 건 더 발행해야
+        릴레이가 지금 상태로 다시 하이드레이션해 알림 판정을 되풀이한다. 중복 발송은 알림
+        계층의 dedup 클레임(``run``/``run_operator`` 키)이 막는다.
+
+        Run 이 아직 종료 상태가 아니면(부분 재실행 준비까지는 성공하고 큐잉에서 실패한 경우)
+        먼저 ``fallback_status`` 로 다시 봉인한다 — 그 Run 을 실행할 워커가 없으므로 종료로
+        되돌려야 결과가 통보되고, 진행 중으로 남겨두면 아무도 알림을 내지 않는다.
+        """
+        if self._state.status not in _RUN_TERMINAL:
+            self._state.ended_at = datetime.now(UTC)
+            self._state.awaiting_input_module_id = None
+            self._state.awaiting_input_prompt = None
+            self._state.status = fallback_status
+        self._state.auto_rerun_pending = False
+        self._emit_run_finished()
+        return self._state.status
+
     def attach_failure_analysis(self, module: RunModule, analysis) -> None:
         """Run 종료 후 AI 실패 분석 결과를 해당 모듈에 부착한다(구독자 → 도메인 변이 경로)."""
         module.failure_analysis = analysis
@@ -309,7 +365,12 @@ class RunAggregate:
         module.duration_ms = self._duration_ms(module)
         self._emit_module_completed(module)
 
-    def record_retry(self, module: RunModule) -> None:
+    def record_retry(
+        self,
+        module: RunModule,
+        tier: RecoveryTier | None = None,
+        failure_signal: FailureSignal | None = None,
+    ) -> None:
         """정책상 재시도 — attempt 를 올리고 모듈을 다시 큐잉한다."""
         module.attempt += 1
         module.retry_count += 1
@@ -319,10 +380,28 @@ class RunAggregate:
         module.ended_at = None
         module.duration_ms = None
         module.failure_analysis = None
+        if tier is not None:
+            module.recovery_tiers.append(int(tier))
+        if failure_signal is not None:
+            module.failure_signals.append(str(failure_signal))
         self._emit(
             RunModuleRetried(
                 module_id=module.module_id,
                 attempt=module.attempt,
+                module=self._module_wire(module),
+            )
+        )
+
+    def record_recovered(self, module: RunModule) -> None:
+        """재시도를 거쳐 통과한 모듈에 복구 표식을 남긴다. 재시도가 없었으면 no-op."""
+        if module.retry_count == 0:
+            return
+        module.recovered = True
+        self._emit(
+            RunModuleRecovered(
+                module_id=module.module_id,
+                attempts=module.attempt,
+                tiers=list(module.recovery_tiers),
                 module=self._module_wire(module),
             )
         )
@@ -333,6 +412,11 @@ class RunAggregate:
         self._state.ended_at = None
         self._state.awaiting_input_module_id = None
         self._state.awaiting_input_prompt = None
+        # R4 — 이 Run 이 자동 재실행 대기 중이었다면(auto_rerun_pending=True) 그 대기는 여기서
+        # 끝난다: 재실행이 실제로 다시 도는 순간부터는 "이 Run의 결과가 최종인가"를 이번
+        # 실행의 종료가 새로 결정해야 한다. 리셋하지 않으면 자동 재실행이 다시 실패로 끝나도
+        # 완료 메일이 영원히 억제된다(진짜 최종 결과가 통보되지 않는 사일런트 실패).
+        self._state.auto_rerun_pending = False
         from_module_id = ordered_modules[from_index].module_id
         for module in ordered_modules[from_index:]:
             if module.status is ModuleStatus.SKIPPED:
@@ -431,6 +515,12 @@ class RunAggregate:
         self._state.awaiting_input_module_id = None
         self._state.awaiting_input_prompt = None
         self._state.status = self.compute_final_status(forced_status)
+        # R4 — 새로운 종료마다 낡은 "자동 재실행 대기" 표식부터 지운다. 이 Run 이 이전
+        # 자동 재실행의 재개였다면(prepare_partial_rerun 이후 이 지점까지 온 것), 지금이 그
+        # 재실행의 진짜 결과다. 표식을 지우지 않으면 RunService 가 이번에는 재실행을 다시
+        # 걸지 않기로(연쇄 차단) 판단할 때 완료/운영자 알림이 영원히 억제된다(설계 R4 위반).
+        # 이번 종료에서 또 자동 재실행을 걸기로 하면 RunService 가 즉시 다시 세운다.
+        self._state.auto_rerun_pending = False
         self._emit_run_finished()
         return self._state.status
 

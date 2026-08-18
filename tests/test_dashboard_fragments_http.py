@@ -214,3 +214,48 @@ def test_fragments_include_visibility_wrappers(client: TestClient) -> None:
     assert "dash-hero__top" in kpi
     assert "dash-hero__aside" in kpi
     assert "dash-sys-row__header" in matrix
+
+
+def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> None:
+    """자동 복구된 모듈은 일간 현황 매트릭스 셀에 ⟳ 불안정 표식을 노출해야 한다."""
+    system = registry.list_systems()[0]
+    module_id = system.modules[0].module_id
+    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
+    run.modules[0].recovered = True
+    run.modules[0].retry_count = 2
+    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    user = User(
+        user_id="u_recovered",
+        email="recovered@test.local",
+        name="Recovered Tester",
+        role="user",
+        hashed_password="x",
+        is_active=True,
+        allowed_system_codes=[system.system_code],
+        created_at=GEN_AT,
+    )
+    app = _build_app(user=user, dashboard_data=data, registry=registry)
+    with TestClient(app) as c:
+        html = c.get("/api/dashboard/daily/fragments/matrix").text
+    assert "cell-flag--unstable" in html
+
+
+def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegistry) -> None:
+    system = registry.list_systems()[0]
+    module_id = system.modules[0].module_id
+    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
+    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    user = User(
+        user_id="u_clean",
+        email="clean@test.local",
+        name="Clean Tester",
+        role="user",
+        hashed_password="x",
+        is_active=True,
+        allowed_system_codes=[system.system_code],
+        created_at=GEN_AT,
+    )
+    app = _build_app(user=user, dashboard_data=data, registry=registry)
+    with TestClient(app) as c:
+        html = c.get("/api/dashboard/daily/fragments/matrix").text
+    assert "cell-flag--unstable" not in html

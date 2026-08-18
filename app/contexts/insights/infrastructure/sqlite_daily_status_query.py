@@ -32,7 +32,7 @@ class SqliteDailyStatusQuery:
             rows = await self._db.fetchall(
                 f"""
                 SELECT day_key, system_code, module_id, last_status,
-                       last_run_id, duration_ms, updated_at
+                       last_run_id, duration_ms, recovered, updated_at
                 FROM daily_system_status
                 WHERE day_key = ? AND system_code IN ({placeholders})
                 """,
@@ -42,7 +42,7 @@ class SqliteDailyStatusQuery:
             rows = await self._db.fetchall(
                 """
                 SELECT day_key, system_code, module_id, last_status,
-                       last_run_id, duration_ms, updated_at
+                       last_run_id, duration_ms, recovered, updated_at
                 FROM daily_system_status
                 WHERE day_key = ?
                 """,
@@ -56,6 +56,8 @@ class SqliteDailyStatusQuery:
                 last_status=ModuleStatus(row["last_status"]),
                 last_run_id=row["last_run_id"],
                 duration_ms=row["duration_ms"],
+                # 마이그레이션 이전 행은 NULL — False 로 취급한다.
+                recovered=bool(row["recovered"]),
                 updated_at=_parse_dt(row["updated_at"]),
             )
             for row in rows

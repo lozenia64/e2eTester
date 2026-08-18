@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.contexts.healing.models import HealingAttempt
 from app.contexts.healing.page_proxy import HealedPage
-from app.core.enums import ModuleStatus
+from app.core.enums import FailureSignal, ModuleStatus
 from app.core.system_models import ModuleDefinition
 from app.platform.artifact_manager import ArtifactManager
+from app.runner.failure_signal import classify_failure
 from app.runner.page_diagnostic import capture_page_html_diagnostic_safe
 from app.runner.screenshot import capture_screenshot
 from app.runner.step_logging import pop_sink, push_sink
@@ -156,6 +157,7 @@ class BaseWorkflowExecutor(ABC):
         status = ModuleStatus.PASSED
         message = ""
         last_error: str | None = None
+        failure_signal = FailureSignal.UNKNOWN
 
         # 자가 치유: 이 모듈 실행 동안만 유효한 셀렉터 오버라이드(깨진 → 대체)와 시도 기록.
         # runtime.page 를 프록시로 잠시 교체해, 스텝이 ctx.page/runtime.page 어느 쪽을 쓰든
@@ -195,12 +197,14 @@ class BaseWorkflowExecutor(ABC):
                         status = ModuleStatus.ANOMALY
                         message = str(exc)
                         last_error = str(exc)
+                        failure_signal = classify_failure(exc)
                         sink(f"[error] {exc}")
                         capture_page_html_diagnostic_safe(real_page, artifact_dir, sink)
                     except Exception as exc:
                         status = ModuleStatus.ERROR
                         message = str(exc)
                         last_error = str(exc)
+                        failure_signal = classify_failure(exc)
                         sink(f"[error] {exc}")
 
                     # 모듈 종료(성공/실패 공통) 시 공용 스크린샷.
@@ -231,6 +235,7 @@ class BaseWorkflowExecutor(ABC):
             last_error=last_error,
             screenshot_path=screenshot_path if screenshot_path.exists() else None,
             healing_events=healing_attempts,
+            failure_signal=failure_signal,
         )
 
     def _dispatch_step(self, context: StepContext) -> StepOutcome:

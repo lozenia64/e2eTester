@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from app.core.enums import RecoveryTier
 from app.core.system_models import ModuleDefinition
 from app.execution.results import StepExecutionResult
 
@@ -99,3 +100,20 @@ class ExecutionGateway(ABC):
         돌려준다(추상 아님 — 기존 어댑터 무변경). 실제 캡처는 세션 스레드에서 수행해야 한다.
         """
         return None
+
+    async def recover_session(
+        self,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> bool:
+        """재시도 **전에** 세션을 ``tier`` 만큼 되감는다. 되감았으면 True.
+
+        - ``RESET_TO_MODULE_ENTRY``: 열린 다이얼로그를 정리하고 ``entry_url`` 로 재이동한다.
+        - ``REPLAY_FROM_LOGIN``: 세션을 폐기·재개설한다.
+
+        되감기를 지원하지 않는 어댑터는 기본 ``False`` 를 돌려주고, 인터프리터는 그 경우
+        tier 0(제자리 재시도)과 동일하게 진행한다. ``RETRY_IN_PLACE`` 는 되감기가 없으므로
+        인터프리터가 아예 호출하지 않는다.
+        """
+        return False

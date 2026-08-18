@@ -66,6 +66,7 @@
 | SPEC-RUN-003 | [run/03-queue-concurrency.md](run/03-queue-concurrency.md) | 프로필별 큐·동시성 |
 | SPEC-RUN-004 | [run/04-checkpoint-resume.md](run/04-checkpoint-resume.md) | 세션 체크포인트·재기동 복구 |
 | SPEC-RUN-005 | [run/05-comparison-artifacts.md](run/05-comparison-artifacts.md) | Run 비교·아티팩트·로그 |
+| SPEC-RUN-006 | [run/06-self-recovery-loop.md](run/06-self-recovery-loop.md) | 실패 신호·복구 등급·자동 재실행 |
 
 ### Suite 사가
 

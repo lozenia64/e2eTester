@@ -25,19 +25,27 @@ I/O 와 뒤섞여, 상태머신이 코드 형태로만 존재했다). 이 모듈
 
   단계 실패 후(decide_post_step_failure):
     cancel_requested                      → CancelRemaining
+    SITE 신호 또는 ANOMALY 상태           → CompleteStep (사이트 이상 — 매니페스트 무관 비재시도)
     retryable 이고 attempt < max_attempts → RetryModule
     그 외                                  → CompleteStep
 
   부분 재실행(decide_partial_rerun):
     invalid module / not allowed          → RejectInvalidResumePoint
     그 외                                  → ResumeFromModule
+
+  Run 수준 자동 재실행(decide_auto_rerun):
+    run_status != ERROR                   → SkipAutoRerun (ANOMALY 는 사이트 이상 — 절대 재실행 안 함)
+    triggered_by != "schedule"            → SkipAutoRerun (수동 실행은 판단을 뺏지 않음)
+    is_auto_rerun                         → SkipAutoRerun (자동 재실행의 연쇄 차단)
+    budget_remaining <= 0                 → SkipAutoRerun
+    그 외                                  → TriggerAutoRerun
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.core.enums import ModuleStatus
+from app.core.enums import FailureSignal, ModuleStatus, RecoveryTier, RunStatus
 
 # --- 모듈 진입 결정 ----------------------------------------------------------
 
@@ -90,12 +98,41 @@ PostStepDecision = CancelRemaining | PauseForInput | CompleteStep | RejectUnexpe
 
 @dataclass(frozen=True)
 class RetryModule:
-    """정책상 재시도 가능 → 백오프 후 같은 모듈을 다시 실행한다."""
+    """정책상 재시도 가능 → 백오프 후 같은 모듈을 다시 실행한다.
+
+    ``tier`` 는 재시도 **전에** 세션을 어디까지 되감을지를 지시한다. 되감기 실행은
+    인터프리터(``RunService``)가 ``ExecutionGateway.recover_session`` 으로 위임한다.
+    """
 
     backoff_ms: int
+    tier: RecoveryTier = RecoveryTier.RETRY_IN_PLACE
 
 
 PostStepFailureDecision = CancelRemaining | PauseForInput | CompleteStep | RetryModule
+
+# 신호 → 기본 복구 등급(설계 §3.2). SITE 는 복구 대상이 아니므로 표에 없다.
+_SIGNAL_BASE_TIER: dict[FailureSignal, RecoveryTier] = {
+    FailureSignal.TIMEOUT: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.SELECTOR_MISS: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.UNKNOWN: RecoveryTier.RETRY_IN_PLACE,
+    FailureSignal.DIALOG: RecoveryTier.RESET_TO_MODULE_ENTRY,
+    FailureSignal.NAVIGATION: RecoveryTier.RESET_TO_MODULE_ENTRY,
+    FailureSignal.SESSION_LOST: RecoveryTier.REPLAY_FROM_LOGIN,
+}
+
+
+def _escalated_tier(
+    failure_signal: FailureSignal, attempted_tiers: tuple[RecoveryTier, ...]
+) -> RecoveryTier:
+    """같은 등급으로 이미 실패했으면 한 단계 올린다(최대 REPLAY_FROM_LOGIN).
+
+    반복되는 타임아웃은 대개 페이지가 이미 잘못된 상태라는 뜻이므로, 같은 되감기를
+    반복하는 대신 되감기 범위를 넓힌다.
+    """
+    tier = _SIGNAL_BASE_TIER.get(failure_signal, RecoveryTier.RETRY_IN_PLACE)
+    while tier in attempted_tiers and tier < RecoveryTier.REPLAY_FROM_LOGIN:
+        tier = RecoveryTier(tier + 1)
+    return tier
 
 
 # --- 부분 재실행 결정 --------------------------------------------------------
@@ -134,6 +171,22 @@ class ReplayFromLogin:
 
 
 RehydrationDecision = ResumeFromCheckpoint | ReplayFromLogin
+
+
+# --- Run 수준 자동 재실행 결정 -----------------------------------------------
+
+
+@dataclass(frozen=True)
+class TriggerAutoRerun:
+    """도구 오류로 끝난 예약 Run 을 1회 자동 재실행한다."""
+
+
+@dataclass(frozen=True)
+class SkipAutoRerun:
+    """자동 재실행 조건에 해당하지 않는다."""
+
+
+AutoRerunDecision = TriggerAutoRerun | SkipAutoRerun
 
 
 class RunStateMachine:
@@ -177,6 +230,10 @@ class RunStateMachine:
         max_attempts: int,
         retryable_on: frozenset[ModuleStatus],
         backoff_ms: int,
+        failure_signal: FailureSignal = FailureSignal.UNKNOWN,
+        attempted_tiers: tuple[RecoveryTier, ...] = (),
+        tier2_used: int = 0,
+        tier2_budget: int = 2,
     ) -> PostStepFailureDecision:
         if cancel_requested:
             return CancelRemaining()
@@ -184,8 +241,25 @@ class RunStateMachine:
             return CompleteStep()
         if step_status is ModuleStatus.PASSED:
             return CompleteStep()
+        # 설계 §3.5 안전 규칙(NFR-001) — 사이트 이상은 매니페스트의 retryable_on 설정과
+        # **무관하게** 자동 재시도하지 않는다. 사이트 이상을 재시도로 덮으면 이 도구의 존재
+        # 이유가 무너진다.
+        #
+        # 신호(SITE)와 상태(ANOMALY) 둘 다로 막는다: 실행 평면의 두 판정 기준이 미세하게
+        # 다르기 때문이다. ``workflow_engine`` 은 ``except RuntimeError`` 로 ANOMALY 를
+        # 가르므로 하위 클래스(예: ``NotImplementedError``)도 ANOMALY 가 되지만,
+        # ``classify_failure`` 는 ``type(exc) is RuntimeError`` 라는 정확 타입 검사라 그때는
+        # ``SITE`` 가 아닌 ``UNKNOWN`` 이 나온다. 신호만 보면 그 틈으로 사이트 이상이 tier 0
+        # 재시도에 걸린다. ``ANOMALY`` 는 이 시스템이 사이트 이상에 붙이는 상태 그 자체이므로
+        # (``app/core/status_labels.py``) 상태로도 함께 막아야 불변이 실제로 성립한다.
+        if failure_signal is FailureSignal.SITE or step_status is ModuleStatus.ANOMALY:
+            return CompleteStep()
         if step_status in retryable_on and current_attempt < max_attempts:
-            return RetryModule(backoff_ms=backoff_ms)
+            tier = _escalated_tier(failure_signal, attempted_tiers)
+            # 로그인 재주행은 비싸므로 Run 당 예산을 넘기면 한 단계 낮춘다(설계 §3.6).
+            if tier is RecoveryTier.REPLAY_FROM_LOGIN and tier2_used >= tier2_budget:
+                tier = RecoveryTier.RESET_TO_MODULE_ENTRY
+            return RetryModule(backoff_ms=backoff_ms, tier=tier)
         return CompleteStep()
 
     @staticmethod
@@ -222,3 +296,27 @@ class RunStateMachine:
         return ReplayFromLogin(
             from_index=login_module_index if login_module_index is not None else 0
         )
+
+    @staticmethod
+    def decide_auto_rerun(
+        *,
+        run_status: RunStatus,
+        triggered_by: str,
+        is_auto_rerun: bool,
+        budget_remaining: int,
+    ) -> AutoRerunDecision:
+        """Run 종료 후 자동 재실행 여부(설계 §3.6).
+
+        ``ANOMALY`` 는 사이트 이상이므로 **절대** 자동 재실행하지 않는다. 수동 실행은
+        사람이 보고 있으므로 판단을 뺏지 않는다. 자동 재실행이 다시 자동 재실행을
+        낳는 연쇄도 차단한다.
+        """
+        if run_status is not RunStatus.ERROR:
+            return SkipAutoRerun()
+        if triggered_by != "schedule":
+            return SkipAutoRerun()
+        if is_auto_rerun:
+            return SkipAutoRerun()
+        if budget_remaining <= 0:
+            return SkipAutoRerun()
+        return TriggerAutoRerun()

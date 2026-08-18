@@ -22,6 +22,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -29,6 +30,7 @@ from app.contexts.run.domain.events import (
     RunFinished,
     RunImported,
     RunModuleBlocked,
+    RunModuleRecovered,
     RunModuleRetried,
     RunModulesCancelled,
     RunPartialRerunStarted,
@@ -85,6 +87,9 @@ def _module_from_wire(wire: dict) -> ModuleSnapshot:
         logs=(),  # 로그는 별도 집합체 소유 — 이벤트/상태에 담지 않는다.
         current_url=wire.get("current_url"),
         dialog_messages=tuple(wire.get("dialog_messages", [])),
+        recovered=bool(wire.get("recovered", False)),
+        recovery_tiers=tuple(wire.get("recovery_tiers", [])),
+        failure_signals=tuple(wire.get("failure_signals", [])),
         failure_analysis=None if analysis is None else FailureAnalysis(**analysis),
     )
 
@@ -171,7 +176,13 @@ def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) ->
                 created,
                 modules=tuple(_module_from_record(module) for module in event.all_modules),
             )
-        case RunStarted() | RunFinished() | RunDeleted() | RunComparisonAttached():
+        case (
+            RunStarted()
+            | RunFinished()
+            | RunDeleted()
+            | RunComparisonAttached()
+            | RunAutoRerunTriggered()
+        ):
             return _apply_summary(base, record, run_id=run_id)
         case (
             RunSealedInterrupted(all_modules=modules) | RunPartialRerunStarted(all_modules=modules)
@@ -194,6 +205,7 @@ def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) ->
             | RunResumed(module=None)
             | RunModuleBlocked(module=None)
             | RunModuleRetried(module=None)
+            | RunModuleRecovered(module=None)
             | ModuleFailureAnalysisAttached(module=None)
             | ModuleFinished(module=None)
         ):
@@ -205,6 +217,7 @@ def evolve(state: RunSnapshot | None, record: RunEventRecord, *, run_id: str) ->
             | RunResumed(module=module)
             | RunModuleBlocked(module=module)
             | RunModuleRetried(module=module)
+            | RunModuleRecovered(module=module)
             | ModuleFailureAnalysisAttached(module=module)
             | ModuleFinished(module=module)
         ):

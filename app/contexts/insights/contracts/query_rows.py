@@ -28,6 +28,9 @@ class DailyStatusRow:
     last_run_id: str | None
     duration_ms: int | None
     updated_at: datetime
+    # 자동 복구 가시성(설계 §3.4) — 재시도를 거쳐 통과했는지. 과거(마이그레이션 이전) 행은
+    # NULL 이므로 어댑터가 False 로 읽는다.
+    recovered: bool = False
 
 
 @dataclass(frozen=True)

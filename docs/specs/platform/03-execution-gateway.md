@@ -44,6 +44,7 @@
 | `submit_input(handle, otp_code)` | OTP 제출 |
 | `resume_from_step(handle, module_def, input, log_cb)` | 부분 재실행 |
 | `capture_storage_state(handle)` | 체크포인트 캡처 |
+| `recover_session(handle, tier, entry_url)` | 재시도 전 세션을 `RecoveryTier` 만큼 되감기 (`SPEC-RUN-006`) |
 | `close_session(handle)` | 세션 종료 |
 
 `RunService`는 `ExecutionHandle`만 보유 — Playwright 객체 직접 접근 금지.
@@ -87,6 +88,17 @@ Run 내 모든 모듈은 동일 context/page 재사용. OTP 일시정지 시에�
 
 `contextvars` 기반 per-step sink (`app/runner/step_logging.py`). `print`/`redirect_stdout` 금지 (AG-006).
 
+### FR-009: 세션 되감기(`recover_session`)
+
+재시도 **전** 세션을 `RecoveryTier` 만큼 되감는 포트 메서드(설계·AC 는 `SPEC-RUN-006`). 기본 구현은 `False`(미지원)를 돌려주므로 이 포트를 구현하지 않는 어댑터는 무변경이다.
+
+| Tier | 워커(`SessionServer`) 동작 |
+| --- | --- |
+| `RESET_TO_MODULE_ENTRY`(1) | 열린 다이얼로그 기록 정리 → `page.goto(entry_url)` |
+| `REPLAY_FROM_LOGIN`(2) | 런타임 폐기 → 같은 `session_id` 로 재개설(재개설 실패 시 옛 런타임 유지) |
+
+`RETRY_IN_PLACE`(0)는 되감기가 없으므로 인터프리터가 아예 호출하지 않는다. `entry_url` 이 없거나 되감기가 예외를 던지면 인터프리터가 tier 0 으로 폴백한다(`SPEC-RUN-006` FR-004).
+
 ## 3. 수용 기준 (AC)
 
 ### AC-001: API Playwright 무실행
@@ -127,6 +139,7 @@ Then gateway.resume_from_step 으로 동일 run_id 재개
 
 ```text
 ExecutionHandle — app/execution/gateway.py (직렬화 가능 핸들)
+RecoveryTier — app/core/enums.py (RETRY_IN_PLACE=0 | RESET_TO_MODULE_ENTRY=1 | REPLAY_FROM_LOGIN=2)
 ```
 
 ## 7. 엣지 케이스·오류 처리
@@ -155,6 +168,8 @@ ExecutionHandle — app/execution/gateway.py (직렬화 가능 핸들)
 | AC-003 | 단위 | `tests/test_run_state_machine.py` | `decide_partial_rerun` |
 | AC-003 | 통합 | `tests/test_run_checkpoint_integration.py` | checkpoint resume 경로 |
 | — | 단위 | `tests/test_session_server.py` | SessionServer 스레드·세션 |
+| — | 단위 | `tests/test_session_server.py` | `recover_session` tier 1/2 워커 동작 (`SPEC-RUN-006`) |
+| — | 단위 | `tests/test_recovery_tier_execution.py` | `recover_session` 포트 기본 구현·Composite 위임 (`SPEC-RUN-006`) |
 | — | 단위 | `tests/test_worker_gateway_errors.py` | 워커 오류 매핑 |
 | — | CI 게이트 | `scripts/check_architecture_gates.py` (AG-006) | print/redirect_stdout 금지 |
 
@@ -174,3 +189,4 @@ ExecutionHandle — app/execution/gateway.py (직렬화 가능 핸들)
 | --- | --- | --- |
 | 2026-08-15 | 역공학 초안 | — |
 | 2026-08-15 | `_TEMPLATE.md` 정합·테스트 매핑 (존재하지 않던 `test_local_gateway_session.py` 제거) | SDD 보강 |
+| 2026-08-18 | `recover_session` 포트 계약 추가 (`SPEC-RUN-006`) | SDD Task 10 |

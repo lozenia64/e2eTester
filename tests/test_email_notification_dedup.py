@@ -15,8 +15,12 @@ from app.notifications.infrastructure.sqlite_email_notification_dedup import (
     SqliteEmailNotificationDedupStore,
 )
 from app.notifications.run_completion_email import (
+    EmailContentSelection,
     EmailNotificationConfig,
+    GeminiPromptSelection,
+    RunCompletionEmailBuilder,
     RunCompletionEmailNotifier,
+    _build_email_context,
 )
 from app.platform.eventing.bus import EventBus, RunFinished
 from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
@@ -44,16 +48,38 @@ def _passed_run(run_id: str = "run_email_dedup") -> Run:
     )
 
 
-def _email_config() -> EmailNotificationConfig:
+def _email_config(operator_recipients: tuple[str, ...] = ()) -> EmailNotificationConfig:
     return EmailNotificationConfig(
         enabled=True,
         gmail_account="sender@gmail.com",
         gmail_app_password="app-password",
         recipients_by_system={"chbot": ("user@company.com",)},
-        operator_recipients=(),
+        operator_recipients=operator_recipients,
         gemini_enabled=False,
         gemini_api_key=None,
         gemini_models=(),
+    )
+
+
+def _error_run(run_id: str = "run_email_dedup_error") -> Run:
+    return Run(
+        run_id=run_id,
+        system_code="chbot",
+        system_name="챗봇(모바일)",
+        status=RunStatus.ERROR,
+        requested_at=datetime.now(UTC),
+        ended_at=datetime.now(UTC),
+        modules=[
+            RunModule(
+                module_id="chbot.simple.auth",
+                name="간편본인인증",
+                group="auth",
+                order=20,
+                status=ModuleStatus.ERROR,
+            )
+        ],
+        selected_module_ids=["chbot.simple.auth"],
+        auto_rerun_pending=True,
     )
 
 
@@ -126,3 +152,57 @@ def test_event_bus_subscribe_is_idempotent():
     bus.subscribe(RunFinished, handler)
     bus.subscribe(RunFinished, handler)
     assert bus.handler_count(RunFinished) == 1
+
+
+def test_auto_rerun_pending_error_run_skips_operator_alert():
+    """R4 — ``send_run_completion`` 은 ERROR 상태를 ``send_run_operator_alert`` 로 즉시
+    리다이렉트한다. 대기 플래그 가드가 그 분기보다 앞에 있지 않으면, 자동 재실행이
+    예정된 ERROR Run 도 운영자 알림이 새 나가 R4 가 무력화된다 — 이 경로를 직접 검증한다.
+    """
+    notifier = RunCompletionEmailNotifier(
+        _email_config(operator_recipients=("ops@company.com",)), dedup_store=None
+    )
+    mock_sender = MagicMock()
+    notifier._sender = mock_sender
+
+    notifier.send_run_completion(_error_run())
+
+    mock_sender.send.assert_not_called()
+
+
+def test_auto_rerun_pending_run_skips_normal_completion_email():
+    """가드는 ERROR 리다이렉트 분기 이전에 있으므로 일반(비-ERROR) 발송 경로도 함께 막는다."""
+    run = _passed_run()
+    run.auto_rerun_pending = True
+    notifier = RunCompletionEmailNotifier(_email_config(), dedup_store=None)
+    mock_sender = MagicMock()
+    notifier._sender = mock_sender
+
+    notifier.send_run_completion(run)
+
+    mock_sender.send.assert_not_called()
+
+
+def _plain_text_body(run: Run) -> str:
+    empty_selection = EmailContentSelection(inline_screenshots=[], log_attachments=[], omitted=[])
+    empty_gemini = GeminiPromptSelection(parts=[], omitted=[], included_labels=[])
+    context = _build_email_context(run, empty_selection, empty_gemini)
+    return RunCompletionEmailBuilder._build_plain_text(context)
+
+
+def test_plain_text_body_includes_recovered_module_summary():
+    run = _passed_run()
+    run.modules[0].retry_count = 2
+    run.modules[0].recovered = True
+
+    text_body = _plain_text_body(run)
+
+    assert "자동 복구된 모듈: 간편본인인증" in text_body
+
+
+def test_plain_text_body_omits_recovered_summary_when_no_recovery():
+    run = _passed_run()
+
+    text_body = _plain_text_body(run)
+
+    assert "자동 복구된 모듈" not in text_body

@@ -652,6 +652,17 @@ body:has(.dash) main > div {
   margin-right: 0.2em;
 }
 
+/* 자동 복구 표식 — 통과했지만 재시도를 거쳤음을 알린다(주의 계열, 실패 계열 아님). */
+.cell-flag {
+  margin-left: 0.25em;
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.cell-flag--unstable {
+  color: var(--st-anomaly);
+}
+
 .dash-mod--filled[data-tone="passed"] { background: var(--st-passed); color: #fff; }
 .dash-mod--filled[data-tone="anomaly"] { background: var(--st-anomaly); color: #fff; }
 .dash-mod--filled[data-tone="error"] { background: var(--st-error); color: #fff; }

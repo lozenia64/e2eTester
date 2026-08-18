@@ -149,10 +149,11 @@ def build_attention_items(system_views: list[dict[str, Any]]) -> list[dict[str, 
 
 def _pick_module_status(
     module_id: str, system_runs: list[Run]
-) -> tuple[ModuleStatus | None, str | None, int | None]:
+) -> tuple[ModuleStatus | None, str | None, int | None, bool]:
     """오늘 실행된 Run 들(최신순) 중 해당 모듈의 가장 최근 '의미 있는' 상태를 고른다.
 
-    반환: (status, run_id, duration_ms). 오늘 점검 결과가 없으면 (None, None, None).
+    반환: (status, run_id, duration_ms, recovered). 오늘 점검 결과가 없으면
+    (None, None, None, False).
     """
     for run in system_runs:
         for module in run.modules:
@@ -160,12 +161,12 @@ def _pick_module_status(
                 continue
             if module.status in _NON_RESULT_STATUSES:
                 continue
-            return module.status, run.run_id, module.duration_ms
-    return None, None, None
+            return module.status, run.run_id, module.duration_ms, module.recovered
+    return None, None, None, False
 
 
 def _module_view(module: RunModule | Any, system_runs: list[Run]) -> dict[str, Any]:
-    status, run_id, duration_ms = _pick_module_status(module.module_id, system_runs)
+    status, run_id, duration_ms, recovered = _pick_module_status(module.module_id, system_runs)
     tone = module_status_badge_tone(status) if status is not None else "not_inspected"
     label = module_status_label(status) if status is not None else "미점검"
     return {
@@ -179,6 +180,8 @@ def _module_view(module: RunModule | Any, system_runs: list[Run]) -> dict[str, A
         "bucket": _module_bucket(status),
         "run_id": run_id,
         "duration_ms": duration_ms,
+        # 자동 복구 가시성(설계 §3.4) — 통과했지만 재시도를 거쳤음을 셀에 표시한다.
+        "recovered": recovered,
     }
 
 
@@ -287,10 +290,12 @@ def _module_view_from_row(
 ) -> dict[str, Any]:
     status = status_row.last_status if status_row is not None else None
     run_id = status_row.last_run_id if status_row is not None else None
+    recovered = bool(status_row.recovered) if status_row is not None else False
     if status in _NON_RESULT_STATUSES:
         status = None
         run_id = None
         duration_ms = None
+        recovered = False
     tone = module_status_badge_tone(status) if status is not None else "not_inspected"
     label = module_status_label(status) if status is not None else "미점검"
     return {
@@ -304,6 +309,8 @@ def _module_view_from_row(
         "bucket": _module_bucket(status),
         "run_id": run_id,
         "duration_ms": duration_ms,
+        # 자동 복구 가시성(설계 §3.4) — `daily_system_status` 프로젝션의 recovered 컬럼에서 읽는다.
+        "recovered": recovered,
     }
 
 

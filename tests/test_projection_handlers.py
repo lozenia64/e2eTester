@@ -123,6 +123,107 @@ async def test_module_completed_updates_anomaly_and_daily_projections(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_module_recovery_updates_daily_projection_recovered_flag(tmp_path: Path) -> None:
+    """재시도 끝에 통과한 모듈은 daily_system_status 프로젝션에도 recovered=True 로 반영된다.
+
+    자동 복구 가시성(설계 §3.4)은 세 화면(Run 상세·일간 현황·완료 메일)에 함께 노출되어야
+    하고, 일간 현황은 이 프로젝션을 읽어 채운다 — 프로젝션이 신호를 안 들고 있으면 화면에
+    영영 뜨지 않는다.
+    """
+    from app.core.enums import FailureSignal, RecoveryTier
+
+    db = SqliteDatabase(tmp_path / "proj_recovered.db")
+    await ensure_schema(db)
+    write_repo = SqliteRunWriteRepository(db)
+    projections = make_projection_handlers(db, write_repo)
+
+    run = _sample_run("run_proj_recovered")
+    aggregate = RunAggregate.for_new_run(run)
+    created_events = aggregate.pull_events()
+    await write_repo.create_run(run, events=created_events)
+    sequence = 0
+    for event in run_events_as_envelopes("run_proj_recovered", created_events):
+        sequence += 1
+        await projections.apply(event, sequence)
+
+    aggregate = RunAggregate(await write_repo.get_run("run_proj_recovered"))
+    aggregate.begin()
+    module = aggregate.module("hom.login")
+    aggregate.mark_running(module)
+    aggregate.record_retry(
+        module, tier=RecoveryTier.RETRY_IN_PLACE, failure_signal=FailureSignal.TIMEOUT
+    )
+    aggregate.mark_running(module)
+    aggregate.record_result(
+        module,
+        status=ModuleStatus.PASSED,
+        message="통과",
+        artifacts=[],
+        current_url=None,
+        dialog_messages=[],
+    )
+    aggregate.record_recovered(module)
+    aggregate.finish_timing(module)
+    aggregate.finalize(None)
+    mutation_events = aggregate.pull_events()
+    await write_repo.save_run(aggregate.persistable_state(), events=mutation_events)
+    for event in run_events_as_envelopes("run_proj_recovered", mutation_events):
+        sequence += 1
+        await projections.apply(event, sequence)
+
+    daily = SqliteDailyStatusQuery(db)
+    day_rows = await daily.list_for_date(schedule_today_label(), None)
+    row = next(r for r in day_rows if r.module_id == "hom.login")
+    assert row.recovered is True
+
+
+@pytest.mark.asyncio
+async def test_module_without_retry_leaves_daily_projection_recovered_false(
+    tmp_path: Path,
+) -> None:
+    """재시도 없이 바로 통과한 모듈은 recovered=False 로 남는다."""
+    db = SqliteDatabase(tmp_path / "proj_clean.db")
+    await ensure_schema(db)
+    write_repo = SqliteRunWriteRepository(db)
+    projections = make_projection_handlers(db, write_repo)
+
+    run = _sample_run("run_proj_clean")
+    aggregate = RunAggregate.for_new_run(run)
+    created_events = aggregate.pull_events()
+    await write_repo.create_run(run, events=created_events)
+    sequence = 0
+    for event in run_events_as_envelopes("run_proj_clean", created_events):
+        sequence += 1
+        await projections.apply(event, sequence)
+
+    aggregate = RunAggregate(await write_repo.get_run("run_proj_clean"))
+    aggregate.begin()
+    module = aggregate.module("hom.login")
+    aggregate.mark_running(module)
+    aggregate.record_result(
+        module,
+        status=ModuleStatus.PASSED,
+        message="통과",
+        artifacts=[],
+        current_url=None,
+        dialog_messages=[],
+    )
+    aggregate.record_recovered(module)  # retry_count == 0 이므로 no-op
+    aggregate.finish_timing(module)
+    aggregate.finalize(None)
+    mutation_events = aggregate.pull_events()
+    await write_repo.save_run(aggregate.persistable_state(), events=mutation_events)
+    for event in run_events_as_envelopes("run_proj_clean", mutation_events):
+        sequence += 1
+        await projections.apply(event, sequence)
+
+    daily = SqliteDailyStatusQuery(db)
+    day_rows = await daily.list_for_date(schedule_today_label(), None)
+    row = next(r for r in day_rows if r.module_id == "hom.login")
+    assert row.recovered is False
+
+
+@pytest.mark.asyncio
 async def test_suite_events_project_suite_history_index(tmp_path: Path) -> None:
     """Suite fat event 가 suite_history_index 를 blob 재수화 없이 채운다."""
     db = SqliteDatabase(tmp_path / "suite_proj.db")

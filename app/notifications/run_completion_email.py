@@ -650,6 +650,10 @@ class RunCompletionEmailBuilder:
                     lines.append(f"  요약: {failed_module['analysis_summary']}")
                 if failed_module["recommended_action"]:
                     lines.append(f"  권장 조치: {failed_module['recommended_action']}")
+        recovered_modules = [m for m in context["modules"] if m["recovered"]]
+        if recovered_modules:
+            names = ", ".join(m["module_name"] for m in recovered_modules)
+            lines.append(f"자동 복구된 모듈: {names}")
         comparison = context["comparison"]
         if comparison["has_baseline"]:
             lines.append("")
@@ -714,6 +718,12 @@ class RunCompletionEmailNotifier:
 
     def send_run_completion(self, run: Run) -> None:
         if run.suite_id:
+            return
+        # R4 — 자동 재실행이 예정된 Run 은 알림을 보류한다. 재실행 Run 의 결과가
+        # 최종 결과이므로, 원본과 재실행이 각각 메일을 보내면 담당자에게 중복으로 도달한다.
+        # ERROR 상태는 아래 분기에서 send_run_operator_alert 로 즉시 리다이렉트되므로, 이
+        # 가드는 그 분기보다 반드시 앞에 있어야 한다(그러지 않으면 R4 가 무력화된다).
+        if run.auto_rerun_pending:
             return
         if run.status in RUN_ERROR_STATUSES:
             self.send_run_operator_alert(run)
@@ -1539,6 +1549,7 @@ def _build_email_context(
             "message": module.message,
             "duration_text": _format_module_duration(module.duration_ms),
             "retry_count": module.retry_count,
+            "recovered": module.recovered,
         }
         for index, module in enumerate(ordered_modules, start=1)
     ]

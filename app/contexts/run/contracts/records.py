@@ -30,6 +30,11 @@ class RunModuleRecord(BaseModel):
     artifacts: list[str] = Field(default_factory=list)
     current_url: str | None = None
     dialog_messages: list[str] = Field(default_factory=list)
+    # 자동 복구 가시성(설계 §3.4). "통과했다"와 "불안정하다"는 직교하는 축이므로,
+    # 상태(PASSED/ANOMALY/ERROR)를 건드리지 않고 별도 필드로 표현한다.
+    recovered: bool = False
+    recovery_tiers: list[int] = Field(default_factory=list)
+    failure_signals: list[str] = Field(default_factory=list)
     failure_analysis: FailureAnalysis | None = None
 
     @classmethod
@@ -60,6 +65,12 @@ class RunRecord(BaseModel):
     comparison: RunComparison | None = None
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
+    # 이 Run 이 자동 재실행으로 이어지고 있으면 자기 자신의 run_id(현재 구현은 기존
+    # 부분 재실행 진입점을 그대로 재사용해 제자리에서 재개하므로 별도의 새 Run 을
+    # 만들지 않는다 — 다른 Run 을 가리키지 않는다). 자동 재실행 연쇄를 막는 근거로만 쓰인다.
+    auto_rerun_of: str | None = None
+    # 자동 재실행이 큐잉되어 이 Run 의 결과가 최종이 아님을 알린다(알림 보류용).
+    auto_rerun_pending: bool = False
 
     @classmethod
     def from_domain(cls, run: Run) -> RunRecord:

@@ -30,6 +30,9 @@ class ModuleSnapshot:
     logs: tuple[str, ...]
     current_url: str | None
     dialog_messages: tuple[str, ...]
+    recovered: bool
+    recovery_tiers: tuple[int, ...]
+    failure_signals: tuple[str, ...]
     failure_analysis: FailureAnalysis | None
 
     @classmethod
@@ -54,6 +57,9 @@ class ModuleSnapshot:
             logs=tuple(copied.logs),
             current_url=copied.current_url,
             dialog_messages=tuple(copied.dialog_messages),
+            recovered=copied.recovered,
+            recovery_tiers=tuple(copied.recovery_tiers),
+            failure_signals=tuple(copied.failure_signals),
             failure_analysis=copied.failure_analysis,
         )
 
@@ -227,6 +233,9 @@ def _module_snapshot_to_run_module(module: ModuleSnapshot) -> RunModule:
         logs=list(module.logs),
         current_url=module.current_url,
         dialog_messages=list(module.dialog_messages),
+        recovered=module.recovered,
+        recovery_tiers=list(module.recovery_tiers),
+        failure_signals=list(module.failure_signals),
         failure_analysis=module.failure_analysis,
     )
 

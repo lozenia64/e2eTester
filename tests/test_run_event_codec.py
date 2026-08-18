@@ -1,4 +1,4 @@
-"""RunEventCodec payload 키 집합 불변 테스트 — 17개 Run 이벤트 전부."""
+"""RunEventCodec payload 키 집합 불변 테스트 — 19개 Run 이벤트 전부."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from app.contexts.run.domain.events import (
     ModuleFinished,
     ModuleQueued,
     ModuleStarted,
+    RunAutoRerunTriggered,
     RunComparisonAttached,
     RunCreated,
     RunDeleted,
@@ -19,6 +20,7 @@ from app.contexts.run.domain.events import (
     RunFinished,
     RunImported,
     RunModuleBlocked,
+    RunModuleRecovered,
     RunModuleRetried,
     RunModulesCancelled,
     RunPartialRerunStarted,
@@ -176,6 +178,10 @@ def _expects_run_status(event) -> bool:
             {"module_id", "attempt", "module"},
         ),
         (
+            RunModuleRecovered(module_id="hom.login", attempts=2, tiers=[0], module=_MODULE),
+            {"module_id", "attempts", "tiers", "module"},
+        ),
+        (
             RunPartialRerunStarted(from_module_id="hom.login", all_modules=[_MODULE]),
             {"from_module_id", "all_modules"},
         ),
@@ -191,6 +197,10 @@ def _expects_run_status(event) -> bool:
         ),
         (RunImported(run_summary=_SUMMARY, all_modules=[_MODULE]), {"all_modules"}),
         (RunDeleted(), set()),
+        (
+            RunAutoRerunTriggered(original_run_id="run_prev", from_module_id="hom.login"),
+            {"original_run_id", "from_module_id"},
+        ),
     ],
 )
 def test_run_event_payload_key_invariant(event, expected_keys):
@@ -253,10 +263,12 @@ def test_run_created_does_not_carry_run_status():
         RunComparisonAttached(baseline_run_id=None),
         RunSealedInterrupted(all_modules=[_MODULE]),
         RunModuleRetried(module_id="hom.login", attempt=2, module=_MODULE),
+        RunModuleRecovered(module_id="hom.login", attempts=2, tiers=[0], module=_MODULE),
         RunPartialRerunStarted(from_module_id="hom.login", all_modules=[_MODULE]),
         ModuleFailureAnalysisAttached(module_id="hom.login", module=_MODULE),
         RunImported(run_summary=_SUMMARY, all_modules=[_MODULE]),
         RunDeleted(),
+        RunAutoRerunTriggered(original_run_id="run_prev", from_module_id="hom.login"),
     ],
 )
 def test_run_event_codec_roundtrip(event):
@@ -302,3 +314,23 @@ def test_encode_omits_run_summary_when_none():
     envelope = _CODEC.encode(_RUN_ID, record)
 
     assert "run_summary" not in envelope.payload
+
+
+def test_legacy_module_wire_without_recovery_fields_decodes():
+    """신규 필드가 없는 과거 이벤트 payload 도 기본값으로 복원되어야 한다."""
+    from app.contexts.run.infrastructure.codec import _wire_to_module
+
+    legacy = {
+        "module_id": "m1",
+        "name": "모듈",
+        "group": "g",
+        "order": 1,
+        "status": "PASSED",
+    }
+
+    record = _wire_to_module(legacy)
+
+    assert record is not None
+    assert record.recovered is False
+    assert record.recovery_tiers == []
+    assert record.failure_signals == []

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from app.core.enums import RecoveryTier
 from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.execution.results import StepExecutionResult
@@ -67,3 +68,11 @@ class CompositeExecutionGateway(ExecutionGateway):
         await self._for_mode(handle.execution_mode).resume_from_step(
             handle, module_index, workflow_step
         )
+
+    async def recover_session(
+        self,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> bool:
+        return await self._for_mode(handle.execution_mode).recover_session(handle, tier, entry_url)

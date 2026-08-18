@@ -27,10 +27,12 @@ from app.contexts.run.domain.state_machine import (
     ResumeFromModule,
     RetryModule,
     RunStateMachine,
+    TriggerAutoRerun,
 )
-from app.core.enums import ModuleStatus, RunStatus
+from app.core.enums import ModuleStatus, RecoveryTier, RunStatus
 from app.core.logging import get_logger, log_context
 from app.core.run_models import DashboardEvent, Run, RunModule
+from app.core.settings import E2ESettings
 from app.domain.execution_policy import module_policy_from_definition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle
 from app.execution.session_checkpoint import SessionCheckpoint, SessionCheckpointStorePort
@@ -88,6 +90,7 @@ class RunService:
         healing_recorder: HealingRecorder | None = None,
         session_registry: RedisSessionRegistry | None = None,
         session_checkpoint_store: SessionCheckpointStorePort | None = None,
+        settings: E2ESettings | None = None,
     ) -> None:
         self._registry = registry
         self._write_repo = write_repo
@@ -117,6 +120,10 @@ class RunService:
         # Phase C: 모듈 경계·OTP 일시정지 시 세션 storage_state 를 내구 체크포인트로 저장하는
         # 선택 협력자. 미주입/게이트웨이 미지원이면 캡처는 no-op(None)이라 기존 흐름과 동일하다.
         self._session_checkpoint_store = session_checkpoint_store
+        # 자동 재실행 게이트(설계 §3.6)·OTP 안전장치(R3)가 참조하는 설정. 미주입 시 기본값으로
+        # 구성해 기존 호출부(테스트 포함)를 깨지 않는다 — 기본값은 auto_rerun_enabled=False 라
+        # 동작이 바뀌지 않는다.
+        self._settings = settings or E2ESettings()
 
     # --- 조회 -------------------------------------------------------------
 
@@ -503,6 +510,7 @@ class RunService:
         *,
         user_id: str | None = None,
         user_name: str | None = None,
+        auto_rerun_of: str | None = None,
     ) -> Run:
         run = await self._write_repo.get_run(run_id)
         if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_INPUT}:
@@ -531,6 +539,8 @@ class RunService:
         aggregate.prepare_partial_rerun(decision.from_index, ordered_modules)
         # 귀속 사용자 갱신도 애그리거트(유일 변이자)를 거친다(직접 run.X= 금지).
         aggregate.reassign_owner(user_id, user_name)
+        if auto_rerun_of is not None:
+            aggregate.set_auto_rerun_of(auto_rerun_of)
         await self._persist(run, aggregate)
         await self._run_queue.enqueue_run_job(
             RunJobDescriptor(
@@ -597,6 +607,12 @@ class RunService:
         resume_storage_state = await self._load_resume_storage_state(run, start_index, handle)
 
         forced_status: RunStatus | None = None
+        # 로그인 재주행(tier 2) 예산은 **Run 단위** 비용 가드다(설계 §3.6 / R6 —
+        # settings.recovery_tier2_budget 주석·docs/INSTALL.md·docs/E2E_ARCHITECTURE.md 모두
+        # "Run 당"이라고 규정한다). 따라서 카운터는 모듈 루프 **밖**에 있어야 한다. 모듈 루프
+        # 안에서 세면 모듈마다 0으로 리셋되어, 매니페스트의 max_attempts 가 작은 한 예산이
+        # 절대 걸리지 않는다(가드가 사실상 무력해진다).
+        tier2_used = 0
         try:
             for index, module in enumerate(ordered_modules[start_index:], start=start_index):
                 current_module = module
@@ -646,10 +662,19 @@ class RunService:
                 async def on_log(line: str, current_module=module, current_run=run) -> None:
                     await self._handle_module_log(current_run, current_module, line)
 
+                # 이 모듈에서 이미 시도한 복구 등급(등급 **상승** 판정 입력) — 등급 상승은
+                # 한 모듈의 재시도 시퀀스 안에서만 의미가 있으므로 모듈 스코프가 맞다.
+                # tier 2 **예산**(tier2_used)과 혼동하지 말 것: 예산은 Run 스코프다.
+                attempted_tiers: list[RecoveryTier] = []
+                # tier 1 되감기 지점. 매니페스트에 진입 URL 필드가 없으므로(설계 §3.3)
+                # 모듈 첫 실행 시점의 페이지 URL 을 런타임에서 잡아 둔다.
+                module_entry_url: str | None = None
                 while True:
                     execution_result = await self._gateway.run_step(
                         handle, run.run_id, definition, on_log
                     )
+                    if module_entry_url is None:
+                        module_entry_url = execution_result.current_url
 
                     # 자가 치유 시도가 보고되면 감사 이벤트로 영속하고 패치 제안을 만든다.
                     # 기록 실패가 점검 자체를 실패시키지 않도록 격리한다.
@@ -684,6 +709,10 @@ class RunService:
                             max_attempts=module.max_attempts,
                             retryable_on=module_policy.retryable_on,
                             backoff_ms=module_policy.retry_backoff_ms,
+                            failure_signal=execution_result.failure_signal,
+                            attempted_tiers=tuple(attempted_tiers),
+                            tier2_used=tier2_used,
+                            tier2_budget=self._settings.recovery_tier2_budget,
                         )
 
                     if isinstance(post, CancelRemaining):
@@ -708,14 +737,37 @@ class RunService:
                         )
                         break
                     if isinstance(post, RetryModule):
-                        aggregate.record_retry(module)
-                        await self._persist(run, aggregate)
-                        await asyncio.sleep(post.backoff_ms / 1000)
-                        await self._transition_to_running(run, module)
-                        continue
+                        if self._run_deadline_exceeded(run):
+                            logger.info(
+                                "Run 실행 시간 상한 초과 — 재시도 중단",
+                                log_event="run.recovery.deadline",
+                                run_id=run.run_id,
+                            )
+                            post = CompleteStep()
+                        else:
+                            attempted_tiers.append(post.tier)
+                            # 실제로 tier 2 로 재시도할 때만 Run 예산을 소진한다(강등된
+                            # 재시도는 예산을 쓰지 않는다).
+                            if post.tier is RecoveryTier.REPLAY_FROM_LOGIN:
+                                tier2_used += 1
+                            if post.tier is not RecoveryTier.RETRY_IN_PLACE:
+                                await self._recover_session_for_retry(
+                                    run, module, handle, post.tier, module_entry_url
+                                )
+                            aggregate.record_retry(
+                                module,
+                                tier=post.tier,
+                                failure_signal=execution_result.failure_signal,
+                            )
+                            await self._persist(run, aggregate)
+                            await asyncio.sleep(post.backoff_ms / 1000)
+                            await self._transition_to_running(run, module)
+                            continue
                     assert isinstance(post, CompleteStep)
 
                     self._record_module_result(aggregate, module, execution_result)
+                    if execution_result.status is ModuleStatus.PASSED:
+                        aggregate.record_recovered(module)
                     aggregate.finish_timing(module)
                     await self._persist(run, aggregate)
                     break
@@ -828,6 +880,64 @@ class RunService:
             return None
         return checkpoint.storage_state
 
+    def _run_deadline_exceeded(self, run: Run) -> bool:
+        """Run 총 실행 시간 상한 초과 여부. 미설정(None)이면 항상 False(기존 동작)."""
+        limit = self._settings.run_max_duration_s
+        if limit is None or run.started_at is None:
+            return False
+        return (datetime.now(UTC) - run.started_at).total_seconds() > limit
+
+    async def _recover_session_for_retry(
+        self,
+        run: Run,
+        module: RunModule,
+        handle: ExecutionHandle,
+        tier: RecoveryTier,
+        entry_url: str | None,
+    ) -> None:
+        """재시도 전 세션 되감기. 실패해도 재시도 자체는 진행한다(tier 0 폴백)."""
+        # R3 — 로그인 재주행 경로에 사람 입력이 필요한 모듈이 있는데 OTP 중계가 없으면
+        # tier 2 는 무인 실행을 멈추게 한다. 되감지 말고 실패를 확정하는 편이 낫다.
+        if tier is RecoveryTier.REPLAY_FROM_LOGIN and self._requires_manual_input(run):
+            if not self._settings.otp_relay_token_str():
+                logger.info(
+                    "OTP 중계 미설정 — 로그인 재주행 생략",
+                    log_event="run.recovery.skipped_otp",
+                    run_id=run.run_id,
+                )
+                return
+        # 되감을 곳을 모른 채 세션을 버리는 것이 더 위험하므로 tier 0 으로 폴백한다(설계 §3.3).
+        if tier is RecoveryTier.RESET_TO_MODULE_ENTRY and entry_url is None:
+            logger.info(
+                "모듈 진입 URL 미확보 — 제자리 재시도로 폴백",
+                log_event="run.recovery.fallback",
+                run_id=run.run_id,
+                module_id=module.module_id,
+            )
+            return
+        try:
+            recovered = await self._gateway.recover_session(handle, tier, entry_url)
+        except Exception:
+            logger.exception(
+                "세션 되감기 실패 — 제자리 재시도로 진행",
+                log_event="run.recovery.failed",
+                run_id=run.run_id,
+                module_id=module.module_id,
+            )
+            return
+        logger.info(
+            "세션 되감기",
+            log_event="run.recovery.applied" if recovered else "run.recovery.unsupported",
+            run_id=run.run_id,
+            module_id=module.module_id,
+            recovery_tier=int(tier),
+        )
+
+    def _requires_manual_input(self, run: Run) -> bool:
+        """이 Run 의 시스템이 사람 입력(OTP 등)을 요구하는 모듈을 하나라도 갖는지(설계 R3)."""
+        system = self._registry.get_system(run.system_code)
+        return any(d.requires_user_input for d in system.modules)
+
     async def _save_checkpoint(
         self, run: Run, *, module_index: int, handle: ExecutionHandle
     ) -> None:
@@ -922,7 +1032,30 @@ class RunService:
         final_status = aggregate.compute_final_status(forced_status)
         if final_status in {RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR, RunStatus.FAILED}:
             aggregate.attach_comparison(await self._comparator.compute(run))
+        # Run 수준 자동 재실행 게이트(설계 §3.6). 도구 오류(ERROR)로 끝난 예약 Run 만, 그것도
+        # auto_rerun_enabled 일 때만 1회 대상이 된다 — 기본값 False 라 도입 자체는 기존 동작을
+        # 바꾸지 않는다.
+        #
+        # R4 경합 차단 — 이 판정은 ``finalize()`` **이전**에 내린다. 판정 입력(final_status·
+        # triggered_by·auto_rerun_of·예산)이 전부 finalize 이전에 확정돼 있으므로 순서를
+        # 앞당겨도 결과가 달라지지 않는다. 이렇게 해야 대기 표식을 ``RunFinished`` 와 **같은
+        # persist(=같은 트랜잭션)** 로 실을 수 있다. ``OutboxRelay`` 는 같은 프로세스의
+        # asyncio 태스크(기본 0.5초 폴링)로, ``RunFinished`` 아웃박스 행을 보는 즉시 Run 을
+        # 새로 하이드레이션해 알림 판정을 내리고 그 행을 정확히 한 번만 디스패치한다. 두 쓰기
+        # 사이에 await 경계가 있으면 릴레이가 ``pending=False`` 를 보고 운영자 알림을 먼저
+        # 보내 dedup 키를 선점하고, 재실행의 진짜 최종 결과는 영영 통보되지 않는다.
+        decision = RunStateMachine.decide_auto_rerun(
+            run_status=final_status,
+            triggered_by=run.triggered_by,
+            is_auto_rerun=run.auto_rerun_of is not None,
+            budget_remaining=1 if self._settings.auto_rerun_enabled else 0,
+        )
+        auto_rerun_target = (
+            self._auto_rerun_target(run) if isinstance(decision, TriggerAutoRerun) else None
+        )
         final_status = aggregate.finalize(forced_status)
+        if auto_rerun_target is not None:
+            aggregate.mark_auto_rerun_pending(from_module_id=auto_rerun_target.module_id)
         await self._persist(run, aggregate)
         # 종료된 Run 의 제어 상태(취소 플래그·재개 컨텍스트)는 더 이상 필요 없다. 입력값은
         # input_store 가 따로 보관하므로 rerun 에는 영향이 없다.
@@ -936,6 +1069,109 @@ class RunService:
             status=final_status.value,
             suite_id=run.suite_id,
             schedule_id=run.schedule_id,
+        )
+        if auto_rerun_target is not None:
+            await self._enqueue_auto_rerun(run, auto_rerun_target)
+
+    def _auto_rerun_target(self, run: Run) -> RunModule | None:
+        """자동 재실행을 걸 실패 모듈. 큐잉이 성립할 수 없으면 ``None``.
+
+        ``rerun_from_module`` 이 거부할 조건(모듈 부재·``partial_rerun_allowed=False`` 등)을
+        **미리** 같은 순수 규칙(``decide_partial_rerun``)으로 확인한다 — 규칙을 복제하는 게
+        아니라 같은 함수를 한 번 더 평가하는 것이다. 이렇게 하면 애초에 큐잉될 수 없는 Run 은
+        대기 표식을 세웠다가 되돌리는 왕복 없이 곧바로 정상 알림 경로로 간다(``ERROR`` 상태
+        모듈 중 ``partial_rerun_allowed=False`` 는 실제 매니페스트에 존재하는 흔한 설정이다).
+        """
+        failed = next(
+            (m for m in run.modules if m.status in (ModuleStatus.ERROR, ModuleStatus.FAILED)),
+            None,
+        )
+        if failed is None:
+            return None
+        try:
+            system = self._registry.get_system(run.system_code)
+        except KeyError:
+            return None
+        definition = next(
+            (d for d in system.modules if d.module_id == failed.module_id),
+            None,
+        )
+        if definition is None:
+            return None
+        decision = RunStateMachine.decide_partial_rerun(
+            from_module_id=failed.module_id,
+            module_ids_in_order=[
+                module.module_id for module in self._planner.ordered_selected_run_modules(run)
+            ],
+            partial_rerun_allowed=definition.partial_rerun_allowed,
+        )
+        if isinstance(decision, RejectInvalidResumePoint):
+            logger.info(
+                "부분 재실행 불가 모듈 — 자동 재실행 생략",
+                log_event="run.auto_rerun.not_resumable",
+                run_id=run.run_id,
+                module_id=failed.module_id,
+            )
+            return None
+        return failed
+
+    async def _enqueue_auto_rerun(self, run: Run, failed: RunModule) -> None:
+        """실패 모듈부터 1회 자동 재실행한다(설계 §3.6). 실패해도 원본 Run 결과는 보존한다.
+
+        호출 시점에 ``auto_rerun_pending`` 은 이미 ``RunFinished`` 와 같은 트랜잭션으로 True 로
+        영속돼 있다(R4 경합 차단). 큐잉이 성공하면 ``rerun_from_module`` 의
+        ``prepare_partial_rerun`` 이 Run 을 ``RUNNING`` 으로 되돌리며 표식을 내리고, 그때부터는
+        "아직 끝나지 않은 Run" 이라는 사실 자체가 알림을 보류시킨다 — 이번 재실행의 종료가
+        진짜 최종 결과를 알린다.
+        """
+        try:
+            await self.rerun_from_module(
+                run_id=run.run_id,
+                from_module_id=failed.module_id,
+                auto_rerun_of=run.run_id,
+            )
+        except Exception:
+            logger.exception(
+                "자동 재실행 큐잉 실패",
+                log_event="run.auto_rerun.failed",
+                run_id=run.run_id,
+            )
+            await self._compensate_failed_auto_rerun(run.run_id)
+
+    async def _compensate_failed_auto_rerun(self, run_id: str) -> None:
+        """큐잉 실패 보상 — 원본 Run 의 종료 알림 경로를 되살린다(R4).
+
+        ``auto_rerun_pending`` 을 내리는 것만으로는 부족하다: 아웃박스는 이미 발행한 행을 다시
+        처리하지 않으므로(dispatch-once), 그 한 번의 디스패치가 대기 상태를 보고 알림을
+        건너뛰었다면 다시 볼 기회가 없다. 그래서 종료 사실을 **새 ``RunFinished`` 로 한 번 더
+        발행**한다 — 릴레이는 이 새 행을 디스패치하며 지금 상태(대기 아님)로 다시
+        하이드레이션하므로 알림이 정상 발송된다. 이미 알림이 나갔던 경우의 중복은 알림 계층의
+        dedup 클레임이 막는다.
+
+        계층 경계는 지킨다 — 애플리케이션이 알림 어댑터를 직접 호출하지 않고 도메인 사실을 한
+        건 더 남길 뿐이며, 배달은 여전히 아웃박스 릴레이 → EventBus 구독자가 한다. 최신
+        스냅샷을 다시 읽는 이유는 ``rerun_from_module`` 이 중간까지 진행하며 Run 을 이미
+        변경했을 수 있어서다(오래된 ``run`` 객체를 저장하면 그 변경을 되돌려쓴다).
+        """
+        try:
+            fresh = await self._write_repo.get_run(run_id)
+            aggregate = RunAggregate(fresh)
+            status = aggregate.reannounce_finished(fallback_status=RunStatus.ERROR)
+            await self._persist(fresh, aggregate)
+        except Exception:
+            # 보상까지 실패하면 이 Run 의 알림은 실제로 유실된다 — 조용히 넘기지 않고 운영자가
+            # 찾을 수 있는 전용 로그 이벤트를 남긴다. 다만 종료 처리 자체를 무너뜨리지는 않는다.
+            logger.exception(
+                "자동 재실행 큐잉 실패 보상 실패 — 종료 알림 유실 가능",
+                log_event="run.auto_rerun.compensation_failed",
+                run_id=run_id,
+            )
+            return
+        logger.info(
+            "자동 재실행 큐잉 실패 보상 — 종료 재발행",
+            log_event="run.auto_rerun.compensated",
+            run_id=run_id,
+            status=status.value,
         )
 
     # --- 로그 기록 --------------------------------------------------------

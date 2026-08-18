@@ -382,17 +382,21 @@ class ProjectionHandlers:
             return []
         # 날짜 귀속·updated_at 모두 이벤트 발생 시각 기준(리빌드 결정성).
         day_key = schedule_day_label(event.occurred_at)
+        # module wire(RunModuleRecord.model_dump)에 recovered 가 실려 온다(Task 6). 과거
+        # 이벤트 재생 호환을 위해 없으면 False.
+        recovered = bool((event.payload.get("module") or {}).get("recovered", False))
         return [
             (
                 """
                 INSERT INTO daily_system_status
                     (day_key, system_code, module_id, last_status, last_run_id,
-                     duration_ms, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     duration_ms, recovered, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(day_key, system_code, module_id) DO UPDATE SET
                     last_status = excluded.last_status,
                     last_run_id = excluded.last_run_id,
                     duration_ms = excluded.duration_ms,
+                    recovered = excluded.recovered,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -402,6 +406,7 @@ class ProjectionHandlers:
                     status.value,
                     event.aggregate_id,
                     event.payload.get("duration_ms"),
+                    1 if recovered else 0,
                     event.occurred_at.isoformat(),
                 ),
             )

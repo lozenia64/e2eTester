@@ -33,6 +33,14 @@ class _FakeContext:
 class _FakePage:
     def __init__(self) -> None:
         self.context = _FakeContext()
+        self.goto_calls: list[str] = []
+        self.load_states: list[str] = []
+
+    def goto(self, url: str, **_kwargs) -> None:
+        self.goto_calls.append(url)
+
+    def wait_for_load_state(self, state: str = "load", **_kwargs) -> None:
+        self.load_states.append(state)
 
 
 class _FakeRuntime:
@@ -41,6 +49,7 @@ class _FakeRuntime:
         self.closed = False
         self.otp: str | None = None
         self.page = _FakePage()
+        self.dialog_messages: list[str] = []
 
 
 class _FakeExecutor:
@@ -167,3 +176,94 @@ async def test_capture_storage_state_runs_on_session_thread(server):
 async def test_capture_storage_state_unknown_session_returns_none(server):
     srv, _fake = server
     assert await srv.capture_storage_state("nope") is None
+
+
+# --- 복구 등급 되감기 --------------------------------------------------------
+
+
+async def test_recover_tier_one_navigates_to_entry_url(server):
+    """tier 1 은 다이얼로그 기록을 끊고 진입 URL 로 재이동한다."""
+    from app.core.enums import RecoveryTier
+
+    srv, _fake = server
+    session_id = await srv.open_session("fake", {}, "run1", "m1")
+    runtime = srv._require_session(session_id).runtime  # noqa: SLF001
+    runtime.dialog_messages.append("이전 모듈의 팝업")
+
+    recovered = await srv.recover(
+        session_id, RecoveryTier.RESET_TO_MODULE_ENTRY, "https://example.com/entry"
+    )
+
+    assert recovered is True
+    assert runtime.page.goto_calls == ["https://example.com/entry"]
+    assert runtime.dialog_messages == []
+
+
+async def test_recover_tier_one_without_entry_url_is_noop(server):
+    from app.core.enums import RecoveryTier
+
+    srv, _fake = server
+    session_id = await srv.open_session("fake", {}, "run1", "m1")
+    runtime = srv._require_session(session_id).runtime  # noqa: SLF001
+
+    recovered = await srv.recover(session_id, RecoveryTier.RESET_TO_MODULE_ENTRY, None)
+
+    assert recovered is False
+    assert runtime.page.goto_calls == []
+
+
+async def test_recover_tier_two_rebuilds_runtime(server):
+    """tier 2 는 런타임을 폐기하고 같은 session_id 로 다시 만든다."""
+    from app.core.enums import RecoveryTier
+
+    srv, fake = server
+    session_id = await srv.open_session("fake", {"id": "u1"}, "run1", "m1")
+    first_runtime = srv._require_session(session_id).runtime  # noqa: SLF001
+
+    recovered = await srv.recover(session_id, RecoveryTier.REPLAY_FROM_LOGIN, None)
+
+    assert recovered is True
+    assert fake.closed is True  # 옛 런타임은 닫혔다
+    assert srv._require_session(session_id).runtime is not first_runtime  # noqa: SLF001
+    assert srv.get_session_run_id(session_id) == "run1"  # 세션 식별자는 유지된다
+
+
+async def test_recover_tier_two_keeps_old_runtime_if_rebuild_fails(server):
+    """두 번째 build_runtime 실패 시 옛 런타임을 닫지 않아 제자리 재시도가 가능하다."""
+    from app.core.enums import RecoveryTier
+
+    srv, fake = server
+    session_id = await srv.open_session("fake", {"id": "u1"}, "run1", "m1")
+    first_runtime = srv._require_session(session_id).runtime  # noqa: SLF001
+
+    def _fail_rebuild(*_args, **_kwargs):
+        raise RuntimeError("rebuild failed")
+
+    fake.build_runtime = _fail_rebuild
+
+    recovered = await srv.recover(session_id, RecoveryTier.REPLAY_FROM_LOGIN, None)
+
+    assert recovered is False
+    assert srv._require_session(session_id).runtime is first_runtime  # noqa: SLF001
+    assert first_runtime.closed is False
+    assert srv.get_session_run_id(session_id) == "run1"
+
+
+async def test_recover_unknown_session_returns_false(server):
+    from app.core.enums import RecoveryTier
+
+    srv, _fake = server
+
+    recovered = await srv.recover("없는세션", RecoveryTier.REPLAY_FROM_LOGIN, None)
+
+    assert recovered is False
+
+
+async def test_recover_tier_zero_is_rejected(server):
+    """tier 0 은 되감기가 없으므로 워커까지 오면 안 된다."""
+    from app.core.enums import RecoveryTier
+
+    srv, _fake = server
+    session_id = await srv.open_session("fake", {}, "run1", "m1")
+
+    assert await srv.recover(session_id, RecoveryTier.RETRY_IN_PLACE, None) is False
