@@ -252,12 +252,23 @@ def _module_table(modules: list[dict]) -> str:
             if status not in {ModuleStatus.SKIPPED.value, ModuleStatus.CANCELLED.value}
             else f"color:{MUTED};"
         )
+        # 자동 복구 가시성(설계 §3.4) — 통과했지만 재시도를 거쳤음을 알린다(주의 계열,
+        # 실패 계열 아님). plain-text 본문의 "자동 복구된 모듈: ..." 문구와 같은 어휘.
+        recovery_badge = (
+            f'<br><span style="display:inline-block;margin-top:4px;padding:2px 8px;'
+            f'border-radius:999px;background:{WARN_SOFT_BG};color:{WARN_COLOR};'
+            f'font-size:11px;font-weight:700;">자동 복구됨 '
+            f'({module.get("retry_count") or 0}회 재시도)</span>'
+            if module.get("recovered")
+            else ""
+        )
         rows.append(
             "<tr>"
             f'<td style="padding:10px 12px;border-bottom:1px solid {BORDER};text-align:center;'
             f'font-size:13px;{dim}">{module["seq"]}</td>'
             f'<td style="padding:10px 12px;border-bottom:1px solid {BORDER};font-size:13px;'
-            f'font-weight:600;white-space:nowrap;{dim}">{_text(module["module_name"])}</td>'
+            f'font-weight:600;white-space:nowrap;{dim}">{_text(module["module_name"])}'
+            f"{recovery_badge}</td>"
             f'<td style="padding:10px 12px;border-bottom:1px solid {BORDER};text-align:center;'
             f'font-size:13px;font-weight:700;color:{color};">{escape(label)}</td>'
             f'<td style="padding:10px 12px;border-bottom:1px solid {BORDER};text-align:right;'
