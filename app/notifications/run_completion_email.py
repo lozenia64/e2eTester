@@ -650,6 +650,10 @@ class RunCompletionEmailBuilder:
                     lines.append(f"  요약: {failed_module['analysis_summary']}")
                 if failed_module["recommended_action"]:
                     lines.append(f"  권장 조치: {failed_module['recommended_action']}")
+        recovered_modules = [m for m in context["modules"] if m["recovered"]]
+        if recovered_modules:
+            names = ", ".join(m["module_name"] for m in recovered_modules)
+            lines.append(f"자동 복구된 모듈: {names}")
         comparison = context["comparison"]
         if comparison["has_baseline"]:
             lines.append("")
@@ -1539,6 +1543,7 @@ def _build_email_context(
             "message": module.message,
             "duration_text": _format_module_duration(module.duration_ms),
             "retry_count": module.retry_count,
+            "recovered": module.recovered,
         }
         for index, module in enumerate(ordered_modules, start=1)
     ]

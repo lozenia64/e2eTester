@@ -99,6 +99,43 @@ def test_latest_meaningful_status_wins_and_skips_non_results():
     assert sys["latest_run_id"] == late.run_id
 
 
+def test_recovered_flag_surfaces_on_module_view():
+    """자동 복구된 모듈은 일간 현황 모듈 뷰에 recovered=True 로 노출되어야 한다."""
+    systems = [_sysdef("hom", ["a"])]
+    run = Run(
+        run_id="run_recovered",
+        system_code="hom",
+        system_name="HOM",
+        status=RunStatus.PASSED,
+        requested_at=GEN_AT,
+        modules=[
+            RunModule(
+                module_id="a",
+                name="a",
+                group="g",
+                order=0,
+                status=ModuleStatus.PASSED,
+                retry_count=2,
+                recovered=True,
+                recovery_tiers=[0, 1],
+            )
+        ],
+    )
+    data = build_daily_dashboard(systems, [run], generated_at=GEN_AT, date_label="d")
+
+    module = data["systems"][0]["modules"][0]
+    assert module["recovered"] is True
+
+
+def test_recovered_flag_defaults_false_for_clean_module():
+    systems = [_sysdef("hom", ["a"])]
+    run = _run("hom", {"a": ModuleStatus.PASSED}, at=GEN_AT)
+    data = build_daily_dashboard(systems, [run], generated_at=GEN_AT, date_label="d")
+
+    module = data["systems"][0]["modules"][0]
+    assert module["recovered"] is False
+
+
 def test_totals_and_attention_sort_puts_anomaly_before_passed():
     systems = [
         _sysdef("b", ["m1"], order=200),

@@ -19,10 +19,10 @@
 {% set tip = mod.name ~ ' · ' ~ (mod.status_label or '') %}
 {%- if mod.run_id -%}
 <a href="/runs/{{ mod.run_id }}" class="dash-mod dash-mod--link{% if filled %} dash-mod--filled{% elif idle %} dash-mod--idle{% else %} dash-mod--outline{% endif %}{% if live %} dash-mod--live{% endif %}"
-   data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ mod.name }} Run 상세">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span></a>
+   data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ mod.name }} Run 상세">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span>{% if mod.recovered %}<span class="cell-flag cell-flag--unstable" title="자동 복구 발생">⟳</span>{% endif %}</a>
 {%- else -%}
 <span class="dash-mod{% if filled %} dash-mod--filled{% elif idle %} dash-mod--idle{% else %} dash-mod--outline{% endif %}{% if live %} dash-mod--live{% endif %}"
-      data-tone="{{ tone }}" title="{{ tip }}">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span></span>
+      data-tone="{{ tone }}" title="{{ tip }}">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span>{% if mod.recovered %}<span class="cell-flag cell-flag--unstable" title="자동 복구 발생">⟳</span>{% endif %}</span>
 {%- endif -%}
 {%- endmacro %}
 

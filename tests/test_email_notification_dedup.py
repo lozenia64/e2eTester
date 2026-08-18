@@ -15,8 +15,12 @@ from app.notifications.infrastructure.sqlite_email_notification_dedup import (
     SqliteEmailNotificationDedupStore,
 )
 from app.notifications.run_completion_email import (
+    EmailContentSelection,
     EmailNotificationConfig,
+    GeminiPromptSelection,
+    RunCompletionEmailBuilder,
     RunCompletionEmailNotifier,
+    _build_email_context,
 )
 from app.platform.eventing.bus import EventBus, RunFinished
 from app.platform.eventing.subscribers.email_notification import EmailNotificationSubscriber
@@ -126,3 +130,28 @@ def test_event_bus_subscribe_is_idempotent():
     bus.subscribe(RunFinished, handler)
     bus.subscribe(RunFinished, handler)
     assert bus.handler_count(RunFinished) == 1
+
+
+def _plain_text_body(run: Run) -> str:
+    empty_selection = EmailContentSelection(inline_screenshots=[], log_attachments=[], omitted=[])
+    empty_gemini = GeminiPromptSelection(parts=[], omitted=[], included_labels=[])
+    context = _build_email_context(run, empty_selection, empty_gemini)
+    return RunCompletionEmailBuilder._build_plain_text(context)
+
+
+def test_plain_text_body_includes_recovered_module_summary():
+    run = _passed_run()
+    run.modules[0].retry_count = 2
+    run.modules[0].recovered = True
+
+    text_body = _plain_text_body(run)
+
+    assert "자동 복구된 모듈: 간편본인인증" in text_body
+
+
+def test_plain_text_body_omits_recovered_summary_when_no_recovery():
+    run = _passed_run()
+
+    text_body = _plain_text_body(run)
+
+    assert "자동 복구된 모듈" not in text_body
