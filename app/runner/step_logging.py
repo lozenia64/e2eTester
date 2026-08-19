@@ -43,3 +43,18 @@ def log(message: str = "") -> None:
     sink = _sink.get()
     if sink is not None:
         sink(str(message))
+
+
+def bind_log() -> LogSink:
+    """현재 컨텍스트의 싱크에 **고정된** 로거를 돌려준다(이벤트 콜백 전용).
+
+    Playwright sync API 의 이벤트 콜백(``page.on("dialog", ...)`` 등)은 dispatcher
+    greenlet 에서 실행되고, greenlet 은 자체 contextvars 컨텍스트를 가지므로 그 안에서
+    부른 ``log`` 은 싱크를 못 보고 **조용히 사라진다**. 실제로 대표홈페이지 방어 스크립트의
+    alert 로그가 이렇게 유실돼, 운영자와 AI 분석이 원인을 오판했다.
+    콜백을 등록하는 쪽(= 스텝 컨텍스트)에서 이 함수로 싱크를 미리 붙여 넘긴다.
+    """
+    sink = _sink.get()
+    if sink is None:
+        return lambda message="": None
+    return lambda message="": sink(str(message))

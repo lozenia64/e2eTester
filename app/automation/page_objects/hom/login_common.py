@@ -12,11 +12,11 @@ from urllib.parse import urlparse
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from app.runner.step_logging import log
+from app.runner.step_logging import bind_log, log
 from app.systems.access_common.browser import (
     PC_VIEWPORT,
     add_console_serialization_guard,
-    is_devtools_block_dialog,
+    is_site_defense_dialog,
 )
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
@@ -25,6 +25,11 @@ DEFAULT_ENV_FILE_PATH: Final[Path] = Path(".env")
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 MAX_TIMEOUT_MS: Final[int] = 15000
 POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/my/main\.do")
+# EVFW 방어 스크립트가 강제 새로고침을 터뜨리는 동안은 클릭이 성립하지 않는다.
+# 문서가 이만큼 유지되면 정착으로 보고, 그 사이에 다시 새로고침이 끼면 한 번 더 시도한다.
+# (2026-08-19 실측: 새로고침이 ~6초 간격으로 3~4회 반복 → 그 사이 창을 노린다)
+DEFENSE_SETTLE_MS: Final[int] = 2000
+DEFENSE_CLICK_ATTEMPTS: Final[int] = 2
 # 보안프로그램(키보드보안/백신류 로컬 에이전트 + 브라우저 확장)을 일반 브라우저나
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
 # 영속 프로파일(persistent context)로 실행해야 한다. 아래 디렉터리에 프로파일 상태
@@ -341,25 +346,27 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
 def add_dialog_logger(page: Page) -> list[str]:
     """페이지 alert/confirm 을 수집·수락한다.
 
-    방어 스크립트의 '개발자도구 사용을 차단하였습니다' alert 는 수 초에 수십 번 반복되므로,
-    수락만 하고 기록·로그에서는 제외한다. 기록에 남기면 실행 로그를 뒤덮고
-    ``ensure_no_failure_dialogs`` 의 점검 판정까지 오염시킨다.
+    방어 스크립트 alert('개발자도구 …', 'HTML변경 …', '새로고침 후 이용해 …')는 수 초에
+    수십 번 반복되므로 ``dialog_messages`` 기록은 첫 1회로 접고 나머지는 accept 만 한다.
+    로그는 ``bind_log()`` 로 스텝 싱크를 고정해 남긴다 — 이 핸들러는 Playwright dispatcher
+    greenlet 에서 실행돼 ContextVar 싱크가 보이지 않아, 과거 ``log`` 호출이 전부 유실됐다.
     """
     messages: list[str] = []
-    devtools_block_count = 0
+    emit = bind_log()
+    defense_count = 0
 
     def _handle(dialog) -> None:
-        nonlocal devtools_block_count
-        if is_devtools_block_dialog(dialog.message):
-            devtools_block_count += 1
-            if devtools_block_count == 1:
-                log(
-                    f"[warn] 사이트 방어 스크립트의 개발자도구 차단 alert 를 무시합니다: {dialog.message}"
-                )
+        nonlocal defense_count
+        if is_site_defense_dialog(dialog.message):
+            defense_count += 1
+            emit(f"[defense] 사이트 방어 스크립트 alert #{defense_count}: {dialog.message}")
+            if defense_count == 1:
+                # 첫 1회만 남긴다 — 증거는 보존하고 반복 기록으로 판정을 오염시키지는 않는다.
+                messages.append(dialog.message)
             dialog.accept()
             return
         messages.append(dialog.message)
-        log(f"[dialog] {dialog.message}")
+        emit(f"[dialog] {dialog.message}")
         dialog.accept()
 
     page.on("dialog", _handle)
@@ -535,14 +542,48 @@ def open_url(page: Page, target_url: str) -> None:
     log(f"[wait] End direct navigation: {target_url} -> {page.url}")
 
 
-def click_and_wait_for_navigation(page: Page, locator, expected_url: str) -> None:
-    log(f"[wait] Start navigation wait: {expected_url} ({MAX_TIMEOUT_MS} ms default)")
-    with page.expect_navigation(wait_until="domcontentloaded"):
-        click_with_log(locator, f"Navigate to {expected_url}")
-    log(f"[wait] End navigation wait: {expected_url} -> {page.url}")
-    wait_url_with_log(
-        page, re.compile(expected_url), MAX_TIMEOUT_MS, f"Confirm URL matches {expected_url}"
+def wait_for_document_settled(
+    page: Page, settle_ms: int = DEFENSE_SETTLE_MS, timeout_ms: int = MAX_TIMEOUT_MS
+) -> None:
+    """방어 스크립트의 강제 새로고침이 멈춰 문서가 ``settle_ms`` 동안 유지될 때까지 기다린다.
+
+    ``performance.now()`` 는 문서를 새로 로드할 때마다 0 으로 리셋되므로, 값이 ``settle_ms``
+    를 넘었다는 것은 그 시간 동안 재진입(reload)이 없었다는 뜻이다. EVFW 가
+    ``window.location.reload(true)`` 를 반복하는 동안 클릭하면 대상이 계속 DOM 에서 떨어져
+    (element was detached) Locator.click 이 타임아웃한다 — 그 창을 피하기 위한 대기다.
+    """
+    wait_function_with_log(
+        page,
+        f"() => performance.now() > {settle_ms}",
+        timeout_ms,
+        f"document settled {settle_ms} ms (사이트 강제 새로고침 정착)",
     )
+
+
+def click_and_wait_for_navigation(page: Page, locator, expected_url: str) -> None:
+    last_error: Exception | None = None
+    for attempt in range(1, DEFENSE_CLICK_ATTEMPTS + 1):
+        try:
+            wait_for_document_settled(page)
+            log(f"[wait] Start navigation wait: {expected_url} ({MAX_TIMEOUT_MS} ms default)")
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                click_with_log(locator, f"Navigate to {expected_url}")
+            log(f"[wait] End navigation wait: {expected_url} -> {page.url}")
+            wait_url_with_log(
+                page,
+                re.compile(expected_url),
+                MAX_TIMEOUT_MS,
+                f"Confirm URL matches {expected_url}",
+            )
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+            log(
+                f"[warn] Navigation click attempt {attempt}/{DEFENSE_CLICK_ATTEMPTS} 실패 — "
+                f"사이트 방어 스크립트의 강제 새로고침 의심(현재 URL {page.url})"
+            )
+    assert last_error is not None
+    raise last_error
 
 
 def grant_browser_permissions(context, base_url: str) -> None:
