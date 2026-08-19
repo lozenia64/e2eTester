@@ -60,6 +60,13 @@ diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것�
 깨져 자산이 번들에서 빠질 수 있고, Vitest 를 돌리지 않으면 프론트 순수 로직 테스트가
 아무것도 강제하지 않는다. 둘 다 Node 를 요구하므로 `docs_only` 프로파일에서는 제외한다.
 
+`coverage`(Tier 2, `pytest --cov`)도 CI 에서는 Node·빌드가 필요하다 —
+`base.html` 이 `asset_styles()`/`asset_script()`(`app/web/asset_manifest.py`)로
+실제 Vite manifest 를 요구하므로, 템플릿을 렌더링하는 테스트는 `dist/` 없이 돌지
+않는다. `.github/workflows/ci.yml` 의 `gate` job 은 게이트당 컨테이너가 분리돼
+다른 job 의 `build_web` 산출물을 공유받지 못하므로, `coverage` job 자체에
+Node 설치 + `npm run build` 스텝이 별도로 있다.
+
 ## GitHub Actions
 
 | Job | 내용 |

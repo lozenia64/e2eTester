@@ -85,18 +85,26 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: python3 -m pip install -r requirements-dev.txt
 
-      # typecheck_web·eslint_web·build_web·vitest_web 만 Node 를 필요로 한다.
-      # 게이트당 job 이 하나이므로 해당 job 에서만 설치한다.
-      - name: Set up Node (프론트 게이트 전용)
-        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web'
+      # typecheck_web·eslint_web·build_web·vitest_web 는 Node 자체가 필요하다.
+      # coverage 는 pytest 가 base.html 을 거치는 모든 페이지를 렌더링하며
+      # asset_styles()/asset_script() 가 실제 Vite manifest 를 요구하므로
+      # (app/web/asset_manifest.py) 빌드까지 필요하다 — 게이트당 job 이 하나라
+      # 다른 job 의 build_web 산출물을 공유받지 못한다.
+      - name: Set up Node (프론트 게이트·coverage 용)
+        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web' || matrix.gate == 'coverage'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
 
       - name: Install web dependencies
-        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web'
+        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web' || matrix.gate == 'coverage'
         run: npm ci
+
+      # coverage 는 빌드 산출물(dist/)까지 있어야 pytest 가 템플릿을 렌더링할 수 있다.
+      - name: Build frontend assets (coverage 전용)
+        if: matrix.gate == 'coverage'
+        run: npm run build
 
       - name: Run gate — ${{ matrix.gate }}
         run: python3 scripts/ci/run_all_gates.py --gate "${{ matrix.gate }}"
