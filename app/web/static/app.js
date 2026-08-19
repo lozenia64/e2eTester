@@ -1,42 +1,11 @@
-const STATUS_BADGE_CLASSES = {
-    pending: "bg-gray-100 text-gray-600",
-    queued: "bg-gray-100 text-gray-600",
-    running: "bg-blue-100 text-blue-700",
-    waiting_input: "bg-amber-100 text-amber-700",
-    passed: "bg-emerald-100 text-emerald-700",
-    anomaly: "bg-amber-100 text-amber-800",
-    error: "bg-red-100 text-red-700",
-    failed: "bg-amber-100 text-amber-800",
-    blocked: "bg-orange-100 text-orange-700",
-    skipped: "bg-slate-200 text-slate-700",
-    cancelled: "bg-zinc-200 text-zinc-700",
-};
-
-const STATUS_DISPLAY_LABELS = {
-    pending: "대기",
-    queued: "대기",
-    running: "실행 중",
-    waiting_input: "입력 대기",
-    passed: "정상",
-    anomaly: "이상징후",
-    error: "점검실패",
-    failed: "이상징후",
-    blocked: "차단",
-    skipped: "제외",
-    cancelled: "취소",
-};
-
+// 상태 라벨·색의 SSOT 는 app/core/status_labels.py 이며,
+// 생성물(status.generated.ts)을 main.ts 가 window.__statusBadge 로 노출한다.
 function normalizeOutcomeStatus(status) {
-    const value = String(status ?? "").toLowerCase();
-    return value === "failed" ? "anomaly" : value;
+    return window.__statusBadge.normalizeTone(status);
 }
 
 function statusDisplayLabel(entity) {
-    if (entity?.status_label) {
-        return entity.status_label;
-    }
-    const normalized = normalizeOutcomeStatus(entity?.status ?? entity);
-    return STATUS_DISPLAY_LABELS[normalized] ?? String(entity?.status ?? entity ?? "");
+    return window.__statusBadge.statusLabel(entity?.status ?? entity ?? "");
 }
 
 function isModuleIssueStatus(status) {
@@ -587,9 +556,9 @@ async function readErrorMessage(response) {
     }
 }
 
-function statusBadgeClassName(status, sizeClasses = "px-2.5 py-1") {
-    const tone = STATUS_BADGE_CLASSES[normalizeOutcomeStatus(status)] ?? "bg-gray-100 text-gray-600";
-    return `inline-flex items-center rounded-full text-xs font-semibold ${sizeClasses} ${tone}`;
+function statusBadgeClassName(status, sizeClasses = "") {
+    void sizeClasses; // 크기는 data-size 로 이관됨 — 호출부 호환을 위해 인자만 유지
+    return "status-badge";
 }
 
 const FEEDBACK_TONE_CLASSES = {
@@ -1167,8 +1136,7 @@ function createRunListItem(run) {
     } else if (isActive && run.current_module_name) {
         metaParts.push(`실행 중 · ${run.current_module_name}`);
     } else if (isModuleIssueStatus(status) && run.failed_module_name) {
-        const issueLabel = normalizeOutcomeStatus(status) === "error" ? "점검실패" : "이상징후";
-        metaParts.push(`${issueLabel} · ${run.failed_module_name}`);
+        metaParts.push(`${statusDisplayLabel(status)} · ${run.failed_module_name}`);
     }
     meta.textContent = metaParts.filter(Boolean).join(" · ");
     info.appendChild(meta);
@@ -1184,9 +1152,7 @@ function createRunListItem(run) {
         : `통과 ${run.module_passed ?? 0}/${run.module_total ?? 0}`;
     right.appendChild(progress);
 
-    const statusPill = document.createElement("span");
-    statusPill.className = statusBadgeClassName(run.status);
-    statusPill.textContent = statusDisplayLabel(run);
+    const statusPill = window.__statusBadge.renderStatusBadge(run.status);
     right.appendChild(statusPill);
 
     card.appendChild(left);
@@ -1234,7 +1200,7 @@ function isExecutionGroupActive(group) {
     return group.runs.some((run) => ACTIVE_RUN_STATUSES.has(String(run.status ?? "").toLowerCase()));
 }
 
-// run-chip--* 상태 톤 클래스 키(팔레트는 STATUS_BADGE_CLASSES 와 동일).
+// run-chip--* 상태 톤 클래스 키(팔레트는 status-badge 컴포넌트의 톤과 동일).
 function runChipToneKey(status) {
     const normalized = normalizeOutcomeStatus(status);
     if (normalized === "waiting_input") {
@@ -1337,9 +1303,7 @@ function createSuiteStripRow(group) {
     title.textContent = "전체 점검";
     titleRow.appendChild(title);
 
-    const statusPill = document.createElement("span");
-    statusPill.className = statusBadgeClassName(suite.status);
-    statusPill.textContent = statusDisplayLabel(suite);
+    const statusPill = window.__statusBadge.renderStatusBadge(suite.status);
     titleRow.appendChild(statusPill);
 
     if (isWaiting) {
@@ -1948,6 +1912,8 @@ function updateModuleCard(module) {
 
     const statusNode = card.querySelector('[data-role="module-status"]');
     statusNode.className = statusBadgeClassName(module.status);
+    statusNode.dataset.tone = window.__statusBadge.normalizeTone(module.status);
+    statusNode.dataset.size = "md";
     statusNode.textContent = statusDisplayLabel({ status: module.status });
 
     card.querySelector('[data-role="module-message"]').textContent = module.message;
@@ -2979,6 +2945,7 @@ function updateSuiteStepCard(step) {
     if (statusNode) {
         statusNode.textContent = step.status ?? "";
         statusNode.className = `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClassName(step.status)}`;
+        statusNode.dataset.tone = window.__statusBadge.normalizeTone(step.status);
     }
     const linkNode = card.querySelector('[data-role="step-run-link"]');
     if (linkNode) {
@@ -3025,6 +2992,7 @@ function renderSuiteSnapshot(suite) {
     if (statusNode) {
         statusNode.textContent = suite.status ?? "";
         statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
+        statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
     }
     updateSuiteActions(suite.status);
     updateSuiteProgress(suite);
@@ -3138,6 +3106,7 @@ function bindSuiteSocket() {
             if (statusNode) {
                 statusNode.textContent = suite.status;
                 statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
+                statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
             }
             updateSuiteActions(suite.status);
         }
@@ -3172,8 +3141,10 @@ function bindRunSocket() {
         const message = JSON.parse(event.data);
 
         if (message.event_type === "snapshot") {
-            document.getElementById("run-status").textContent = message.payload.status;
-            document.getElementById("run-status").className = statusBadgeClassName(message.payload.status, "px-3 py-1.5");
+            const snapshotStatusNode = document.getElementById("run-status");
+            snapshotStatusNode.textContent = message.payload.status;
+            snapshotStatusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(message.payload.status)}`;
+            snapshotStatusNode.dataset.tone = window.__statusBadge.normalizeTone(message.payload.status);
             updateRunActions(message.payload.status);
             updateOtpPanel(message.payload);
             updateComparisonPanel(message.payload);
@@ -3195,7 +3166,8 @@ function bindRunSocket() {
         if (message.run_status) {
             const runStatus = document.getElementById("run-status");
             runStatus.textContent = message.run_status;
-            runStatus.className = statusBadgeClassName(message.run_status, "px-3 py-1.5");
+            runStatus.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(message.run_status)}`;
+            runStatus.dataset.tone = window.__statusBadge.normalizeTone(message.run_status);
             updateRunActions(message.run_status);
         }
 

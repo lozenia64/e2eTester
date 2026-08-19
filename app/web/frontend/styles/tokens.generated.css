@@ -1,0 +1,42 @@
+/* 자동 생성 파일 — 직접 수정하지 마세요.
+   출처: app/core/status_labels.py
+   생성: python3 scripts/gen_frontend_tokens.py */
+
+:root {
+  --st-passed-solid: #10b981;
+  --st-passed-surface: #d1fae5;
+  --st-passed-text: #047857;
+  --st-passed-border: #6ee7b7;
+  --st-anomaly-solid: #f59e0b;
+  --st-anomaly-surface: #fef3c7;
+  --st-anomaly-text: #b45309;
+  --st-anomaly-border: #fcd34d;
+  --st-error-solid: #ef4444;
+  --st-error-surface: #fee2e2;
+  --st-error-text: #b91c1c;
+  --st-error-border: #fca5a5;
+  --st-running-solid: #3b82f6;
+  --st-running-surface: #dbeafe;
+  --st-running-text: #1d4ed8;
+  --st-running-border: #93c5fd;
+  --st-waiting_input-solid: #8b5cf6;
+  --st-waiting_input-surface: #ede9fe;
+  --st-waiting_input-text: #6d28d9;
+  --st-waiting_input-border: #c4b5fd;
+  --st-blocked-solid: #f97316;
+  --st-blocked-surface: #ffedd5;
+  --st-blocked-text: #c2410c;
+  --st-blocked-border: #fdba74;
+  --st-skipped-solid: #94a3b8;
+  --st-skipped-surface: #f1f5f9;
+  --st-skipped-text: #475569;
+  --st-skipped-border: #cbd5e1;
+  --st-cancelled-solid: #71717a;
+  --st-cancelled-surface: #f4f4f5;
+  --st-cancelled-text: #52525b;
+  --st-cancelled-border: #d4d4d8;
+  --st-pending-solid: #a1a1aa;
+  --st-pending-surface: #f4f4f5;
+  --st-pending-text: #6b7280;
+  --st-pending-border: #e4e4e7;
+}

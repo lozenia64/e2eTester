@@ -12,6 +12,7 @@ from app.contexts.identity.dependencies import get_current_user, require_admin
 from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
 
 if TYPE_CHECKING:
     from app.contexts.run.application.service import RunService
@@ -19,7 +20,9 @@ if TYPE_CHECKING:
     from app.orchestrator.queries import RunQueries
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
+templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
+templates.env.globals["asset_js"] = asset_js
+templates.env.globals["asset_css"] = asset_css
 
 
 @router.get("/", response_class=HTMLResponse)

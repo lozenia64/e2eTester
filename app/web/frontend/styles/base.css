@@ -1,0 +1,9 @@
+/* Pretendard 폰트 CSS 는 여기서 @import 하지 않는다 — entries/main.ts 가 별도의
+   CSS 모듈로 임포트한다. 이 파일은 Tailwind PostCSS 파이프라인을 타는데, 그
+   경로에서는 패키지 CSS 안의 상대 url(./woff2-dynamic-subset/*.woff2) 92개가
+   rebase 되지 않아 폰트가 번들에 실리지 않는다(전 페이지 시스템 폰트 폴백). */
+@import "tailwindcss";
+@import "./primitives.css";
+@import "./tokens.generated.css";
+@import "./app.css";
+@import "./dashboard.css";

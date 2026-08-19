@@ -334,7 +334,6 @@ e2eTester/
           ops.html                 # 운영 관측
           stats.html
       static/
-        app.css
         app.js                     # 실행 화면(execute)·Run/Suite 화면 공용 스크립트
         dashboard.js               # 일간 대시보드 렌더링
         schedules.js               # 예약 관리 센터 (페이지 전용)

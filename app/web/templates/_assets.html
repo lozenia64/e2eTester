@@ -1,0 +1,9 @@
+{# Vite manifest 경유 자산 태그. static/ 직접 참조 금지(FG-005). #}
+{% macro asset_styles(entry="entries/main.ts") -%}
+{% for href in asset_css(entry) %}<link rel="stylesheet" href="{{ href }}">
+{% endfor %}
+{%- endmacro %}
+
+{% macro asset_script(entry="entries/main.ts") -%}
+<script type="module" src="{{ asset_js(entry) }}"></script>
+{%- endmacro %}

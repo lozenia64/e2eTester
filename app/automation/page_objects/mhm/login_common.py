@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from app.runner.step_logging import log
+from app.runner.step_logging import bind_log, log
 
 DEFAULT_BASE_URL: Final[str] = "https://m.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("mhwgeneralins-login-result.png")
@@ -332,11 +332,17 @@ def build_config(args: argparse.Namespace) -> LoginConfig:
 
 
 def add_dialog_logger(page: Page) -> list[str]:
+    """페이지 alert/confirm 을 수집·수락한다.
+
+    ``bind_log()`` 로 스텝 싱크를 고정한다 — dialog 핸들러는 Playwright dispatcher
+    greenlet 에서 실행돼 ContextVar 싱크가 보이지 않아 ``log`` 호출이 유실된다.
+    """
     messages: list[str] = []
+    emit = bind_log()
 
     def _handle(dialog) -> None:
         messages.append(dialog.message)
-        log(f"[dialog] {dialog.message}")
+        emit(f"[dialog] {dialog.message}")
         dialog.accept()
 
     page.on("dialog", _handle)

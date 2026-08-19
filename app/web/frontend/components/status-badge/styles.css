@@ -1,0 +1,21 @@
+/* 색은 전부 토큰. 톤별 규칙을 손으로 쓰지 않도록 data-tone 으로 분기한다. */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.status-badge[data-size="sm"] { padding: 0.125rem 0.5rem; font-size: 0.6875rem; }
+.status-badge[data-size="md"] { padding: 0.25rem 0.625rem; font-size: 0.75rem; }
+
+.status-badge[data-tone="passed"] { background: var(--st-passed-surface); color: var(--st-passed-text); border-color: var(--st-passed-border); }
+.status-badge[data-tone="anomaly"] { background: var(--st-anomaly-surface); color: var(--st-anomaly-text); border-color: var(--st-anomaly-border); }
+.status-badge[data-tone="error"] { background: var(--st-error-surface); color: var(--st-error-text); border-color: var(--st-error-border); }
+.status-badge[data-tone="running"] { background: var(--st-running-surface); color: var(--st-running-text); border-color: var(--st-running-border); }
+.status-badge[data-tone="waiting_input"] { background: var(--st-waiting_input-surface); color: var(--st-waiting_input-text); border-color: var(--st-waiting_input-border); }
+.status-badge[data-tone="blocked"] { background: var(--st-blocked-surface); color: var(--st-blocked-text); border-color: var(--st-blocked-border); }
+.status-badge[data-tone="skipped"] { background: var(--st-skipped-surface); color: var(--st-skipped-text); border-color: var(--st-skipped-border); }
+.status-badge[data-tone="cancelled"] { background: var(--st-cancelled-surface); color: var(--st-cancelled-text); border-color: var(--st-cancelled-border); }
+.status-badge[data-tone="pending"] { background: var(--st-pending-surface); color: var(--st-pending-text); border-color: var(--st-pending-border); }

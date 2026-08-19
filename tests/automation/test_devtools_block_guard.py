@@ -1,8 +1,12 @@
-"""사이트 방어 스크립트의 '개발자도구 차단' alert 대응 검증.
+"""사이트 방어 스크립트(EVFW/OhRep) alert·강제 새로고침 대응 검증.
 
-대표홈페이지(PC)는 EVFW/AATIE 방어 스크립트가 ``navigator.webdriver`` 와 콘솔 계측으로
-개발자도구를 탐지해 ``alert("개발자도구 사용을 차단하였습니다!!")`` 를 반복 발생시킨다.
-alert 루프는 ``page.goto`` 를 정지시켜 일일점검 Run 을 실패로 만든다.
+대표홈페이지(PC)는 EVFW/OhRep 방어 스크립트가 자동화를 개발자도구·HTML 위변조로 오판하면
+alert 을 띄우고 ``window.location.reload(true)`` 를 반복한다. alert 루프는 ``page.goto`` 를
+정지시키고, 새로고침 루프는 클릭 대상을 DOM 에서 떼어내(element was detached) Locator.click
+을 타임아웃시킨다 — 둘 다 일일점검 Run 을 실패로 만든다.
+
+2026-08-19 실측된 실제 alert 문구는 '새로고침 후 이용해 주시길 바랍니다.' 였고, dialog 핸들러
+안에서 부른 ``log`` 이 전부 유실돼 운영자·AI 분석이 원인을 오판했다(bind_log 로 수정).
 """
 
 from __future__ import annotations
@@ -13,11 +17,14 @@ import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.automation.page_objects.hom import login_common as hom_common
+from app.runner import step_logging
 from app.systems.access_common import browser as access_browser
 
 AUTOMATION_CONTROLLED_FLAG = "--disable-blink-features=AutomationControlled"
 # 사이트가 실제로 띄우는 문구 (공백 없는 '개발자도구')
 BLOCK_ALERT_MESSAGE = "개발자도구 사용을 차단하였습니다!!"
+# 2026-08-19 run_20260819_102719_ec8e9c 의 dialog_messages 에 4회 기록된 실제 문구
+DEFENSE_RELOAD_MESSAGE = "새로고침 후 이용해 주시길 바랍니다."
 
 
 class _FakeContext:
@@ -69,20 +76,50 @@ class _FakePage:
         return dialog
 
 
+class _SettlePage:
+    """``wait_for_function`` 이 N 번째 폴링에서 통과하는 페이지 스텁."""
+
+    url = "https://www.hwgeneralins.com/"
+
+    def __init__(self, *, settle_after_polls: int) -> None:
+        self._settle_after_polls = settle_after_polls
+        self.settle_polls = 0
+        self.clicked_after_settle = False
+        self.locator_stub = SimpleNamespace(click=self._click)
+
+    def _click(self) -> None:
+        self.clicked_after_settle = self.settle_polls >= self._settle_after_polls
+
+    def wait_for_function(self, expression: str, timeout: int | None = None):
+        assert "performance.now()" in expression
+        self.settle_polls = self._settle_after_polls
+
+    def expect_navigation(self, **kwargs):
+        from contextlib import nullcontext
+
+        return nullcontext()
+
+    def wait_for_url(self, url_or_pattern, timeout: int | None = None) -> None:
+        return None
+
+
 @pytest.mark.parametrize(
     "message",
     [
         BLOCK_ALERT_MESSAGE,
         "개발자 도구 사용이 감지되었습니다.",
         "개발자도구를 종료해 주세요",
+        "HTML변경이 감지되었습니다!!",
+        DEFENSE_RELOAD_MESSAGE,
+        "새로고침후 이용해 주시길 바랍니다",
     ],
 )
-def test_devtools_block_dialog_detected_regardless_of_spacing(message: str) -> None:
-    assert access_browser.is_devtools_block_dialog(message)
+def test_site_defense_dialog_detected_regardless_of_spacing(message: str) -> None:
+    assert access_browser.is_site_defense_dialog(message)
 
 
-def test_normal_dialog_is_not_treated_as_devtools_block() -> None:
-    assert not access_browser.is_devtools_block_dialog("정상적으로 처리되었습니다.")
+def test_normal_dialog_is_not_treated_as_site_defense() -> None:
+    assert not access_browser.is_site_defense_dialog("정상적으로 처리되었습니다.")
 
 
 def test_hom_persistent_launch_disables_automation_controlled(tmp_path) -> None:
@@ -152,14 +189,51 @@ def test_console_guard_keeps_error_and_warn_for_diagnostics() -> None:
     assert "'warn'" not in script and '"warn"' not in script
 
 
-def test_hom_dialog_logger_swallows_devtools_block_alert() -> None:
+def test_hom_dialog_logger_folds_repeated_defense_alerts() -> None:
     page = _FakePage()
     messages = hom_common.add_dialog_logger(page)
 
-    dialog = page.emit_dialog(BLOCK_ALERT_MESSAGE)
+    for _ in range(4):
+        dialog = page.emit_dialog(DEFENSE_RELOAD_MESSAGE)
 
     assert dialog.accepted, "차단 alert 도 닫아야 페이지가 계속 진행된다"
-    assert messages == [], "차단 alert 은 점검 판정용 dialog 기록에서 제외한다"
+    assert messages == [DEFENSE_RELOAD_MESSAGE], (
+        "증거는 1회 남기고 반복 기록으로 점검 판정을 오염시키지 않는다"
+    )
+
+
+def test_dialog_logger_log_survives_playwright_event_context() -> None:
+    """dialog 핸들러의 로그가 스텝 싱크에 도달해야 한다.
+
+    Playwright 이벤트 콜백은 dispatcher greenlet 에서 실행되므로 ContextVar 싱크가 보이지
+    않는다. 핸들러 등록 시점에 싱크를 고정(bind_log)하지 않으면 로그가 조용히 사라진다.
+    """
+    captured: list[str] = []
+    token = step_logging.push_sink(captured.append)
+    try:
+        page = _FakePage()
+        hom_common.add_dialog_logger(page)
+    finally:
+        step_logging.pop_sink(token)
+
+    # 핸들러 등록 이후, 싱크가 컨텍스트에서 사라진 뒤에 dialog 가 발생하는 상황을 재현한다.
+    page.emit_dialog(DEFENSE_RELOAD_MESSAGE)
+    page.emit_dialog("정상적으로 등록되었습니다.")
+
+    assert any("[defense]" in line and DEFENSE_RELOAD_MESSAGE in line for line in captured), (
+        f"방어 alert 로그가 유실됐다: {captured}"
+    )
+    assert any("[dialog] 정상적으로 등록되었습니다." == line for line in captured)
+
+
+def test_navigation_click_waits_for_document_to_settle() -> None:
+    """강제 새로고침 중에는 클릭하지 않고, 문서가 정착한 뒤에 클릭해야 한다."""
+    page = _SettlePage(settle_after_polls=2)
+
+    hom_common.click_and_wait_for_navigation(page, page.locator_stub, r"/util/login/login\.do$")
+
+    assert page.settle_polls >= 2, "performance.now() 정착을 실제로 기다려야 한다"
+    assert page.clicked_after_settle, "정착 전에 클릭하면 대상이 DOM 에서 떨어진다"
 
 
 class _GotoPage:

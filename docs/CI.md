@@ -19,7 +19,7 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 
 | Tier | 게이트 |
 | --- | --- |
-| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency` |
+| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web`, `build_web`, `vitest_web` |
 | 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
 | 2 | `coverage` (= `pytest --cov`, 바닥선 57%) |
 | 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
@@ -39,6 +39,33 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 | AG-007 | QueryPort 반환에 Run/Suite 엔티티 금지 |
 | AG-008 | 서비스에서 run/suite 필드 직접 대입 금지 |
 | AG-009 | contexts/api 에서 실행 평면 import 금지 |
+
+## 프론트엔드 게이트 요약
+
+SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_frontend_tokens.py`.
+
+| 규칙 | 내용 |
+| --- | --- |
+| FG-001 | 템플릿에 외부 CDN `<script>`/`<link>` 금지 |
+| FG-002 | `app/web/frontend/` 내 하드코딩 hex 금지 (생성물 제외) |
+| FG-003 | 상태 라벨은 `lib/status.generated.ts` 경유만 |
+| FG-004 | 엔트리·컴포넌트 파일 400줄 상한 |
+| FG-005 | 템플릿의 `/static/` 직접 참조 금지 (allowlist 제외) |
+
+`frontend_tokens` 는 `status_labels.py` 에서 토큰·타입을 재생성해 커밋본과
+diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것을 막는다.
+
+`build_web`(`npm run build`)와 `vitest_web`(`npm run test`)은 정적 검사만으로는
+잡히지 않는 것을 막는다 — 타입·린트가 통과해도 Vite/PostCSS/Tailwind 파이프라인이
+깨져 자산이 번들에서 빠질 수 있고, Vitest 를 돌리지 않으면 프론트 순수 로직 테스트가
+아무것도 강제하지 않는다. 둘 다 Node 를 요구하므로 `docs_only` 프로파일에서는 제외한다.
+
+`coverage`(Tier 2, `pytest --cov`)도 CI 에서는 Node·빌드가 필요하다 —
+`base.html` 이 `asset_styles()`/`asset_script()`(`app/web/asset_manifest.py`)로
+실제 Vite manifest 를 요구하므로, 템플릿을 렌더링하는 테스트는 `dist/` 없이 돌지
+않는다. `.github/workflows/ci.yml` 의 `gate` job 은 게이트당 컨테이너가 분리돼
+다른 job 의 `build_web` 산출물을 공유받지 못하므로, `coverage` job 자체에
+Node 설치 + `npm run build` 스텝이 별도로 있다.
 
 ## GitHub Actions
 

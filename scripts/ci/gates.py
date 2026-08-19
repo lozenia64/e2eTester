@@ -6,6 +6,7 @@ import glob as _glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -16,6 +17,17 @@ from typing import Any
 def _py(*parts: str) -> list[str]:
     """Build a gate command using the current interpreter (Windows/macOS parity)."""
     return [sys.executable, *parts]
+
+
+# Windows 의 npm 은 `npm.CMD` 셸 스텁이다. subprocess.run(["npm", ...], shell=False) 는
+# CreateProcess 가 PATHEXT 를 뒤지지 않아 WinError 2(FileNotFoundError) 로 죽는다.
+# shutil.which 로 실제 실행 파일 경로(확장자 포함)를 미리 구해 셸 없이도 실행되게 한다.
+_NPM = shutil.which("npm") or "npm"
+
+
+def _npm(*parts: str) -> list[str]:
+    """Build a gate command using the resolved npm executable (Windows/macOS parity)."""
+    return [_NPM, *parts]
 
 
 # --- CI 경로 글롭 (SSOT) ---------------------------------------------------
@@ -65,6 +77,14 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "app/contexts/run/domain/decider.py",
         "app/contexts/suite/domain/decider.py",
     ),
+    "frontend_gates": _py("scripts/check_frontend_gates.py"),
+    "frontend_tokens": _py("scripts/gen_frontend_tokens.py", "--check"),
+    "typecheck_web": _npm("run", "typecheck"),
+    "eslint_web": _npm("run", "lint"),
+    # 타입·린트만 걸면 Vite/PostCSS/Tailwind 파이프라인이 깨져도 통과한다
+    # (실제로 Pretendard 폰트 92개가 번들에서 빠진 채 머지될 뻔했다).
+    "build_web": _npm("run", "build"),
+    "vitest_web": _npm("run", "test"),
     "ruff": _py("-m", "ruff", "check", "."),
     "ruff_format": _py("-m", "ruff", "format", "--check", "."),
     "pytest": _py("-m", "pytest", "tests/", "-q"),
@@ -101,6 +121,12 @@ GATE_TIERS: dict[str, int] = {
     "docs_consistency": 0,
     "ci_config_valid": 0,
     "ruff": 0,
+    "frontend_gates": 0,
+    "frontend_tokens": 0,
+    "typecheck_web": 0,
+    "eslint_web": 0,
+    "build_web": 0,
+    "vitest_web": 0,
     "ruff_format": 0,
     "ruff_changed": 0,
     "ruff_format_changed": 0,
@@ -125,6 +151,12 @@ STANDARD_GATES: list[str] = [
     "snapshot_validate",
     "ruff",
     "ruff_format",
+    "frontend_gates",
+    "frontend_tokens",
+    "typecheck_web",
+    "eslint_web",
+    "build_web",
+    "vitest_web",
     "pytest",
 ]
 

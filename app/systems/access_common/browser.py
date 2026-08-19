@@ -17,7 +17,7 @@ from app.platform.browser_profiles import (
     playwright_mcp_profiles_root,
     resolve_legacy_profile,
 )
-from app.runner.step_logging import log
+from app.runner.step_logging import bind_log, log
 
 PREFERRED_BROWSER_CHANNEL: Final[str] = "chrome"
 PC_VIEWPORT: Final[dict[str, int]] = {"width": 1339, "height": 1038}
@@ -65,14 +65,21 @@ LOCAL_NETWORK_DISABLED_FEATURES: Final[tuple[str, ...]] = (
     "PrivateNetworkAccessPermissionPrompt",
 )
 
-# 사이트 방어 스크립트(연수원 SLS self-defender, 대표홈페이지 EVFW/AATIE)가 자동화를
-# 개발자도구로 오판하면 alert("개발자도구 …")를 반복 발생시킨다. alert 루프는 page.goto 를
-# 정지시켜 점검 Run 을 통째로 실패시킨다.
+# 사이트 방어 스크립트(연수원 SLS self-defender, 대표홈페이지 EVFW/OhRep)가 자동화를
+# 개발자도구·HTML 위변조로 오판하면 alert 을 띄우고 window.location.reload(true) 를 반복한다.
+# alert·reload 루프는 page.goto 를 정지시키거나 클릭 대상을 DOM 에서 떼어내(element was
+# detached) 점검 Run 을 통째로 실패시킨다.
 # window.alert 패치(init script)는 무결성 검사에 걸려 로그인 AJAX 가 차단되므로 쓰지 않는다.
-# → add_dialog_logger 에서만 로그·dialog_messages 수집을 생략하고 accept() 한다.
-# 문구는 사이트마다 '개발자도구'(대표홈페이지)·'개발자 도구'(SLS)로 띄어쓰기가 달라, 공백을
-# 제거하고 비교한다.
-DEVTOOLS_BLOCK_ALERT_SUBSTRING: Final[str] = "개발자도구"
+# → add_dialog_logger 에서 accept() 만 하고 반복 기록은 1회로 접는다.
+# 문구는 사이트·룰마다 다르므로(공백 표기까지) 공백을 제거하고 부분 일치로 비교한다.
+#   - '개발자도구 사용을 차단하였습니다!!' (대표홈페이지 EVFW) / '개발자 도구 …' (SLS)
+#   - 'HTML변경이 감지되었습니다!!'         (EVFW 위변조 탐지 룰)
+#   - '새로고침 후 이용해 주시길 바랍니다.'  (EVFW, 2026-08-19 실측된 실제 문구)
+SITE_DEFENSE_ALERT_SUBSTRINGS: Final[tuple[str, ...]] = (
+    "개발자도구",
+    "HTML변경",
+    "새로고침후이용해",
+)
 
 # 대표홈페이지(EVFW) 방어 스크립트가 실제로 보는 신호는 **콘솔 인자 직렬화 지연** 이다.
 # Playwright 는 CDP Runtime 도메인을 항상 켜 두므로, console.table/log 에 넘긴 객체가 매번
@@ -175,8 +182,10 @@ def resolve_playwright_mcp_user_data_dir(
     return target
 
 
-def is_devtools_block_dialog(message: str) -> bool:
-    return DEVTOOLS_BLOCK_ALERT_SUBSTRING in re.sub(r"\s+", "", message or "")
+def is_site_defense_dialog(message: str) -> bool:
+    """사이트 방어 스크립트가 띄운 alert 인가(업무 dialog 와 구분)."""
+    squashed = re.sub(r"\s+", "", message or "")
+    return any(needle in squashed for needle in SITE_DEFENSE_ALERT_SUBSTRINGS)
 
 
 def launch_legacy_persistent_browser_context(
@@ -357,19 +366,31 @@ def grant_browser_permissions(context, base_url: str) -> None:
 
 
 def add_dialog_logger(page: Page) -> list[str]:
+    """페이지 alert/confirm 을 수집·수락한다.
+
+    ``log`` 대신 ``bind_log()`` 로 스텝 싱크를 고정해 쓴다 — 이 핸들러는 Playwright
+    dispatcher greenlet 에서 실행돼 ContextVar 싱크가 보이지 않기 때문이다(로그 유실).
+    """
     messages: list[str] = []
+    emit = bind_log()
+    defense_count = 0
 
     def _handle(dialog) -> None:
-        devtools = is_devtools_block_dialog(dialog.message)
+        nonlocal defense_count
+        defense = is_site_defense_dialog(dialog.message)
         try:
-            if devtools:
+            if defense:
+                defense_count += 1
+                emit(f"[defense] 사이트 방어 스크립트 alert #{defense_count}: {dialog.message}")
+                if defense_count == 1:
+                    messages.append(dialog.message)
                 dialog.accept()
                 return
             messages.append(dialog.message)
-            log(f"[dialog] {dialog.message}")
+            emit(f"[dialog] {dialog.message}")
             dialog.accept()
         except Exception:
-            if not devtools:
+            if not defense:
                 raise
 
     page.on("dialog", _handle)

@@ -9,12 +9,15 @@ from fastapi.templating import Jinja2Templates
 from app.contexts.identity.dependencies import get_current_user, get_user_service
 from app.contexts.identity.jwt import create_access_token
 from app.contexts.identity.models import TokenResponse, User, UserPublic
+from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
 
 if TYPE_CHECKING:
     from app.contexts.identity.service import UserService
 
 router = APIRouter(tags=["auth"])
-templates = Jinja2Templates(directory="app/web/templates")
+templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
+templates.env.globals["asset_js"] = asset_js
+templates.env.globals["asset_css"] = asset_css
 
 
 @router.get("/login", response_class=HTMLResponse)

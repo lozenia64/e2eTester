@@ -4,18 +4,35 @@
 
 ## 빠른 시작
 
-**준비:** Python 3.13+, Git, Redis.
+**준비:** Python 3.13+, Node 22+, Git, Redis.
 
 ```bash
 git clone https://github.com/lozenia64/e2eTester.git && cd e2eTester
 python3 -m venv .venv && .venv\Scripts\activate   # Windows
 python3 -m pip install -r requirements.txt
 python3 -m playwright install chromium
+npm ci && npm run build   # 프론트엔드 자산 빌드 (필수)
 cp .env.example .env   # 관리자·JWT 변경
 python3 scripts/run_local.py
 ```
 
 http://127.0.0.1:2222 — `.env` 의 `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` 로 로그인.
+
+## 프론트엔드 빌드
+
+화면의 CSS·JS·폰트는 Vite 가 `app/web/static/dist/` 로 빌드하고, Jinja 템플릿이
+`app/web/static/dist/.vite/manifest.json` 을 읽어 해시 파일명을 해석합니다.
+**빌드 산출물은 커밋되지 않으므로**, 새로 클론한 뒤 `npm run build` 를 건너뛰면
+manifest 가 없어 모든 페이지가 500 으로 떨어집니다(`ManifestMissingError`).
+
+```bash
+npm ci          # 의존성 설치 (package-lock.json 기준)
+npm run build   # app/web/static/dist/ 생성
+npm run dev     # 개발 중 파일 변경 감시 재빌드 (선택)
+```
+
+프론트 소스를 고친 뒤에는 다시 `npm run build` 를 실행합니다. 서버 재시작은
+필요 없습니다 — manifest 의 mtime 이 바뀌면 자동으로 다시 읽습니다.
 
 ## 실행 구조
 
