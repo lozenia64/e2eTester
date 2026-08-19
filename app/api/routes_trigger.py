@@ -22,12 +22,15 @@ from fastapi.templating import Jinja2Templates
 from app.api.dependencies import get_schedule_service
 from app.core.requests import SubmitOtpRequest
 from app.core.schedule_models import Schedule
+from app.web.asset_manifest import asset_css, asset_js
 
 if TYPE_CHECKING:
     from app.contexts.scheduling.scheduler import SchedulerService
 
 router = APIRouter(tags=["trigger"])
 templates = Jinja2Templates(directory="app/web/templates")
+templates.env.globals["asset_js"] = asset_js
+templates.env.globals["asset_css"] = asset_css
 
 
 async def _get_schedule_by_token_or_404(
