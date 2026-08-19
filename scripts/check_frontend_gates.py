@@ -23,6 +23,14 @@ GENERATED_FILES = {
     "app/web/frontend/lib/status.generated.ts",
 }
 
+# 프론트엔드 툴체인 도입 이전부터 있던 레거시 모놀리식 스타일시트.
+# 아직 이들을 분리·모듈화하는 작업이 계획에 없어 당분간 grandfather 한다.
+# 향후 단계에서 컴포넌트 단위로 쪼갤 때마다 여기서 한 줄씩 지운다. 비면 FG-004 가 완성된다.
+FG004_ALLOWLIST = {
+    "app/web/frontend/styles/app.css",
+    "app/web/frontend/styles/dashboard.css",
+}
+
 # P3 이관 완료 전까지 템플릿이 직접 로드하는 레거시 페이지 스크립트.
 # 화면을 이관할 때마다 여기서 한 줄씩 지운다. 비면 FG-005 가 완성된다.
 FG005_ALLOWLIST = {
@@ -130,11 +138,11 @@ def check_fg003_status_source(root: Path = REPO_ROOT) -> list[str]:
 
 
 def check_fg004_file_size(root: Path = REPO_ROOT) -> list[str]:
-    """FG-004: 엔트리·컴포넌트 400줄 상한."""
+    """FG-004: 엔트리·컴포넌트 400줄 상한(레거시 모놀리식 스타일시트는 allowlist 제외)."""
     problems: list[str] = []
     for path in _iter(root, FRONTEND_DIR, ".ts", ".css"):
         rel = _rel(path, root)
-        if rel in GENERATED_FILES:
+        if rel in GENERATED_FILES or rel in FG004_ALLOWLIST:
             continue
         lines = len(path.read_text(encoding="utf-8").splitlines())
         if lines > MAX_FILE_LINES:

@@ -100,6 +100,28 @@ def test_fg004_allows_file_at_limit(tmp_path):
     assert check_fg004_file_size(tmp_path) == []
 
 
+def test_fg004_allows_exact_allow_listed_legacy_stylesheet(tmp_path):
+    """FG004_ALLOWLIST 에 등록된 레거시 모놀리식 스타일시트는 400줄을 넘어도 통과한다."""
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/app.css",
+        "\n".join(f".x{i} {{ color: red; }}" for i in range(1411)),
+    )
+    assert check_fg004_file_size(tmp_path) == []
+
+
+def test_fg004_flags_oversized_file_not_on_allowlist(tmp_path):
+    """allowlist 에 없는 새 파일이 400줄을 넘으면 여전히 걸린다(디렉터리 전체 예외 아님)."""
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/other.css",
+        "\n".join(f".x{i} {{ color: red; }}" for i in range(1411)),
+    )
+    problems = check_fg004_file_size(tmp_path)
+    assert len(problems) == 1
+    assert "other.css" in problems[0]
+
+
 def test_fg005_flags_direct_static_reference(tmp_path):
     _write(tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">')
     problems = check_fg005_no_static_ref(tmp_path)
