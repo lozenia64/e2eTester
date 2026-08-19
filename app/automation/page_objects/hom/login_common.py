@@ -18,6 +18,9 @@ from app.systems.access_common.browser import (
     add_console_serialization_guard,
     is_site_defense_dialog,
 )
+from app.systems.access_common.browser import (
+    resolve_user_data_dir as resolve_shared_user_data_dir,
+)
 
 DEFAULT_BASE_URL: Final[str] = "https://www.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("hwgeneralins-login-result.png")
@@ -34,9 +37,10 @@ DEFENSE_CLICK_ATTEMPTS: Final[int] = 2
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
 # 영속 프로파일(persistent context)로 실행해야 한다. 아래 디렉터리에 프로파일 상태
 # (로컬 에이전트 loopback 인증서 신뢰, 보안 확장 설치 등)가 누적된다.
-# 환경변수 E2E_USER_DATA_DIR 로 경로를 바꿀 수 있으며, 사용자의 실제 Chrome 프로파일을
+# 경로 해석은 access_common.browser 가 단독으로 담당한다 — 기본 ~/.e2etester/{아래 이름},
+# 환경변수 E2E_USER_DATA_DIR 로 그 상위 루트를 바꾼다. 사용자의 실제 Chrome 프로파일 루트를
 # 가리키게 하면 그 프로파일에 설치된 보안 확장을 그대로 사용할 수 있다.
-DEFAULT_USER_DATA_DIR: Final[Path] = Path.home() / ".e2etester" / "chrome-profile"
+USER_DATA_PROFILE_NAME: Final[str] = "chrome-profile"
 
 # navigator.webdriver 를 실제 false 로 만드는 Chrome 플래그(스텔스 위조 스크립트 대체).
 DISABLE_AUTOMATION_CONTROLLED_FLAG: Final[str] = "--disable-blink-features=AutomationControlled"
@@ -404,10 +408,14 @@ def maybe_close_home_popup(page: Page) -> None:
 
 
 def resolve_user_data_dir() -> Path:
-    override = os.environ.get("E2E_USER_DATA_DIR")
-    target = Path(override).expanduser() if override else DEFAULT_USER_DATA_DIR
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    """프로필 경로 — 해석은 공용 경로 함수에 위임한다.
+
+    직접 ``os.environ`` 을 읽던 과거 구현은 `.env` 에 적은 ``E2E_USER_DATA_DIR`` 을
+    무시했다(`.env` 는 pydantic-settings 가 자기 필드로만 읽고 ``os.environ`` 에 넣지
+    않는다). 공용 함수를 거치면 터미널 환경변수와 `.env` 양쪽이 동일하게 적용되고,
+    override 를 "프로필들이 담기는 루트"로 해석하는 규칙도 실행 경로와 일치한다.
+    """
+    return resolve_shared_user_data_dir(USER_DATA_PROFILE_NAME)
 
 
 def launch_persistent_browser_context(

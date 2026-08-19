@@ -115,9 +115,10 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _iter_py_sources(root: Path):
-    for path in sorted(root.rglob("*.py")):
-        yield path, _read(path)
+def _iter_py_sources(*roots: Path):
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            yield path, _read(path)
 
 
 # --------------------------------------------------------------------------- #
@@ -331,9 +332,17 @@ def check_documented_routes_exist() -> CheckResult:
 # 4. 환경변수 문서화
 # --------------------------------------------------------------------------- #
 def _collect_env_names() -> tuple[set[str], set[str]]:
+    """설정을 읽는 런타임 프로세스(`app/` + `worker/`)의 환경변수 이름을 모은다.
+
+    `worker/` 를 포함해야 하는 이유: 씬 워커는 API 와 별개 프로세스로 기동하면서
+    자기 바인드 주소를 직접 `os.environ` 에서 읽는다. `app/` 만 훑던 동안
+    `E2E_WORKER_HTTP_HOST`/`_PORT` 가 어느 문서에도 없이 새어나갔다.
+    `scripts/` 는 개발 도구라 제외한다 — CI 전용 변수(GITHUB_* 등)까지 설치 문서에
+    올리라고 요구하게 된다.
+    """
     literals: set[str] = set()
     prefixes: set[str] = set()
-    for _path, text in _iter_py_sources(REPO_ROOT / "app"):
+    for _path, text in _iter_py_sources(REPO_ROOT / "app", REPO_ROOT / "worker"):
         literals.update(LITERAL_ENV_RE.findall(text))
         literals.update(SETTINGS_ALIAS_RE.findall(text))
         for grp in OS_ENV_RE.findall(text):

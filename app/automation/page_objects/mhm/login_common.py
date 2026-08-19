@@ -13,6 +13,9 @@ from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.runner.step_logging import bind_log, log
+from app.systems.access_common.browser import (
+    resolve_user_data_dir as resolve_shared_user_data_dir,
+)
 
 DEFAULT_BASE_URL: Final[str] = "https://m.hwgeneralins.com"
 DEFAULT_SCREENSHOT_PATH: Final[Path] = Path("mhwgeneralins-login-result.png")
@@ -24,9 +27,10 @@ POST_LOGIN_MAIN_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"/myh/mai/MySu
 # Cursor의 Playwright MCP와 동일하게 인식시키려면, 일회용 시크릿 컨텍스트가 아니라
 # 영속 프로파일(persistent context)로 실행해야 한다. 아래 디렉터리에 프로파일 상태
 # (로컬 에이전트 loopback 인증서 신뢰, 보안 확장 설치 등)가 누적된다.
-# 환경변수 E2E_USER_DATA_DIR 로 경로를 바꿀 수 있으며, 사용자의 실제 Chrome 프로파일을
+# 경로 해석은 access_common.browser 가 단독으로 담당한다 — 기본 ~/.e2etester/{아래 이름},
+# 환경변수 E2E_USER_DATA_DIR 로 그 상위 루트를 바꾼다. 사용자의 실제 Chrome 프로파일 루트를
 # 가리키게 하면 그 프로파일에 설치된 보안 확장을 그대로 사용할 수 있다.
-DEFAULT_USER_DATA_DIR: Final[Path] = Path.home() / ".e2etester" / "mhm-chrome-profile"
+USER_DATA_PROFILE_NAME: Final[str] = "mhm-chrome-profile"
 MHM_MOBILE_DEVICE_NAME: Final[str] = "iPhone 14 Pro"
 
 # Playwright 가 Chrome 실행 시 끄는 기본 feature 들(브라우저 안정화 목적). 아래에서
@@ -426,10 +430,12 @@ def maybe_close_pre_login_bottom_popup(page: Page) -> None:
 
 
 def resolve_user_data_dir() -> Path:
-    override = os.environ.get("E2E_USER_DATA_DIR")
-    target = Path(override).expanduser() if override else DEFAULT_USER_DATA_DIR
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    """프로필 경로 — 해석은 공용 경로 함수에 위임한다(hom 쪽과 동일한 이유).
+
+    직접 ``os.environ`` 을 읽던 과거 구현은 `.env` 에 적은 ``E2E_USER_DATA_DIR`` 을
+    무시했다.
+    """
+    return resolve_shared_user_data_dir(USER_DATA_PROFILE_NAME)
 
 
 def resolve_mobile_device(playwright) -> dict:

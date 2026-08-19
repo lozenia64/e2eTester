@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import threading
-
-import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -172,23 +169,3 @@ def create_http_app(
             Route("/sessions/heartbeat", heartbeat, methods=["POST"]),
         ],
     )
-
-
-def start_http_server(
-    session_server: SessionServer,
-    *,
-    host: str = "0.0.0.0",
-    port: int = 8100,
-    heartbeat_manager: SessionHeartbeatManager | None = None,
-) -> threading.Thread:
-    """uvicorn 으로 HTTP 서버를 백그라운드 스레드에서 띄운다."""
-    app = create_http_app(session_server, heartbeat_manager)
-    config = uvicorn.Config(app, host=host, port=port, log_level="info")
-    server = uvicorn.Server(config)
-
-    def _run() -> None:
-        server.run()
-
-    thread = threading.Thread(target=_run, name="worker-http", daemon=True)
-    thread.start()
-    return thread
