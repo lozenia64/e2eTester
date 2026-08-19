@@ -3,8 +3,6 @@
 {% block title %}일간 점검 대시보드{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/dashboard.css?v=8">
-
 <div class="dash"
      x-data="{ drawerOpen: false }"
      @dash-close-drawer.window="drawerOpen = false"
@@ -50,7 +48,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-<script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
 <script src="/static/dashboard.js?v=22" defer></script>
 {% endblock %}
