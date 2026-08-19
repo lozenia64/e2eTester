@@ -16,10 +16,14 @@ FRONTEND_DIR = "app/web/frontend"
 
 MAX_FILE_LINES = 400
 
-# hex 를 담을 수 있는 유일한 예외 — 팔레트 원본
+# hex 를 담을 수 있는 유일한 예외 — 팔레트 원본.
+# 스크립트로 생성되는 파일(tokens.generated.css, status.generated.ts)뿐 아니라
+# 손으로 작성하는 primitive 팔레트(primitives.css)도 포함한다 — 3계층 토큰
+# 모델(primitive → semantic/생성 토큰 → 컴포넌트)에서 둘 다 정당한 hex 출처다.
 GENERATED_FILES = {
     "app/web/frontend/styles/tokens.generated.css",
     "app/web/frontend/lib/status.generated.ts",
+    "app/web/frontend/styles/primitives.css",
 }
 
 # 프론트엔드 툴체인 도입 이전부터 있던 레거시 모놀리식 스타일시트.

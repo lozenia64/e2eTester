@@ -1,0 +1,123 @@
+/* 중립 팔레트(라이트 전용). 상태색은 tokens.generated.css 가 담당한다. */
+:root {
+  --c-white: #ffffff;
+  --c-gray-50: #f9fafb;
+  --c-gray-100: #f3f4f6;
+  --c-gray-200: #e5e7eb;
+  --c-gray-300: #d1d5db;
+  --c-gray-400: #9ca3af;
+  --c-gray-500: #6b7280;
+  --c-gray-700: #374151;
+  --c-gray-900: #111827;
+  --c-indigo-50: #e0e7ff;
+  --c-indigo-500: #6366f1;
+  --c-indigo-600: #4f46e5;
+  --c-violet-100: #ede9fe;
+  --c-violet-600: #7c3aed;
+  --c-violet-700: #6d28d9;
+
+  --pl-bg: var(--c-gray-50);
+  --pl-surface: var(--c-white);
+  --pl-border: var(--c-gray-200);
+  --pl-text: var(--c-gray-900);
+  --pl-text-muted: var(--c-gray-500);
+  --pl-text-subtle: var(--c-gray-400);
+  --pl-accent: var(--c-indigo-500);
+  --pl-shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+  --pl-shadow-md: 0 8px 30px -8px rgb(0 0 0 / 0.12);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── 확장 primitive ──
+   app.css/dashboard.css 의 잔여 hex(FG-002) 중 위 팔레트나 tokens.generated.css
+   의 --st-* 로 커버되지 않는 값들. 기존 화면을 그대로 보존하는 value-for-value
+   치환이 목적이며, 여기서 새 색을 "발명"하지 않는다 — 이미 파일에 있던 hex를
+   그대로 옮겨 담을 뿐이다. 일부 값은 --st-* 상태 토큰과 우연히 같은 hex 를
+   갖지만(예: --c-emerald-700 과 --st-passed-text 모두 #047857), 여기서는
+   "실행 결과 상태"가 아니라 장식용 accent 색(시스템 카드 분류, run-chip 등)이라
+   상태 토큰을 재사용하지 않고 별도 primitive 로 둔다. */
+:root {
+  /* gray 확장 */
+  --c-gray-125: #f1f1f4;
+  --c-gray-150: #ececf2;
+  --c-gray-350: #b6b8c0;
+  --c-gray-600: #4b5563;
+  --c-gray-800: #1f2937;
+
+  /* slate — module-graph, run-chip, node-card 계열의 차분한 회청색 */
+  --c-slate-50: #f8fafc;
+  --c-slate-200: #e2e8f0;
+  --c-slate-220: #dbe4f0;
+  --c-slate-300: #cbd5e1;
+  --c-slate-400: #94a3b8;
+  --c-slate-500: #64748b;
+  --c-slate-700: #334155;
+
+  /* zinc 확장 */
+  --c-zinc-100: #f4f4f5;
+  --c-zinc-200: #e4e4e7;
+  --c-zinc-500: #71717a;
+  --c-zinc-700: #3f3f46;
+
+  /* indigo 확장 */
+  --c-indigo-25: #eef2ff;
+  --c-indigo-700: #4338ca;
+
+  /* violet 확장 */
+  --c-violet-25: #fbfaff;
+  --c-violet-50: #f5f3ff;
+  --c-violet-125: #e9e5ff;
+  --c-violet-200: #ddd6fe;
+  --c-violet-300: #c4b5fd;
+  --c-violet-500: #8b5cf6;
+
+  /* sky — system-card--accent-sky */
+  --c-sky-100: #e0f2fe;
+  --c-sky-500: #0ea5e9;
+  --c-sky-600: #0284c7;
+  --c-sky-700: #0369a1;
+
+  /* cyan — system-card--accent-cyan */
+  --c-cyan-50: #ecfeff;
+  --c-cyan-100: #cffafe;
+  --c-cyan-500: #06b6d4;
+  --c-cyan-600: #0891b2;
+  --c-cyan-700: #0e7490;
+
+  /* rose — system-card--accent-rose */
+  --c-rose-50: #fff1f2;
+  --c-rose-100: #ffe4e6;
+  --c-rose-500: #f43f5e;
+  --c-rose-600: #e11d48;
+  --c-rose-700: #be123c;
+
+  /* emerald — system-card--accent-emerald / run-chip--passed(장식용, 상태 토큰과 값은 같지만 별도 primitive) */
+  --c-emerald-50: #ecfdf5;
+  --c-emerald-400: #34d399;
+  --c-emerald-600: #059669;
+  --c-emerald-700: #047857;
+
+  /* amber — system-card--accent-amber / run-chip--anomaly 등 */
+  --c-amber-50: #fffbeb;
+  --c-amber-200: #fde68a;
+  --c-amber-300: #fcd34d;
+  --c-amber-400: #fbbf24;
+  --c-amber-600: #d97706;
+  --c-amber-800: #92400e;
+
+  /* red — 배너·배지의 옅은 틴트, run-chip--error(장식용) */
+  --c-red-50: #fef2f2;
+  --c-red-100: #fee2e2;
+  --c-red-200: #fecaca;
+  --c-red-700: #b91c1c;
+
+  /* orange — run-chip--blocked(장식용) */
+  --c-orange-50: #fff7ed;
+  --c-orange-100: #ffedd5;
+  --c-orange-700: #c2410c;
+
+  /* blue — 배지 배경, run-chip--running(장식용) */
+  --c-blue-50: #eff6ff;
+  --c-blue-100: #dbeafe;
+  --c-blue-700: #1d4ed8;
+}
