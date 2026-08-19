@@ -12,7 +12,7 @@ from app.contexts.run.views.actor import load_actor_context
 from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
 from app.contexts.suite.contracts.ports import SuiteSummaryQueryPort
 from app.core.enums import ModuleStatus
-from app.core.stats_models import SystemUsageStat, UsageStats, UserUsageStat
+from app.core.stats_models import SavingsSummary, SystemUsageStat, UsageStats, UserUsageStat
 from app.core.status_labels import MODULE_ANOMALY_STATUSES
 
 if TYPE_CHECKING:
@@ -182,3 +182,50 @@ class StatsService:
             by_system=by_system,
         )
         return stats.model_copy(update={"charts": build_usage_charts(stats)})
+
+    async def get_savings_summary(
+        self,
+        *,
+        from_dt: datetime,
+        to_dt: datetime,
+        user_id: str | None,
+    ) -> SavingsSummary:
+        """전사 절감 합계 + 본인 기여분. 사용자별 분해는 담지 않는다.
+
+        기존 get_usage_stats 를 재사용하고 사용자 목록은 버린다 — 계산 로직을
+        두 벌로 만들지 않기 위해서다.
+        """
+        stats = await self.get_usage_stats(from_dt, to_dt)
+
+        total_seconds = sum(s.manual_seconds_saved for s in stats.by_system)
+        my_seconds = next(
+            (u.manual_seconds_saved for u in stats.by_user if u.user_id == user_id),
+            0,
+        )
+        module_count = sum(len(s.modules) for s in self._registry.list_systems())
+
+        basis_updated_at: datetime | None = None
+        if self._module_settings_repo is not None:
+            settings_rows = await self._module_settings_repo.list()
+            if settings_rows:
+                basis_updated_at = max(row.updated_at for row in settings_rows)
+
+        estimated = total_seconds > 0
+        note = ""
+        if estimated:
+            basis_label = (
+                f" (기준 {basis_updated_at.month}/{basis_updated_at.day})"
+                if basis_updated_at is not None
+                else ""
+            )
+            note = f"{stats.total_runs:,}회 · {module_count}개 모듈 × 수동 추정치{basis_label}"
+
+        return SavingsSummary(
+            total_seconds=total_seconds,
+            my_seconds=my_seconds,
+            run_count=stats.total_runs,
+            module_count=module_count,
+            basis_updated_at=basis_updated_at,
+            estimated=estimated,
+            note=note,
+        )
