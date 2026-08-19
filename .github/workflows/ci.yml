@@ -85,17 +85,17 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: python3 -m pip install -r requirements-dev.txt
 
-      # typecheck_web·eslint_web 만 Node 를 필요로 한다.
+      # typecheck_web·eslint_web·build_web·vitest_web 만 Node 를 필요로 한다.
       # 게이트당 job 이 하나이므로 해당 job 에서만 설치한다.
       - name: Set up Node (프론트 게이트 전용)
-        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web'
+        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
 
       - name: Install web dependencies
-        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web'
+        if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web'
         run: npm ci
 
       - name: Run gate — ${{ matrix.gate }}

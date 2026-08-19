@@ -19,7 +19,7 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 
 | Tier | 게이트 |
 | --- | --- |
-| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web` |
+| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web`, `build_web`, `vitest_web` |
 | 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
 | 2 | `coverage` (= `pytest --cov`, 바닥선 57%) |
 | 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
@@ -54,6 +54,11 @@ SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_f
 
 `frontend_tokens` 는 `status_labels.py` 에서 토큰·타입을 재생성해 커밋본과
 diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것을 막는다.
+
+`build_web`(`npm run build`)와 `vitest_web`(`npm run test`)은 정적 검사만으로는
+잡히지 않는 것을 막는다 — 타입·린트가 통과해도 Vite/PostCSS/Tailwind 파이프라인이
+깨져 자산이 번들에서 빠질 수 있고, Vitest 를 돌리지 않으면 프론트 순수 로직 테스트가
+아무것도 강제하지 않는다. 둘 다 Node 를 요구하므로 `docs_only` 프로파일에서는 제외한다.
 
 ## GitHub Actions
 
