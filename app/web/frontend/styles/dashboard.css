@@ -993,11 +993,11 @@ body:has(.dash) main > div {
 .dash-panel-dot[data-tone="passed"] { background: var(--st-passed-solid); }
 .dash-panel-dot[data-tone="anomaly"] { background: var(--st-anomaly-solid); }
 .dash-panel-dot[data-tone="error"] { background: var(--st-error-solid); }
-.dash-panel-dot[data-tone="running"],
-.dash-panel-dot[data-tone="waiting_input"] { background: var(--st-running-solid); }
-.dash-panel-dot[data-tone="blocked"],
-.dash-panel-dot[data-tone="cancelled"],
-.dash-panel-dot[data-tone="skipped"] { background: var(--st-blocked-solid); }
+.dash-panel-dot[data-tone="running"] { background: var(--st-running-solid); }
+.dash-panel-dot[data-tone="waiting_input"] { background: var(--st-waiting_input-solid); }
+.dash-panel-dot[data-tone="blocked"] { background: var(--st-blocked-solid); }
+.dash-panel-dot[data-tone="skipped"] { background: var(--st-skipped-solid); }
+.dash-panel-dot[data-tone="cancelled"] { background: var(--st-cancelled-solid); }
 .dash-panel-dot[data-tone="not_inspected"],
 .dash-panel-dot[data-tone="pending"] { background: var(--st-pending-solid); }
 
