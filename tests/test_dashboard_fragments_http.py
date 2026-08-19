@@ -15,10 +15,10 @@ from app.api.dependencies import get_daily_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
-from app.contexts.insights.application.daily_dashboard import build_daily_dashboard
+from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
 from app.core.enums import ModuleStatus
 from app.registry.loader import ModuleRegistry
-from tests.test_daily_dashboard import _run
+from tests.conftest import make_run_summary_row, make_status_row
 
 GEN_AT = datetime(2026, 8, 15, 5, 0, tzinfo=UTC)
 
@@ -51,8 +51,9 @@ class FakeRunService:
 
 def _build_all_not_inspected_dashboard(registry: ModuleRegistry) -> dict:
     systems = registry.list_systems()
-    return build_daily_dashboard(
+    return build_daily_dashboard_from_projection(
         systems,
+        [],
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
@@ -65,7 +66,8 @@ def _build_realistic_six_system_dashboard() -> dict:
     systems = registry.list_systems()
     assert len(systems) >= 6
 
-    runs = []
+    status_rows = []
+    run_summaries = []
     for sys in systems:
         code = sys.system_code
         if code == "hwtc":
@@ -85,11 +87,19 @@ def _build_realistic_six_system_dashboard() -> dict:
                 statuses[m.module_id] = ModuleStatus.PASSED
         else:
             statuses = {m.module_id: ModuleStatus.PASSED for m in sys.modules}
-        runs.append(_run(code, statuses, at=GEN_AT))
+        run_id = f"run_{code}"
+        status_rows.extend(
+            make_status_row(system_code=code, module_id=mid, last_status=st, last_run_id=run_id)
+            for mid, st in statuses.items()
+        )
+        run_summaries.append(
+            make_run_summary_row(system_code=code, run_id=run_id, requested_at=GEN_AT)
+        )
 
-    return build_daily_dashboard(
+    return build_daily_dashboard_from_projection(
         systems,
-        runs,
+        status_rows,
+        run_summaries,
         generated_at=GEN_AT,
         date_label="2026-08-15",
     )
@@ -220,10 +230,20 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
     """자동 복구된 모듈은 일간 현황 매트릭스 셀에 ⟳ 불안정 표식을 노출해야 한다."""
     system = registry.list_systems()[0]
     module_id = system.modules[0].module_id
-    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
-    run.modules[0].recovered = True
-    run.modules[0].retry_count = 2
-    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    data = build_daily_dashboard_from_projection(
+        [system],
+        [
+            make_status_row(
+                system_code=system.system_code,
+                module_id=module_id,
+                last_status=ModuleStatus.PASSED,
+                recovered=True,
+            )
+        ],
+        [make_run_summary_row(system_code=system.system_code)],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+    )
     user = User(
         user_id="u_recovered",
         email="recovered@test.local",
@@ -243,8 +263,19 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
 def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegistry) -> None:
     system = registry.list_systems()[0]
     module_id = system.modules[0].module_id
-    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
-    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    data = build_daily_dashboard_from_projection(
+        [system],
+        [
+            make_status_row(
+                system_code=system.system_code,
+                module_id=module_id,
+                last_status=ModuleStatus.PASSED,
+            )
+        ],
+        [make_run_summary_row(system_code=system.system_code)],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+    )
     user = User(
         user_id="u_clean",
         email="clean@test.local",

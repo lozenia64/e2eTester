@@ -20,7 +20,7 @@ from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
-from app.contexts.insights.application.daily_dashboard import build_daily_dashboard
+from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import (
     FakeDailyDashboardQueries,
@@ -208,8 +208,9 @@ def empty_day_live_server(
     dashboard_user: User,
 ) -> str:
     """All-not-inspected payload for HF-1 summary AC."""
-    data = build_daily_dashboard(
+    data = build_daily_dashboard_from_projection(
         registry.list_systems(),
+        [],
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
