@@ -6,6 +6,20 @@ export type StatusTone = "passed" | "anomaly" | "error" | "running" | "waiting_i
 
 export const STATUS_TONES: readonly StatusTone[] = ["passed", "anomaly", "error", "running", "waiting_input", "blocked", "skipped", "cancelled", "pending"] as const;
 
+export const STATUS_TONE_MAP: Record<string, StatusTone> = {
+  "pending": "pending",
+  "running": "running",
+  "waiting_input": "waiting_input",
+  "passed": "passed",
+  "anomaly": "anomaly",
+  "error": "error",
+  "failed": "anomaly",
+  "cancelled": "cancelled",
+  "queued": "pending",
+  "blocked": "blocked",
+  "skipped": "skipped",
+};
+
 export const RUN_STATUS_LABELS: Record<string, string> = {
   "pending": "대기",
   "running": "실행 중",

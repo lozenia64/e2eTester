@@ -17,11 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.core.enums import ModuleStatus, RunStatus
 from app.core.status_labels import (
     MODULE_STATUS_LABELS,
     RUN_STATUS_LABELS,
     STATUS_TONES,
     SUITE_STATUS_LABELS,
+    module_status_badge_tone,
+    run_status_badge_tone,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +89,37 @@ def _ts_label_map(name: str, labels: dict) -> str:
     return f"export const {name}: Record<string, string> = {{\n{body}\n}};\n"
 
 
+def build_tone_map() -> dict[str, str]:
+    """상태 문자열 → 톤. run/module 두 축의 badge_tone() 을 실제로 호출해 병합한다.
+
+    프론트가 톤 규칙을 손으로 다시 적으면(TONE_ALIASES 같은 형태) RunStatus·
+    ModuleStatus 에 상태가 늘어날 때 조용히 어긋난다. 여기서 생성해 SSOT 를 하나로 둔다.
+    두 축이 겹치는 키(passed·failed·cancelled 등)는 값이 모두 같아야 하며,
+    다르면 병합이 한쪽을 조용히 덮으므로 즉시 실패시킨다.
+    """
+    merged: dict[str, str] = {}
+    for status in RunStatus:
+        merged[status.value.lower()] = run_status_badge_tone(status)
+    for status in ModuleStatus:
+        key = status.value.lower()
+        tone = module_status_badge_tone(status)
+        existing = merged.get(key)
+        if existing is not None and existing != tone:
+            msg = (
+                f"톤 매핑 충돌: '{key}' 가 RunStatus 에서는 '{existing}', "
+                f"ModuleStatus 에서는 '{tone}' 입니다 — status_labels.py 의 "
+                "*_badge_tone() 을 먼저 일치시키세요."
+            )
+            raise SystemExit(msg)
+        merged[key] = tone
+    return merged
+
+
+def _ts_tone_map() -> str:
+    body = "\n".join(f'  "{key}": "{tone}",' for key, tone in build_tone_map().items())
+    return f"export const STATUS_TONE_MAP: Record<string, StatusTone> = {{\n{body}\n}};\n"
+
+
 def render_ts() -> str:
     _assert_palette_covers_tones()
     union = " | ".join(f'"{tone}"' for tone in STATUS_TONES)
@@ -94,6 +128,7 @@ def render_ts() -> str:
         BANNER_TS,
         f"export type StatusTone = {union};\n",
         f"export const STATUS_TONES: readonly StatusTone[] = [{tone_list}] as const;\n",
+        _ts_tone_map(),
         _ts_label_map("RUN_STATUS_LABELS", RUN_STATUS_LABELS),
         _ts_label_map("MODULE_STATUS_LABELS", MODULE_STATUS_LABELS),
         _ts_label_map("SUITE_STATUS_LABELS", SUITE_STATUS_LABELS),
