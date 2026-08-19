@@ -1136,8 +1136,7 @@ function createRunListItem(run) {
     } else if (isActive && run.current_module_name) {
         metaParts.push(`실행 중 · ${run.current_module_name}`);
     } else if (isModuleIssueStatus(status) && run.failed_module_name) {
-        const issueLabel = normalizeOutcomeStatus(status) === "error" ? "점검실패" : "이상징후";
-        metaParts.push(`${issueLabel} · ${run.failed_module_name}`);
+        metaParts.push(`${statusDisplayLabel(status)} · ${run.failed_module_name}`);
     }
     meta.textContent = metaParts.filter(Boolean).join(" · ");
     info.appendChild(meta);
