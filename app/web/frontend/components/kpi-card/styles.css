@@ -1,0 +1,82 @@
+/* 색은 전부 토큰(FG-002). 밴드는 기존 dash-stats 와 같은 4열 그리드를 유지해
+   넌스크롤 뷰포트 예산을 바꾸지 않는다. */
+.kpi-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+  gap: 1px;
+  border-radius: clamp(0.625rem, 1.2cqh, 1rem);
+  overflow: hidden;
+  background: var(--pl-border);
+}
+
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  background: var(--pl-surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+.kpi-card__label {
+  font-size: 0.6875rem;
+  color: var(--pl-text-muted);
+}
+
+.kpi-card__value {
+  font-size: clamp(1.125rem, 3cqh, 1.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--pl-text);
+}
+
+.kpi-card__unit {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--pl-text-muted);
+}
+
+.kpi-card__note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.625rem;
+  color: var(--pl-text-subtle);
+}
+
+.kpi-card__badge {
+  margin-left: 0.25rem;
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--st-pending-surface);
+  color: var(--st-pending-text);
+  font-size: 0.5625rem;
+  font-weight: 700;
+}
+
+/* 행동을 요구하는 카드만 톤으로 분리한다(설계 §3.7). */
+.kpi-card[data-tone="anomaly"] .kpi-card__label,
+.kpi-card[data-tone="anomaly"] .kpi-card__value,
+.kpi-card[data-tone="anomaly"] .kpi-card__note {
+  color: var(--st-anomaly-text);
+}
+
+.kpi-card[data-tone="anomaly"] {
+  background: var(--st-anomaly-surface);
+}
+
+/* 뷰포트 압축 — dashboard.js 의 syncKpiCompress() 가 붙이는 훅.
+   기존 .dash-stats__tile 규칙을 그대로 계승한다. */
+#dash-host-kpi[data-kpi-compress="true"] .kpi-card {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+#dash-host-kpi[data-kpi-compress="true"] .kpi-card__note {
+  display: none;
+}
