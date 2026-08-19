@@ -83,6 +83,22 @@ def suite_status_label(status: SuiteStatus) -> str:
     return SUITE_STATUS_LABELS.get(status, str(status))
 
 
+# 배지·점·막대의 색 축(SSOT). 프론트 토큰(tokens.generated.css)과
+# TS union(status.generated.ts)이 이 튜플에서 생성된다.
+# 순서는 생성물의 출력 순서이므로 임의로 바꾸지 않는다.
+STATUS_TONES: tuple[str, ...] = (
+    "passed",
+    "anomaly",
+    "error",
+    "running",
+    "waiting_input",
+    "blocked",
+    "skipped",
+    "cancelled",
+    "pending",
+)
+
+
 def run_status_badge_tone(status: RunStatus) -> str:
     if status == RunStatus.PASSED:
         return "passed"
