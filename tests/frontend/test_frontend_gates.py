@@ -16,7 +16,9 @@ def _write(root: Path, rel: str, text: str) -> None:
 
 
 def test_fg001_flags_external_script(tmp_path):
-    _write(tmp_path, "app/web/templates/x.html", '<script src="https://unpkg.com/htmx.org@2"></script>')
+    _write(
+        tmp_path, "app/web/templates/x.html", '<script src="https://unpkg.com/htmx.org@2"></script>'
+    )
     problems = check_fg001_no_cdn(tmp_path)
     assert len(problems) == 1
     assert "unpkg.com" in problems[0]
@@ -72,7 +74,11 @@ def test_fg002_flags_hex_in_frontend(tmp_path):
 
 def test_fg002_ignores_generated_tokens(tmp_path):
     """생성물은 팔레트 원본이므로 hex 를 담는 유일한 예외다."""
-    _write(tmp_path, "app/web/frontend/styles/tokens.generated.css", ":root { --st-passed-solid: #10b981; }")
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/tokens.generated.css",
+        ":root { --st-passed-solid: #10b981; }",
+    )
     assert check_fg002_no_hex(tmp_path) == []
 
 
@@ -84,19 +90,31 @@ def test_fg003_flags_hardcoded_korean_status_label(tmp_path):
 
 
 def test_fg003_allows_generated_module(tmp_path):
-    _write(tmp_path, "app/web/frontend/lib/status.generated.ts", 'export const X = { "error": "점검실패" };')
+    _write(
+        tmp_path,
+        "app/web/frontend/lib/status.generated.ts",
+        'export const X = { "error": "점검실패" };',
+    )
     assert check_fg003_status_source(tmp_path) == []
 
 
 def test_fg004_flags_oversized_file(tmp_path):
-    _write(tmp_path, "app/web/frontend/entries/big.ts", "\n".join(f"const x{i} = {i};" for i in range(401)))
+    _write(
+        tmp_path,
+        "app/web/frontend/entries/big.ts",
+        "\n".join(f"const x{i} = {i};" for i in range(401)),
+    )
     problems = check_fg004_file_size(tmp_path)
     assert len(problems) == 1
     assert "401" in problems[0]
 
 
 def test_fg004_allows_file_at_limit(tmp_path):
-    _write(tmp_path, "app/web/frontend/entries/ok.ts", "\n".join(f"const x{i} = {i};" for i in range(400)))
+    _write(
+        tmp_path,
+        "app/web/frontend/entries/ok.ts",
+        "\n".join(f"const x{i} = {i};" for i in range(400)),
+    )
     assert check_fg004_file_size(tmp_path) == []
 
 
@@ -123,7 +141,9 @@ def test_fg004_flags_oversized_file_not_on_allowlist(tmp_path):
 
 
 def test_fg005_flags_direct_static_reference(tmp_path):
-    _write(tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">')
+    _write(
+        tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'
+    )
     problems = check_fg005_no_static_ref(tmp_path)
     assert len(problems) == 1
     assert "app.css" in problems[0]
@@ -131,5 +151,9 @@ def test_fg005_flags_direct_static_reference(tmp_path):
 
 def test_fg005_allows_legacy_page_scripts(tmp_path):
     """P3 이관 전까지 페이지별 레거시 JS 는 허용한다(ALLOWLIST)."""
-    _write(tmp_path, "app/web/templates/x.html", '<script src="/static/dashboard.js?v=22" defer></script>')
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        '<script src="/static/dashboard.js?v=22" defer></script>',
+    )
     assert check_fg005_no_static_ref(tmp_path) == []

@@ -150,8 +150,7 @@ def check_fg004_file_size(root: Path = REPO_ROOT) -> list[str]:
         lines = len(path.read_text(encoding="utf-8").splitlines())
         if lines > MAX_FILE_LINES:
             problems.append(
-                f"[FG-004] {rel} 가 {lines}줄 (상한 {MAX_FILE_LINES}) — "
-                "책임 단위로 분리하세요."
+                f"[FG-004] {rel} 가 {lines}줄 (상한 {MAX_FILE_LINES}) — 책임 단위로 분리하세요."
             )
     return problems
 

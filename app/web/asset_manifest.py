@@ -24,10 +24,7 @@ class AssetManifest:
 
     def _load(self) -> dict[str, Any]:
         if not self._path.exists():
-            msg = (
-                f"Vite manifest 가 없습니다: {self._path}. "
-                "`npm run build` 를 먼저 실행하세요."
-            )
+            msg = f"Vite manifest 가 없습니다: {self._path}. `npm run build` 를 먼저 실행하세요."
             raise ManifestMissingError(msg)
         mtime = self._path.stat().st_mtime
         if self._mtime != mtime:
