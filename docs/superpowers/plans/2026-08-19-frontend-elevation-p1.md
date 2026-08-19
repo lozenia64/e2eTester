@@ -629,10 +629,7 @@ class AssetManifest:
 
     def _load(self) -> dict[str, Any]:
         if not self._path.exists():
-            msg = (
-                f"Vite manifest 가 없습니다: {self._path}. "
-                "`npm run build` 를 먼저 실행하세요."
-            )
+            msg = f"Vite manifest 가 없습니다: {self._path}. `npm run build` 를 먼저 실행하세요."
             raise ManifestMissingError(msg)
         mtime = self._path.stat().st_mtime
         if self._mtime != mtime:
@@ -809,7 +806,9 @@ def _write(root: Path, rel: str, text: str) -> None:
 
 
 def test_fg001_flags_external_script(tmp_path):
-    _write(tmp_path, "app/web/templates/x.html", '<script src="https://unpkg.com/htmx.org@2"></script>')
+    _write(
+        tmp_path, "app/web/templates/x.html", '<script src="https://unpkg.com/htmx.org@2"></script>'
+    )
     problems = check_fg001_no_cdn(tmp_path)
     assert len(problems) == 1
     assert "unpkg.com" in problems[0]
@@ -829,7 +828,11 @@ def test_fg002_flags_hex_in_frontend(tmp_path):
 
 def test_fg002_ignores_generated_tokens(tmp_path):
     """생성물은 팔레트 원본이므로 hex 를 담는 유일한 예외다."""
-    _write(tmp_path, "app/web/frontend/styles/tokens.generated.css", ":root { --st-passed-solid: #10b981; }")
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/tokens.generated.css",
+        ":root { --st-passed-solid: #10b981; }",
+    )
     assert check_fg002_no_hex(tmp_path) == []
 
 
@@ -841,24 +844,38 @@ def test_fg003_flags_hardcoded_korean_status_label(tmp_path):
 
 
 def test_fg003_allows_generated_module(tmp_path):
-    _write(tmp_path, "app/web/frontend/lib/status.generated.ts", 'export const X = { "error": "점검실패" };')
+    _write(
+        tmp_path,
+        "app/web/frontend/lib/status.generated.ts",
+        'export const X = { "error": "점검실패" };',
+    )
     assert check_fg003_status_source(tmp_path) == []
 
 
 def test_fg004_flags_oversized_file(tmp_path):
-    _write(tmp_path, "app/web/frontend/entries/big.ts", "\n".join(f"const x{i} = {i};" for i in range(401)))
+    _write(
+        tmp_path,
+        "app/web/frontend/entries/big.ts",
+        "\n".join(f"const x{i} = {i};" for i in range(401)),
+    )
     problems = check_fg004_file_size(tmp_path)
     assert len(problems) == 1
     assert "401" in problems[0]
 
 
 def test_fg004_allows_file_at_limit(tmp_path):
-    _write(tmp_path, "app/web/frontend/entries/ok.ts", "\n".join(f"const x{i} = {i};" for i in range(400)))
+    _write(
+        tmp_path,
+        "app/web/frontend/entries/ok.ts",
+        "\n".join(f"const x{i} = {i};" for i in range(400)),
+    )
     assert check_fg004_file_size(tmp_path) == []
 
 
 def test_fg005_flags_direct_static_reference(tmp_path):
-    _write(tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">')
+    _write(
+        tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'
+    )
     problems = check_fg005_no_static_ref(tmp_path)
     assert len(problems) == 1
     assert "app.css" in problems[0]
@@ -866,7 +883,11 @@ def test_fg005_flags_direct_static_reference(tmp_path):
 
 def test_fg005_allows_legacy_page_scripts(tmp_path):
     """P3 이관 전까지 페이지별 레거시 JS 는 허용한다(ALLOWLIST)."""
-    _write(tmp_path, "app/web/templates/x.html", '<script src="/static/dashboard.js?v=22" defer></script>')
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        '<script src="/static/dashboard.js?v=22" defer></script>',
+    )
     assert check_fg005_no_static_ref(tmp_path) == []
 ```
 
@@ -999,8 +1020,7 @@ def check_fg004_file_size(root: Path = REPO_ROOT) -> list[str]:
         lines = len(path.read_text(encoding="utf-8").splitlines())
         if lines > MAX_FILE_LINES:
             problems.append(
-                f"[FG-004] {rel} 가 {lines}줄 (상한 {MAX_FILE_LINES}) — "
-                "책임 단위로 분리하세요."
+                f"[FG-004] {rel} 가 {lines}줄 (상한 {MAX_FILE_LINES}) — 책임 단위로 분리하세요."
             )
     return problems
 
@@ -1285,7 +1305,7 @@ Expected: FAIL — `KeyError` 또는 `assert 'frontend_gates' in GATE_COMMANDS`
 
 `STANDARD_GATES` 리스트의 `"ruff_format",` 아래에 추가:
 
-```python
+```text
     "frontend_gates",
     "frontend_tokens",
     "typecheck_web",
