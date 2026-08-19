@@ -7,12 +7,18 @@
 from __future__ import annotations
 
 import re
+from itertools import chain
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 TEMPLATE_DIR = "app/web/templates"
 FRONTEND_DIR = "app/web/frontend"
+
+# 스캔에서 통째로 제외할 디렉터리 이름. node_modules 는 서드파티 소스라 우리
+# 규칙의 대상이 아니고(.css/.ts 가 하나만 들어와도 FG-002/004 가 오발화한다),
+# 점으로 시작하는 디렉터리는 도구 캐시(.vite 등)다.
+SKIP_DIRS = {"node_modules"}
 
 MAX_FILE_LINES = 400
 
@@ -80,19 +86,37 @@ def _rel(path: Path, root: Path) -> str:
     return str(path.relative_to(root)).replace("\\", "/")
 
 
+def _is_skipped(path: Path, base: Path) -> bool:
+    """node_modules · 점 디렉터리 아래의 파일인가."""
+    parts = path.relative_to(base).parts[:-1]  # 파일명 제외 = 디렉터리 성분만
+    return any(part in SKIP_DIRS or part.startswith(".") for part in parts)
+
+
 def _iter(root: Path, subdir: str, *suffixes: str):
     base = root / subdir
     if not base.exists():
         return
     for path in sorted(base.rglob("*")):
-        if path.is_file() and path.suffix in suffixes:
-            yield path
+        if not path.is_file() or path.suffix not in suffixes:
+            continue
+        if _is_skipped(path, base):
+            continue
+        yield path
+
+
+def _iter_component_markup(root: Path):
+    """컴포넌트가 자기 폴더에 두는 Jinja 매크로.
+
+    `app/web/templates/**.html` 만 훑던 시절엔 이 파일들이 어떤 게이트에도
+    걸리지 않았다 — macro.jinja 가 CDN·hex·/static 참조를 담아도 무사통과였다.
+    """
+    return _iter(root, FRONTEND_DIR, ".jinja")
 
 
 def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
     """FG-001: 템플릿에 외부 CDN script/link 금지(차트 라이브러리 예외 제외)."""
     problems: list[str] = []
-    for path in _iter(root, TEMPLATE_DIR, ".html"):
+    for path in chain(_iter(root, TEMPLATE_DIR, ".html"), _iter_component_markup(root)):
         rel = _rel(path, root)
         exceptions = FG001_EXCEPTIONS.get(rel, set())
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -109,7 +133,7 @@ def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
 def check_fg002_no_hex(root: Path = REPO_ROOT) -> list[str]:
     """FG-002: frontend/ 내 하드코딩 hex 금지(생성물 제외)."""
     problems: list[str] = []
-    for path in _iter(root, FRONTEND_DIR, ".css", ".ts"):
+    for path in _iter(root, FRONTEND_DIR, ".css", ".ts", ".jinja"):
         rel = _rel(path, root)
         if rel in GENERATED_FILES:
             continue
@@ -164,7 +188,7 @@ def check_fg004_file_size(root: Path = REPO_ROOT) -> list[str]:
 def check_fg005_no_static_ref(root: Path = REPO_ROOT) -> list[str]:
     """FG-005: static/ 직접 참조 금지(allowlist 제외). manifest 경유만."""
     problems: list[str] = []
-    for path in _iter(root, TEMPLATE_DIR, ".html"):
+    for path in chain(_iter(root, TEMPLATE_DIR, ".html"), _iter_component_markup(root)):
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for ref in _STATIC_REF.findall(line):
                 if ref in FG005_ALLOWLIST:

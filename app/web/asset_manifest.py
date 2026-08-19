@@ -60,3 +60,9 @@ _default_manifest = AssetManifest(
 
 asset_js = _default_manifest.js_url
 asset_css = _default_manifest.css_urls
+
+# Jinja 검색 경로 SSOT. `app/web/frontend` 가 함께 있어야 컴포넌트가 마크업을
+# 자기 폴더에 둘 수 있다 — {% import "components/status-badge/macro.jinja" %} 는
+# templates/ 하나만 검색하면 TemplateNotFound 로 죽는다.
+# 네 군데 Jinja2Templates() 호출부가 전부 이 상수를 쓴다(한 곳만 고쳐 어긋나는 걸 막는다).
+TEMPLATE_SEARCH_DIRS: list[str] = ["app/web/templates", "app/web/frontend"]

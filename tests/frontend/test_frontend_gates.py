@@ -179,3 +179,86 @@ def test_fg005_allows_legacy_page_scripts(tmp_path):
         '<script src="/static/dashboard.js?v=22" defer></script>',
     )
     assert check_fg005_no_static_ref(tmp_path) == []
+
+
+# ── 컴포넌트 폴더의 .jinja 매크로도 스캔 대상이다 ────────────────────────────
+# templates/**.html 만 훑던 시절엔 macro.jinja 가 CDN·hex·/static 을 담아도
+# 어떤 게이트에도 걸리지 않았다.
+
+MACRO_REL = "app/web/frontend/components/status-badge/macro.jinja"
+
+
+def test_fg001_flags_external_script_in_component_jinja(tmp_path):
+    _write(tmp_path, MACRO_REL, '<script src="https://unpkg.com/htmx.org@2"></script>')
+    problems = check_fg001_no_cdn(tmp_path)
+    assert len(problems) == 1
+    assert "unpkg.com" in problems[0]
+    assert "macro.jinja" in problems[0]
+
+
+def test_fg002_flags_hex_in_component_jinja(tmp_path):
+    _write(tmp_path, MACRO_REL, '<span style="color: #ff0000">x</span>')
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#ff0000" in problems[0]
+    assert "macro.jinja" in problems[0]
+
+
+def test_fg005_flags_static_ref_in_component_jinja(tmp_path):
+    _write(tmp_path, MACRO_REL, '<link rel="stylesheet" href="/static/badge.css">')
+    problems = check_fg005_no_static_ref(tmp_path)
+    assert len(problems) == 1
+    assert "badge.css" in problems[0]
+    assert "macro.jinja" in problems[0]
+
+
+def test_component_jinja_without_violations_passes(tmp_path):
+    """실제 macro.jinja 형태 — 새로 스캔 대상이 됐다고 오발화하면 안 된다."""
+    _write(
+        tmp_path,
+        MACRO_REL,
+        '{% macro status_badge(status, label, size="md") -%}\n'
+        '<span class="status-badge" data-tone="{{ status }}" data-size="{{ size }}">'
+        "{{ label }}</span>\n"
+        "{%- endmacro %}",
+    )
+    assert check_fg001_no_cdn(tmp_path) == []
+    assert check_fg002_no_hex(tmp_path) == []
+    assert check_fg005_no_static_ref(tmp_path) == []
+
+
+# ── node_modules / 점 디렉터리는 스캔하지 않는다 ─────────────────────────────
+
+
+def test_node_modules_is_not_scanned(tmp_path):
+    """서드파티 소스는 우리 규칙의 대상이 아니다 — .css/.ts 가 들어와도 오발화 금지."""
+    _write(tmp_path, "app/web/frontend/node_modules/some-pkg/dist/x.css", ".x { color: #ff0000; }")
+    _write(tmp_path, "app/web/frontend/node_modules/some-pkg/dist/x.ts", 'const l = "점검실패";')
+    _write(
+        tmp_path,
+        "app/web/frontend/node_modules/some-pkg/dist/big.ts",
+        "\n".join(f"const x{i} = {i};" for i in range(401)),
+    )
+    _write(
+        tmp_path,
+        "app/web/frontend/node_modules/some-pkg/dist/m.jinja",
+        '<script src="https://unpkg.com/whatever@1"></script>',
+    )
+    assert check_fg002_no_hex(tmp_path) == []
+    assert check_fg003_status_source(tmp_path) == []
+    assert check_fg004_file_size(tmp_path) == []
+    assert check_fg001_no_cdn(tmp_path) == []
+
+
+def test_dot_directories_are_not_scanned(tmp_path):
+    """도구 캐시(.vite 등)도 스캔 대상이 아니다."""
+    _write(tmp_path, "app/web/frontend/.vite/cache/x.css", ".x { color: #ff0000; }")
+    assert check_fg002_no_hex(tmp_path) == []
+
+
+def test_sibling_of_node_modules_is_still_scanned(tmp_path):
+    """디렉터리 이름이 정확히 node_modules 일 때만 건너뛴다(접두 매치 아님)."""
+    _write(tmp_path, "app/web/frontend/node_modules_helpers/x.css", ".x { color: #ff0000; }")
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#ff0000" in problems[0]
