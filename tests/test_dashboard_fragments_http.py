@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_daily_queries, get_run_service
+from app.api.dependencies import get_daily_queries, get_daily_summary_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
@@ -39,6 +39,22 @@ class FakeDailyDashboardQueries:
         allowed = set(allowed_system_codes)
         systems = [s for s in self._data["systems"] if s["system_code"] in allowed]
         return {**self._data, "systems": systems}
+
+
+class FakeDailySummaryQueries:
+    """DailySummaryQueries 대체 — kpi 프래그먼트는 totals/date_label/generated_at/attention만
+    쓰므로(zone_a_kpi.html 참고) 기존 dashboard_data 를 그대로 돌려주면 충분하다."""
+
+    def __init__(self, data: dict) -> None:
+        self._data = data
+
+    async def get_daily_summary(
+        self,
+        *,
+        user_id: str | None = None,
+        allowed_system_codes: list[str] | None = None,
+    ) -> dict:
+        return self._data
 
 
 class FakeRunService:
@@ -115,6 +131,9 @@ def _build_app(
     app.include_router(daily_router)
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_daily_queries] = lambda: FakeDailyDashboardQueries(dashboard_data)
+    app.dependency_overrides[get_daily_summary_queries] = lambda: FakeDailySummaryQueries(
+        dashboard_data
+    )
     app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return app
 

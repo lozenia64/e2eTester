@@ -58,6 +58,7 @@ from app.execution.composition import (
 )
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
+from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
 from app.platform.db import DEFAULT_DB_PATH
 from app.platform.eventing.bus import RunFinished
 from app.platform.eventing.composition import EventingContainer, compose_event_bus
@@ -270,6 +271,12 @@ class AppContainer:
         self.insights.insights_service = services.insights_service
         self.insights.ops_service = services.ops_service
 
+        self.insights.daily_summary_queries = DailySummaryQueries(
+            self.insights.daily_queries,
+            self.healing.healing_service,
+            self.insights.stats_service,
+        )
+
     def apply_to_app_state(self, app: FastAPI) -> None:
         app.state.settings = self.settings
         app.state.user_service = self.identity.user_service
@@ -279,6 +286,7 @@ class AppContainer:
         app.state.run_service = self.run.services.run_service
         app.state.run_queries = self.run.run_queries
         app.state.daily_queries = self.insights.daily_queries
+        app.state.daily_summary_queries = self.insights.daily_summary_queries
         app.state.admin_dashboard_queries = self.insights.admin_dashboard_queries
         app.state.suite_summary_query = self.run.repos.suite_summary_query
         app.state.suite_service = self.suite.services.suite_service

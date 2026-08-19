@@ -15,7 +15,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api.dependencies import get_daily_queries, get_run_service
+from app.api.dependencies import get_daily_queries, get_daily_summary_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
@@ -24,6 +24,7 @@ from app.contexts.insights.application.daily_dashboard import build_daily_dashbo
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import (
     FakeDailyDashboardQueries,
+    FakeDailySummaryQueries,
     FakeRunService,
     _build_realistic_six_system_dashboard,
 )
@@ -148,6 +149,9 @@ def _build_dashboard_test_app(
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_daily_queries] = lambda: FakeDailyDashboardQueries(dashboard_data)
+    app.dependency_overrides[get_daily_summary_queries] = lambda: FakeDailySummaryQueries(
+        dashboard_data
+    )
     app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return app
 
