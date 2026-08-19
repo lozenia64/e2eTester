@@ -1255,7 +1255,7 @@ a.run-chip:hover {
     opacity: 0.85;
 }
 
-/* 상태 톤 — 상단 상태 배지(STATUS_BADGE_CLASSES)와 같은 팔레트 */
+/* 상태 톤 — 상단 상태 배지(.status-badge)와 같은 팔레트 */
 .run-chip--pending { background: var(--c-gray-100); color: var(--c-gray-600); box-shadow: inset 0 0 0 1px rgb(107 114 128 / 0.18); }
 .run-chip--running { background: var(--c-blue-100); color: var(--c-blue-700); box-shadow: inset 0 0 0 1px rgb(59 130 246 / 0.25); }
 .run-chip--waiting { background: var(--st-anomaly-surface); color: var(--st-anomaly-text); box-shadow: inset 0 0 0 1px rgb(245 158 11 / 0.35); }

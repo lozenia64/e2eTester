@@ -123,12 +123,18 @@ def check_fg002_no_hex(root: Path = REPO_ROOT) -> list[str]:
 
 
 def check_fg003_status_source(root: Path = REPO_ROOT) -> list[str]:
-    """FG-003: 상태 라벨은 status.generated.ts 경유만."""
+    """FG-003: 상태 라벨은 status.generated.ts 경유만.
+
+    `*.test.ts` 는 예외다 — 컴포넌트가 실제로 올바른 한국어 라벨을 렌더하는지
+    검증하려면 단언문에 기대값 리터럴이 필요하다(예: `expect(statusLabel("error")).toBe("점검실패")`).
+    이 규칙이 막으려는 건 컴포넌트/엔트리 소스가 라벨을 하드코딩하는 것이지,
+    테스트가 생성된 라벨을 검증하는 것이 아니다.
+    """
     labels = ("정상", "이상징후", "점검실패", "입력 대기", "실행 중", "차단", "제외", "취소")
     problems: list[str] = []
     for path in _iter(root, FRONTEND_DIR, ".ts"):
         rel = _rel(path, root)
-        if rel in GENERATED_FILES:
+        if rel in GENERATED_FILES or rel.endswith(".test.ts"):
             continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for label in labels:

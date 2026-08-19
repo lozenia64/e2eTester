@@ -98,6 +98,28 @@ def test_fg003_allows_generated_module(tmp_path):
     assert check_fg003_status_source(tmp_path) == []
 
 
+def test_fg003_allows_literal_labels_in_test_files(tmp_path):
+    """*.test.ts 는 기대값 단언에 라벨 리터럴이 필요하므로 예외다."""
+    _write(
+        tmp_path,
+        "app/web/frontend/components/status-badge/index.test.ts",
+        'expect(statusLabel("error")).toBe("점검실패");',
+    )
+    assert check_fg003_status_source(tmp_path) == []
+
+
+def test_fg003_still_flags_non_test_file_with_test_like_name(tmp_path):
+    """`.test.ts` 접미사가 아닌 파일은 여전히 걸린다(접두 문자열 매치 아님)."""
+    _write(
+        tmp_path,
+        "app/web/frontend/components/status-badge/index.testing.ts",
+        'const label = "점검실패";',
+    )
+    problems = check_fg003_status_source(tmp_path)
+    assert len(problems) == 1
+    assert "점검실패" in problems[0]
+
+
 def test_fg004_flags_oversized_file(tmp_path):
     _write(
         tmp_path,
