@@ -19,7 +19,7 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 
 | Tier | 게이트 |
 | --- | --- |
-| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency` |
+| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web` |
 | 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
 | 2 | `coverage` (= `pytest --cov`, 바닥선 57%) |
 | 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
@@ -39,6 +39,21 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 | AG-007 | QueryPort 반환에 Run/Suite 엔티티 금지 |
 | AG-008 | 서비스에서 run/suite 필드 직접 대입 금지 |
 | AG-009 | contexts/api 에서 실행 평면 import 금지 |
+
+## 프론트엔드 게이트 요약
+
+SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_frontend_tokens.py`.
+
+| 규칙 | 내용 |
+| --- | --- |
+| FG-001 | 템플릿에 외부 CDN `<script>`/`<link>` 금지 |
+| FG-002 | `app/web/frontend/` 내 하드코딩 hex 금지 (생성물 제외) |
+| FG-003 | 상태 라벨은 `lib/status.generated.ts` 경유만 |
+| FG-004 | 엔트리·컴포넌트 파일 400줄 상한 |
+| FG-005 | 템플릿의 `/static/` 직접 참조 금지 (allowlist 제외) |
+
+`frontend_tokens` 는 `status_labels.py` 에서 토큰·타입을 재생성해 커밋본과
+diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것을 막는다.
 
 ## GitHub Actions
 
