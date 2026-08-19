@@ -31,6 +31,7 @@ from app.contexts.healing.models import (
 from app.contexts.healing.patch_builder import apply_replacement, build_patch_drafts
 from app.core.logging import get_logger
 from app.core.run_models import Run, RunModule
+from app.core.schedule_time import schedule_day_label
 from app.core.system_models import ModuleDefinition
 
 if TYPE_CHECKING:
@@ -215,7 +216,12 @@ class HealingService:
     async def metrics(self, *, allowed_system_codes: list[str] | None = None) -> dict[str, Any]:
         events = self._scoped(await self._event_store.list(), allowed_system_codes)
         patches = self._scoped(await self._patch_store.list(), allowed_system_codes)
-        payload = build_healing_metrics(events, patches, now=datetime.now(UTC))
+        payload = build_healing_metrics(
+            events,
+            patches,
+            now=datetime.now(UTC),
+            day_label=schedule_day_label,
+        )
         payload["by_system"] = {
             code: {**row, "system_name": self._system_name(code)}
             for code, row in payload["by_system"].items()
