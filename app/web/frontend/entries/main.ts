@@ -1,5 +1,9 @@
 // 전 페이지 공용 엔트리. CSS 번들 + htmx/Alpine self-host.
 // 외부 CDN 을 대체한다(FG-001).
+// Pretendard 는 Tailwind 파이프라인(base.css) 밖의 독립 CSS 모듈로 임포트한다.
+// base.css 안에서 @import 하면 패키지 CSS 의 상대 url(./woff2-dynamic-subset/*.woff2)
+// 가 rebase·방출되지 않아 @font-face 가 전부 404 난다.
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "../styles/base.css";
 import "../components/status-badge/styles.css";
 
