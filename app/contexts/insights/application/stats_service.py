@@ -198,9 +198,13 @@ class StatsService:
         stats = await self.get_usage_stats(from_dt, to_dt)
 
         total_seconds = sum(s.manual_seconds_saved for s in stats.by_system)
-        my_seconds = next(
-            (u.manual_seconds_saved for u in stats.by_user if u.user_id == user_id),
-            0,
+        my_seconds = (
+            next(
+                (u.manual_seconds_saved for u in stats.by_user if u.user_id == user_id),
+                0,
+            )
+            if user_id is not None
+            else 0
         )
         module_count = sum(len(s.modules) for s in self._registry.list_systems())
 

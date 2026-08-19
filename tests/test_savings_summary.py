@@ -160,6 +160,39 @@ async def test_unknown_user_gets_zero_my_seconds():
 
 
 @pytest.mark.asyncio
+async def test_none_user_id_gets_zero_my_seconds_even_with_system_bucket():
+    """user_id=None 호출은 by_user 의 시스템 귀속(user_id=None) 버킷과 매칭돼선 안 된다.
+
+    get_usage_stats 는 created_by_user_id 가 없는 스케줄/시스템 트리거 실행을
+    UserUsageStat(user_id=None, ...) 버킷으로 집계한다(total_users 계산이 이를
+    None 으로 명시적으로 제외하는 것과 동일한 전제). user_id=None 으로
+    get_savings_summary 를 호출했을 때 `u.user_id == user_id` 비교가
+    `None == None` 으로 그 버킷과 우연히 일치해 그 몫을 "내 몫"으로 반환하면 안 된다.
+    """
+    stats = _usage_stats().model_copy(
+        update={
+            "by_user": [
+                *_usage_stats().by_user,
+                UserUsageStat(
+                    user_id=None,
+                    user_name=None,
+                    email=None,
+                    total_runs=1,
+                    total_modules_passed=1,
+                    total_modules_failed=0,
+                    total_duration_ms=1000,
+                    manual_seconds_saved=999,
+                    by_system=[],
+                ),
+            ]
+        }
+    )
+    service = _service_with_usage(stats)
+    summary = await service.get_savings_summary(from_dt=FROM_DT, to_dt=TO_DT, user_id=None)
+    assert summary.my_seconds == 0
+
+
+@pytest.mark.asyncio
 async def test_returned_summary_drops_the_user_list():
     """by_user 를 받아 계산하되 응답에는 남기지 않는다."""
     service = _service_with_usage(_usage_stats())
