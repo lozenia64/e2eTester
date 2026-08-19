@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "./tokens.generated.css";
+@import "./app.css";
+@import "./dashboard.css";

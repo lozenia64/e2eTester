@@ -89,3 +89,7 @@ desktop.ini
 # 무시하는 쪽: 아래 도구별 로컬 세션·산출물 디렉터리.
 .claude/
 .superpowers/
+
+# Vite 빌드 산출물
+app/web/static/dist/
+node_modules/
