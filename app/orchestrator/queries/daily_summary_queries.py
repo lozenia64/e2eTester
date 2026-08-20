@@ -57,4 +57,6 @@ class DailySummaryQueries:
         summary["date_label"] = dashboard["date_label"]
         summary["generated_at"] = dashboard["generated_at"]
         summary["attention"] = dashboard["attention"]
+        # 상황판(P3-2)이 매트릭스를 그리는 데 쓴다. PII 없음(시스템·모듈 메타뿐).
+        summary["systems"] = dashboard["systems"]
         return summary
