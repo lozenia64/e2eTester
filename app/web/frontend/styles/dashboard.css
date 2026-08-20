@@ -95,12 +95,6 @@ body:has(.dash) main > div {
   font-size: max(1rem, 1rem);
 }
 
-#dash-host-kpi[data-kpi-compress="true"] .dash-stats__tile {
-  min-height: 44px;
-  padding-top: 0.35rem;
-  padding-bottom: 0.35rem;
-}
-
 .dash-host-matrix {
   flex: 1 1 auto;
   min-height: 0;
@@ -112,10 +106,6 @@ body:has(.dash) main > div {
 .dash-host-matrix > * {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-.dash-kpi__value {
-  font-variant-numeric: tabular-nums;
 }
 
 /* ── Zone A — Hero ── */
@@ -145,19 +135,6 @@ body:has(.dash) main > div {
   gap: 0.35rem;
 }
 
-.dash-hero__rate-block {
-  text-align: right;
-}
-
-.dash-hero__rate-label {
-  display: block;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--pl-text-muted);
-}
-
 .dash-hero__title {
   margin: 0;
   font-size: max(1rem, clamp(1rem, 3cqh, 2rem));
@@ -173,35 +150,6 @@ body:has(.dash) main > div {
   font-size: clamp(0.65rem, 1.4cqh, 0.8rem);
   font-weight: 500;
   color: var(--pl-text-muted);
-}
-
-.dash-hero__summary {
-  margin: 0.35rem 0 0;
-  font-size: max(0.75rem, clamp(0.7rem, 1.4cqh, 0.875rem));
-  font-weight: 600;
-  color: var(--pl-text-muted);
-}
-
-.dash-hero__rate-wrap {
-  display: flex;
-  align-items: baseline;
-  line-height: 1;
-}
-
-.dash-hero__rate {
-  font-size: clamp(2.5rem, 6cqh, 5rem);
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  background: linear-gradient(135deg, var(--pl-text) 30%, var(--pl-text-muted));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.dash-hero__pct {
-  font-size: clamp(1rem, 2.5cqh, 2rem);
-  font-weight: 600;
-  color: var(--pl-text-subtle);
 }
 
 .dash-hero__actions {
@@ -250,59 +198,6 @@ body:has(.dash) main > div {
 
 .dash-htmx-indicator.htmx-request {
   opacity: 1;
-}
-
-/* ── Zone B — Stats strip ── */
-.dash-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  width: 100%;
-  min-width: 0;
-  gap: 1px;
-  border-radius: clamp(0.625rem, 1.2cqh, 1rem);
-  overflow: hidden;
-  background: var(--pl-border);
-}
-
-.dash-stats__tile {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-  min-height: 56px;
-  padding: clamp(0.35rem, 1cqh, 1rem) clamp(0.35rem, 1.5cqi, 0.75rem);
-  background: var(--pl-surface);
-}
-
-.dash-stats__value {
-  font-size: max(1.25rem, clamp(1.25rem, 2.5cqh, 2rem));
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.dash-stats__tile[data-tone="anomaly"] .dash-stats__value { color: var(--st-anomaly-solid); }
-.dash-stats__tile[data-tone="error"] .dash-stats__value { color: var(--st-error-solid); }
-.dash-stats__tile[data-tone="running"] .dash-stats__value { color: var(--st-running-solid); }
-.dash-stats__tile[data-tone="not_inspected"] .dash-stats__value { color: var(--st-pending-solid); }
-
-.dash-stats__label {
-  font-size: max(0.75rem, clamp(0.625rem, 1.2cqh, 0.8125rem));
-  font-weight: 700;
-  color: var(--pl-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-@media (max-width: 900px) {
-  .dash-stats__value {
-    font-size: max(1rem, clamp(1rem, 2cqh, 1.5rem));
-  }
-
-  .dash-stats__label {
-    font-size: 0.6875rem;
-  }
 }
 
 /* ── Attention strip ── */
@@ -775,10 +670,6 @@ body:has(.dash) main > div {
   padding: 0.25rem 0.5rem;
 }
 
-.dash:has(.dash__systems[data-density="micro"]) .dash-hero__summary {
-  display: none;
-}
-
 .dash__systems[data-density="micro"] .dash-sys-row__cta {
   font-size: 0;
 }
@@ -786,19 +677,6 @@ body:has(.dash) main > div {
 .dash__systems[data-density="micro"] .dash-sys-row__cta::after {
   content: "점검";
   font-size: 0.75rem;
-}
-
-.dash:has(.dash__systems[data-density="micro"]) .dash-hero__rate {
-  font-size: clamp(1.75rem, 4cqh, 2.5rem);
-}
-
-.dash:has(.dash__systems[data-density="micro"]) .dash-stats__tile {
-  padding: 0.35rem 0.5rem;
-  min-height: 44px;
-}
-
-.dash:has(.dash__systems[data-density="micro"]) .dash-stats__value {
-  font-size: clamp(1rem, 2cqh, 1.25rem);
 }
 
 /* ── Mobile card internal stack ── */
@@ -815,9 +693,6 @@ body:has(.dash) main > div {
     width: 100%;
   }
 
-  .dash-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 
 /* ── Error banner ── */

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SystemUsageStat(BaseModel):
@@ -45,3 +45,26 @@ class ModuleSettings(BaseModel):
     module_id: str
     estimated_manual_seconds: int
     updated_at: datetime
+
+
+class SavingsSummary(BaseModel):
+    """절감 시간 요약(비관리자 노출용).
+
+    사용자별 분해를 담지 않는다 — ``UserUsageStat`` 은 이름·이메일을 포함하므로
+    전직원에게 열면 "누가 얼마나 돌렸나"가 노출된다. 전사 합계와 본인 기여분만 담는다.
+    """
+
+    total_seconds: int
+    my_seconds: int
+    run_count: int
+    module_count: int
+    basis_updated_at: datetime | None
+    estimated: bool
+    note: str
+
+    @model_validator(mode="after")
+    def _estimated_requires_note(self) -> SavingsSummary:
+        if self.estimated and not self.note.strip():
+            msg = "estimated=True 인 지표는 산출 근거(note)가 있어야 한다."
+            raise ValueError(msg)
+        return self

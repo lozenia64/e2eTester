@@ -11,14 +11,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_daily_queries, get_run_service
+from app.api.dependencies import get_daily_queries, get_daily_summary_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
-from app.contexts.insights.application.daily_dashboard import build_daily_dashboard
+from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
 from app.core.enums import ModuleStatus
 from app.registry.loader import ModuleRegistry
-from tests.test_daily_dashboard import _run
+from tests.conftest import make_run_summary_row, make_status_row
 
 GEN_AT = datetime(2026, 8, 15, 5, 0, tzinfo=UTC)
 
@@ -41,6 +41,72 @@ class FakeDailyDashboardQueries:
         return {**self._data, "systems": systems}
 
 
+class FakeDailySummaryQueries:
+    """DailySummaryQueries 대체 — kpi 프래그먼트는 totals/date_label/generated_at/attention/
+    cards 를 쓴다(zone_a_kpi.html 참고). totals 는 넘겨받은 dashboard_data 를 그대로 쓰고,
+    healing/stats 컨텍스트가 없는 이 fake 에서는 나머지 카드 3장을 카드 계약(key·label·
+    value·unit·period·note·tone·href·estimated)에 맞는 고정값으로 채운다."""
+
+    def __init__(self, data: dict) -> None:
+        self._data = data
+
+    async def get_daily_summary(
+        self,
+        *,
+        user_id: str | None = None,
+        allowed_system_codes: list[str] | None = None,
+        is_admin: bool = False,
+    ) -> dict:
+        totals = self._data["totals"]
+        cards = [
+            {
+                "key": "pass_rate",
+                "label": "통과율",
+                "value": totals["pass_rate"],
+                "unit": "%",
+                "period": "오늘",
+                "note": f"{totals['passed']}/{totals['modules']} 모듈 정상",
+                "tone": "passed",
+                "href": "",
+                "estimated": False,
+            },
+            {
+                "key": "self_healed",
+                "label": "스스로 복구",
+                "value": 3,
+                "unit": "건",
+                "period": "오늘",
+                "note": "이번 달 누적 12건",
+                "tone": "running",
+                "href": "/self-healing",
+                "estimated": False,
+            },
+            {
+                "key": "pending_patches",
+                "label": "내 승인 대기",
+                "value": 2,
+                "unit": "건",
+                "period": "패치",
+                "note": "자동 생성된 수정 diff 검토",
+                "tone": "anomaly",
+                "href": "/self-healing#patches",
+                "estimated": False,
+            },
+            {
+                "key": "savings",
+                "label": "이번 달 절감",
+                "value": 120,
+                "unit": "h",
+                "period": "이번 달",
+                "note": "480회 · 12개 모듈 × 수동 추정치 (기준 8/1)",
+                "tone": "passed",
+                "href": "/admin/modules",
+                "estimated": True,
+            },
+        ]
+        return {**self._data, "cards": cards}
+
+
 class FakeRunService:
     def __init__(self, registry: ModuleRegistry) -> None:
         self._registry = registry
@@ -51,8 +117,9 @@ class FakeRunService:
 
 def _build_all_not_inspected_dashboard(registry: ModuleRegistry) -> dict:
     systems = registry.list_systems()
-    return build_daily_dashboard(
+    return build_daily_dashboard_from_projection(
         systems,
+        [],
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
@@ -65,7 +132,8 @@ def _build_realistic_six_system_dashboard() -> dict:
     systems = registry.list_systems()
     assert len(systems) >= 6
 
-    runs = []
+    status_rows = []
+    run_summaries = []
     for sys in systems:
         code = sys.system_code
         if code == "hwtc":
@@ -85,11 +153,19 @@ def _build_realistic_six_system_dashboard() -> dict:
                 statuses[m.module_id] = ModuleStatus.PASSED
         else:
             statuses = {m.module_id: ModuleStatus.PASSED for m in sys.modules}
-        runs.append(_run(code, statuses, at=GEN_AT))
+        run_id = f"run_{code}"
+        status_rows.extend(
+            make_status_row(system_code=code, module_id=mid, last_status=st, last_run_id=run_id)
+            for mid, st in statuses.items()
+        )
+        run_summaries.append(
+            make_run_summary_row(system_code=code, run_id=run_id, requested_at=GEN_AT)
+        )
 
-    return build_daily_dashboard(
+    return build_daily_dashboard_from_projection(
         systems,
-        runs,
+        status_rows,
+        run_summaries,
         generated_at=GEN_AT,
         date_label="2026-08-15",
     )
@@ -105,6 +181,9 @@ def _build_app(
     app.include_router(daily_router)
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_daily_queries] = lambda: FakeDailyDashboardQueries(dashboard_data)
+    app.dependency_overrides[get_daily_summary_queries] = lambda: FakeDailySummaryQueries(
+        dashboard_data
+    )
     app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return app
 
@@ -154,8 +233,11 @@ def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/kpi")
     assert response.status_code == 200
     html = response.text
-    assert "오늘의 점검 현황" in html
-    assert "dash-hero__rate" in html
+    # _build_realistic_six_system_dashboard 는 hom 시스템에 ERROR 를 심어 두므로
+    # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기 참고).
+    assert "점검실패" in html
+    assert "우선 확인이 필요합니다" in html
+    assert "kpi-band" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-002")
@@ -176,17 +258,15 @@ def test_kpi_fragment_renders_empty_day_summary(
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/kpi").text
-    assert "dash-hero__rate-label" in html
     assert "통과율" in html
-    assert "dash-hero__summary" in html
     assert "아직 점검이 시작되지 않았습니다" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-004")
 def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/kpi").text
-    assert html.count('class="dash-stats__tile"') == 4
-    assert "이상징후" in html
+    assert html.count('class="kpi-card"') == 4
+    assert "통과율" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-007")
@@ -220,10 +300,20 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
     """자동 복구된 모듈은 일간 현황 매트릭스 셀에 ⟳ 불안정 표식을 노출해야 한다."""
     system = registry.list_systems()[0]
     module_id = system.modules[0].module_id
-    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
-    run.modules[0].recovered = True
-    run.modules[0].retry_count = 2
-    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    data = build_daily_dashboard_from_projection(
+        [system],
+        [
+            make_status_row(
+                system_code=system.system_code,
+                module_id=module_id,
+                last_status=ModuleStatus.PASSED,
+                recovered=True,
+            )
+        ],
+        [make_run_summary_row(system_code=system.system_code)],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+    )
     user = User(
         user_id="u_recovered",
         email="recovered@test.local",
@@ -243,8 +333,19 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
 def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegistry) -> None:
     system = registry.list_systems()[0]
     module_id = system.modules[0].module_id
-    run = _run(system.system_code, {module_id: ModuleStatus.PASSED}, at=GEN_AT)
-    data = build_daily_dashboard([system], [run], generated_at=GEN_AT, date_label="2026-08-15")
+    data = build_daily_dashboard_from_projection(
+        [system],
+        [
+            make_status_row(
+                system_code=system.system_code,
+                module_id=module_id,
+                last_status=ModuleStatus.PASSED,
+            )
+        ],
+        [make_run_summary_row(system_code=system.system_code)],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+    )
     user = User(
         user_id="u_clean",
         email="clean@test.local",

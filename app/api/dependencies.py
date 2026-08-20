@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.core.settings import E2ESettings
     from app.execution.run_queue import RunExecutionQueue
     from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries, RunQueries
+    from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
     from app.registry.loader import ModuleRegistry
 
 
@@ -45,6 +46,11 @@ def get_run_queries(connection: HTTPConnection) -> RunQueries:
 def get_daily_queries(connection: HTTPConnection) -> DailyDashboardQueries:
     """일간 점검 현황 질의 핸들러(읽기 전용)."""
     return connection.app.state.daily_queries
+
+
+def get_daily_summary_queries(connection: HTTPConnection) -> DailySummaryQueries:
+    """KPI 요약 질의 핸들러(읽기 전용)."""
+    return connection.app.state.daily_summary_queries
 
 
 def get_admin_dashboard_queries(connection: HTTPConnection) -> AdminDashboardQueries:

@@ -68,6 +68,14 @@ def schedule_today_start_utc() -> datetime:
     return today_start_local.astimezone(UTC)
 
 
+def schedule_month_start_utc() -> datetime:
+    """스케줄 타임존 기준 '이번 달' 1일 00:00:00 을 UTC 로 반환한다."""
+    tz, _ = _resolve_timezone()
+    now_local = datetime.now(tz)
+    month_start_local = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return month_start_local.astimezone(UTC)
+
+
 def schedule_today_label() -> str:
     """스케줄 타임존 기준 '오늘' 날짜 라벨(YYYY-MM-DD)."""
     tz, _ = _resolve_timezone()

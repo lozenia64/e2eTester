@@ -425,6 +425,7 @@ e2eTester/
 - `POST /api/healing/patches/{patch_id}/reject`
 - `GET /api/healing/patches/{patch_id}/download`
 - `GET /api/dashboard/daily`
+- `GET /api/dashboard/daily/summary`
 - `GET /api/dashboard/daily/fragments/{zone}`
 - `GET /api/dashboard/daily/fragments/system/{system_code}/panel`
 - `GET /api/runs`

@@ -14,16 +14,18 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_daily_queries, get_run_service
+from app.api.dependencies import get_daily_queries, get_daily_summary_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
-from app.contexts.insights.application.daily_dashboard import build_daily_dashboard
+from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import (
     FakeDailyDashboardQueries,
+    FakeDailySummaryQueries,
     FakeRunService,
     _build_realistic_six_system_dashboard,
 )
@@ -148,6 +150,9 @@ def _build_dashboard_test_app(
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_daily_queries] = lambda: FakeDailyDashboardQueries(dashboard_data)
+    app.dependency_overrides[get_daily_summary_queries] = lambda: FakeDailySummaryQueries(
+        dashboard_data
+    )
     app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return app
 
@@ -208,8 +213,9 @@ def empty_day_live_server(
     dashboard_user: User,
 ) -> str:
     """All-not-inspected payload for HF-1 summary AC."""
-    data = build_daily_dashboard(
+    data = build_daily_dashboard_from_projection(
         registry.list_systems(),
+        [],
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
@@ -316,12 +322,16 @@ def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
     page.wait_for_selector(".dash-hero__title")
     title = page.locator(".dash-hero__title")
     assert title.is_visible()
-    assert title.inner_text() == "오늘의 점검 현황"
-    label = page.locator(".dash-hero__rate-label")
-    assert label.is_visible()
-    assert label.inner_text() == "통과율"
+    # _build_realistic_six_system_dashboard 는 hom 시스템에 ERROR 를 심어 두므로
+    # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기, 설계 D2 로
+    # 통과율 큰 숫자는 사라지고 밴드 1번 칸으로 옮겨졌다).
+    title_text = title.inner_text()
+    assert "점검실패" in title_text and "우선 확인이 필요합니다" in title_text
     box = title.bounding_box()
     assert box is not None and box["height"] >= 16 and box["width"] >= 120
+    first_card = page.locator(".kpi-card").first
+    assert first_card.is_visible()
+    assert "통과율" in first_card.locator(".kpi-card__label").inner_text()
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-002")
@@ -471,8 +481,9 @@ def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
     page.wait_for_selector(".dash-hero__title")
     rect = _rect_in_container(page, ".dash-hero__title")
     assert rect and rect["width"] >= 120 and rect["height"] >= 16 and rect["inBox"]
-    assert "아직 점검이 시작되지 않았습니다" in page.locator(".dash-hero__summary").inner_text()
-    assert page.locator(".dash-hero__rate-label").is_visible()
+    # 설계 D2 이후로는 상태 문장이 .dash-hero__title 하나에 담긴다(별도 __summary 없음).
+    assert "아직 점검이 시작되지 않았습니다" in page.locator(".dash-hero__title").inner_text()
+    assert page.locator(".kpi-card").first.is_visible()
 
 
 @pytest.mark.spec("SPEC-UI-006", "AC-002")
@@ -495,14 +506,14 @@ def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
 def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
-    page.wait_for_selector("#dash-zone-stats .dash-stats__tile")
-    tiles = page.locator("#dash-zone-stats .dash-stats__tile")
+    page.wait_for_selector("#dash-zone-stats .kpi-card")
+    tiles = page.locator("#dash-zone-stats .kpi-card")
     assert tiles.count() == 4
     for i in range(4):
-        sel = f"#dash-zone-stats .dash-stats__tile:nth-child({i + 1})"
+        sel = f"#dash-zone-stats .kpi-card:nth-child({i + 1})"
         rect = _rect_in_container(page, sel)
         assert rect and rect["inBox"], f"tile {i} outside .dash"
-    assert tiles.first.locator(".dash-stats__label").inner_text() == "이상징후"
+    assert "통과율" in tiles.first.locator(".kpi-card__label").inner_text()
 
 
 @pytest.mark.spec("SPEC-UI-008", "AC-001")
@@ -534,16 +545,14 @@ def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
     sw = m["sidebarWidth"]
     title_left = page.eval_on_selector(".dash-hero__title", "el => el.getBoundingClientRect().left")
     tile_left = page.eval_on_selector(
-        "#dash-zone-stats .dash-stats__tile:first-child",
+        "#dash-zone-stats .kpi-card:first-child",
         "el => el.getBoundingClientRect().left",
     )
     assert title_left >= sw - 1, {"title_left": title_left, "sidebarWidth": sw}
     assert tile_left >= sw - 1, {"tile_left": tile_left, "sidebarWidth": sw}
     assert (
-        page.locator(
-            "#dash-zone-stats .dash-stats__tile:first-child .dash-stats__label"
-        ).inner_text()
-        == "이상징후"
+        "통과율"
+        in page.locator("#dash-zone-stats .kpi-card:first-child .kpi-card__label").inner_text()
     )
 
 
@@ -572,3 +581,48 @@ def test_no_main_inset_mobile_390x844(page, live_server: str) -> None:
     assert pl == "0px", pl
     dash_left = page.eval_on_selector(".dash", "el => el.getBoundingClientRect().left")
     assert dash_left <= 1, dash_left
+
+
+# ── Task 7: dash-stats → kpi-band 교체 ──────────────────────────────────────
+
+
+@pytest.fixture()
+def kpi_fragment_html():
+    from app.api.dependencies import get_daily_queries, get_daily_summary_queries
+    from app.api.routes_daily import router as daily_router
+    from app.contexts.identity.dependencies import get_current_user
+    from tests.test_daily_summary_http import SUMMARY, FakeDailySummaryQueries, _member
+
+    app = FastAPI()
+    app.include_router(daily_router)
+    app.dependency_overrides[get_daily_summary_queries] = lambda: FakeDailySummaryQueries()
+    app.dependency_overrides[get_daily_queries] = lambda: None
+    app.dependency_overrides[get_current_user] = _member
+    with TestClient(app) as client:
+        response = client.get("/api/dashboard/daily/fragments/kpi")
+        assert response.status_code == 200, response.text
+        return response.text
+
+
+def test_kpi_band_replaces_stats_band(kpi_fragment_html):
+    """밴드를 더하지 않고 교체한다 — 넌스크롤 예산이 늘면 안 된다."""
+    assert "kpi-band" in kpi_fragment_html
+    assert "dash-stats" not in kpi_fragment_html
+
+
+def test_kpi_band_renders_exactly_four_cards(kpi_fragment_html):
+    assert kpi_fragment_html.count('class="kpi-card"') == 4
+
+
+def test_hero_no_longer_duplicates_pass_rate(kpi_fragment_html):
+    """통과율은 밴드 1번 칸에만 있다(설계 D2)."""
+    assert "dash-hero__rate" not in kpi_fragment_html
+
+
+def test_estimated_card_shows_badge_and_note(kpi_fragment_html):
+    assert "kpi-card__badge" in kpi_fragment_html
+    assert "추정" in kpi_fragment_html
+
+
+def test_pending_patches_card_links_to_patches(kpi_fragment_html):
+    assert 'href="/self-healing#patches"' in kpi_fragment_html

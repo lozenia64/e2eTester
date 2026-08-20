@@ -5,6 +5,7 @@ I/O 없음. ``HealingService`` 가 스토어에서 읽은 이벤트/패치를 �
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -21,16 +22,26 @@ def _as_utc(moment: datetime) -> datetime:
     return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
+def _utc_day_label(moment: datetime) -> str:
+    """기본 날짜 라벨 — 기존 동작(UTC) 유지."""
+    return _as_utc(moment).date().isoformat()
+
+
 def build_healing_metrics(
     events: list[HealingEvent],
     patches: list[HealingPatch],
     *,
     now: datetime,
     trend_days: int = 30,
+    day_label: Callable[[datetime], str] = _utc_day_label,
+    month_start: datetime | None = None,
 ) -> dict[str, Any]:
     """상단 KPI(이번 달 자동 복구 N건 · 무인 통과율 · MTTR) + 일별 추이 + 만성 지점 표."""
     now = _as_utc(now)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start is None:
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        month_start = _as_utc(month_start)
     month_events = [e for e in events if _as_utc(e.created_at) >= month_start]
 
     auto_recovered = [
@@ -48,16 +59,16 @@ def build_healing_metrics(
     )
 
     # 일별 추이(최근 trend_days 일): 자동 복구 / 그 외(제안·실패) 건수.
+    # UTC 로 시각을 자정에 맞추면(replace(hour=0)) day_label 이 스케줄 타임존을 쓸 때
+    # 버킷 경계가 하루 어긋난다 — 날짜 절삭 없이 day_label 에 전적으로 위임한다.
     trend: list[dict[str, Any]] = []
-    day_start = (now - timedelta(days=trend_days - 1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    day_start = now - timedelta(days=trend_days - 1)
     buckets: dict[str, dict[str, int]] = {}
     for offset in range(trend_days):
-        day = (day_start + timedelta(days=offset)).date().isoformat()
+        day = day_label(day_start + timedelta(days=offset))
         buckets[day] = {"auto": 0, "other": 0}
     for event in events:
-        day = _as_utc(event.created_at).date().isoformat()
+        day = day_label(event.created_at)
         bucket = buckets.get(day)
         if bucket is None:
             continue
