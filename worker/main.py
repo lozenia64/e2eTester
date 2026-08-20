@@ -11,7 +11,6 @@ append·실행 순서)은 API 프로세스의 인터프리터가 독점하고, �
 from __future__ import annotations
 
 import asyncio
-import os
 
 import uvicorn
 
@@ -46,8 +45,8 @@ async def _async_main() -> None:
     session_registry = RedisSessionRegistry(settings.redis_url, settings.session_lease_ttl)
     heartbeat_manager = SessionHeartbeatManager(session_registry)
 
-    host = os.environ.get("E2E_WORKER_HTTP_HOST", "0.0.0.0")
-    port = int(os.environ.get("E2E_WORKER_HTTP_PORT", "8100"))
+    host = settings.worker_http_host
+    port = settings.worker_http_port
     http_app = create_http_app(session_server, heartbeat_manager)
     config = uvicorn.Config(http_app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)

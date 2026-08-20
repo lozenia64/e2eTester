@@ -80,6 +80,14 @@ class E2ESettings(BaseSettings):
         default="http://127.0.0.1:8100",
         validation_alias="E2E_WORKER_BASE_URL",
     )
+    # 워커 프로세스(`worker.main`) 자신의 바인드 주소. API 는 `worker_base_url` 로 접속한다.
+    # 이 도구는 한 PC 에서 API·워커를 함께 띄우므로 루프백이 기본 — 과거 기본값 `0.0.0.0`
+    # 은 워커 실행 호스트를 같은 네트워크에 불필요하게 노출했다. 워커를 다른 PC 에 두는
+    # 구성에서만 `0.0.0.0` 으로 되돌린다.
+    worker_http_host: str = Field(default="127.0.0.1", validation_alias="E2E_WORKER_HTTP_HOST")
+    worker_http_port: int = Field(
+        default=8100, ge=1, le=65535, validation_alias="E2E_WORKER_HTTP_PORT"
+    )
 
     # Gemini / AI 실패 분석
     failure_analyzer_enabled: bool = Field(

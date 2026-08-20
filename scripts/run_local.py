@@ -26,7 +26,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.platform.port_cleanup import free_ports  # noqa: E402
-from app.platform.process_lifecycle import graceful_shutdown, popen_managed  # noqa: E402
+from app.platform.process_lifecycle import (  # noqa: E402
+    assign_to_job,
+    create_child_job,
+    graceful_shutdown,
+    popen_managed,
+)
 from app.platform.redis_health import ensure_redis_ready  # noqa: E402
 from app.platform.stdio_utf8 import configure_stdio_utf8  # noqa: E402
 
@@ -95,6 +100,10 @@ def main() -> int:
             if pids:
                 print(f"freed port {port}: terminated PIDs {pids}", file=sys.stderr)
 
+    # 이 프로세스가 어떤 방식으로든(터미널 강제종료 포함) 죽으면 OS 가 잡에 묶인 자식
+    # 전체를 함께 정리한다 — finally 블록이 못 도는 경우에도 좀비가 남지 않는다.
+    job = create_child_job()
+
     procs: list[subprocess.Popen] = []
     try:
         redis_proc = ensure_redis_ready(
@@ -104,9 +113,12 @@ def main() -> int:
         )
         if redis_proc is not None:
             procs.append(redis_proc)
+            assign_to_job(job, redis_proc.pid)
 
         for cmd in commands:
-            procs.append(popen_managed(cmd, cwd=str(ROOT), env=env))
+            proc = popen_managed(cmd, cwd=str(ROOT), env=env)
+            procs.append(proc)
+            assign_to_job(job, proc.pid)
         # 한 프로세스라도 종료하면 전체를 정리한다(수명 공동 관리).
         while True:
             for proc in procs:
