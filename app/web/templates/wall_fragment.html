@@ -1,0 +1,10 @@
+{# 상황판 본문 — htmx 가 15초마다 이 프래그먼트만 다시 받는다.
+   조작하지 않는 화면이므로 링크·버튼·폼을 두지 않는다. #}
+{% set d = view.dominant %}
+<div id="wall-body" class="wall-body" data-dominant="{{ d.kind }}" data-tone="{{ d.tone }}">
+  <section class="wall-hero" data-tone="{{ d.tone }}">
+    <p class="wall-hero__headline">{{ d.headline }}</p>
+    {% if d.detail %}<p class="wall-hero__detail">{{ d.detail }}</p>{% endif %}
+  </section>
+  <p class="wall-meta">{{ view.date_label }}{% if view.generated_at %} · 갱신 {{ view.generated_at[11:16] }}{% endif %}</p>
+</div>

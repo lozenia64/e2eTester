@@ -1,0 +1,16 @@
+{# 상황판 독립 레이아웃. base.html 을 상속하지 않는다 — 사이드바·모바일 네비가
+   없는 고정 디스플레이용이기 때문이다(설계 §3.8). #}
+{% import "_assets.html" as assets %}<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>점검 상황판</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    {{ assets.asset_styles("entries/wall.ts") }}
+</head>
+<body class="wall">
+    {% include "wall_fragment.html" %}
+    {{ assets.asset_script("entries/wall.ts") }}
+</body>
+</html>
