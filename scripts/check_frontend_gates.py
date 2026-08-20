@@ -1,4 +1,4 @@
-"""프론트엔드 게이트 FG-001~005 — check_architecture_gates.py 의 프론트 대응물.
+"""프론트엔드 게이트 FG-001~006 — check_architecture_gates.py 의 프론트 대응물.
 
 디자인 시스템은 강제력이 없으면 6개월 안에 하드코딩으로 되돌아간다.
 각 규칙은 실제로 발생했던 사고를 막는다(설계 문서 §3.6 참조).
@@ -58,6 +58,71 @@ FG005_ALLOWLIST = {
     "/static/schedules.js",
     "/static/favicon.svg",
 }
+
+# 상태→표현 매핑을 아직 중복으로 들고 있는 템플릿(구조 탐지 기준 실측 4개).
+# Step 7 이 화면을 이관할 때마다 한 줄씩 지운다. 비면 FG-006 이 완성된다 —
+# 오탐이 섞이지 않으므로 이 전제는 실제로 성립한다.
+# run.html·suite.html 은 P3-1 이 고쳤으므로 처음부터 여기에 없다.
+FG006_ALLOWLIST = {
+    # 상태→글리프 맵
+    "app/web/templates/dashboard/partials/_macros.html",
+    # 인라인 JS 의 상태→라벨+클래스 맵
+    "app/web/templates/mobile_trigger.html",
+    # <option value="PASSED">정상</option> 류 라벨 중복 + 필터 체크박스
+    "app/web/templates/admin/runs.html",
+    # 범례의 상태 라벨 중복
+    "app/web/templates/schedules.html",
+}
+
+# FG-006 은 **어휘가 아니라 구조**를 본다.
+#
+# 초안은 상태 색 쌍(`bg-red-100 text-red-700`)과 한국어 라벨 리터럴을 탐지했는데,
+# 실측에서 위반 70건 중 약 50건이 오탐이었다 — <body> 레이아웃 클래스, 네비 활성
+# 표시 색, "취소" 버튼 문구, 히어로 산문("점검실패 N건 — 우선 확인이 필요합니다"),
+# 페이지 이름("이상징후 인박스"), 부분 문자열 충돌("무인 실행 중 …"). 그 결과
+# allowlist 가 16개로 불어 게이트가 run.html·suite.html 2개만 지키는 규칙이 됐고,
+# 영구히 못 지울 항목이 섞여 "allowlist 가 비면 완성" 이라는 전제가 깨졌다.
+#
+# 실제 병은 어휘가 아니라 **상태→표현 매핑의 중복**이다. 그 구조만 탐지한다.
+# (검증: 아래 두 규칙은 P3-1 이 고친 run.html:6 · suite.html:6 의 status_pill 을
+#  둘 다 잡고, 위 오탐 6종은 모두 통과시킨다. 실측 16건/4파일, 오탐 0.)
+
+# 규칙 A(MAP) — 상태 키로 인덱싱되는 리터럴 맵.
+# `{'pending': ..., 'running': ...}` / `running: { label: ... }` 를 모두 잡는다.
+_STATUS_MAP_KEYS = (
+    "passed",
+    "anomaly",
+    "error",
+    "running",
+    "waiting_input",
+    "blocked",
+    "skipped",
+    "cancelled",
+    "pending",
+    "queued",
+    "failed",
+)
+_STATUS_MAP_KEY_RE = [re.compile(rf"['\"]?{key}['\"]?\s*:") for key in _STATUS_MAP_KEYS]
+# 한 줄에 상태 키가 둘 이상 콜론과 함께 나오면 맵 리터럴로 판정한다. 하나만으로는
+# 평범한 CSS 선언(`color: …`)이나 산문과 구분되지 않는다.
+_STATUS_MAP_MIN_KEYS = 2
+
+# 규칙 B(PAIR) — enum 값과 한국어 라벨이 같은 줄에 함께 있음.
+# `<option value="PASSED">정상</option>` 처럼 생성물(status.generated.ts)을 써야 하는 자리다.
+# 라벨은 이 도메인 전용 어휘만 쓴다 — "취소"·"제외"·"차단"·"실행 중" 은 일반 한국어로
+# 흔해서 단독 판정하면 버튼·산문을 오탐한다. enum 과 같은 줄이라는 조건이 문맥을 준다.
+_ENUM_VALUES = (
+    "PASSED",
+    "ANOMALY",
+    "ERROR",
+    "RUNNING",
+    "WAITING_INPUT",
+    "BLOCKED",
+    "SKIPPED",
+    "CANCELLED",
+    "FAILED",
+)
+_DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상")
 
 # 차트 라이브러리(Chart.js/ECharts/Plotly) CDN 예외 — 이 계획(P1)의 범위 밖이다.
 # self-host 하려면 npm 의존성 추가 + 페이지별 Vite 엔트리가 필요한데, 현재
@@ -200,12 +265,52 @@ def check_fg005_no_static_ref(root: Path = REPO_ROOT) -> list[str]:
     return problems
 
 
+def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]:
+    """FG-006: 템플릿이 상태→표현 매핑을 중복으로 들고 있는 것을 막는다.
+
+    run.html 이 자체 status_pill 맵을 들고 있어 ANOMALY/ERROR 배지가 회색·영문으로
+    렌더되던 사고(P3-1)를 막는다. FG-003 은 frontend/**/*.ts 만 보므로 템플릿은
+    무검증이었다.
+
+    어휘(색 리터럴·한국어 단어)가 아니라 구조를 본다 — 위 상수 주석 참조.
+    """
+    problems: list[str] = []
+    for path in _iter(root, TEMPLATE_DIR, ".html"):
+        rel = _rel(path, root)
+        if rel in FG006_ALLOWLIST:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            matched = [
+                key
+                for key, pattern in zip(_STATUS_MAP_KEYS, _STATUS_MAP_KEY_RE, strict=True)
+                if pattern.search(line)
+            ]
+            if len(matched) >= _STATUS_MAP_MIN_KEYS:
+                keys = ", ".join(matched[:4])
+                problems.append(
+                    f"[FG-006] {rel}:{lineno} 상태 키 맵 리터럴 (`{keys}`) — "
+                    "components/status-badge/macro.jinja 의 status_badge 와 "
+                    "status_badge_view(status) 를 쓰세요."
+                )
+                continue
+            enum_hit = next((e for e in _ENUM_VALUES if e in line), None)
+            label_hit = next((label for label in _DOMAIN_LABELS if label in line), None)
+            if enum_hit and label_hit:
+                problems.append(
+                    f"[FG-006] {rel}:{lineno} enum 값 `{enum_hit}` 과 라벨 `{label_hit}` 이 "
+                    "같은 줄에 하드코딩 — lib/status.generated.ts 또는 "
+                    "status_badge_view(status).label 을 쓰세요."
+                )
+    return problems
+
+
 CHECKS = (
     check_fg001_no_cdn,
     check_fg002_no_hex,
     check_fg003_status_source,
     check_fg004_file_size,
     check_fg005_no_static_ref,
+    check_fg006_no_template_status_literals,
 )
 
 
@@ -218,7 +323,7 @@ def main() -> int:
         for problem in problems:
             print(f"  {problem}")
         return 1
-    print("프론트엔드 게이트 통과 (FG-001~005)")
+    print("프론트엔드 게이트 통과 (FG-001~006)")
     return 0
 
 

@@ -6,6 +6,7 @@ from scripts.check_frontend_gates import (
     check_fg003_status_source,
     check_fg004_file_size,
     check_fg005_no_static_ref,
+    check_fg006_no_template_status_literals,
 )
 
 
@@ -262,3 +263,118 @@ def test_sibling_of_node_modules_is_still_scanned(tmp_path):
     problems = check_fg002_no_hex(tmp_path)
     assert len(problems) == 1
     assert "#ff0000" in problems[0]
+
+
+def test_fg006_flags_status_keyed_map(tmp_path):
+    """이것이 P3-1 이 고친 실제 버그다 — run.html:6 의 status_pill 원문."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "{% set status_pill = {'pending': 'bg-gray-100 text-gray-600', "
+        "'running': 'bg-blue-100 text-blue-700', 'passed': 'bg-emerald-100 text-emerald-700'} %}",
+    )
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert problems, problems
+    assert "상태 키 맵" in problems[0]
+
+
+def test_fg006_flags_js_status_map_in_template(tmp_path):
+    """mobile_trigger.html 이 인라인 JS 로 들고 있던 상태→라벨+클래스 맵."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        '  running: { label: "실행 중", cls: "a" }, passed: { label: "정상", cls: "b" },',
+    )
+    assert check_fg006_no_template_status_literals(tmp_path)
+
+
+def test_fg006_flags_enum_and_label_on_one_line(tmp_path):
+    """<option value="PASSED">정상</option> — 생성물을 써야 할 자리."""
+    _write(tmp_path, "app/web/templates/x.html", '<option value="ANOMALY">이상징후</option>')
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert problems
+    assert "enum" in problems[0]
+
+
+def test_fg006_allows_body_layout_classes(tmp_path):
+    """base.html 의 <body class="… bg-gray-50 text-gray-900 …"> 는 레이아웃이다."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        '<body class="min-h-screen bg-gray-50 text-gray-900 antialiased">',
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_nav_active_color_block(tmp_path):
+    """{% block nav_runs %}bg-red-50 text-red-700{% endblock %} 는 네비 활성 표시다."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "{% block nav_runs %}bg-red-50 text-red-700 font-semibold{% endblock %}",
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_cancel_button_label(tmp_path):
+    """'취소' 는 Cancel 버튼 문구로 흔하다 — 상태 라벨로 단독 판정하지 않는다."""
+    _write(tmp_path, "app/web/templates/x.html", '<button type="button">취소</button>')
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_prose_mentioning_a_status_word(tmp_path):
+    """히어로 문장·설명 산문은 배지가 아니다(zone_a_kpi.html 의 헤드라인)."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "{% elif t.error > 0 %}점검실패 {{ t.error }}건 — 우선 확인이 필요합니다",
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_page_title_naming_a_status(tmp_path):
+    """'이상징후 인박스' 는 페이지 이름이다."""
+    _write(tmp_path, "app/web/templates/x.html", "<h1>이상징후 인박스</h1>")
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_substring_collision(tmp_path):
+    """'무인 실행 중 셀렉터가…' 의 '실행 중' 은 문장 일부다."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "<p>무인 실행 중 셀렉터가 깨지면 자동 복구 시도가 기록됩니다.</p>",
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_skips_allowlisted_template(tmp_path, monkeypatch):
+    import scripts.check_frontend_gates as gates
+
+    monkeypatch.setattr(gates, "FG006_ALLOWLIST", {"app/web/templates/legacy.html"})
+    _write(
+        tmp_path,
+        "app/web/templates/legacy.html",
+        "{% set status_pill = {'passed': 'a', 'error': 'b'} %}",
+    )
+    assert gates.check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_does_not_allowlist_run_and_suite():
+    """P3-1 이 고친 두 템플릿은 처음부터 allowlist 밖에 있어야 한다."""
+    import scripts.check_frontend_gates as gates
+
+    assert "app/web/templates/run.html" not in gates.FG006_ALLOWLIST
+    assert "app/web/templates/suite.html" not in gates.FG006_ALLOWLIST
+
+
+def test_fg006_allowlist_holds_only_real_offenders():
+    """구조 탐지로 좁힌 뒤 남는 4개. 오탐이 섞이면 allowlist 가 영구히 비지 않는다."""
+    import scripts.check_frontend_gates as gates
+
+    assert gates.FG006_ALLOWLIST == {
+        "app/web/templates/dashboard/partials/_macros.html",
+        "app/web/templates/mobile_trigger.html",
+        "app/web/templates/admin/runs.html",
+        "app/web/templates/schedules.html",
+    }

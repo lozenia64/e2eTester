@@ -377,7 +377,7 @@ body {
 }
 
 .node-card.status-waiting_input {
-    border-left-color: var(--st-anomaly-solid);
+    border-left-color: var(--st-waiting_input-solid);
 }
 
 .node-card.status-anomaly,

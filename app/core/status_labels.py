@@ -133,3 +133,21 @@ def module_status_badge_tone(status: ModuleStatus) -> str:
     if status == ModuleStatus.CANCELLED:
         return "cancelled"
     return "pending"
+
+
+def suite_status_badge_tone(status: SuiteStatus) -> str:
+    if status == SuiteStatus.PASSED:
+        return "passed"
+    if status in SUITE_ERROR_STATUSES:
+        return "error"
+    if status in SUITE_ANOMALY_STATUSES:
+        return "anomaly"
+    if status == SuiteStatus.RUNNING:
+        return "running"
+    if status == SuiteStatus.WAITING_INPUT:
+        return "waiting_input"
+    if status == SuiteStatus.SKIPPED:
+        return "skipped"
+    if status == SuiteStatus.CANCELLED:
+        return "cancelled"
+    return "pending"
