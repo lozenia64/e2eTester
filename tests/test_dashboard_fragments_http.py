@@ -42,8 +42,10 @@ class FakeDailyDashboardQueries:
 
 
 class FakeDailySummaryQueries:
-    """DailySummaryQueries 대체 — kpi 프래그먼트는 totals/date_label/generated_at/attention만
-    쓰므로(zone_a_kpi.html 참고) 기존 dashboard_data 를 그대로 돌려주면 충분하다."""
+    """DailySummaryQueries 대체 — kpi 프래그먼트는 totals/date_label/generated_at/attention/
+    cards 를 쓴다(zone_a_kpi.html 참고). totals 는 넘겨받은 dashboard_data 를 그대로 쓰고,
+    healing/stats 컨텍스트가 없는 이 fake 에서는 나머지 카드 3장을 카드 계약(key·label·
+    value·unit·period·note·tone·href·estimated)에 맞는 고정값으로 채운다."""
 
     def __init__(self, data: dict) -> None:
         self._data = data
@@ -54,7 +56,54 @@ class FakeDailySummaryQueries:
         user_id: str | None = None,
         allowed_system_codes: list[str] | None = None,
     ) -> dict:
-        return self._data
+        totals = self._data["totals"]
+        cards = [
+            {
+                "key": "pass_rate",
+                "label": "통과율",
+                "value": totals["pass_rate"],
+                "unit": "%",
+                "period": "오늘",
+                "note": f"{totals['passed']}/{totals['modules']} 모듈 정상",
+                "tone": "passed",
+                "href": "",
+                "estimated": False,
+            },
+            {
+                "key": "self_healed",
+                "label": "스스로 복구",
+                "value": 3,
+                "unit": "건",
+                "period": "오늘",
+                "note": "이번 달 누적 12건",
+                "tone": "running",
+                "href": "/self-healing",
+                "estimated": False,
+            },
+            {
+                "key": "pending_patches",
+                "label": "내 승인 대기",
+                "value": 2,
+                "unit": "건",
+                "period": "패치",
+                "note": "자동 생성된 수정 diff 검토",
+                "tone": "anomaly",
+                "href": "/self-healing#patches",
+                "estimated": False,
+            },
+            {
+                "key": "savings",
+                "label": "이번 달 절감",
+                "value": 120,
+                "unit": "h",
+                "period": "이번 달",
+                "note": "480회 · 12개 모듈 × 수동 추정치 (기준 8/1)",
+                "tone": "passed",
+                "href": "/admin/modules",
+                "estimated": True,
+            },
+        ]
+        return {**self._data, "cards": cards}
 
 
 class FakeRunService:
@@ -183,8 +232,11 @@ def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/kpi")
     assert response.status_code == 200
     html = response.text
-    assert "오늘의 점검 현황" in html
-    assert "dash-hero__rate" in html
+    # _build_realistic_six_system_dashboard 는 hom 시스템에 ERROR 를 심어 두므로
+    # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기 참고).
+    assert "점검실패" in html
+    assert "우선 확인이 필요합니다" in html
+    assert "kpi-band" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-002")
@@ -205,17 +257,15 @@ def test_kpi_fragment_renders_empty_day_summary(
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/kpi").text
-    assert "dash-hero__rate-label" in html
     assert "통과율" in html
-    assert "dash-hero__summary" in html
     assert "아직 점검이 시작되지 않았습니다" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-004")
 def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/kpi").text
-    assert html.count('class="dash-stats__tile"') == 4
-    assert "이상징후" in html
+    assert html.count('class="kpi-card"') == 4
+    assert "통과율" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-007")

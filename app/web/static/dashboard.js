@@ -204,37 +204,6 @@
     scheduleDensityUpdate();
   }
 
-  function animateCountUp(el, target) {
-    const num = Number(target);
-    if (!Number.isFinite(num)) {
-      el.textContent = target;
-      return;
-    }
-    if (REDUCED) {
-      el.textContent = String(Math.round(num));
-      return;
-    }
-
-    const start = performance.now();
-    const duration = 600;
-
-    function frame(now) {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      el.textContent = String(Math.round(num * eased));
-      if (t < 1) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  }
-
-  function runHeroCountUp() {
-    const rateEl = $(".dash-hero__rate[data-target]", root);
-    if (!rateEl) return;
-    const target = rateEl.dataset.target;
-    if (target == null) return;
-    animateCountUp(rateEl, target);
-  }
-
   function openDrawer(systemCode) {
     if (!systemCode || typeof htmx === "undefined") return;
     htmx.ajax("GET", `/api/dashboard/daily/fragments/system/${systemCode}/panel`, {
@@ -249,7 +218,6 @@
     $("#dash-error")?.classList.add("hidden");
 
     if (ev.target.id === "dash-host-kpi" || ev.target.closest("#dash-host-kpi")) {
-      runHeroCountUp();
       scheduleDensityUpdate();
     }
     if (ev.target.id === "dash-host-matrix" || ev.target.closest("#dash-host-matrix")) {
@@ -323,5 +291,4 @@
 
   bindDensityObserver();
   updateDashboardDensity();
-  runHeroCountUp();
 })();
