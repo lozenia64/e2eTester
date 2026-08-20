@@ -19,3 +19,54 @@
 .status-badge[data-tone="skipped"] { background: var(--st-skipped-surface); color: var(--st-skipped-text); border-color: var(--st-skipped-border); }
 .status-badge[data-tone="cancelled"] { background: var(--st-cancelled-surface); color: var(--st-cancelled-text); border-color: var(--st-cancelled-border); }
 .status-badge[data-tone="pending"] { background: var(--st-pending-surface); color: var(--st-pending-text); border-color: var(--st-pending-border); }
+
+/* ── 점등 (설계 §3.4) ─────────────────────────────────────────
+   data-tone 이 바뀔 때 색이 전이되고, 진행 중·입력 대기만 계속 움직인다.
+   색은 전부 토큰(FG-002). */
+.status-badge {
+  transition:
+    background-color 0.25s var(--ease-out),
+    color 0.25s var(--ease-out),
+    border-color 0.25s var(--ease-out);
+}
+
+@keyframes status-badge-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.62;
+  }
+}
+
+@keyframes status-badge-attention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--st-waiting_input-border);
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--st-waiting_input-border);
+  }
+}
+
+/* 진행 중 — 은은하게 */
+.status-badge[data-tone="running"] {
+  animation: status-badge-breathe 1.8s ease-in-out infinite;
+}
+
+/* 입력 대기 — 사람의 OTP 입력을 기다리는 유일한 상태. 눈에 띄어야 한다. */
+.status-badge[data-tone="waiting_input"] {
+  animation: status-badge-attention 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-badge {
+    transition: none;
+  }
+
+  .status-badge[data-tone="running"],
+  .status-badge[data-tone="waiting_input"] {
+    animation: none;
+  }
+}
