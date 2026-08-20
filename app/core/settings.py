@@ -100,6 +100,10 @@ class E2ESettings(BaseSettings):
     # 예약·보존
     schedule_tz: str = Field(default="Asia/Seoul", validation_alias="E2E_SCHEDULE_TZ")
     run_retention_enabled: bool = Field(default=True, validation_alias="E2E_RUN_RETENTION_ENABLED")
+    # 상황판(/wall)은 로그인 없이 열리는 공개 읽기 라우트다(P3-2 설계 D1).
+    # 사내망 전제이므로 기본은 켜 두고, 앱이 외부에서 접근 가능한 배포에서는
+    # false 로 즉시 차단한다. false 면 /wall·/wall/fragment 가 404 다.
+    wall_enabled: bool = Field(default=True, validation_alias="E2E_WALL_ENABLED")
     run_retention_cron: str = Field(default="0 3 * * *", validation_alias="E2E_RUN_RETENTION_CRON")
 
     # 운영 로깅 (structlog)
