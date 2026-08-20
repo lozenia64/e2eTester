@@ -4,7 +4,9 @@
    dashboard.css 밀도 선택자에 묶여 있다 — 설계 §3.4.1). #}
 {% import "components/kpi-card/macro.jinja" as kpi %}
 {% set d = view.dominant %}
-<div id="wall-body" class="wall-body" data-dominant="{{ d.kind }}" data-tone="{{ d.tone }}">
+<div id="wall-body" class="wall-body"
+     data-dominant="{{ d.kind }}" data-tone="{{ d.tone }}"
+     hx-get="/wall/fragment" hx-trigger="wall-refresh from:body" hx-swap="outerHTML">
   <section class="wall-hero" data-tone="{{ d.tone }}">
     <p class="wall-hero__headline">{{ d.headline }}</p>
     {% if d.detail %}<p class="wall-hero__detail">{{ d.detail }}</p>{% endif %}

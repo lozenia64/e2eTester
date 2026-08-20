@@ -218,3 +218,20 @@ def test_strip_cards_are_not_links():
     with client:
         body = client.get("/wall").text
     assert "<a " not in body
+
+
+def test_body_declares_htmx_polling_target():
+    """갱신은 htmx 가 /wall/fragment 를 다시 받아 처리한다(설계 §3.9)."""
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert 'hx-get="/wall/fragment"' in body
+    assert 'hx-swap="outerHTML"' in body
+
+
+def test_fragment_is_self_replacing():
+    """프래그먼트 루트가 교체 대상과 같은 요소여야 outerHTML 스왑이 성립한다."""
+    client, _ = _client()
+    with client:
+        body = client.get("/wall/fragment").text
+    assert 'id="wall-body"' in body

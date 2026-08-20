@@ -26,7 +26,9 @@ def manifest() -> dict:
 
 def _resolved_css(entry: str) -> str:
     return "\n".join(
-        (Path("app/web/static/dist") / url.removeprefix("/static/dist/")).read_text(encoding="utf-8")
+        (Path("app/web/static/dist") / url.removeprefix("/static/dist/")).read_text(
+            encoding="utf-8"
+        )
         for url in ASSET_MANIFEST.css_urls(entry)
     )
 

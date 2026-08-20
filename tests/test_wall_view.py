@@ -266,7 +266,10 @@ def test_system_tones_stay_inside_status_tone_axis():
 
 def test_dominant_headline_matches_status_ssot():
     cases = {
-        "waiting_input": (ModuleStatus.WAITING_INPUT, _summary(attention=[_attention("waiting_input")])),
+        "waiting_input": (
+            ModuleStatus.WAITING_INPUT,
+            _summary(attention=[_attention("waiting_input")]),
+        ),
         "error": (ModuleStatus.ERROR, _summary(error=1, attention=[_attention("error")])),
         "anomaly": (ModuleStatus.ANOMALY, _summary(anomaly=1, attention=[_attention("anomaly")])),
         "running": (ModuleStatus.RUNNING, _summary(running=2)),

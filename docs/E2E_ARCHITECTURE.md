@@ -44,6 +44,7 @@ e2eTester/
       routes_systems.py
       routes_schedules.py
       routes_trigger.py            # 모바일 즉시 점검 (/m/{trigger_token}, /api/trigger/*)
+      routes_wall.py               # 비인증 상황판 (/wall, /wall/fragment)
       routes_anomalies.py          # 이상징후 인박스 (/api/anomalies*)
       routes_insights.py           # 시스템 인사이트 (/api/systems/{code}/health|timeline|modules/breakdown)
       routes_healing.py            # 자가 치유 센터 (/api/healing/*)
@@ -392,6 +393,8 @@ e2eTester/
 > **인프라 라우트 제외:** `/favicon.ico`, `/apple-touch-icon*.png`, `/static`, `/artifacts` 는 API 계약이 아니며 문서·가드 대상에서 제외한다(`include_in_schema=False` 와 동일).
 
 - `GET /`
+- `GET /wall`
+- `GET /wall/fragment`
 - `GET /runs/execute`
 - `GET /login`
 - `POST /auth/login`
