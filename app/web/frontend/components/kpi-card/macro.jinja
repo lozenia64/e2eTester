@@ -1,6 +1,6 @@
-{% macro kpi_card(key, label, value, unit="", period="", note="", tone="pending", href="", estimated=false) -%}
+{% macro kpi_card(key, label, value, unit="", period="", note="", tone="pending", href="", estimated=false, size="md") -%}
 {% set tag = "a" if href else "article" %}
-<{{ tag }} class="kpi-card" data-tone="{{ tone }}" data-key="{{ key }}"{% if href %} href="{{ href }}"{% endif %}>
+<{{ tag }} class="kpi-card" data-tone="{{ tone }}" data-key="{{ key }}" data-size="{{ size }}"{% if href %} href="{{ href }}"{% endif %}>
   <span class="kpi-card__label">{{ label }}{% if period %} · {{ period }}{% endif %}{% if estimated %}<span class="kpi-card__badge">추정</span>{% endif %}</span>
   <span class="kpi-card__value-wrap">
     <span class="kpi-card__value"{% if value is number %} data-target="{{ value }}"{% endif %}>{{ value }}</span>{% if unit %}<span class="kpi-card__unit">{{ unit }}</span>{% endif %}

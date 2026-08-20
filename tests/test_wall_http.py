@@ -179,3 +179,42 @@ def test_page_does_not_extend_base_layout():
 
     source = Path("app/web/templates/wall.html").read_text(encoding="utf-8")
     assert 'extends "base.html"' not in source
+
+
+def test_matrix_renders_every_system():
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert 'data-wall-system="HOM"' in body
+    assert "대표홈" in body
+
+
+def test_matrix_system_carries_its_tone():
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert 'data-tone="passed"' in body
+
+
+def test_strip_renders_three_large_cards():
+    """통과율은 히어로가 흡수 — 스트립은 3장(설계 §3.5)."""
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert body.count('class="kpi-card"') == 3
+    assert body.count('data-size="lg"') == 3
+
+
+def test_strip_has_no_pass_rate_card():
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert 'data-key="pass_rate"' not in body
+
+
+def test_strip_cards_are_not_links():
+    """조작하지 않는 화면 — href 가 있어도 링크로 렌더하지 않는다."""
+    client, _ = _client()
+    with client:
+        body = client.get("/wall").text
+    assert "<a " not in body

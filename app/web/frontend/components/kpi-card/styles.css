@@ -70,6 +70,28 @@
   background: var(--st-anomaly-surface);
 }
 
+/* 상황판 대형 모드 — 3~5m 거리용. 값은 vmin 기준으로 해상도에 비례한다. */
+.kpi-card[data-size="lg"] {
+  padding: 2vmin 2.5vmin;
+  gap: 0.5vmin;
+}
+
+.kpi-card[data-size="lg"] .kpi-card__label {
+  font-size: clamp(0.75rem, 1.8vmin, 1.75rem);
+}
+
+.kpi-card[data-size="lg"] .kpi-card__value {
+  font-size: clamp(1.5rem, 5vmin, 5rem);
+}
+
+.kpi-card[data-size="lg"] .kpi-card__unit {
+  font-size: clamp(0.75rem, 2vmin, 2rem);
+}
+
+.kpi-card[data-size="lg"] .kpi-card__note {
+  font-size: clamp(0.625rem, 1.4vmin, 1.25rem);
+}
+
 /* 뷰포트 압축 — dashboard.js 의 syncKpiCompress() 가 붙이는 훅.
    기존 .dash-stats__tile 규칙을 그대로 계승한다. */
 #dash-host-kpi[data-kpi-compress="true"] .kpi-card {
