@@ -52,3 +52,73 @@ def test_manifest_is_reloaded_when_file_changes(manifest_path):
     changed = {"entries/main.ts": {"file": "assets/main-99999999.js", "isEntry": True}}
     manifest_path.write_text(json.dumps(changed), encoding="utf-8")
     assert manifest.js_url("entries/main.ts").endswith("main-99999999.js")
+
+
+def test_css_urls_follows_imported_chunk_css(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "entries/wall.ts": {
+                    "file": "assets/wall.js",
+                    "isEntry": True,
+                    "imports": ["_shared.js"],
+                },
+                "_shared.js": {
+                    "file": "assets/shared.js",
+                    "css": ["assets/shared.css"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = AssetManifest(path, base_url="/static/dist")
+    assert manifest.css_urls("entries/wall.ts") == ["/static/dist/assets/shared.css"]
+
+
+def test_css_urls_deduplicates_shared_chunk_reached_twice(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "entries/wall.ts": {
+                    "file": "assets/wall.js",
+                    "isEntry": True,
+                    "imports": ["_a.js", "_b.js"],
+                },
+                "_a.js": {"file": "assets/a.js", "imports": ["_shared.js"]},
+                "_b.js": {"file": "assets/b.js", "imports": ["_shared.js"]},
+                "_shared.js": {
+                    "file": "assets/shared.js",
+                    "css": ["assets/shared.css"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = AssetManifest(path, base_url="/static/dist")
+    assert manifest.css_urls("entries/wall.ts") == ["/static/dist/assets/shared.css"]
+
+
+def test_css_urls_stops_on_import_cycle(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "entries/wall.ts": {
+                    "file": "assets/wall.js",
+                    "isEntry": True,
+                    "imports": ["_a.js"],
+                },
+                "_a.js": {"file": "assets/a.js", "imports": ["_b.js"]},
+                "_b.js": {
+                    "file": "assets/b.js",
+                    "imports": ["_a.js"],
+                    "css": ["assets/shared.css"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = AssetManifest(path, base_url="/static/dist")
+    assert manifest.css_urls("entries/wall.ts") == ["/static/dist/assets/shared.css"]
