@@ -1,3 +1,3 @@
-{% macro status_badge(status, label, size="md") -%}
-<span class="status-badge" data-tone="{{ status }}" data-size="{{ size }}">{{ label }}</span>
+{% macro status_badge(tone, label, size="md", role="", elem_id="", status_value="") -%}
+<span class="status-badge"{% if elem_id %} id="{{ elem_id }}"{% endif %} data-tone="{{ tone }}" data-size="{{ size }}"{% if status_value %} data-status="{{ status_value }}"{% endif %}{% if role %} data-role="{{ role }}"{% endif %}>{{ label }}</span>
 {%- endmacro %}

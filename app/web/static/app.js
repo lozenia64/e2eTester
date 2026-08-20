@@ -2989,11 +2989,11 @@ function updateSuiteOtpPanel(suite) {
 
 function renderSuiteSnapshot(suite) {
     const statusNode = document.getElementById("suite-status");
-    if (statusNode) {
-        statusNode.textContent = suite.status ?? "";
-        statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
-        statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
-    }
+    statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
+    statusNode.className = "status-badge";
+    statusNode.dataset.size = "md";
+    statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
+    statusNode.dataset.status = suite.status;
     updateSuiteActions(suite.status);
     updateSuiteProgress(suite);
     updateSuiteOtpPanel(suite);
@@ -3028,7 +3028,7 @@ function bindSuiteActions() {
     if (cancelButton) {
         cancelButton.addEventListener("click", () => cancelSuite(cancelButton));
     }
-    updateSuiteActions(document.getElementById("suite-status")?.textContent);
+    updateSuiteActions(document.getElementById("suite-status")?.dataset.status);
 }
 
 async function submitSuiteOtp(suiteId, otpCode, form) {
@@ -3103,11 +3103,11 @@ function bindSuiteSocket() {
 
         if (suite.status) {
             const statusNode = document.getElementById("suite-status");
-            if (statusNode) {
-                statusNode.textContent = suite.status;
-                statusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(suite.status, "px-3 py-1.5")}`;
-                statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
-            }
+            statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
+            statusNode.className = "status-badge";
+            statusNode.dataset.size = "md";
+            statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
+            statusNode.dataset.status = suite.status;
             updateSuiteActions(suite.status);
         }
 
@@ -3124,7 +3124,7 @@ function bindRunActions() {
     if (rerunButton) {
         rerunButton.addEventListener("click", () => rerunRun(rerunButton));
     }
-    updateRunActions(document.getElementById("run-status")?.textContent);
+    updateRunActions(document.getElementById("run-status")?.dataset.status);
 }
 
 function bindRunSocket() {
@@ -3142,9 +3142,11 @@ function bindRunSocket() {
 
         if (message.event_type === "snapshot") {
             const snapshotStatusNode = document.getElementById("run-status");
-            snapshotStatusNode.textContent = message.payload.status;
-            snapshotStatusNode.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(message.payload.status)}`;
+            snapshotStatusNode.textContent = window.__statusBadge.statusLabel(message.payload.status);
+            snapshotStatusNode.className = "status-badge";
+            snapshotStatusNode.dataset.size = "md";
             snapshotStatusNode.dataset.tone = window.__statusBadge.normalizeTone(message.payload.status);
+            snapshotStatusNode.dataset.status = message.payload.status;
             updateRunActions(message.payload.status);
             updateOtpPanel(message.payload);
             updateComparisonPanel(message.payload);
@@ -3165,9 +3167,11 @@ function bindRunSocket() {
 
         if (message.run_status) {
             const runStatus = document.getElementById("run-status");
-            runStatus.textContent = message.run_status;
-            runStatus.className = `inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${statusBadgeClassName(message.run_status)}`;
+            runStatus.textContent = window.__statusBadge.statusLabel(message.run_status);
+            runStatus.className = "status-badge";
+            runStatus.dataset.size = "md";
             runStatus.dataset.tone = window.__statusBadge.normalizeTone(message.run_status);
+            runStatus.dataset.status = message.run_status;
             updateRunActions(message.run_status);
         }
 

@@ -13,6 +13,7 @@ from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
+from app.web.status_view import status_badge_view
 
 if TYPE_CHECKING:
     from app.contexts.run.application.service import RunService
@@ -23,6 +24,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
 templates.env.globals["asset_js"] = asset_js
 templates.env.globals["asset_css"] = asset_css
+templates.env.globals["status_badge_view"] = status_badge_view
 
 
 @router.get("/", response_class=HTMLResponse)
