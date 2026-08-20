@@ -154,18 +154,24 @@ P2 가 만든 `app/web/frontend/components/status-badge/macro.jinja` 를 쓴다.
 
 | 규칙 | 내용 |
 | --- | --- |
-| **FG-006** | `app/web/templates/**/*.html` 에서 (a) 상태 색 **쌍 리터럴** 과 (b) 상태 라벨 한국어 리터럴 금지 |
+| **FG-006** | `app/web/templates/**/*.html` 에서 **상태→표현 매핑의 중복** 금지 |
 
-**"상태 표현 용도"를 판정 가능하게 확정한다.** 장식용 배경색과 구분하기 위해, 탐지 대상은 배경+전경이 **쌍으로 붙은** 리터럴로 한정한다 — 이것이 `status_pill` 맵이 쓰던 정확한 형태다.
+**어휘가 아니라 구조를 탐지한다.** 초안은 상태 색 쌍(`bg-red-100 text-red-700`)과 한국어 라벨 리터럴을 탐지했으나, 구현 후 실측에서 **위반 70건 중 약 50건이 오탐**이었다 — `<body>` 레이아웃 클래스, 네비 활성 표시 색, "취소" 버튼 문구, 히어로 산문(P2 가 설계한 `점검실패 N건 — 우선 확인이 필요합니다`), 페이지 이름(`이상징후 인박스`), 부분 문자열 충돌(`무인 실행 중 …`). 그 결과 allowlist 가 16개로 불어 게이트가 `run.html`·`suite.html` 2개만 지키는 규칙이 되고, 영구히 못 지울 항목이 섞여 아래 "비면 완성" 전제가 깨졌다.
 
-```text
-탐지 정규식:  bg-(emerald|amber|red|orange|slate|zinc|blue|gray)-\d{2,3}\s+text-\w+-\d{2,3}
-탐지 라벨:    정상 · 이상징후 · 점검실패 · 입력 대기 · 실행 중 · 차단 · 제외 · 취소
-```
+실제 병은 어휘가 아니라 **상태→표현 매핑의 중복**이다. 두 규칙만 남긴다.
 
-`bg-indigo-50` 단독(브랜드 강조)이나 `bg-white` 같은 장식은 걸리지 않는다. 쌍으로 쓰였다면 상태 배지일 가능성이 압도적이고, 아니라면 allowlist 에 등록하면 된다.
+| 규칙 | 탐지 대상 | 잡는 실례 |
+| --- | --- | --- |
+| **MAP** | 한 줄에 상태 키(`passed`·`error`·…)가 콜론과 함께 **2개 이상** | `run.html:6` `status_pill`, `_macros.html` 글리프 맵, `mobile_trigger.html` 인라인 JS 맵 |
+| **PAIR** | 같은 줄에 enum 값(`PASSED`…) + 도메인 전용 라벨(`이상징후`·`점검실패`·`입력 대기`·`정상`) | `<option value="PASSED">정상</option>` |
 
-**allowlist 운용:** `FG006_ALLOWLIST` 에 현재 오염된 템플릿 7개를 넣고 시작하되, **Step 4 가 고치는 `run.html`·`suite.html` 은 처음부터 제외**한다. 나머지 5개는 Step 7 이 이관할 때 한 줄씩 지운다. **allowlist 가 비면 FG-006 이 완성된다** — `FG-005` 와 동일한 점진 완성 패턴이다.
+`취소`·`제외`·`차단`·`실행 중` 은 일반 한국어로 흔해 라벨 목록에서 제외한다. enum 과 같은 줄이라는 조건이 문맥을 대신 준다.
+
+**검증된 결과:** 두 규칙은 P3-1 이 고친 `run.html:6`·`suite.html:6` 의 `status_pill` 을 **둘 다 잡고**, 위 오탐 6종을 모두 통과시킨다. 실측 **16건 / 4파일, 오탐 0**.
+
+**allowlist 운용:** `FG006_ALLOWLIST` 는 상태→표현 매핑을 아직 중복으로 들고 있는 4개다 — `dashboard/partials/_macros.html` · `mobile_trigger.html` · `admin/runs.html` · `schedules.html`. `run.html`·`suite.html` 은 P3-1 이 고쳤으므로 처음부터 없다. Step 7 이 이관할 때마다 한 줄씩 지운다. **오탐이 섞이지 않으므로 "allowlist 가 비면 FG-006 이 완성된다" 는 전제가 실제로 성립한다** — `FG-005` 와 동일한 점진 완성 패턴이다.
+
+**놓치는 것(의도적):** 색 쌍 규칙이 잡던 `execute.html:6` 의 `tone_pill` 은 키가 색명(`'red'`·`'orange'`)이라 MAP 규칙에 걸리지 않는다. `analyzer_status.color` 를 받는 색→클래스 맵이라 `status_pill` 과 같은 병은 아니며, Step 7 이 `execute.html` 을 이관할 때 정리된다.
 
 `scripts/ci/gates.py` 의 `frontend_gates` 게이트가 이미 Tier 0 에 있으므로 **새 게이트 등록은 필요 없다.**
 

@@ -51,7 +51,7 @@ SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_f
 | FG-003 | 상태 라벨은 `lib/status.generated.ts` 경유만 |
 | FG-004 | 엔트리·컴포넌트 파일 400줄 상한 |
 | FG-005 | 템플릿의 `/static/` 직접 참조 금지 (allowlist 제외) |
-| FG-006 | 템플릿의 상태 색 쌍·상태 라벨 하드코딩 금지 (allowlist 축소형) |
+| FG-006 | 템플릿의 **상태→표현 매핑 중복** 금지 — 상태 키 맵 리터럴, enum+라벨 동일 줄 (allowlist 축소형) |
 
 `frontend_tokens` 는 `status_labels.py` 에서 토큰·타입을 재생성해 커밋본과
 diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것을 막는다.

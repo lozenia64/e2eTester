@@ -2989,11 +2989,13 @@ function updateSuiteOtpPanel(suite) {
 
 function renderSuiteSnapshot(suite) {
     const statusNode = document.getElementById("suite-status");
-    statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
-    statusNode.className = "status-badge";
-    statusNode.dataset.size = "md";
-    statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
-    statusNode.dataset.status = suite.status;
+    if (statusNode) {
+        statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
+        statusNode.className = "status-badge";
+        statusNode.dataset.size = "md";
+        statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
+        statusNode.dataset.status = suite.status;
+    }
     updateSuiteActions(suite.status);
     updateSuiteProgress(suite);
     updateSuiteOtpPanel(suite);
@@ -3103,11 +3105,13 @@ function bindSuiteSocket() {
 
         if (suite.status) {
             const statusNode = document.getElementById("suite-status");
-            statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
-            statusNode.className = "status-badge";
-            statusNode.dataset.size = "md";
-            statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
-            statusNode.dataset.status = suite.status;
+            if (statusNode) {
+                statusNode.textContent = window.__statusBadge.statusLabel(suite.status);
+                statusNode.className = "status-badge";
+                statusNode.dataset.size = "md";
+                statusNode.dataset.tone = window.__statusBadge.normalizeTone(suite.status);
+                statusNode.dataset.status = suite.status;
+            }
             updateSuiteActions(suite.status);
         }
 
