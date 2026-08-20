@@ -6,6 +6,7 @@ from scripts.check_frontend_gates import (
     check_fg003_status_source,
     check_fg004_file_size,
     check_fg005_no_static_ref,
+    check_fg006_no_template_status_literals,
 )
 
 
@@ -262,3 +263,52 @@ def test_sibling_of_node_modules_is_still_scanned(tmp_path):
     problems = check_fg002_no_hex(tmp_path)
     assert len(problems) == 1
     assert "#ff0000" in problems[0]
+
+
+def test_fg006_flags_status_color_pair(tmp_path):
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        '<span class="rounded-full bg-red-100 text-red-700">점검실패</span>',
+    )
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert problems, problems
+    assert "bg-red-100" in problems[0]
+
+
+def test_fg006_allows_decorative_single_color(tmp_path):
+    """장식용 단독 배경색은 상태 표현이 아니다."""
+    _write(tmp_path, "app/web/templates/x.html", '<div class="bg-indigo-50 p-4">배너</div>')
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_bg_white(tmp_path):
+    _write(tmp_path, "app/web/templates/x.html", '<div class="bg-white shadow">카드</div>')
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_flags_korean_status_label(tmp_path):
+    _write(tmp_path, "app/web/templates/x.html", "<span>이상징후</span>")
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert problems
+    assert "이상징후" in problems[0]
+
+
+def test_fg006_skips_allowlisted_template(tmp_path, monkeypatch):
+    import scripts.check_frontend_gates as gates
+
+    monkeypatch.setattr(gates, "FG006_ALLOWLIST", {"app/web/templates/legacy.html"})
+    _write(
+        tmp_path,
+        "app/web/templates/legacy.html",
+        '<span class="bg-red-100 text-red-700">점검실패</span>',
+    )
+    assert gates.check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_does_not_allowlist_run_and_suite(tmp_path):
+    """P3-1 이 고친 두 템플릿은 처음부터 allowlist 밖에 있어야 한다."""
+    import scripts.check_frontend_gates as gates
+
+    assert "app/web/templates/run.html" not in gates.FG006_ALLOWLIST
+    assert "app/web/templates/suite.html" not in gates.FG006_ALLOWLIST

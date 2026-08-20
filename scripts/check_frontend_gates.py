@@ -1,4 +1,4 @@
-"""프론트엔드 게이트 FG-001~005 — check_architecture_gates.py 의 프론트 대응물.
+"""프론트엔드 게이트 FG-001~006 — check_architecture_gates.py 의 프론트 대응물.
 
 디자인 시스템은 강제력이 없으면 6개월 안에 하드코딩으로 되돌아간다.
 각 규칙은 실제로 발생했던 사고를 막는다(설계 문서 §3.6 참조).
@@ -58,6 +58,46 @@ FG005_ALLOWLIST = {
     "/static/schedules.js",
     "/static/favicon.svg",
 }
+
+# P3-1 이후에도 상태 색·라벨을 하드코딩한 채 남아 있는 템플릿.
+# Step 7 이 화면을 이관할 때마다 한 줄씩 지운다. 비면 FG-006 이 완성된다.
+# run.html·suite.html 은 P3-1 이 고쳤으므로 처음부터 여기에 없다.
+FG006_ALLOWLIST = {
+    "app/web/templates/base.html",
+    "app/web/templates/execute.html",
+    "app/web/templates/self_healing.html",
+    "app/web/templates/admin/base.html",
+    "app/web/templates/admin/users.html",
+    # 이하 Step 7 이관 대기 — P3-1 실측에서 계획 초안 5개 외에 라벨/색 쌍이 남아 있었다.
+    "app/web/templates/account/password.html",
+    "app/web/templates/admin/index.html",
+    "app/web/templates/admin/modules.html",
+    "app/web/templates/admin/ops.html",
+    "app/web/templates/admin/runs.html",
+    "app/web/templates/admin/stats.html",
+    "app/web/templates/anomalies.html",
+    "app/web/templates/dashboard/partials/zone_a_kpi.html",
+    "app/web/templates/insights.html",
+    "app/web/templates/mobile_trigger.html",
+    "app/web/templates/schedules.html",
+}
+
+# 상태 배지의 형태 — 배경+전경이 쌍으로 붙은 유틸리티. 장식용 단독 배경색과 구분된다.
+_STATUS_COLOR_PAIR = re.compile(
+    r"bg-(?:emerald|amber|red|orange|slate|zinc|blue|gray|green|yellow)-\d{2,3}"
+    r"\s+text-\w+-\d{2,3}"
+)
+
+_STATUS_LABEL_LITERALS = (
+    "정상",
+    "이상징후",
+    "점검실패",
+    "입력 대기",
+    "실행 중",
+    "차단",
+    "제외",
+    "취소",
+)
 
 # 차트 라이브러리(Chart.js/ECharts/Plotly) CDN 예외 — 이 계획(P1)의 범위 밖이다.
 # self-host 하려면 npm 의존성 추가 + 페이지별 Vite 엔트리가 필요한데, 현재
@@ -200,12 +240,46 @@ def check_fg005_no_static_ref(root: Path = REPO_ROOT) -> list[str]:
     return problems
 
 
+def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]:
+    """FG-006: 템플릿에 상태 색 쌍·상태 라벨 하드코딩 금지.
+
+    run.html 이 자체 status_pill 맵을 들고 있어 ANOMALY/ERROR 배지가 회색으로
+    렌더되던 사고(P3-1)를 막는다. FG-003 은 frontend/**/*.ts 만 보므로
+    템플릿은 무검증이었다.
+    """
+    problems: list[str] = []
+    for path in _iter(root, TEMPLATE_DIR, ".html"):
+        rel = _rel(path, root)
+        if rel in FG006_ALLOWLIST:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            pair = _STATUS_COLOR_PAIR.search(line)
+            if pair:
+                problems.append(
+                    f"[FG-006] {rel}:{lineno} 상태 색 하드코딩 `{pair.group(0)}` — "
+                    "components/status-badge/macro.jinja 의 status_badge 를 쓰세요."
+                )
+            for label in _STATUS_LABEL_LITERALS:
+                if label in line:
+                    # 실행 취소·전체 점검 취소 는 액션 버튼 문구이지 상태 배지 라벨이 아니다.
+                    if label == "취소" and (
+                        'id="run-cancel"' in line or 'id="suite-cancel"' in line
+                    ):
+                        continue
+                    problems.append(
+                        f"[FG-006] {rel}:{lineno} 상태 라벨 하드코딩 `{label}` — "
+                        "status_badge_view(status).label 을 쓰세요."
+                    )
+    return problems
+
+
 CHECKS = (
     check_fg001_no_cdn,
     check_fg002_no_hex,
     check_fg003_status_source,
     check_fg004_file_size,
     check_fg005_no_static_ref,
+    check_fg006_no_template_status_literals,
 )
 
 
@@ -218,7 +292,7 @@ def main() -> int:
         for problem in problems:
             print(f"  {problem}")
         return 1
-    print("프론트엔드 게이트 통과 (FG-001~005)")
+    print("프론트엔드 게이트 통과 (FG-001~006)")
     return 0
 
 

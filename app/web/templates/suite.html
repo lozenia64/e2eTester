@@ -36,8 +36,8 @@
 
 <section class="otp-panel rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm{% if not suite.awaiting_input_run_id %} is-hidden{% endif %}" id="suite-otp-panel" data-suite-id="{{ suite.suite_id }}" data-run-id="{{ suite.awaiting_input_run_id or '' }}">
     <div class="flex items-start gap-3">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+            <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         </span>
         <div class="min-w-0 flex-1">
             <h2 class="text-base font-bold text-gray-900">OTP 입력</h2>

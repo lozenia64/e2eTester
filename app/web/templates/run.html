@@ -51,8 +51,8 @@
 <!-- OTP 입력 -->
 <section class="otp-panel rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm{% if not run.awaiting_input_module_id %} is-hidden{% endif %}" id="otp-panel" data-run-id="{{ run.run_id }}" data-awaiting-module-id="{{ run.awaiting_input_module_id or '' }}">
     <div class="flex items-start gap-3">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+            <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         </span>
         <div class="min-w-0 flex-1">
             <h2 class="text-base font-bold text-gray-900">OTP 입력</h2>
@@ -74,7 +74,7 @@
 <section class="space-y-4">
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">모듈 노드</h2>
-        <p class="text-sm text-gray-500">전체 {{ run.modules|length }}개 모듈 중 {{ run.selected_module_ids|length }}개가 선택되었습니다. 제외된 모듈은 SKIPPED 상태로 유지됩니다.</p>
+        <p class="text-sm text-gray-500">전체 {{ run.modules|length }}개 모듈 중 {{ run.selected_module_ids|length }}개가 선택되었습니다. 선택되지 않은 모듈은 SKIPPED 상태로 유지됩니다.</p>
     </div>
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" id="node-grid" data-run-id="{{ run.run_id }}">
         {% for module in run.modules|sort(attribute='order') %}
