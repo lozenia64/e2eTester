@@ -96,6 +96,16 @@
               자동 복구됨 ({{ module.retry_count }}회 재시도)
             </span>
             {% endif %}
+            {% set heals = healing_by_module.get(module.module_id, []) %}
+            {% if heals %}
+            <p class="mt-2 text-xs text-violet-700">
+              🔧 셀렉터 {{ heals|length }}건
+              {%- if heals[0].action == 'AUTO_HEALED' %} 자동 복구{% else %} 제안됨{% endif %} ·
+              <code class="font-mono">{{ heals[0].broken_selector }}</code> →
+              <code class="font-mono">{{ heals[0].healed_selector }}</code> ·
+              <a href="/self-healing#patches" class="font-medium underline">상세</a>
+            </p>
+            {% endif %}
             <section class="analysis-panel mt-3 space-y-1.5 rounded-xl bg-gray-50 p-3 ring-1 ring-inset ring-gray-200{% if not module.failure_analysis %} is-hidden{% endif %}" data-role="failure-analysis">
                 <div class="flex items-center justify-between gap-2">
                     <span class="inline-flex items-center gap-1 text-xs font-semibold text-violet-600">

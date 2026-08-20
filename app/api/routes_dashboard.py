@@ -7,7 +7,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
-from app.api.dependencies import get_run_queries, get_run_service, get_suite_service
+from app.api.dependencies import (
+    get_healing_service,
+    get_run_queries,
+    get_run_service,
+    get_suite_service,
+)
 from app.contexts.identity.dependencies import get_current_user, require_admin
 from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
@@ -16,6 +21,7 @@ from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
 from app.web.status_view import status_badge_view
 
 if TYPE_CHECKING:
+    from app.contexts.healing.service import HealingService
     from app.contexts.run.application.service import RunService
     from app.contexts.suite.application.service import SuiteService
     from app.orchestrator.queries import RunQueries
@@ -327,6 +333,7 @@ async def run_dashboard(
     run_id: str,
     current_user: User = Depends(get_current_user),
     run_queries: RunQueries = Depends(get_run_queries),
+    healing: HealingService = Depends(get_healing_service),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
@@ -334,11 +341,22 @@ async def run_dashboard(
         run = await run_queries.get_run_detail(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    allowed = None if current_user.role == "admin" else current_user.allowed_system_codes
+    healing_payload = await healing.list_events(allowed_system_codes=allowed, run_id=run_id)
+    healing_by_module: dict[str, list[dict]] = {}
+    for item in healing_payload["items"]:
+        # NO_CANDIDATE 는 복구되지 않은 시도다 — 화면에 표시하지 않는다(설계 §3.5).
+        if item["action"] == "NO_CANDIDATE":
+            continue
+        healing_by_module.setdefault(item["module_id"], []).append(item)
+
     return templates.TemplateResponse(
         request,
         "run.html",
         {
             "run": run,
             "current_user": current_user,
+            "healing_by_module": healing_by_module,
         },
     )

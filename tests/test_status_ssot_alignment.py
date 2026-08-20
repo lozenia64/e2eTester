@@ -25,9 +25,7 @@ def _parse_ts_object(source: str, name: str) -> dict[str, str]:
     생성기가 만드는 형식은 결정적이다(키·값 모두 이중 인용부호, 후행 콤마).
     JSON 으로 바꿔 파싱하므로 정규식으로 값을 하나씩 긁지 않는다.
     """
-    match = re.search(
-        rf"export const {name}: Record<string, \w+> = \{{(.*?)\n\}};", source, re.S
-    )
+    match = re.search(rf"export const {name}: Record<string, \w+> = \{{(.*?)\n\}};", source, re.S)
     assert match, f"{name} 을 {GENERATED_TS} 에서 찾지 못했습니다."
     body = match.group(1).strip().rstrip(",")
     return json.loads("{" + body + "}")

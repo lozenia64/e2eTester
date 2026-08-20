@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import routes_dashboard
-from app.api.dependencies import get_run_queries
+from app.api.dependencies import get_healing_service, get_run_queries
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
 from app.contexts.run.views.view import RunView
@@ -57,7 +57,13 @@ class _StubRunQueries:
 def _build_client(run: RunView) -> TestClient:
     app = FastAPI()
     app.include_router(routes_dashboard.router)
+
+    class _NoHealing:
+        async def list_events(self, **kwargs):
+            return {"items": [], "systems": []}
+
     app.dependency_overrides[get_run_queries] = lambda: _StubRunQueries(run)
+    app.dependency_overrides[get_healing_service] = lambda: _NoHealing()
     app.dependency_overrides[get_current_user] = lambda: User(
         user_id="u1",
         email="tester@test.local",

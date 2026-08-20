@@ -197,11 +197,14 @@ class HealingService:
         *,
         allowed_system_codes: list[str] | None = None,
         system_code: str | None = None,
+        run_id: str | None = None,
         limit: int = _EVENT_LIST_LIMIT,
     ) -> dict[str, Any]:
         events = self._scoped(await self._event_store.list(limit=limit), allowed_system_codes)
         if system_code:
             events = [e for e in events if e.system_code == system_code]
+        if run_id:
+            events = [e for e in events if e.run_id == run_id]
         heal_counts: dict[tuple[str, str], int] = {}
         for event in events:
             key = (event.system_code, event.broken_selector)
