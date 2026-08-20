@@ -45,6 +45,7 @@ async def _load_summary(
     return await summary_queries.get_daily_summary(
         user_id=current_user.user_id,
         allowed_system_codes=allowed,
+        is_admin=current_user.role == "admin",
     )
 
 

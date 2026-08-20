@@ -34,6 +34,7 @@ class DailySummaryQueries:
         *,
         user_id: str | None,
         allowed_system_codes: list[str] | None,
+        is_admin: bool = False,
     ) -> dict[str, Any]:
         dashboard = await self._daily_queries.get_daily_dashboard(
             allowed_system_codes=allowed_system_codes
@@ -49,6 +50,7 @@ class DailySummaryQueries:
             healing_metrics,
             savings,
             today_label=schedule_today_label(),
+            is_admin=is_admin,
         )
         # 프래그먼트가 히어로 문장·메타에 쓰는 원본도 함께 넘긴다.
         summary["totals"] = dashboard["totals"]

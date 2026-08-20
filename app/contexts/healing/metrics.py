@@ -34,10 +34,14 @@ def build_healing_metrics(
     now: datetime,
     trend_days: int = 30,
     day_label: Callable[[datetime], str] = _utc_day_label,
+    month_start: datetime | None = None,
 ) -> dict[str, Any]:
     """상단 KPI(이번 달 자동 복구 N건 · 무인 통과율 · MTTR) + 일별 추이 + 만성 지점 표."""
     now = _as_utc(now)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start is None:
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        month_start = _as_utc(month_start)
     month_events = [e for e in events if _as_utc(e.created_at) >= month_start]
 
     auto_recovered = [

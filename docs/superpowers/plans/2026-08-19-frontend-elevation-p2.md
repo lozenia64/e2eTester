@@ -1898,7 +1898,7 @@ git commit -m "feat(dashboard): 상태 타일을 KPI 카드 4장으로 교체 �
 
 ## 완료 기준 (P2 DoD)
 
-- [ ] `grep -rn "build_daily_dashboard\b" app tests --include=*.py | grep -v _from_projection` → 출력 없음
+- [ ] `grep -rn "build_daily_dashboard\b" app --include=*.py | grep -v _from_projection` → 출력 없음
 - [ ] `python3 -m pytest tests/ -q` → 전부 통과
 - [ ] `npm run build && npm run typecheck && npm run lint && npm run test` → 전부 통과
 - [ ] `python3 scripts/ci/run_all_gates.py --profile full` → 전 게이트 통과

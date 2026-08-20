@@ -64,3 +64,43 @@ def test_kst_today_bucket_matches_dashboard_date_label():
     )
     bucket = next(row for row in metrics["trend"] if row["date"] == dashboard_today)
     assert bucket["auto"] == 1
+
+
+# KST 2026-09-01 08:30 == UTC 2026-08-31 23:30 — UTC 로는 아직 8월, KST 로는 이미 9월.
+KST_MONTH_BOUNDARY_UTC = datetime(2026, 8, 31, 23, 30, tzinfo=UTC)
+# KST 2026-09-01 00:00 == UTC 2026-08-31 15:00 — savings 카드가 쓰는
+# schedule_month_start_utc() 와 같은 정의의 '이번 달(9월, KST)' 시작점을 고정 시각으로 재현한다.
+KST_SEPTEMBER_START_UTC = datetime(2026, 8, 31, 15, 0, tzinfo=UTC)
+
+
+def test_month_kpi_uses_utc_by_default():
+    """month_start 를 생략하면(기존 호출자) UTC 월 경계를 그대로 쓴다 — 하위 호환."""
+    events = [
+        _event(KST_MONTH_BOUNDARY_UTC, event_id="e-boundary"),
+        # UTC 로는 같은 8월이지만, KST 로는 지난달(8월) 안에 머무는 시각.
+        _event(datetime(2026, 8, 15, 12, 0, tzinfo=UTC), event_id="e-mid-august"),
+    ]
+    metrics = build_healing_metrics(events, [], now=KST_MONTH_BOUNDARY_UTC)
+    # UTC 월 시작(8/1 00:00)을 쓰므로 두 이벤트 모두 '이번 달'(UTC 8월)로 뭉뚱그려진다.
+    assert metrics["kpi"]["month_events"] == 2
+    assert metrics["kpi"]["month_auto_recovered"] == 2
+
+
+def test_month_kpi_uses_schedule_timezone_when_month_start_provided():
+    """month_start 를 스케줄 타임존(KST) 기준으로 넘기면 KST 월 경계로 정확히 나뉜다.
+
+    savings 카드(``StatsService.get_savings_summary`` → ``schedule_month_start_utc()``)와
+    같은 '이번 달' 정의를 healing 의 ``month_auto_recovered`` 도 따라야, 같은 화면의
+    두 카드가 KST 아침 시간대에 서로 다른 달을 가리키는 불일치가 사라진다.
+    """
+    events = [
+        _event(KST_MONTH_BOUNDARY_UTC, event_id="e-boundary"),
+        _event(datetime(2026, 8, 15, 12, 0, tzinfo=UTC), event_id="e-mid-august"),
+    ]
+    metrics = build_healing_metrics(
+        events, [], now=KST_MONTH_BOUNDARY_UTC, month_start=KST_SEPTEMBER_START_UTC
+    )
+    # KST 월 시작(9/1 00:00 KST)을 쓰므로, 8/15 이벤트는 '지난 달(8월, KST)'로 빠지고
+    # 경계 시각의 이벤트만 '이번 달(9월, KST)'로 집계된다.
+    assert metrics["kpi"]["month_events"] == 1
+    assert metrics["kpi"]["month_auto_recovered"] == 1

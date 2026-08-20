@@ -29,6 +29,7 @@ from app.contexts.suite.infrastructure.sqlite_suite_summary_query import SqliteS
 from app.core.settings import E2ESettings
 from app.execution.profile_queue import ProfilePartitionedRunQueue
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
+from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
 from app.platform.eventing.support import SqliteDatabase
 from app.registry.loader import ModuleRegistry
 
@@ -56,6 +57,7 @@ def compose_insights_repositories(db_path: str, es_db: SqliteDatabase) -> Insigh
 class InsightsContainer:
     repos: InsightsRepositories
     daily_queries: DailyDashboardQueries | None = None
+    daily_summary_queries: DailySummaryQueries | None = None
     admin_dashboard_queries: AdminDashboardQueries | None = None
     stats_service: StatsService | None = None
     insights_service: InsightsService | None = None

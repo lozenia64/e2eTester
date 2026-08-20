@@ -5,7 +5,6 @@
   if (!root) return;
 
   const REFRESH_MS = 30000;
-  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (sel, el = document) => el.querySelector(sel);
 
   const TIER_ORDER = ["comfortable", "compact", "dense", "minimal", "micro"];

@@ -85,7 +85,7 @@ class FakeDailySummaryQueries:
     def __init__(self) -> None:
         self.seen: list[tuple[str | None, list[str] | None]] = []
 
-    async def get_daily_summary(self, *, user_id, allowed_system_codes):
+    async def get_daily_summary(self, *, user_id, allowed_system_codes, is_admin: bool = False):
         self.seen.append((user_id, allowed_system_codes))
         return SUMMARY
 

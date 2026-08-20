@@ -55,6 +55,7 @@ class FakeDailySummaryQueries:
         *,
         user_id: str | None = None,
         allowed_system_codes: list[str] | None = None,
+        is_admin: bool = False,
     ) -> dict:
         totals = self._data["totals"]
         cards = [

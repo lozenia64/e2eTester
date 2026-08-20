@@ -26,7 +26,7 @@ def _today_auto_healed(healing_metrics: dict[str, Any], today_label: str) -> int
     return 0
 
 
-def _savings_card(savings: SavingsSummary) -> dict[str, Any]:
+def _savings_card(savings: SavingsSummary, *, is_admin: bool) -> dict[str, Any]:
     if not savings.estimated or savings.total_seconds <= 0:
         return {
             "key": "savings",
@@ -36,7 +36,7 @@ def _savings_card(savings: SavingsSummary) -> dict[str, Any]:
             "period": "이번 달",
             "note": "모듈별 수동 소요 추정치를 설정하면 집계됩니다",
             "tone": "pending",
-            "href": MODULE_SETTINGS_URL,
+            "href": MODULE_SETTINGS_URL if is_admin else "",
             "estimated": False,
         }
     return {
@@ -47,7 +47,7 @@ def _savings_card(savings: SavingsSummary) -> dict[str, Any]:
         "period": "이번 달",
         "note": savings.note,
         "tone": "passed",
-        "href": MODULE_SETTINGS_URL,
+        "href": MODULE_SETTINGS_URL if is_admin else "",
         "estimated": True,
     }
 
@@ -58,6 +58,7 @@ def build_daily_summary(
     savings: SavingsSummary,
     *,
     today_label: str,
+    is_admin: bool = False,
 ) -> dict[str, Any]:
     """KPI 카드 4장(순서 고정: 통과율 · 스스로 복구 · 승인 대기 · 절감)."""
     kpi = healing_metrics.get("kpi", {})
@@ -100,6 +101,6 @@ def build_daily_summary(
             "href": PATCH_LIST_URL,
             "estimated": False,
         },
-        _savings_card(savings),
+        _savings_card(savings, is_admin=is_admin),
     ]
     return {"cards": cards}

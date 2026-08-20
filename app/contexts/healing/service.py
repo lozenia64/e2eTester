@@ -29,6 +29,7 @@ from app.contexts.healing.models import (
     PatchStatus,
 )
 from app.contexts.healing.patch_builder import apply_replacement, build_patch_drafts
+from app.contexts.scheduling.scheduler import schedule_month_start_utc
 from app.core.logging import get_logger
 from app.core.run_models import Run, RunModule
 from app.core.schedule_time import schedule_day_label
@@ -221,6 +222,7 @@ class HealingService:
             patches,
             now=datetime.now(UTC),
             day_label=schedule_day_label,
+            month_start=schedule_month_start_utc(),
         )
         payload["by_system"] = {
             code: {**row, "system_name": self._system_name(code)}

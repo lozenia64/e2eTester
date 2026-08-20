@@ -8,7 +8,10 @@ export function animateCountUp(
   target: number,
   durationMs: number = DEFAULT_DURATION_MS,
 ): void {
-  if (durationMs <= 0 || Number.isNaN(target)) {
+  const prefersReducedMotion =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (durationMs <= 0 || Number.isNaN(target) || prefersReducedMotion) {
     el.textContent = String(target);
     return;
   }

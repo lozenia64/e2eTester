@@ -28,6 +28,7 @@ def _cards(**overrides):
         "healing_metrics": HEALING,
         "savings": SAVINGS,
         "today_label": "2026-08-19",
+        "is_admin": True,
     }
     kwargs.update(overrides)
     summary = build_daily_summary(
@@ -35,6 +36,7 @@ def _cards(**overrides):
         kwargs["healing_metrics"],
         kwargs["savings"],
         today_label=kwargs["today_label"],
+        is_admin=kwargs["is_admin"],
     )
     return {card["key"]: card for card in summary["cards"]}
 
@@ -106,6 +108,24 @@ def test_unset_basis_shows_guidance_instead_of_zero_hours():
     card = _cards(savings=empty)["savings"]
     assert card["value"] == "추정치 미설정"
     assert card["href"] == "/admin/modules"
+
+
+def test_savings_href_hidden_for_non_admin():
+    """비관리자는 절감 카드를 클릭해도 /admin/modules 403 으로 보내지 않는다."""
+    estimated_card = _cards(is_admin=False)["savings"]
+    assert estimated_card["href"] == ""
+
+    empty = SavingsSummary(
+        total_seconds=0,
+        my_seconds=0,
+        run_count=0,
+        module_count=36,
+        basis_updated_at=None,
+        estimated=False,
+        note="",
+    )
+    unset_card = _cards(savings=empty, is_admin=False)["savings"]
+    assert unset_card["href"] == ""
 
 
 def test_summary_has_no_user_identifiers():
