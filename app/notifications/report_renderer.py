@@ -85,6 +85,12 @@ _STATUS_COLORS = {
     SuiteStatus.FAILED.value: WARN_COLOR,
     SuiteStatus.SKIPPED.value: NEUTRAL_COLOR,
     SuiteStatus.CANCELLED.value: NEUTRAL_COLOR,
+    # 아래 3개는 이전까지 맵에 없어 기본값(NEUTRAL_COLOR)으로 흘러내렸다.
+    # RUNNING 은 진행 중이므로 중립이 아니어야 한다 — 웹 토큰도 파랑이다.
+    # PENDING/QUEUED 는 중립이 맞지만, 우연이 아니라 의도임을 명시한다.
+    ModuleStatus.RUNNING.value: INFO_COLOR,
+    ModuleStatus.PENDING.value: NEUTRAL_COLOR,
+    ModuleStatus.QUEUED.value: NEUTRAL_COLOR,
 }
 
 
