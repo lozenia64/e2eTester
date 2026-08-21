@@ -11,9 +11,9 @@ import pytest
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.notifications.report_renderer import (
+    _STATUS_COLORS,
     INFO_COLOR,
     NEUTRAL_COLOR,
-    _STATUS_COLORS,
     _status_color,
 )
 

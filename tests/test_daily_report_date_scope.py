@@ -145,9 +145,7 @@ async def test_summary_forwards_date_label_and_builds_for_requested_day():
     from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
 
     daily = _RecordingDailyQueries()
-    result = await DailySummaryQueries(
-        daily, _StubHealing(), _StubStats()
-    ).get_daily_summary(
+    result = await DailySummaryQueries(daily, _StubHealing(), _StubStats()).get_daily_summary(
         user_id=None,
         allowed_system_codes=None,
         date_label="2026-08-20",

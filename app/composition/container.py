@@ -37,6 +37,7 @@ from app.contexts.run.infrastructure.failure_analysis_subscriber import FailureA
 from app.contexts.run.infrastructure.hydration import RunHydrator, RunProjectionLoader
 from app.contexts.scheduling.composition import (
     SchedulingContainer,
+    compose_daily_report_scheduler,
     compose_retention_scheduler,
     compose_scheduler,
 )
@@ -49,6 +50,7 @@ from app.contexts.suite.composition import (
     compose_suite_service,
 )
 from app.contexts.suite.infrastructure.hydration import SuiteHydrator
+from app.core.env_utils import DEFAULT_ENV_FILE_PATH, load_dotenv_file
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import E2ESettings
 from app.execution.composition import (
@@ -56,7 +58,17 @@ from app.execution.composition import (
     compose_execution_gateway,
     compose_execution_runtime,
 )
-from app.notifications.run_completion_email import RunCompletionEmailNotifier
+from app.notifications.daily_report_email import (
+    DailyReportEmailService,
+    resolve_daily_report_recipients,
+)
+from app.notifications.infrastructure.sqlite_email_notification_dedup import (
+    SqliteEmailNotificationDedupStore,
+)
+from app.notifications.run_completion_email import (
+    EmailNotificationConfig,
+    RunCompletionEmailNotifier,
+)
 from app.orchestrator.queries import AdminDashboardQueries, DailyDashboardQueries
 from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
 from app.platform.db import DEFAULT_DB_PATH
@@ -114,6 +126,7 @@ class AppContainer:
     outbox_relay: OutboxRelay = field(init=False)
     _scheduler_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
     _retention_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
+    _daily_report_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
 
     @classmethod
     def build(cls, settings: E2ESettings) -> AppContainer:
@@ -276,6 +289,17 @@ class AppContainer:
             self.healing.healing_service,
             self.insights.stats_service,
         )
+        email_config = EmailNotificationConfig.from_env(self.execution.system_codes)
+        if email_config is not None:
+            daily_report_service = DailyReportEmailService(
+                summary_queries=self.insights.daily_summary_queries,
+                dedup_store=SqliteEmailNotificationDedupStore(self.es_db),
+                config=email_config,
+                recipients=resolve_daily_report_recipients(load_dotenv_file(DEFAULT_ENV_FILE_PATH)),
+            )
+            self.scheduling.daily_report_scheduler = compose_daily_report_scheduler(
+                daily_report_service
+            )
 
     def apply_to_app_state(self, app: FastAPI) -> None:
         app.state.settings = self.settings
@@ -401,6 +425,10 @@ class AppContainer:
             self._retention_task = asyncio.create_task(
                 self.scheduling.retention_scheduler.run_forever()
             )
+        if self.scheduling.daily_report_scheduler is not None:
+            self._daily_report_task = asyncio.create_task(
+                self.scheduling.daily_report_scheduler.run_forever()
+            )
 
     async def stop(self) -> None:
         await self.outbox_relay.stop()
@@ -423,6 +451,15 @@ class AppContainer:
             except asyncio.CancelledError:
                 pass
             self._retention_task = None
+        if self.scheduling.daily_report_scheduler is not None:
+            self.scheduling.daily_report_scheduler.stop()
+        if self._daily_report_task is not None:
+            self._daily_report_task.cancel()
+            try:
+                await self._daily_report_task
+            except asyncio.CancelledError:
+                pass
+            self._daily_report_task = None
         await self.execution.run_queue.stop()
         if self.execution.session_registry is not None:
             await self.execution.session_registry.close()
