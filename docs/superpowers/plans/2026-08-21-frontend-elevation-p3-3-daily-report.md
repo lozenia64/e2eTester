@@ -1766,27 +1766,45 @@ from app.notifications.daily_report_email import DailyReportEmailService
 
 - [ ] **Step 6: 컨테이너에서 서비스와 스케줄러를 만든다**
 
-`app/composition/container.py` 에서 `retention_scheduler` 를 만드는 근처(`grep -n "compose_retention_scheduler" app/composition/container.py` 로 찾는다)에 추가한다:
+**배선 위치는 `wire_read_models()` 의 끝**이다 — `container.py:272-277` 에서 `self.insights.daily_summary_queries` 가 만들어진 **직후**. `retention_scheduler` 를 만드는 `container.py:252` 는 `wire_orchestration()` 안이고 `daily_summary_queries` 보다 앞이라, 거기 두면 아직 없는 객체를 참조한다.
+
+`self.insights.daily_summary_queries = DailySummaryQueries(...)` 블록 바로 아래에 추가한다:
 
 ```text
-        from app.notifications.daily_report_email import (
-            DailyReportEmailService,
-            resolve_daily_report_recipients,
-        )
-
         email_config = EmailNotificationConfig.from_env(self.execution.system_codes)
         if email_config is not None:
-            daily_recipients = resolve_daily_report_recipients(dotenv_values())
+            # 컨테이너에 dedup 스토어 필드가 없다. 같은 DB(self.es_db)로 새로 만들면
+            # claim 테이블이 Run 완료 메일과 공유되고, scope 가 "daily_report" 로
+            # 달라 충돌하지 않는다.
             daily_report_service = DailyReportEmailService(
                 summary_queries=self.insights.daily_summary_queries,
-                dedup_store=self.notifications.email_dedup_store,
+                dedup_store=SqliteEmailNotificationDedupStore(self.es_db),
                 config=email_config,
-                recipients=daily_recipients,
+                recipients=resolve_daily_report_recipients(
+                    load_dotenv_file(DEFAULT_ENV_FILE_PATH)
+                ),
             )
             self.scheduling.daily_report_scheduler = compose_daily_report_scheduler(
                 daily_report_service
             )
 ```
+
+**파일 상단에 추가할 임포트 4줄** — `container.py:59` 는 지금 `RunCompletionEmailNotifier` 만 임포트한다:
+
+```text
+from app.contexts.scheduling.composition import compose_daily_report_scheduler
+from app.core.env_utils import DEFAULT_ENV_FILE_PATH, load_dotenv_file
+from app.notifications.daily_report_email import (
+    DailyReportEmailService,
+    resolve_daily_report_recipients,
+)
+from app.notifications.infrastructure.sqlite_email_notification_dedup import (
+    SqliteEmailNotificationDedupStore,
+)
+from app.notifications.run_completion_email import EmailNotificationConfig
+```
+
+`compose_daily_report_scheduler` 는 기존 `compose_retention_scheduler` 임포트(`container.py:40`) 옆에 합쳐 넣는다.
 
 **확정된 이름들** (실측):
 
@@ -1794,8 +1812,8 @@ from app.notifications.daily_report_email import DailyReportEmailService
 | --- | --- |
 | 요약 쿼리 | `self.insights.daily_summary_queries` (`container.py:274` 에서 생성) |
 | dedup 스토어 | 컨테이너에 없다. `app/platform/eventing/composition.py:28` 이 `SqliteEmailNotificationDedupStore(es_db)` 로 만든다. **여기서도 `SqliteEmailNotificationDedupStore(self.es_db)` 로 새로 만든다** — 같은 DB(`container.py:131` 의 `self.es_db`)를 쓰므로 claim 테이블이 공유되고, scope 가 `"daily_report"` 로 달라 Run 완료 메일과 충돌하지 않는다 |
-| `dotenv_values` | `run_completion_email.py` 가 이미 임포트해 쓴다. 같은 경로를 쓴다 |
-| 스케줄러 조립 지점 | `container.py:252` 의 `compose_retention_scheduler(...)` 바로 아래 |
+| env 값 읽기 | `dotenv_values` 는 임포트가 아니라 `load_dotenv_file(DEFAULT_ENV_FILE_PATH)` 의 결과 지역 변수다(`run_completion_email.py:114`). 두 이름 모두 `app.core.env_utils` 에 있다 |
+| 스케줄러 조립 지점 | **`wire_read_models()` 끝** (`container.py:272-277` 의 `daily_summary_queries` 생성 직후). `container.py:252` 는 `wire_orchestration()` 안이라 너무 이르다 |
 
 `EmailNotificationConfig.from_env` 는 `container.py:367` 근처에서 `inspect_env_status` 용으로 이미 호출된다. 그 호출은 상태 점검용이므로 별개다 — 여기서 `from_env` 를 다시 부르되, `None` 이면(메일 설정 없음) 스케줄러를 만들지 않는다.
 
