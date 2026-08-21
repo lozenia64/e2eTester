@@ -105,6 +105,15 @@ class E2ESettings(BaseSettings):
     # false 로 즉시 차단한다. false 면 /wall·/wall/fragment 가 404 다.
     wall_enabled: bool = Field(default=True, validation_alias="E2E_WALL_ENABLED")
     run_retention_cron: str = Field(default="0 3 * * *", validation_alias="E2E_RUN_RETENTION_CRON")
+    # 일간 리포트 메일(P3-3). 메일은 되돌릴 수 없는 부수효과라 기본은 꺼 둔다 —
+    # 상황판(E2E_WALL_ENABLED, 기본 true)과 반대 판단이다.
+    daily_report_enabled: bool = Field(
+        default=False, validation_alias="E2E_EMAIL_DAILY_REPORT_ENABLED"
+    )
+    # 발송 시각(스케줄 타임존 기준 5필드 cron). None 이면 기본값 08:00.
+    daily_report_cron: str | None = Field(
+        default=None, validation_alias="E2E_EMAIL_DAILY_REPORT_CRON"
+    )
 
     # 운영 로깅 (structlog)
     log_level: str = Field(default="INFO", validation_alias="E2E_LOG_LEVEL")
@@ -158,6 +167,11 @@ class E2ESettings(BaseSettings):
 
         _, source = resolve_env_with_source(env_name, load_dotenv_file())
         return source
+
+
+# 수신자 env 는 E2ESettings 필드가 아니다 — Task 6 에서 dotenv_values 로 읽는다.
+if False:  # pragma: no cover — docs_consistency 역방향 가드용 env 이름 선언
+    resolve_env_with_source("E2E_EMAIL_DAILY_REPORT_RECIPIENTS")
 
 
 @lru_cache
