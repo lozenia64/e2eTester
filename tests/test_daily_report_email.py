@@ -79,6 +79,11 @@ class _Queries:
         return SUMMARY
 
 
+class _FailingQueries:
+    async def get_daily_summary(self, **_kwargs):
+        raise RuntimeError("summary unavailable")
+
+
 class _Dedup:
     def __init__(self, *, allow: bool = True) -> None:
         self.allow = allow
@@ -150,6 +155,16 @@ def test_recipients_drop_blank_entries():
     assert resolve_daily_report_recipients(values) == ("a@x.com", "b@x.com")
 
 
+def test_recipients_deduplicate_case_insensitive():
+    values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com|A@x.com|a@x.com"}
+    assert resolve_daily_report_recipients(values) == ("a@x.com",)
+
+
+def test_recipients_drop_invalid_entries():
+    values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com|not-an-email|b@x.com"}
+    assert resolve_daily_report_recipients(values) == ("a@x.com", "b@x.com")
+
+
 @pytest.mark.asyncio
 async def test_sends_once_to_all_recipients():
     service, holder = _service(recipients=("a@x.com", "b@x.com"))
@@ -187,6 +202,16 @@ async def test_second_call_for_same_date_does_not_send():
     dedup = _Dedup(allow=False)
     service, holder = _service(dedup=dedup)
     assert await service.send_for("2026-08-20") is False
+    assert "sender" not in holder
+
+
+@pytest.mark.asyncio
+async def test_pre_send_failure_releases_claim():
+    dedup = _Dedup()
+    service, holder = _service(dedup=dedup, queries=_FailingQueries())
+    assert await service.send_for("2026-08-20") is False
+    assert dedup.claims == [("daily_report", "2026-08-20")]
+    assert dedup.releases == [("daily_report", "2026-08-20")]
     assert "sender" not in holder
 
 

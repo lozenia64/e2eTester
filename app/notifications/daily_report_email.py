@@ -15,7 +15,7 @@ from app.core.env_utils import resolve_env_value
 from app.core.logging import get_logger
 from app.notifications.daily_report import build_daily_report
 from app.notifications.report_renderer import render_daily_report_html
-from app.notifications.run_completion_email import GmailEmailSender
+from app.notifications.run_completion_email import GmailEmailSender, _parse_recipients
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,13 +29,16 @@ DEDUP_SCOPE = "daily_report"
 class _DedupStore(Protocol):
     def try_claim_sync(self, scope: str, entity_id: str) -> bool: ...
 
+    def release_sync(self, scope: str, entity_id: str) -> None: ...
+
 
 def resolve_daily_report_recipients(values: dict[str, str | None]) -> tuple[str, ...]:
     """파이프 구분 수신자 문자열 → 튜플. 기존 메일 수신자 형식과 같다."""
     raw = (resolve_env_value("E2E_EMAIL_DAILY_REPORT_RECIPIENTS", values) or "").strip()
     if not raw:
         return ()
-    return tuple(part.strip() for part in raw.split("|") if part.strip())
+    recipients, _invalid_entries = _parse_recipients(raw)
+    return tuple(recipients)
 
 
 def _build_message(*, subject: str, from_addr: str, html_body: str, plain_body: str):
@@ -81,23 +84,34 @@ class DailyReportEmailService:
             )
             return False
 
-        summary = await self._summary_queries.get_daily_summary(
-            user_id=None,  # 리포트에 개인 기여분은 의미가 없다
-            allowed_system_codes=None,  # 전사 리포트
-            is_admin=False,
-            date_label=date_label,
-        )
-        report = build_daily_report(summary, date_label=date_label)
-        html = render_daily_report_html(report)
-        subject = f"[E2E] {date_label} 점검 결과 — {report['headline']}"
-        plain = f"{date_label} 점검 결과: {report['headline']}"
+        try:
+            summary = await self._summary_queries.get_daily_summary(
+                user_id=None,  # 리포트에 개인 기여분은 의미가 없다
+                allowed_system_codes=None,  # 전사 리포트
+                is_admin=False,
+                date_label=date_label,
+            )
+            report = build_daily_report(summary, date_label=date_label)
+            html = render_daily_report_html(report)
+            subject = f"[E2E] {date_label} 점검 결과 — {report['headline']}"
+            plain = f"{date_label} 점검 결과: {report['headline']}"
 
-        message = _build_message(
-            subject=subject,
-            from_addr=self._config.gmail_account,
-            html_body=html,
-            plain_body=plain,
-        )
+            message = _build_message(
+                subject=subject,
+                from_addr=self._config.gmail_account,
+                html_body=html,
+                plain_body=plain,
+            )
+        except Exception as exc:
+            self._dedup_store.release_sync(DEDUP_SCOPE, date_label)
+            logger.exception(
+                "일간 리포트 준비 실패 — claim 해제 후 재시도 가능",
+                log_event="daily_report.prepare_failed",
+                date_label=date_label,
+                error=str(exc),
+            )
+            return False
+
         try:
             self._sender_factory(self._config).send(message, list(self._recipients))
         except Exception as exc:
