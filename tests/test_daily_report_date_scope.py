@@ -43,12 +43,14 @@ def test_invalid_label_raises():
 class _RecordingStatusQuery:
     def __init__(self) -> None:
         self.dates: list[str] = []
+        self.since_utcs: list[datetime] = []
 
     async def list_for_date(self, date_label, allowed_system_codes):
         self.dates.append(date_label)
         return []
 
     async def list_run_summaries_for_date(self, date_label, since_utc, allowed_system_codes):
+        self.since_utcs.append(since_utc)
         return []
 
 
@@ -75,6 +77,7 @@ async def test_explicit_date_label_is_used():
         date_label="2026-08-20"
     )
     assert query.dates == ["2026-08-20"]
+    assert query.since_utcs == [schedule_day_start_utc("2026-08-20")]
 
 
 @pytest.mark.asyncio
@@ -85,3 +88,71 @@ async def test_dashboard_echoes_the_requested_date():
         _EmptyRegistry(), _RecordingStatusQuery()
     ).get_daily_dashboard(date_label="2026-08-20")
     assert data["date_label"] == "2026-08-20"
+
+
+_HEALING_FOR_DATE = {
+    "kpi": {"month_auto_recovered": 10, "pending_patches": 1},
+    "trend": [
+        {"date": "2026-08-19", "auto": 3},
+        {"date": "2026-08-20", "auto": 5},
+    ],
+}
+
+
+class _RecordingDailyQueries:
+    def __init__(self) -> None:
+        self.date_labels: list[str | None] = []
+
+    async def get_daily_dashboard(self, *, allowed_system_codes=None, date_label=None):
+        self.date_labels.append(date_label)
+        label = date_label or schedule_today_label()
+        return {
+            "totals": {
+                "modules": 2,
+                "passed": 2,
+                "pass_rate": 100,
+                "anomaly": 0,
+                "error": 0,
+            },
+            "date_label": label,
+            "generated_at": datetime.now(UTC),
+            "attention": [],
+        }
+
+
+class _StubHealing:
+    async def metrics(self, *, allowed_system_codes=None):
+        return _HEALING_FOR_DATE
+
+
+class _StubStats:
+    async def get_savings_summary(self, *, from_dt, to_dt, user_id):
+        from app.core.stats_models import SavingsSummary
+
+        return SavingsSummary(
+            total_seconds=0,
+            my_seconds=0,
+            run_count=0,
+            module_count=0,
+            basis_updated_at=datetime.now(UTC),
+            estimated=False,
+            note="",
+        )
+
+
+@pytest.mark.asyncio
+async def test_summary_forwards_date_label_and_builds_for_requested_day():
+    from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
+
+    daily = _RecordingDailyQueries()
+    result = await DailySummaryQueries(
+        daily, _StubHealing(), _StubStats()
+    ).get_daily_summary(
+        user_id=None,
+        allowed_system_codes=None,
+        date_label="2026-08-20",
+    )
+    assert daily.date_labels == ["2026-08-20"]
+    assert result["date_label"] == "2026-08-20"
+    self_healed = next(card for card in result["cards"] if card["key"] == "self_healed")
+    assert self_healed["value"] == 5
