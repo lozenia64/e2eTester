@@ -169,11 +169,6 @@ class E2ESettings(BaseSettings):
         return source
 
 
-# 수신자 env 는 E2ESettings 필드가 아니다 — Task 6 에서 dotenv_values 로 읽는다.
-if False:  # pragma: no cover — docs_consistency 역방향 가드용 env 이름 선언
-    resolve_env_with_source("E2E_EMAIL_DAILY_REPORT_RECIPIENTS")
-
-
 @lru_cache
 def get_settings() -> E2ESettings:
     return E2ESettings()
