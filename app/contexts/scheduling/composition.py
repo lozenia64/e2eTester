@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.contexts.run.application.service import RunService
+from app.contexts.scheduling.daily_report_scheduler import DailyReportScheduler
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
     SqliteScheduleRepository,
 )
@@ -13,12 +15,16 @@ from app.contexts.scheduling.scheduler import SchedulerService
 from app.contexts.suite.application.service import SuiteService
 from app.orchestrator.queries import RunQueries
 
+if TYPE_CHECKING:
+    from app.notifications.daily_report_email import DailyReportEmailService
+
 
 @dataclass
 class SchedulingContainer:
     schedule_repository: SqliteScheduleRepository
     scheduler: SchedulerService | None = None
     retention_scheduler: RunRetentionScheduler | None = None
+    daily_report_scheduler: DailyReportScheduler | None = None
 
 
 def compose_scheduler(
@@ -39,3 +45,9 @@ def compose_retention_scheduler(
     run_service: RunService,
 ) -> RunRetentionScheduler | None:
     return RunRetentionScheduler.from_env(RunRetentionService(run_service))
+
+
+def compose_daily_report_scheduler(
+    report_service: DailyReportEmailService,
+) -> DailyReportScheduler | None:
+    return DailyReportScheduler.from_env(report_service)

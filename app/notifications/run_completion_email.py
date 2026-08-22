@@ -1677,7 +1677,7 @@ def _resolve_operator_recipients(
     dotenv_values: dict[str, str],
 ) -> tuple[tuple[str, ...], list[str]]:
     raw_value = (resolve_env_value("E2E_EMAIL_OPERATOR_RECIPIENTS", dotenv_values) or "").strip()
-    recipients, invalid_entries = _parse_recipients(raw_value)
+    recipients, invalid_entries = parse_recipients(raw_value)
     errors: list[str] = []
     if invalid_entries:
         errors.append(
@@ -1695,7 +1695,7 @@ def _resolve_recipient_map(
     for system_code in system_codes:
         env_name = _recipient_env_name(system_code)
         raw_value = (resolve_env_value(env_name, dotenv_values) or "").strip()
-        recipients, invalid_entries = _parse_recipients(raw_value)
+        recipients, invalid_entries = parse_recipients(raw_value)
         if invalid_entries:
             errors.append(
                 f"{env_name} 에 유효하지 않은 메일 주소가 있습니다: {', '.join(invalid_entries)}"
@@ -1722,7 +1722,7 @@ def _recipient_env_name(system_code: str) -> str:
     return f"E2E_EMAIL_RECIPIENTS_{suffix}"
 
 
-def _parse_recipients(raw_value: str) -> tuple[list[str], list[str]]:
+def parse_recipients(raw_value: str) -> tuple[list[str], list[str]]:
     recipients: list[str] = []
     invalid_entries: list[str] = []
     seen: set[str] = set()
