@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.core.enums import ModuleStatus, RunStatus
+from app.core.status_colors import PALETTE
 from app.core.status_labels import (
     MODULE_STATUS_LABELS,
     RUN_STATUS_LABELS,
@@ -41,26 +42,6 @@ BANNER_TS = (
     "// 출처: app/core/status_labels.py\n"
     "// 생성: python3 scripts/gen_frontend_tokens.py\n"
 )
-
-# 톤별 팔레트(라이트 전용). Tailwind 표준 색값을 쓰되 기존 --st-* 선택을 계승한다.
-# solid=칩/점, surface=배경, text=전경, border=테두리.
-PALETTE: dict[str, dict[str, str]] = {
-    "passed": {"solid": "#10b981", "surface": "#d1fae5", "text": "#047857", "border": "#6ee7b7"},
-    "anomaly": {"solid": "#f59e0b", "surface": "#fef3c7", "text": "#b45309", "border": "#fcd34d"},
-    "error": {"solid": "#ef4444", "surface": "#fee2e2", "text": "#b91c1c", "border": "#fca5a5"},
-    "running": {"solid": "#3b82f6", "surface": "#dbeafe", "text": "#1d4ed8", "border": "#93c5fd"},
-    # waiting_input 은 사람의 OTP 입력을 기다리는 상태 — running 과 반드시 구분한다.
-    "waiting_input": {
-        "solid": "#8b5cf6",
-        "surface": "#ede9fe",
-        "text": "#6d28d9",
-        "border": "#c4b5fd",
-    },
-    "blocked": {"solid": "#f97316", "surface": "#ffedd5", "text": "#c2410c", "border": "#fdba74"},
-    "skipped": {"solid": "#94a3b8", "surface": "#f1f5f9", "text": "#475569", "border": "#cbd5e1"},
-    "cancelled": {"solid": "#71717a", "surface": "#f4f4f5", "text": "#52525b", "border": "#d4d4d8"},
-    "pending": {"solid": "#a1a1aa", "surface": "#f4f4f5", "text": "#6b7280", "border": "#e4e4e7"},
-}
 
 VARIANTS = ("solid", "surface", "text", "border")
 
