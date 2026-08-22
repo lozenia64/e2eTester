@@ -18,7 +18,7 @@ import-linter>=2.0,<3.0
 
 # CI 보안 게이트 (Tier 3 — auth/PII 터치 PR 또는 new_system 프로필)
 pip-audit>=2.10.1,<3.0
-bandit[toml]>=1.8,<2.0
+bandit[toml]>=1.9.4,<2.0
 
 # typed decider evolve exhaustiveness (reportMatchNotExhaustive)
 pyright>=1.1.411,<2.0
