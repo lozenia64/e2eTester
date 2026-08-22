@@ -102,8 +102,10 @@ class _Sender:
     def __init__(self, config) -> None:
         self.config = config
         self.sent: list[list[str]] = []
+        self.messages: list[Any] = []
 
     def send(self, message, recipients: list[str]) -> None:
+        self.messages.append(message)
         self.sent.append(list(recipients))
 
 
@@ -124,7 +126,15 @@ class _Config:
     timeout_seconds = 5
 
 
-def _service(*, dedup=None, sender_cls=_Sender, recipients=("a@test.local",), queries=None):
+def _service(
+    *,
+    dedup=None,
+    sender_cls=_Sender,
+    recipients=("a@test.local",),
+    queries=None,
+    public_base_url: str | None = None,
+    wall_enabled: bool | None = None,
+):
     holder: dict[str, Any] = {}
 
     def factory(config):
@@ -136,9 +146,17 @@ def _service(*, dedup=None, sender_cls=_Sender, recipients=("a@test.local",), qu
         dedup_store=dedup or _Dedup(),
         config=_Config(),
         recipients=tuple(recipients),
+        public_base_url=public_base_url,
+        wall_enabled=wall_enabled,
         sender_factory=factory,
     )
     return service, holder
+
+
+def _sent_html(holder: dict[str, Any]) -> str:
+    message = holder["sender"].messages[0]
+    html_part = message.get_payload()[1]
+    return html_part.get_payload(decode=True).decode("utf-8")
 
 
 def test_recipients_parse_pipe_separated():
@@ -229,6 +247,43 @@ async def test_sends_once_to_all_recipients():
     service, holder = _service(recipients=("a@x.com", "b@x.com"))
     assert await service.send_for("2026-08-20") is True
     assert holder["sender"].sent == [["a@x.com", "b@x.com"]]
+
+
+@pytest.mark.asyncio
+async def test_send_for_includes_wall_link_when_injected_values_enable_it():
+    service, holder = _service(
+        public_base_url="https://e2e.example.com/",
+        wall_enabled=True,
+    )
+
+    assert await service.send_for("2026-08-20") is True
+    html = _sent_html(holder)
+    assert 'href="https://e2e.example.com/wall"' in html
+    assert "실시간 상황판 열기" in html
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("public_base_url", "wall_enabled"),
+    [
+        ("", True),
+        ("   ", True),
+        ("https://e2e.example.com", False),
+    ],
+)
+async def test_send_for_omits_wall_link_when_injected_conditions_are_not_met(
+    public_base_url: str,
+    wall_enabled: bool,
+):
+    service, holder = _service(
+        public_base_url=public_base_url,
+        wall_enabled=wall_enabled,
+    )
+
+    assert await service.send_for("2026-08-20") is True
+    html = _sent_html(holder)
+    assert "/wall" not in html
+    assert "실시간 상황판 열기" not in html
 
 
 @pytest.mark.asyncio
