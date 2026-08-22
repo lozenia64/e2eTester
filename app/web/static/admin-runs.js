@@ -204,6 +204,9 @@
 
   function statusLabel(value) {
     const labels = {
+      PENDING: "대기",
+      RUNNING: "실행 중",
+      WAITING_INPUT: "입력 대기",
       PASSED: "정상",
       ANOMALY: "이상징후",
       FAILED: "이상징후",
