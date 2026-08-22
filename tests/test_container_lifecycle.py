@@ -176,7 +176,8 @@ def test_wire_read_models_wires_daily_report_scheduler_when_email_config_availab
     monkeypatch.setattr(
         container_mod,
         "resolve_daily_report_recipients",
-        lambda *_args, **_kwargs: ("qa@example.com",),
+        # (수신자, 오류 목록) — 형제 리졸버와 같은 계약
+        lambda *_args, **_kwargs: (("qa@example.com",), []),
         raising=False,
     )
     monkeypatch.setattr(

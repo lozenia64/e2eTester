@@ -143,26 +143,63 @@ def _service(*, dedup=None, sender_cls=_Sender, recipients=("a@test.local",), qu
 
 def test_recipients_parse_pipe_separated():
     values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": " a@x.com | b@x.com "}
-    assert resolve_daily_report_recipients(values) == ("a@x.com", "b@x.com")
+    recipients, errors = resolve_daily_report_recipients(values)
+    assert recipients == ("a@x.com", "b@x.com")
+    assert errors == []
 
 
 def test_recipients_empty_when_unset():
-    assert resolve_daily_report_recipients({}) == ()
+    assert resolve_daily_report_recipients({}) == ((), [])
 
 
 def test_recipients_drop_blank_entries():
     values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com||b@x.com|"}
-    assert resolve_daily_report_recipients(values) == ("a@x.com", "b@x.com")
+    recipients, errors = resolve_daily_report_recipients(values)
+    assert recipients == ("a@x.com", "b@x.com")
+    assert errors == []
 
 
 def test_recipients_deduplicate_case_insensitive():
     values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com|A@x.com|a@x.com"}
-    assert resolve_daily_report_recipients(values) == ("a@x.com",)
+    recipients, _errors = resolve_daily_report_recipients(values)
+    assert recipients == ("a@x.com",)
 
 
 def test_recipients_drop_invalid_entries():
     values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com|not-an-email|b@x.com"}
-    assert resolve_daily_report_recipients(values) == ("a@x.com", "b@x.com")
+    recipients, _errors = resolve_daily_report_recipients(values)
+    assert recipients == ("a@x.com", "b@x.com")
+
+
+def test_invalid_entries_are_reported_not_silently_dropped():
+    """오타 난 주소가 신호 없이 사라지면 그 사람만 리포트를 못 받는다.
+
+    형제 리졸버(_resolve_operator_recipients·_resolve_recipient_map)는 잘못된 항목을
+    오류 문자열로 돌려준다. 일간 리포트 경로만 버리고 있었다.
+    """
+    values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "a@x.com|exec@company,com"}
+    recipients, errors = resolve_daily_report_recipients(values)
+    assert recipients == ("a@x.com",)
+    assert len(errors) == 1
+    assert "exec@company,com" in errors[0]
+    assert "E2E_EMAIL_DAILY_REPORT_RECIPIENTS" in errors[0]
+
+
+def test_every_invalid_entry_is_named():
+    values = {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "bad1|bad2|ok@x.com"}
+    _recipients, errors = resolve_daily_report_recipients(values)
+    assert "bad1" in errors[0]
+    assert "bad2" in errors[0]
+
+
+def test_parse_recipients_is_public_api():
+    """소비자가 둘이 됐다 — 비공개 이름을 모듈 밖에서 임포트하지 않는다."""
+    from app.notifications import run_completion_email
+
+    assert hasattr(run_completion_email, "parse_recipients")
+    recipients, invalid = run_completion_email.parse_recipients("a@x.com|nope")
+    assert recipients == ["a@x.com"]
+    assert invalid == ["nope"]
 
 
 @pytest.mark.asyncio

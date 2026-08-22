@@ -291,11 +291,21 @@ class AppContainer:
         )
         email_config = EmailNotificationConfig.from_env(self.execution.system_codes)
         if email_config is not None:
+            daily_recipients, recipient_errors = resolve_daily_report_recipients(
+                load_dotenv_file(DEFAULT_ENV_FILE_PATH)
+            )
+            for message in recipient_errors:
+                # 오타 난 주소를 조용히 버리면 그 사람만 리포트를 못 받고 이유가 남지 않는다.
+                logger.warning(
+                    "일간 리포트 수신자 설정 오류",
+                    log_event="daily_report.recipient_config_error",
+                    detail=message,
+                )
             daily_report_service = DailyReportEmailService(
                 summary_queries=self.insights.daily_summary_queries,
                 dedup_store=SqliteEmailNotificationDedupStore(self.es_db),
                 config=email_config,
-                recipients=resolve_daily_report_recipients(load_dotenv_file(DEFAULT_ENV_FILE_PATH)),
+                recipients=daily_recipients,
             )
             self.scheduling.daily_report_scheduler = compose_daily_report_scheduler(
                 daily_report_service

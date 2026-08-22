@@ -15,7 +15,7 @@ from app.core.env_utils import resolve_env_value
 from app.core.logging import get_logger
 from app.notifications.daily_report import build_daily_report
 from app.notifications.report_renderer import render_daily_report_html
-from app.notifications.run_completion_email import GmailEmailSender, _parse_recipients
+from app.notifications.run_completion_email import GmailEmailSender, parse_recipients
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,13 +32,26 @@ class _DedupStore(Protocol):
     def release_sync(self, scope: str, entity_id: str) -> None: ...
 
 
-def resolve_daily_report_recipients(values: dict[str, str | None]) -> tuple[str, ...]:
-    """파이프 구분 수신자 문자열 → 튜플. 기존 메일 수신자 형식과 같다."""
+def resolve_daily_report_recipients(
+    values: dict[str, str | None],
+) -> tuple[tuple[str, ...], list[str]]:
+    """파이프 구분 수신자 문자열 → (수신자, 오류 목록).
+
+    형제 리졸버(``_resolve_operator_recipients``·``_resolve_recipient_map``)와 같은 계약이다 —
+    잘못된 주소를 조용히 버리면 오타 하나로 그 사람만 리포트를 못 받고 아무 신호도 남지 않는다.
+    """
+    # 리터럴로 둔다 — check_docs_consistency 가 코드에서 env 이름 문자열을 찾아
+    # 문서(.env.example / INSTALL.md)와 대조하므로, 상수로 감추면 "죽은 변수" 로 오판한다.
     raw = (resolve_env_value("E2E_EMAIL_DAILY_REPORT_RECIPIENTS", values) or "").strip()
     if not raw:
-        return ()
-    recipients, _invalid_entries = _parse_recipients(raw)
-    return tuple(recipients)
+        return (), []
+    recipients, invalid_entries = parse_recipients(raw)
+    errors: list[str] = []
+    if invalid_entries:
+        errors.append(
+            f"{RECIPIENTS_ENV} 에 유효하지 않은 메일 주소가 있습니다: " + ", ".join(invalid_entries)
+        )
+    return tuple(recipients), errors
 
 
 def _build_message(*, subject: str, from_addr: str, html_body: str, plain_body: str):
