@@ -387,33 +387,23 @@ def test_fg006_allows_unrelated_keys_far_apart(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
 
-def test_fg006_skips_allowlisted_template(tmp_path, monkeypatch):
-    import scripts.check_frontend_gates as gates
-
-    monkeypatch.setattr(gates, "FG006_ALLOWLIST", {"app/web/templates/legacy.html"})
+def test_fg006_flags_former_allowlisted_template(tmp_path):
+    """P3-4 마지막 이관 후에는 예외 없이 같은 구조 위반으로 잡혀야 한다."""
     _write(
         tmp_path,
-        "app/web/templates/legacy.html",
+        "app/web/templates/mobile_trigger.html",
         "{% set status_pill = {'passed': 'a', 'error': 'b'} %}",
     )
-    assert gates.check_fg006_no_template_status_literals(tmp_path) == []
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert len(problems) == 1
+    assert "mobile_trigger.html" in problems[0]
 
 
-def test_fg006_does_not_allowlist_run_and_suite():
-    """P3-1 이 고친 두 템플릿은 처음부터 allowlist 밖에 있어야 한다."""
+def test_fg006_has_no_allowlist():
+    """allowlist 가 남아 있으면 마지막 템플릿 이관 후에도 규칙이 다시 새기 시작한다."""
     import scripts.check_frontend_gates as gates
 
-    assert "app/web/templates/run.html" not in gates.FG006_ALLOWLIST
-    assert "app/web/templates/suite.html" not in gates.FG006_ALLOWLIST
-
-
-def test_fg006_allowlist_holds_only_real_offenders():
-    """구조 탐지로 좁힌 뒤 남는 1개. 오탐이 섞이면 allowlist 가 영구히 비지 않는다."""
-    import scripts.check_frontend_gates as gates
-
-    assert gates.FG006_ALLOWLIST == {
-        "app/web/templates/mobile_trigger.html",
-    }
+    assert not hasattr(gates, "FG006_ALLOWLIST")
 
 
 def test_fg007_flags_hardcoded_mail_status_color(tmp_path):

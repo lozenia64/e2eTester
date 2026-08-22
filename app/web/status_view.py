@@ -100,3 +100,36 @@ def status_options(name: str) -> list[StatusOption]:
         )
         raise KeyError(msg) from None
     return [StatusOption(status.value, run_status_label(status)) for status in statuses]
+
+
+# 모바일 즉시 점검 화면의 레거시 배지 클래스. 톤 이름과 1:1 이 아니다 —
+# 이 화면엔 badge-pending 이 없고(대기도 진행처럼 보인다), waiting_input 은
+# badge-waiting 이다. P4 가 이 화면을 이관할 때 톤 기반으로 정리한다.
+_MOBILE_TONE_CLASSES = {
+    "pending": "badge-running",
+    "running": "badge-running",
+    "waiting_input": "badge-waiting",
+    "passed": "badge-passed",
+    "anomaly": "badge-anomaly",
+    "error": "badge-error",
+    "cancelled": "badge-cancelled",
+}
+
+# 진행을 나타내는 상태만 스피너를 돌린다. SSOT 축이 아니라 이 화면의 뷰 규칙이다.
+_MOBILE_SPINNING = frozenset({RunStatus.PENDING, RunStatus.RUNNING})
+
+
+def mobile_status_view_map() -> dict[str, dict[str, object]]:
+    """모바일 즉시 점검 화면의 상태 → 표현 맵.
+
+    템플릿이 이 맵을 인라인으로 들고 있던 동안 라벨 8개 중 4개가 SSOT 와
+    어긋났고 FG-006 은 하나도 잡지 못했다(P3-4 §1.3). 서버가 만들어 내려보낸다.
+    """
+    return {
+        status.value: {
+            "label": run_status_label(status),
+            "cls": _MOBILE_TONE_CLASSES[run_status_badge_tone(status)],
+            "spin": status in _MOBILE_SPINNING,
+        }
+        for status in RunStatus
+    }

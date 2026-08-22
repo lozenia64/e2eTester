@@ -60,15 +60,6 @@ FG005_ALLOWLIST = {
     "/static/favicon.svg",
 }
 
-# 상태→표현 매핑을 아직 중복으로 들고 있는 템플릿(구조 탐지 기준 실측 4개).
-# Step 7 이 화면을 이관할 때마다 한 줄씩 지운다. 비면 FG-006 이 완성된다 —
-# 오탐이 섞이지 않으므로 이 전제는 실제로 성립한다.
-# run.html·suite.html 은 P3-1 이 고쳤으므로 처음부터 여기에 없다.
-FG006_ALLOWLIST = {
-    # 인라인 JS 의 상태→라벨+클래스 맵
-    "app/web/templates/mobile_trigger.html",
-}
-
 # FG-006 은 **어휘가 아니라 구조**를 본다.
 #
 # 초안은 상태 색 쌍(`bg-red-100 text-red-700`)과 한국어 라벨 리터럴을 탐지했는데,
@@ -260,14 +251,14 @@ def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]
     run.html 이 자체 status_pill 맵을 들고 있어 ANOMALY/ERROR 배지가 회색·영문으로
     렌더되던 사고(P3-1)를 막는다.
 
+    allowlist 는 P3-4 가 마지막 템플릿을 이관하며 없앴다 — 예외 없는 규칙이다.
+
     맵 판정은 **블록 단위**다. 줄 단위이던 동안 한 줄에 한 항목씩 쓴 맵
     (mobile_trigger.html 의 STATUS_VIEW 8개)이 통째로 보이지 않았다(P3-4 §3.3).
     """
     problems: list[str] = []
     for path in _iter(root, TEMPLATE_DIR, ".html"):
         rel = _rel(path, root)
-        if rel in FG006_ALLOWLIST:
-            continue
         lines = path.read_text(encoding="utf-8").splitlines()
         flagged_windows: list[int] = []
         for lineno, line in enumerate(lines, 1):

@@ -87,16 +87,7 @@
         const TRIGGER_TOKEN = {{ trigger_token | tojson }};
         const POLL_MS = 3000;
         const ACTIVE_STATUSES = new Set(["PENDING", "RUNNING", "WAITING_INPUT"]);
-        const STATUS_VIEW = {
-            PENDING: { label: "진행 중", cls: "badge-running", spin: true },
-            RUNNING: { label: "진행 중", cls: "badge-running", spin: true },
-            WAITING_INPUT: { label: "인증번호 대기", cls: "badge-waiting", spin: false },
-            PASSED: { label: "정상", cls: "badge-passed", spin: false },
-            ANOMALY: { label: "이상징후", cls: "badge-anomaly", spin: false },
-            FAILED: { label: "이상징후", cls: "badge-anomaly", spin: false },
-            ERROR: { label: "점검실패", cls: "badge-error", spin: false },
-            CANCELLED: { label: "취소됨", cls: "badge-cancelled", spin: false },
-        };
+        const STATUS_VIEW = {{ mobile_status_view_map() | tojson }};
 
         const badge = document.querySelector('[data-role="status-badge"]');
         const progressNode = document.querySelector('[data-role="progress"]');
