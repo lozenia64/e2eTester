@@ -20,6 +20,7 @@
 - **메일 색 값을 바꾸지 않는다.** 커버리지 누락(`PENDING`·`QUEUED`·`RUNNING`)만 메운다.
 - **링크를 넣지 않는다.** 렌더 결과에 외부 URL 0건.
 - **`date_label` 기본값은 현행 동작(오늘)** — 일간 현황·상황판이 영향받지 않아야 한다.
+- **선행 의존: P3-2.** `summary["systems"]` 는 P3-2 가 추가한 패스스루다. P3-2 없이 병합하면 시스템별 표가 조용히 빈 채 발송된다 — 픽스처가 `systems` 를 주입하므로 테스트로는 잡히지 않는다.
 - **SMTP 를 실제로 호출하는 테스트를 쓰지 않는다.** `docs/CI.md` 의 "AI/메일은 CI 밖" 방침과 일치시킨다.
 - 새 CI 게이트를 등록하지 않는다.
 - PR 전 `python3 scripts/ci/run_all_gates.py --profile full`.
@@ -486,7 +487,7 @@ git commit -m "fix(notifications): 메일 상태 색 커버리지 누락 3건 �
 - Test: `tests/test_daily_report_build.py`
 
 **Interfaces:**
-- Consumes: Task 2 의 `get_daily_summary(date_label=…)` 반환 dict — `cards` · `totals` · `systems` · `attention` · `date_label`
+- Consumes: Task 2 의 `get_daily_summary(date_label=…)` 반환 dict — `cards` · `totals` · `attention` · `date_label`, 그리고 **P3-2 가 넣는** `systems`
 - Produces:
   ```python
   def build_daily_report(summary: dict[str, Any], *, date_label: str) -> dict[str, Any]

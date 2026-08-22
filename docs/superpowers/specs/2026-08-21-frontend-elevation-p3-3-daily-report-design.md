@@ -106,7 +106,9 @@ def build_daily_report(summary: dict[str, Any], *, date_label: str) -> dict[str,
 
 I/O 없음. `build_daily_summary`·`build_wall_view` 와 같은 순수 빌더 패턴이다.
 
-데이터는 **P2 의 `get_daily_summary(date_label=어제)` 하나로 전량 나온다** — `cards`·`totals`·`systems`·`attention` 이 그대로 대응한다. **신규 쿼리 0건.**
+데이터는 **`get_daily_summary(date_label=어제)` 하나로 전량 나온다** — `cards`·`totals`·`systems`·`attention` 이 그대로 대응한다. **신규 쿼리 0건.**
+
+**선행 의존: P3-2.** 위 네 필드 중 `systems` 만 P2 가 아니라 **P3-2 가 추가한 패스스루**다(`daily_summary_queries.py` 의 `summary["systems"] = dashboard["systems"]`). `build_daily_report` 는 `summary.get("systems", [])` 로 읽으므로, P3-2 없이 이 기능만 병합하면 예외 없이 조용히 빈 리스트가 되어 **"시스템별 결과" 표가 통째로 빈 채 발송된다.** 테스트 픽스처는 `systems` 를 직접 주입하므로 이 결함을 잡지 못한다 — 따라서 **P3-2 병합 이후에만 병합한다.**
 
 ### 3.3 제목 규칙 — 상황판과 다르다
 
