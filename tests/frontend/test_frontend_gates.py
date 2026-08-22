@@ -408,13 +408,11 @@ def test_fg006_does_not_allowlist_run_and_suite():
 
 
 def test_fg006_allowlist_holds_only_real_offenders():
-    """구조 탐지로 좁힌 뒤 남는 3개. 오탐이 섞이면 allowlist 가 영구히 비지 않는다."""
+    """구조 탐지로 좁힌 뒤 남는 1개. 오탐이 섞이면 allowlist 가 영구히 비지 않는다."""
     import scripts.check_frontend_gates as gates
 
     assert gates.FG006_ALLOWLIST == {
         "app/web/templates/mobile_trigger.html",
-        "app/web/templates/admin/runs.html",
-        "app/web/templates/schedules.html",
     }
 
 

@@ -64,3 +64,39 @@ def tone_glyph(tone: str) -> str:
     글리프 하나가 중립으로 나오는 것이 훨씬 가벼운 실패다.
     """
     return TONE_GLYPHS.get(_VIEW_TONE_ALIASES.get(tone, tone), TONE_GLYPHS["pending"])
+
+
+@dataclass(frozen=True)
+class StatusOption:
+    """필터 체크박스·`<option>`·범례가 쓰는 최소 표현."""
+
+    value: str
+    label: str
+
+
+# 화면마다 보여줄 상태 목록이 다르다. 목록을 이름으로 부르게 해서
+# "왜 이 화면엔 취소가 없나" 가 코드에 남게 한다.
+_STATUS_OPTION_SETS: dict[str, tuple[RunStatus, ...]] = {
+    # 관리자 Run 목록 필터 — 종료 결과 전체 + 취소
+    "admin_runs": (
+        RunStatus.PASSED,
+        RunStatus.ANOMALY,
+        RunStatus.ERROR,
+        RunStatus.CANCELLED,
+    ),
+    # 예약 캘린더 범례 — 취소된 Run 은 캘린더에 칠하지 않는다
+    "schedule_legend": (RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR),
+}
+
+
+def status_options(name: str) -> list[StatusOption]:
+    """이름 붙은 상태 목록 → (값, 라벨). 라벨은 status_labels.py 가 유일한 출처다."""
+    try:
+        statuses = _STATUS_OPTION_SETS[name]
+    except KeyError:
+        msg = (
+            f"알 수 없는 상태 목록 이름: {name!r}. "
+            f"{sorted(_STATUS_OPTION_SETS)} 중 하나여야 합니다."
+        )
+        raise KeyError(msg) from None
+    return [StatusOption(status.value, run_status_label(status)) for status in statuses]

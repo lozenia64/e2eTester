@@ -67,10 +67,6 @@ FG005_ALLOWLIST = {
 FG006_ALLOWLIST = {
     # 인라인 JS 의 상태→라벨+클래스 맵
     "app/web/templates/mobile_trigger.html",
-    # <option value="PASSED">정상</option> 류 라벨 중복 + 필터 체크박스
-    "app/web/templates/admin/runs.html",
-    # 범례의 상태 라벨 중복
-    "app/web/templates/schedules.html",
 }
 
 # FG-006 은 **어휘가 아니라 구조**를 본다.

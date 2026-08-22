@@ -729,10 +729,9 @@
           <button type="button" class="adm-filter-trigger" id="filter-trigger-status" data-filter-popover="status" aria-expanded="false">상태</button>
           <div class="adm-filter-popover hidden" id="filter-popover-status" data-popover="status" role="dialog" aria-label="상태 필터">
             <p class="adm-filter-popover__title">상태</p>
-            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="PASSED" /> 정상</label>
-            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="ANOMALY" /> 이상징후</label>
-            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="ERROR" /> 점검실패</label>
-            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="CANCELLED" /> 취소</label>
+            {% for option in status_options("admin_runs") %}
+            <label class="adm-filter-option-row"><input type="checkbox" class="adm-filter-option" data-group="status" value="{{ option.value }}" /> {{ option.label }}</label>
+            {% endfor %}
           </div>
         </div>
         <div class="adm-segment" id="filter-trigger-segment" role="group" aria-label="트리거">
@@ -770,10 +769,9 @@
       </div>
       <select id="filter-system" multiple class="sr-only" aria-hidden="true" tabindex="-1"></select>
       <select id="filter-status" multiple class="sr-only" aria-hidden="true" tabindex="-1">
-        <option value="PASSED">정상</option>
-        <option value="ANOMALY">이상징후</option>
-        <option value="ERROR">점검실패</option>
-        <option value="CANCELLED">취소</option>
+        {% for option in status_options("admin_runs") %}
+        <option value="{{ option.value }}">{{ option.label }}</option>
+        {% endfor %}
       </select>
       <select id="filter-trigger" class="sr-only" aria-hidden="true" tabindex="-1">
         <option value="">전체</option>
