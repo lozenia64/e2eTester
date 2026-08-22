@@ -54,6 +54,18 @@ def resolve_daily_report_recipients(
     return tuple(recipients), errors
 
 
+def resolve_wall_url(*, public_base_url: str, wall_enabled: bool) -> str | None:
+    """공개 주소 + 상황판 스위치 → 메일에 넣을 /wall 절대 URL. 없으면 None.
+
+    두 조건이 모두 참일 때만 링크를 만든다. 상황판이 꺼져 있으면 그 URL 은
+    404 이므로(app/api/routes_wall.py 의 wall_enabled 의존성) 죽은 링크가 된다.
+    """
+    base = (public_base_url or "").strip().rstrip("/")
+    if not base or not wall_enabled:
+        return None
+    return f"{base}/wall"
+
+
 def _build_message(*, subject: str, from_addr: str, html_body: str, plain_body: str):
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
@@ -71,12 +83,16 @@ class DailyReportEmailService:
         dedup_store: _DedupStore,
         config: Any,
         recipients: tuple[str, ...],
+        public_base_url: str | None = None,
+        wall_enabled: bool | None = None,
         sender_factory: Callable[[Any], Any] = GmailEmailSender,
     ) -> None:
         self._summary_queries = summary_queries
         self._dedup_store = dedup_store
         self._config = config
         self._recipients = recipients
+        self._public_base_url = public_base_url
+        self._wall_enabled = wall_enabled
         self._sender_factory = sender_factory
 
     async def send_for(self, date_label: str) -> bool:
@@ -105,7 +121,21 @@ class DailyReportEmailService:
                 date_label=date_label,
             )
             report = build_daily_report(summary, date_label=date_label)
-            html = render_daily_report_html(report)
+            html = render_daily_report_html(
+                report,
+                wall_url=resolve_wall_url(
+                    public_base_url=(
+                        self._public_base_url
+                        if self._public_base_url is not None
+                        else getattr(self._config, "public_base_url", "")
+                    ),
+                    wall_enabled=(
+                        self._wall_enabled
+                        if self._wall_enabled is not None
+                        else getattr(self._config, "wall_enabled", False)
+                    ),
+                ),
+            )
             subject = f"[E2E] {date_label} 점검 결과 — {report['headline']}"
             plain = f"{date_label} 점검 결과: {report['headline']}"
 

@@ -974,11 +974,12 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
 
 
 # --- 일간 리포트 (P3-3) -------------------------------------------------------------
-def render_daily_report_html(context: dict) -> str:
-    """일간 리포트 메일 본문.
+def render_daily_report_html(context: dict, *, wall_url: str | None = None) -> str:
+    """일간 리포트 메일 HTML.
 
-    Run/Suite 보고서와 같은 셸·헬퍼를 쓴다. 링크는 넣지 않는다 — 기존 메일에도 링크가
-    없고 공개 URL 설정 자체가 없다(설계 D6).
+    Run/Suite 보고서와 같은 셸·헬퍼를 쓴다. `wall_url` 이 주어질 때만 상황판
+    링크를 넣는다 — 공개 주소가 설정되지 않은 배포에서는 링크 없는 자족적
+    메일이 기본이다(P3-3 D6 · P3-4 §3.4).
     """
     status_value = context["status_value"]
     accent = _status_color(status_value)
@@ -1007,6 +1008,13 @@ def render_daily_report_html(context: dict) -> str:
     else:
         issue_html = _callout("확인이 필요한 건이 없습니다.", PASS_COLOR, PASS_SOFT_BG)
     body += _section(3, "확인 필요", issue_html, accent)
+    if wall_url and wall_url.strip():
+        body += (
+            f'<div style="margin:20px 0 4px;font-size:14px;">'
+            f'<a href="{escape(wall_url.strip())}" '
+            f'style="color:{INFO_COLOR};text-decoration:none;font-weight:700;">'
+            f"실시간 상황판 열기 →</a></div>"
+        )
     body += _footer()
 
     return _shell(title, body)

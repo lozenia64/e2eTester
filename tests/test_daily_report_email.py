@@ -202,6 +202,28 @@ def test_parse_recipients_is_public_api():
     assert invalid == ["nope"]
 
 
+def test_wall_url_is_none_when_public_base_url_is_unset() -> None:
+    from app.notifications.daily_report_email import resolve_wall_url
+
+    assert resolve_wall_url(public_base_url="", wall_enabled=True) is None
+
+
+def test_wall_url_is_none_when_wall_is_disabled() -> None:
+    """상황판이 꺼져 있으면 그 URL 은 404 다 — 죽은 링크를 보내지 않는다."""
+    from app.notifications.daily_report_email import resolve_wall_url
+
+    assert resolve_wall_url(public_base_url="https://e2e.example.com", wall_enabled=False) is None
+
+
+def test_wall_url_joins_without_double_slash() -> None:
+    from app.notifications.daily_report_email import resolve_wall_url
+
+    assert (
+        resolve_wall_url(public_base_url="https://e2e.example.com/", wall_enabled=True)
+        == "https://e2e.example.com/wall"
+    )
+
+
 @pytest.mark.asyncio
 async def test_sends_once_to_all_recipients():
     service, holder = _service(recipients=("a@x.com", "b@x.com"))

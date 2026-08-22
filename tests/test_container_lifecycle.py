@@ -141,6 +141,7 @@ def test_wire_read_models_wires_daily_report_scheduler_when_email_config_availab
         E2E_DB_PATH=str(tmp_path / "daily-report.db"),
         E2E_EXECUTION_MODE="local",
         E2E_REDIS_URL="",
+        E2E_PUBLIC_BASE_URL="https://e2e.example.com",
     )
     container = AppContainer(settings=settings)
     container.wire_persistence()
@@ -198,5 +199,7 @@ def test_wire_read_models_wires_daily_report_scheduler_when_email_config_availab
     assert captured["summary_queries"] is container.insights.daily_summary_queries
     assert captured["config"] is fake_config
     assert captured["recipients"] == ("qa@example.com",)
+    assert captured["public_base_url"] == settings.public_base_url
+    assert captured["wall_enabled"] is settings.wall_enabled
     assert captured["dedup_store"]._db is container.es_db
     assert container.scheduling.daily_report_scheduler is fake_scheduler
