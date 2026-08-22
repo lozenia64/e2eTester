@@ -831,7 +831,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" defer></script>
+{% import "_assets.html" as assets %}
+{{ assets.asset_script("entries/vendor-chart.ts") }}
+{{ assets.asset_script("entries/vendor-echarts.ts") }}
 <script src="/static/admin-runs.js?v=14" defer></script>
 {% endblock %}

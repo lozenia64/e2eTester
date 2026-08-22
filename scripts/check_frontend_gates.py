@@ -124,24 +124,6 @@ _ENUM_VALUES = (
 )
 _DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상")
 
-# 차트 라이브러리(Chart.js/ECharts/Plotly) CDN 예외 — 이 계획(P1)의 범위 밖이다.
-# self-host 하려면 npm 의존성 추가 + 페이지별 Vite 엔트리가 필요한데, 현재
-# vite.config.ts 는 단일 엔트리만 지원해 그 구조 변경은 이후 작업으로 미룬다.
-# FG005_ALLOWLIST 와 달리 파일 전체가 아니라 "파일 + 정확한 URL" 쌍만 예외로
-# 둔다 — 내일 admin/runs.html 에 엉뚱한 CDN 이 추가되면 여전히 걸려야 한다.
-FG001_EXCEPTIONS: dict[str, set[str]] = {
-    "app/web/templates/insights.html": {
-        "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js",
-    },
-    "app/web/templates/admin/runs.html": {
-        "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js",
-        "https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js",
-    },
-    "app/web/templates/admin/stats.html": {
-        "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js",
-    },
-}
-
 _EXTERNAL_URL = re.compile(r"""(?:src|href)\s*=\s*["'](https?://[^"']+)["']""")
 _HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _STATIC_REF = re.compile(r"""(?:src|href)\s*=\s*["'](/static/[^"'?]+)""")
@@ -179,15 +161,17 @@ def _iter_component_markup(root: Path):
 
 
 def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
-    """FG-001: 템플릿에 외부 CDN script/link 금지(차트 라이브러리 예외 제외)."""
+    """FG-001: 템플릿에 외부 CDN script/link 금지. 예외 없음.
+
+    차트 라이브러리 3종(Chart.js·ECharts·Plotly)에 예외를 두었던 이유는
+    "vite.config.ts 가 단일 엔트리만 지원한다" 였다. P3-2 가 wall 엔트리를
+    추가하며 그 전제가 소멸했고, P3-4 가 self-host 로 바꾸며 예외를 없앴다.
+    """
     problems: list[str] = []
     for path in chain(_iter(root, TEMPLATE_DIR, ".html"), _iter_component_markup(root)):
         rel = _rel(path, root)
-        exceptions = FG001_EXCEPTIONS.get(rel, set())
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for url in _EXTERNAL_URL.findall(line):
-                if url in exceptions:
-                    continue
                 problems.append(
                     f"[FG-001] {rel}:{lineno} 외부 자산 참조 `{url}` — "
                     "npm 으로 self-host 하고 asset 매크로를 쓰세요."

@@ -19,12 +19,19 @@ from app.web.asset_manifest import AssetManifest
 DIST = Path("app/web/static/dist")
 MANIFEST = DIST / ".vite/manifest.json"
 ASSET_MANIFEST = AssetManifest(MANIFEST, base_url="/static/dist")
+TEMPLATES = Path("app/web/templates")
 
 VENDOR_ENTRIES = (
     "entries/vendor-chart.ts",
     "entries/vendor-echarts.ts",
     "entries/vendor-plotly.ts",
 )
+
+VENDOR_TEMPLATE_REFS = {
+    "admin/runs.html": ("entries/vendor-chart.ts", "entries/vendor-echarts.ts"),
+    "admin/stats.html": ("entries/vendor-plotly.ts",),
+    "insights.html": ("entries/vendor-plotly.ts",),
+}
 
 
 @pytest.fixture(scope="module")
@@ -81,3 +88,21 @@ def test_main_bundle_does_not_include_vendor_entry(manifest: dict, entry: str) -
 def test_wall_bundle_does_not_include_vendor_entry(manifest: dict, entry: str) -> None:
     """상황판은 3~5m 거리용 표시 화면이다 — 차트 라이브러리를 받을 이유가 없다."""
     assert manifest[entry]["file"] not in _js_closure(manifest, "entries/wall.ts")
+
+
+@pytest.mark.parametrize(("template", "entries"), sorted(VENDOR_TEMPLATE_REFS.items()))
+def test_template_loads_its_vendor_entries(template: str, entries: tuple[str, ...]) -> None:
+    """빌드만 되고 템플릿이 안 부르면 화면에서 차트가 사라진다.
+
+    P3-2 에서 wall.ts 가 kpi-card CSS 를 import 하지 않아 상황판이 무스타일로
+    나갔던 것과 같은 종류의 누락이다.
+    """
+    source = (TEMPLATES / template).read_text(encoding="utf-8")
+    for entry in entries:
+        assert entry in source, f"{template} 이 {entry} 를 로드하지 않습니다."
+
+
+@pytest.mark.parametrize("template", sorted(VENDOR_TEMPLATE_REFS))
+def test_template_has_no_cdn_script(template: str) -> None:
+    source = (TEMPLATES / template).read_text(encoding="utf-8")
+    assert "cdn.jsdelivr.net" not in source

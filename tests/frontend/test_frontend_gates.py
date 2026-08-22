@@ -30,40 +30,24 @@ def test_fg001_allows_local_script(tmp_path):
     assert check_fg001_no_cdn(tmp_path) == []
 
 
-def test_fg001_allows_exact_allow_listed_chart_cdn(tmp_path):
-    """FG001_EXCEPTIONS 에 등록된 파일+URL 쌍은 차트 라이브러리 예외로 통과한다."""
+def test_fg001_flags_chart_cdn_without_exception(tmp_path):
+    """차트 라이브러리 예외는 P3-4 가 self-host 로 바꾸며 없앴다 — 이제 걸려야 한다."""
     _write(
         tmp_path,
         "app/web/templates/insights.html",
-        '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" '
-        'crossorigin="anonymous"></script>',
-    )
-    assert check_fg001_no_cdn(tmp_path) == []
-
-
-def test_fg001_flags_different_url_in_exception_file(tmp_path):
-    """예외 대상 파일이라도 등록되지 않은 다른 URL 은 여전히 걸린다."""
-    _write(
-        tmp_path,
-        "app/web/templates/insights.html",
-        '<script src="https://unpkg.com/some-other-lib@1"></script>',
-    )
-    problems = check_fg001_no_cdn(tmp_path)
-    assert len(problems) == 1
-    assert "unpkg.com" in problems[0]
-
-
-def test_fg001_flags_exception_url_in_different_file(tmp_path):
-    """예외 등록된 URL 이라도 다른 파일에서 쓰이면 여전히 걸린다(파일 단위 allowlist 아님)."""
-    _write(
-        tmp_path,
-        "app/web/templates/dashboard.html",
         '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" '
         'crossorigin="anonymous"></script>',
     )
     problems = check_fg001_no_cdn(tmp_path)
     assert len(problems) == 1
     assert "plotly" in problems[0]
+
+
+def test_fg001_has_no_exception_mechanism():
+    """예외 딕셔너리가 되살아나면 이 게이트는 다시 조용히 새기 시작한다."""
+    import scripts.check_frontend_gates as gates
+
+    assert not hasattr(gates, "FG001_EXCEPTIONS")
 
 
 def test_fg002_flags_hex_in_frontend(tmp_path):
