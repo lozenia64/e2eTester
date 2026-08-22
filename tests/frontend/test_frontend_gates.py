@@ -273,12 +273,40 @@ def test_fg006_flags_js_status_map_in_template(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path)
 
 
+def test_fg006_flags_map_written_one_entry_per_line(tmp_path):
+    """줄당 항목이 하나인 맵도 잡아야 한다.
+
+    규칙이 "한 줄에 상태 키 2개 이상" 이던 동안 mobile_trigger.html 의
+    8개짜리 STATUS_VIEW 가 통째로 보이지 않았다(설계 §3.3).
+    """
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "<script>\n"
+        "const STATUS_VIEW = {\n"
+        '    PENDING: { label: "대기" },\n'
+        '    RUNNING: { label: "실행 중" },\n'
+        '    PASSED: { label: "정상" },\n'
+        "};\n"
+        "</script>\n",
+    )
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert any("상태 키 맵" in problem for problem in problems)
+
+
 def test_fg006_flags_enum_and_label_on_one_line(tmp_path):
     """<option value="PASSED">정상</option> — 생성물을 써야 할 자리."""
     _write(tmp_path, "app/web/templates/x.html", '<option value="ANOMALY">이상징후</option>')
     problems = check_fg006_no_template_status_literals(tmp_path)
     assert problems
     assert "enum" in problems[0]
+
+
+def test_fg006_flags_cancelled_label(tmp_path):
+    _write(tmp_path, "app/web/templates/x.html", '<option value="CANCELLED">취소</option>')
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert len(problems) == 1
+    assert "CANCELLED" in problems[0]
 
 
 def test_fg006_allows_body_layout_classes(tmp_path):
@@ -301,8 +329,25 @@ def test_fg006_allows_nav_active_color_block(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
 
-def test_fg006_allows_cancel_button_label(tmp_path):
-    """'취소' 는 Cancel 버튼 문구로 흔하다 — 상태 라벨로 단독 판정하지 않는다."""
+def test_fg006_allows_status_css_custom_properties(tmp_path):
+    """상태 토큰용 CSS 변수 이름은 맵 리터럴이 아니다."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "<style>\n"
+        ".demo {\n"
+        "  --st-passed: #0ca30c;\n"
+        "  --st-anomaly: #fab219;\n"
+        "  --st-error: #d03b3b;\n"
+        "  --st-running: #2a78d6;\n"
+        "}\n"
+        "</style>\n",
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_cancel_button_without_enum(tmp_path):
+    """'취소' 는 버튼 문구로도 흔하다 — enum 값이 없으면 걸리지 않아야 한다."""
     _write(tmp_path, "app/web/templates/x.html", '<button type="button">취소</button>')
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
@@ -330,6 +375,15 @@ def test_fg006_allows_substring_collision(tmp_path):
         "app/web/templates/x.html",
         "<p>무인 실행 중 셀렉터가 깨지면 자동 복구 시도가 기록됩니다.</p>",
     )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_unrelated_keys_far_apart(tmp_path):
+    """블록 단위로 넓히면서 무관한 단어가 우연히 묶이지 않아야 한다."""
+    lines = ['<div class="error-banner">']
+    lines += ["  <p>줄</p>"] * 40
+    lines += ['  <span data-state="running"></span>', "</div>"]
+    _write(tmp_path, "app/web/templates/x.html", "\n".join(lines))
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
 

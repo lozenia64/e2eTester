@@ -103,10 +103,17 @@ _STATUS_MAP_KEYS = (
     "queued",
     "failed",
 )
-_STATUS_MAP_KEY_RE = [re.compile(rf"['\"]?{key}['\"]?\s*:") for key in _STATUS_MAP_KEYS]
+_STATUS_MAP_KEY_RE = [
+    re.compile(rf"(?<![\w-])['\"]?{key}['\"]?\s*:", re.IGNORECASE) for key in _STATUS_MAP_KEYS
+]
 # 한 줄에 상태 키가 둘 이상 콜론과 함께 나오면 맵 리터럴로 판정한다. 하나만으로는
 # 평범한 CSS 선언(`color: …`)이나 산문과 구분되지 않는다.
 _STATUS_MAP_MIN_KEYS = 2
+# 맵 판정 창. allowlist 를 비우고 2~14줄을 실측했을 때 2~7은 같은 4파일을 잡되
+# 같은 맵을 더 잘게 중복 보고했고, 8~14는 `_macros.html`·`admin/runs.html`·
+# `mobile_trigger.html`·`schedules.html` 4파일/15건으로 안정화됐다.
+# 그중 가장 좁게 같은 결과를 낸 최소값 8을 채택한다.
+_STATUS_MAP_WINDOW = 8
 
 # 규칙 B(PAIR) — enum 값과 한국어 라벨이 같은 줄에 함께 있음.
 # `<option value="PASSED">정상</option>` 처럼 생성물(status.generated.ts)을 써야 하는 자리다.
@@ -123,7 +130,7 @@ _ENUM_VALUES = (
     "CANCELLED",
     "FAILED",
 )
-_DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상")
+_DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상", "취소")
 
 _EXTERNAL_URL = re.compile(r"""(?:src|href)\s*=\s*["'](https?://[^"']+)["']""")
 _HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
@@ -257,23 +264,30 @@ def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]
     """FG-006: 템플릿이 상태→표현 매핑을 중복으로 들고 있는 것을 막는다.
 
     run.html 이 자체 status_pill 맵을 들고 있어 ANOMALY/ERROR 배지가 회색·영문으로
-    렌더되던 사고(P3-1)를 막는다. FG-003 은 frontend/**/*.ts 만 보므로 템플릿은
-    무검증이었다.
+    렌더되던 사고(P3-1)를 막는다.
 
-    어휘(색 리터럴·한국어 단어)가 아니라 구조를 본다 — 위 상수 주석 참조.
+    맵 판정은 **블록 단위**다. 줄 단위이던 동안 한 줄에 한 항목씩 쓴 맵
+    (mobile_trigger.html 의 STATUS_VIEW 8개)이 통째로 보이지 않았다(P3-4 §3.3).
     """
     problems: list[str] = []
     for path in _iter(root, TEMPLATE_DIR, ".html"):
         rel = _rel(path, root)
         if rel in FG006_ALLOWLIST:
             continue
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        flagged_windows: list[int] = []
+        for lineno, line in enumerate(lines, 1):
+            window = "\n".join(lines[lineno - 1 : lineno - 1 + _STATUS_MAP_WINDOW])
             matched = [
                 key
                 for key, pattern in zip(_STATUS_MAP_KEYS, _STATUS_MAP_KEY_RE, strict=True)
-                if pattern.search(line)
+                if pattern.search(window)
             ]
             if len(matched) >= _STATUS_MAP_MIN_KEYS:
+                # 같은 맵이 창을 옮겨가며 여러 번 잡히는 것을 막는다 — 블록당 1건.
+                if flagged_windows and lineno - flagged_windows[-1] < _STATUS_MAP_WINDOW:
+                    continue
+                flagged_windows.append(lineno)
                 keys = ", ".join(matched[:4])
                 problems.append(
                     f"[FG-006] {rel}:{lineno} 상태 키 맵 리터럴 (`{keys}`) — "
