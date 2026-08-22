@@ -1,0 +1,128 @@
+/* 상황판 — 3~5m 거리에서 읽는 고정 디스플레이용.
+   base.html 을 상속하지 않으므로 리셋부터 여기서 책임진다.
+   색은 전부 P1 토큰(FG-002). dashboard.js 의 밀도 시스템은 쓰지 않는다. */
+@import "./primitives.css";
+@import "./tokens.generated.css";
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body.wall {
+  overflow: hidden;
+  height: 100dvh;
+  background: var(--pl-bg);
+  color: var(--pl-text);
+  font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
+}
+
+.wall-body {
+  display: flex;
+  height: 100dvh;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2vmin;
+  padding: 4vmin;
+  text-align: center;
+}
+
+/* 지배 요소 — 상태에 따라 색이 바뀐다. 크기는 vmin 기준이라 1080p·1440p·4K 에서
+   비율이 유지된다. */
+.wall-hero__headline {
+  font-size: clamp(3rem, 14vmin, 14rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.wall-hero__detail {
+  margin-top: 1vmin;
+  font-size: clamp(1rem, 4vmin, 4rem);
+  color: var(--pl-text-muted);
+}
+
+.wall-hero[data-tone="passed"] .wall-hero__headline { color: var(--st-passed-text); }
+.wall-hero[data-tone="anomaly"] .wall-hero__headline { color: var(--st-anomaly-text); }
+.wall-hero[data-tone="error"] .wall-hero__headline { color: var(--st-error-text); }
+.wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-text); }
+.wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-text); }
+
+.wall-matrix {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1.5vmin;
+}
+
+.wall-sys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5vmin;
+  padding: 1.5vmin 1vmin;
+  border-radius: 1.5vmin;
+  background: var(--pl-surface);
+}
+
+.wall-sys__code {
+  font-size: clamp(0.875rem, 2.4vmin, 2.25rem);
+  font-weight: 800;
+}
+
+.wall-sys__bar {
+  width: 100%;
+  height: 2vmin;
+  border-radius: 1vmin;
+}
+
+.wall-sys__count {
+  font-size: clamp(0.75rem, 1.8vmin, 1.75rem);
+  font-weight: 700;
+  color: var(--pl-text-muted);
+}
+
+.wall-sys__name {
+  font-size: clamp(0.625rem, 1.4vmin, 1.25rem);
+  color: var(--pl-text-subtle);
+}
+
+.wall-sys[data-tone="passed"] .wall-sys__bar { background: var(--st-passed-solid); }
+.wall-sys[data-tone="anomaly"] .wall-sys__bar { background: var(--st-anomaly-solid); }
+.wall-sys[data-tone="error"] .wall-sys__bar { background: var(--st-error-solid); }
+.wall-sys[data-tone="running"] .wall-sys__bar { background: var(--st-running-solid); }
+.wall-sys[data-tone="blocked"] .wall-sys__bar { background: var(--st-blocked-solid); }
+.wall-sys[data-tone="pending"] .wall-sys__bar { background: var(--st-pending-solid); }
+
+.wall-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5vmin;
+}
+
+.wall-meta {
+  font-size: clamp(0.75rem, 2vmin, 2rem);
+  color: var(--pl-text-subtle);
+}
+
+/* OTP 대기가 지배 요소일 때만 히어로 전체가 맥동한다 — 3~5m 거리에서 배지
+   크기의 맥동은 보이지 않기 때문이다(설계 §3.10). */
+@keyframes wall-attention {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.wall-body[data-dominant="waiting_input"] .wall-hero {
+  animation: wall-attention 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-body[data-dominant="waiting_input"] .wall-hero {
+    animation: none;
+  }
+}

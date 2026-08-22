@@ -21,6 +21,7 @@ from app.api.routes_schedules import router as schedules_router
 from app.api.routes_suites import router as suites_router
 from app.api.routes_systems import router as systems_router
 from app.api.routes_trigger import router as trigger_router
+from app.api.routes_wall import router as wall_router
 from app.api.ws_runs import router as ws_runs_router
 from app.api.ws_suites import router as ws_suites_router
 from app.composition.container import AppContainer
@@ -100,6 +101,7 @@ app.include_router(presets_router)
 app.include_router(otp_router)
 app.include_router(schedules_router)
 app.include_router(trigger_router)
+app.include_router(wall_router)
 app.include_router(suites_router)
 app.include_router(ws_runs_router)
 app.include_router(ws_suites_router)

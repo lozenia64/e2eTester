@@ -90,3 +90,9 @@ skip 된 체크가 남지 않으므로 merge queue 가 멈추지 않는다.
 ## CI 밖 (수동)
 
 라이브 사이트 Run/Suite, AI/메일(env 미설정). 서버 기동 후 대시보드에서 확인.
+
+CI 밖 수동 검사:
+
+| 스크립트 | 검사 |
+| --- | --- |
+| `scripts/check_wall_console.py` | 상황판 `/wall` 의 브라우저 콘솔 에러·넌스크롤 (앱 기동 후 실행) |

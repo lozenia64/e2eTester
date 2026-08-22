@@ -16,6 +16,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "app/web/frontend/entries/main.ts"),
+        // 상황판은 사이드바·Alpine·컴포넌트 TS 가 필요 없는 독립 화면이라
+        // 별 엔트리로 둔다 — 일반 페이지 번들에 상황판 CSS 를 얹지 않기 위함.
+        wall: resolve(__dirname, "app/web/frontend/entries/wall.ts"),
       },
     },
   },

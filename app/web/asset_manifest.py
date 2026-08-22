@@ -48,7 +48,34 @@ class AssetManifest:
         return f"{self._base_url}/{self._entry(entry)['file']}"
 
     def css_urls(self, entry: str) -> list[str]:
-        return [f"{self._base_url}/{name}" for name in self._entry(entry).get("css", [])]
+        """엔트리가 실제로 싣는 전체 CSS — 임포트한 공유 청크의 CSS까지 따라간다.
+
+        Vite 는 두 엔트리가 같은 모듈을 임포트하면 그 모듈을 공유 청크로 끌어올리고
+        CSS 도 그 청크로 옮긴다. 엔트리 자신의 css 배열만 읽으면 그 CSS 가 어느
+        페이지에도 실리지 않는다 — 엔트리가 하나였을 때는 공유 청크가 없어 이 결함이
+        드러나지 않았다(P3-2 가 두 번째 엔트리를 추가하며 노출).
+        """
+        self._entry(entry)
+        manifest = self._load()
+        seen: set[str] = set()
+        urls: list[str] = []
+
+        def walk(key: str) -> None:
+            if key in seen:
+                return
+            seen.add(key)
+            record = manifest.get(key)
+            if record is None:
+                return
+            for imported in record.get("imports", []):
+                walk(imported)
+            for name in record.get("css", []):
+                url = f"{self._base_url}/{name}"
+                if url not in urls:
+                    urls.append(url)
+
+        walk(entry)
+        return urls
 
 
 # 앱 전체가 공유하는 단일 인스턴스. Jinja2Templates() 호출부가 네 군데로 나뉘어 있어
