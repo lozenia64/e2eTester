@@ -25,3 +25,17 @@ PALETTE: dict[str, dict[str, str]] = {
     "cancelled": {"solid": "#71717a", "surface": "#f4f4f5", "text": "#52525b", "border": "#d4d4d8"},
     "pending": {"solid": "#a1a1aa", "surface": "#f4f4f5", "text": "#6b7280", "border": "#e4e4e7"},
 }
+
+# 톤 → 글리프. 색과 같은 파일에 두는 이유: 둘 다 "톤의 표현" 이라는 하나의 개념이고,
+# 흩어 두면 톤이 늘 때 한쪽만 갱신되는 사고가 난다.
+TONE_GLYPHS: dict[str, str] = {
+    "passed": "✓",
+    "anomaly": "!",
+    "error": "×",
+    "running": "●",
+    "waiting_input": "●",
+    "blocked": "—",
+    "skipped": "—",
+    "cancelled": "—",
+    "pending": "○",
+}

@@ -11,6 +11,7 @@ from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
 from app.contexts.insights.application.daily_dashboard import system_summary_badge
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
+from app.web.status_view import tone_glyph
 
 if TYPE_CHECKING:
     from app.orchestrator.queries import DailyDashboardQueries
@@ -22,6 +23,7 @@ templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
 templates.env.globals["system_summary_badge"] = system_summary_badge
 templates.env.globals["asset_js"] = asset_js
 templates.env.globals["asset_css"] = asset_css
+templates.env.globals["tone_glyph"] = tone_glyph
 
 _FRAGMENT_TEMPLATES = {
     "kpi": "dashboard/partials/zone_a_kpi.html",

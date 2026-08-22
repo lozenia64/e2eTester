@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.status_colors import TONE_GLYPHS
 from app.core.status_labels import (
     module_status_badge_tone,
     module_status_label,
@@ -49,3 +50,17 @@ def status_badge_view(status: RunStatus | ModuleStatus | SuiteStatus) -> StatusB
         "RunStatus/ModuleStatus/SuiteStatus 중 하나를 넘기세요."
     )
     raise TypeError(msg)
+
+
+# 화면 전용 파생 톤 → SSOT 톤. 일간 현황의 "점검 안 함" 은 상태 축의 톤이 아니라
+# 집계 결과이므로 STATUS_TONES 를 늘리지 않고 여기서 접는다.
+_VIEW_TONE_ALIASES = {"not_inspected": "pending"}
+
+
+def tone_glyph(tone: str) -> str:
+    """톤 → 글리프. 템플릿이 자체 맵을 들지 않게 하는 단일 경로.
+
+    모르는 톤에 예외를 내지 않는다 — 템플릿 렌더 중 예외는 화면 전체를 죽이는데,
+    글리프 하나가 중립으로 나오는 것이 훨씬 가벼운 실패다.
+    """
+    return TONE_GLYPHS.get(_VIEW_TONE_ALIASES.get(tone, tone), TONE_GLYPHS["pending"])

@@ -65,8 +65,6 @@ FG005_ALLOWLIST = {
 # 오탐이 섞이지 않으므로 이 전제는 실제로 성립한다.
 # run.html·suite.html 은 P3-1 이 고쳤으므로 처음부터 여기에 없다.
 FG006_ALLOWLIST = {
-    # 상태→글리프 맵
-    "app/web/templates/dashboard/partials/_macros.html",
     # 인라인 JS 의 상태→라벨+클래스 맵
     "app/web/templates/mobile_trigger.html",
     # <option value="PASSED">정상</option> 류 라벨 중복 + 필터 체크박스
