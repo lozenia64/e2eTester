@@ -160,7 +160,7 @@ insights.js:49      if (!el || typeof Plotly === "undefined" || !figure) return;
 
 #### 템플릿 변경
 
-CDN `<script src="https://...">` 를 manifest 경유 엔트리 로드로 바꾼다. 기존 `_assets.html` 의 해석 방식을 그대로 따르며, 이때 해당 줄의 수동 `?v=N` 캐시버스팅도 함께 사라진다(해시 파일명이 대체).
+CDN `<script src="https://...">` 를 manifest 경유 엔트리 로드로 바꾼다. 기존 `_assets.html` 의 `asset_script` 매크로를 그대로 쓰므로 해시 파일명이 자동으로 붙는다. **레거시 `/static/*.js` 줄의 수동 `?v=N` 은 그대로 남는다** — 그 파일들의 이관이 P4 의 몫이기 때문이다.
 
 | 템플릿 | 추가할 엔트리 |
 | --- | --- |
