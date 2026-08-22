@@ -92,7 +92,7 @@ jobs:
       # 다른 job 의 build_web 산출물을 공유받지 못한다.
       - name: Set up Node (프론트 게이트·coverage 용)
         if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web' || matrix.gate == 'coverage'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
