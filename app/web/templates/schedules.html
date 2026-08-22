@@ -248,9 +248,9 @@
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-gray-500">
           <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="planned"></i>예정</span>
-          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="PASSED"></i>정상</span>
-          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="ANOMALY"></i>이상징후</span>
-          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="ERROR"></i>점검실패</span>
+          {% for option in status_options("schedule_legend") %}
+          <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="{{ option.value }}"></i>{{ option.label }}</span>
+          {% endfor %}
           <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="missed"></i>누락</span>
           <span class="inline-flex items-center gap-1"><i class="schedc-block !cursor-default !p-1" data-state="planned" data-suite="1"></i>Suite</span>
         </div>

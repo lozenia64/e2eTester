@@ -1,13 +1,7 @@
 {# Premium Light dashboard macros #}
 
 {% macro module_glyph(tone) -%}
-{% set g = {
-  'passed': '✓', 'anomaly': '!', 'error': '×',
-  'running': '●', 'waiting_input': '●',
-  'not_inspected': '○', 'pending': '○',
-  'blocked': '—', 'skipped': '—', 'cancelled': '—'
-} %}
-<span class="dash-mod__glyph" aria-hidden="true">{{ g.get(tone, '○') }}</span>
+<span class="dash-mod__glyph" aria-hidden="true">{{ tone_glyph(tone) }}</span>
 {%- endmacro %}
 
 

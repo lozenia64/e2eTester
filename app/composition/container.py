@@ -306,6 +306,8 @@ class AppContainer:
                 dedup_store=SqliteEmailNotificationDedupStore(self.es_db),
                 config=email_config,
                 recipients=daily_recipients,
+                public_base_url=self.settings.public_base_url,
+                wall_enabled=self.settings.wall_enabled,
             )
             self.scheduling.daily_report_scheduler = compose_daily_report_scheduler(
                 daily_report_service

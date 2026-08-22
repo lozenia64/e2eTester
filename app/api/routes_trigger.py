@@ -23,6 +23,7 @@ from app.api.dependencies import get_schedule_service
 from app.core.requests import SubmitOtpRequest
 from app.core.schedule_models import Schedule
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
+from app.web.status_view import mobile_status_view_map
 
 if TYPE_CHECKING:
     from app.contexts.scheduling.scheduler import SchedulerService
@@ -31,6 +32,7 @@ router = APIRouter(tags=["trigger"])
 templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
 templates.env.globals["asset_js"] = asset_js
 templates.env.globals["asset_css"] = asset_css
+templates.env.globals["mobile_status_view_map"] = mobile_status_view_map
 
 
 async def _get_schedule_by_token_or_404(

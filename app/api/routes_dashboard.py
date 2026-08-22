@@ -18,7 +18,7 @@ from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
-from app.web.status_view import status_badge_view
+from app.web.status_view import status_badge_view, status_options, tone_glyph
 
 if TYPE_CHECKING:
     from app.contexts.healing.service import HealingService
@@ -31,6 +31,8 @@ templates = Jinja2Templates(directory=TEMPLATE_SEARCH_DIRS)
 templates.env.globals["asset_js"] = asset_js
 templates.env.globals["asset_css"] = asset_css
 templates.env.globals["status_badge_view"] = status_badge_view
+templates.env.globals["status_options"] = status_options
+templates.env.globals["tone_glyph"] = tone_glyph
 
 
 @router.get("/", response_class=HTMLResponse)

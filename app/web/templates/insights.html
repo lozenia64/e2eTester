@@ -264,6 +264,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" crossorigin="anonymous"></script>
+{% import "_assets.html" as assets %}
+{{ assets.asset_script("entries/vendor-plotly.ts") }}
 <script src="/static/insights.js?v=1" defer></script>
 {% endblock %}

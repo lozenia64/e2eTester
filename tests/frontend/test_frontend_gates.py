@@ -7,6 +7,7 @@ from scripts.check_frontend_gates import (
     check_fg004_file_size,
     check_fg005_no_static_ref,
     check_fg006_no_template_status_literals,
+    check_fg007_mail_status_colors_from_ssot,
 )
 
 
@@ -30,40 +31,24 @@ def test_fg001_allows_local_script(tmp_path):
     assert check_fg001_no_cdn(tmp_path) == []
 
 
-def test_fg001_allows_exact_allow_listed_chart_cdn(tmp_path):
-    """FG001_EXCEPTIONS 에 등록된 파일+URL 쌍은 차트 라이브러리 예외로 통과한다."""
+def test_fg001_flags_chart_cdn_without_exception(tmp_path):
+    """차트 라이브러리 예외는 P3-4 가 self-host 로 바꾸며 없앴다 — 이제 걸려야 한다."""
     _write(
         tmp_path,
         "app/web/templates/insights.html",
-        '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" '
-        'crossorigin="anonymous"></script>',
-    )
-    assert check_fg001_no_cdn(tmp_path) == []
-
-
-def test_fg001_flags_different_url_in_exception_file(tmp_path):
-    """예외 대상 파일이라도 등록되지 않은 다른 URL 은 여전히 걸린다."""
-    _write(
-        tmp_path,
-        "app/web/templates/insights.html",
-        '<script src="https://unpkg.com/some-other-lib@1"></script>',
-    )
-    problems = check_fg001_no_cdn(tmp_path)
-    assert len(problems) == 1
-    assert "unpkg.com" in problems[0]
-
-
-def test_fg001_flags_exception_url_in_different_file(tmp_path):
-    """예외 등록된 URL 이라도 다른 파일에서 쓰이면 여전히 걸린다(파일 단위 allowlist 아님)."""
-    _write(
-        tmp_path,
-        "app/web/templates/dashboard.html",
         '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js" '
         'crossorigin="anonymous"></script>',
     )
     problems = check_fg001_no_cdn(tmp_path)
     assert len(problems) == 1
     assert "plotly" in problems[0]
+
+
+def test_fg001_has_no_exception_mechanism():
+    """예외 딕셔너리가 되살아나면 이 게이트는 다시 조용히 새기 시작한다."""
+    import scripts.check_frontend_gates as gates
+
+    assert not hasattr(gates, "FG001_EXCEPTIONS")
 
 
 def test_fg002_flags_hex_in_frontend(tmp_path):
@@ -288,12 +273,40 @@ def test_fg006_flags_js_status_map_in_template(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path)
 
 
+def test_fg006_flags_map_written_one_entry_per_line(tmp_path):
+    """줄당 항목이 하나인 맵도 잡아야 한다.
+
+    규칙이 "한 줄에 상태 키 2개 이상" 이던 동안 mobile_trigger.html 의
+    8개짜리 STATUS_VIEW 가 통째로 보이지 않았다(설계 §3.3).
+    """
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "<script>\n"
+        "const STATUS_VIEW = {\n"
+        '    PENDING: { label: "대기" },\n'
+        '    RUNNING: { label: "실행 중" },\n'
+        '    PASSED: { label: "정상" },\n'
+        "};\n"
+        "</script>\n",
+    )
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert any("상태 키 맵" in problem for problem in problems)
+
+
 def test_fg006_flags_enum_and_label_on_one_line(tmp_path):
     """<option value="PASSED">정상</option> — 생성물을 써야 할 자리."""
     _write(tmp_path, "app/web/templates/x.html", '<option value="ANOMALY">이상징후</option>')
     problems = check_fg006_no_template_status_literals(tmp_path)
     assert problems
     assert "enum" in problems[0]
+
+
+def test_fg006_flags_cancelled_label(tmp_path):
+    _write(tmp_path, "app/web/templates/x.html", '<option value="CANCELLED">취소</option>')
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert len(problems) == 1
+    assert "CANCELLED" in problems[0]
 
 
 def test_fg006_allows_body_layout_classes(tmp_path):
@@ -316,8 +329,25 @@ def test_fg006_allows_nav_active_color_block(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
 
-def test_fg006_allows_cancel_button_label(tmp_path):
-    """'취소' 는 Cancel 버튼 문구로 흔하다 — 상태 라벨로 단독 판정하지 않는다."""
+def test_fg006_allows_status_css_custom_properties(tmp_path):
+    """상태 토큰용 CSS 변수 이름은 맵 리터럴이 아니다."""
+    _write(
+        tmp_path,
+        "app/web/templates/x.html",
+        "<style>\n"
+        ".demo {\n"
+        "  --st-passed: #0ca30c;\n"
+        "  --st-anomaly: #fab219;\n"
+        "  --st-error: #d03b3b;\n"
+        "  --st-running: #2a78d6;\n"
+        "}\n"
+        "</style>\n",
+    )
+    assert check_fg006_no_template_status_literals(tmp_path) == []
+
+
+def test_fg006_allows_cancel_button_without_enum(tmp_path):
+    """'취소' 는 버튼 문구로도 흔하다 — enum 값이 없으면 걸리지 않아야 한다."""
     _write(tmp_path, "app/web/templates/x.html", '<button type="button">취소</button>')
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
@@ -348,33 +378,59 @@ def test_fg006_allows_substring_collision(tmp_path):
     assert check_fg006_no_template_status_literals(tmp_path) == []
 
 
-def test_fg006_skips_allowlisted_template(tmp_path, monkeypatch):
-    import scripts.check_frontend_gates as gates
+def test_fg006_allows_unrelated_keys_far_apart(tmp_path):
+    """블록 단위로 넓히면서 무관한 단어가 우연히 묶이지 않아야 한다."""
+    lines = ['<div class="error-banner">']
+    lines += ["  <p>줄</p>"] * 40
+    lines += ['  <span data-state="running"></span>', "</div>"]
+    _write(tmp_path, "app/web/templates/x.html", "\n".join(lines))
+    assert check_fg006_no_template_status_literals(tmp_path) == []
 
-    monkeypatch.setattr(gates, "FG006_ALLOWLIST", {"app/web/templates/legacy.html"})
+
+def test_fg006_flags_former_allowlisted_template(tmp_path):
+    """P3-4 마지막 이관 후에는 예외 없이 같은 구조 위반으로 잡혀야 한다."""
     _write(
         tmp_path,
-        "app/web/templates/legacy.html",
+        "app/web/templates/mobile_trigger.html",
         "{% set status_pill = {'passed': 'a', 'error': 'b'} %}",
     )
-    assert gates.check_fg006_no_template_status_literals(tmp_path) == []
+    problems = check_fg006_no_template_status_literals(tmp_path)
+    assert len(problems) == 1
+    assert "mobile_trigger.html" in problems[0]
 
 
-def test_fg006_does_not_allowlist_run_and_suite():
-    """P3-1 이 고친 두 템플릿은 처음부터 allowlist 밖에 있어야 한다."""
+def test_fg006_has_no_allowlist():
+    """allowlist 가 남아 있으면 마지막 템플릿 이관 후에도 규칙이 다시 새기 시작한다."""
     import scripts.check_frontend_gates as gates
 
-    assert "app/web/templates/run.html" not in gates.FG006_ALLOWLIST
-    assert "app/web/templates/suite.html" not in gates.FG006_ALLOWLIST
+    assert not hasattr(gates, "FG006_ALLOWLIST")
 
 
-def test_fg006_allowlist_holds_only_real_offenders():
-    """구조 탐지로 좁힌 뒤 남는 4개. 오탐이 섞이면 allowlist 가 영구히 비지 않는다."""
-    import scripts.check_frontend_gates as gates
+def test_fg007_flags_hardcoded_mail_status_color(tmp_path):
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nPASS_COLOR = "#2f8f4e"\n',
+    )
+    problems = check_fg007_mail_status_colors_from_ssot(tmp_path)
+    assert len(problems) == 1
+    assert "PASS_COLOR" in problems[0]
 
-    assert gates.FG006_ALLOWLIST == {
-        "app/web/templates/dashboard/partials/_macros.html",
-        "app/web/templates/mobile_trigger.html",
-        "app/web/templates/admin/runs.html",
-        "app/web/templates/schedules.html",
-    }
+
+def test_fg007_allows_palette_derived_status_color(tmp_path):
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nPASS_COLOR = PALETTE["passed"]["text"]\n',
+    )
+    assert check_fg007_mail_status_colors_from_ssot(tmp_path) == []
+
+
+def test_fg007_ignores_layout_colors(tmp_path):
+    """레이아웃 색은 상태와 무관하므로 hex 리터럴이 정당하다."""
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nINK = "#1f2328"\nBORDER = "#e5e7eb"\n',
+    )
+    assert check_fg007_mail_status_colors_from_ssot(tmp_path) == []

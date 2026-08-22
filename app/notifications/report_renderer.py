@@ -21,6 +21,7 @@ from __future__ import annotations
 from html import escape
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.status_colors import PALETTE
 from app.core.status_labels import (
     MODULE_STATUS_LABELS,
     RUN_STATUS_LABELS,
@@ -37,16 +38,19 @@ BORDER = "#e5e7eb"
 SOFT_BG = "#f7f8fa"
 LABEL_BG = "#f4f6f8"
 
-PASS_COLOR = "#2f8f4e"
-PASS_SOFT_BG = "#e9f6ee"
-FAIL_COLOR = "#c0392b"
-FAIL_SOFT_BG = "#fdecea"
-WARN_COLOR = "#b7791f"
-WARN_SOFT_BG = "#fdf6e3"
-NEUTRAL_COLOR = "#6b7280"
-NEUTRAL_SOFT_BG = "#f1f3f5"
-INFO_COLOR = "#2563eb"
-INFO_SOFT_BG = "#eef3ff"
+# 상태 색은 화면과 같은 팔레트에서 파생한다(P3-4 §3.2).
+# 메일의 (글자색, 옅은 배경) 쌍이 웹 팔레트의 (text, surface) 축에 대응한다.
+# 값을 여기에 직접 적지 마라 — FG-007 이 막는다.
+PASS_COLOR = PALETTE["passed"]["text"]
+PASS_SOFT_BG = PALETTE["passed"]["surface"]
+FAIL_COLOR = PALETTE["error"]["text"]
+FAIL_SOFT_BG = PALETTE["error"]["surface"]
+WARN_COLOR = PALETTE["anomaly"]["text"]
+WARN_SOFT_BG = PALETTE["anomaly"]["surface"]
+NEUTRAL_COLOR = PALETTE["pending"]["text"]
+NEUTRAL_SOFT_BG = PALETTE["pending"]["surface"]
+INFO_COLOR = PALETTE["running"]["text"]
+INFO_SOFT_BG = PALETTE["running"]["surface"]
 
 # --- 스크린샷 크기 규칙 -------------------------------------------------------------
 # Outlook(윈도우)은 Word 렌더링 엔진이라 CSS max-width/height 를 무시하고 HTML
@@ -970,11 +974,12 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
 
 
 # --- 일간 리포트 (P3-3) -------------------------------------------------------------
-def render_daily_report_html(context: dict) -> str:
-    """일간 리포트 메일 본문.
+def render_daily_report_html(context: dict, *, wall_url: str | None = None) -> str:
+    """일간 리포트 메일 HTML.
 
-    Run/Suite 보고서와 같은 셸·헬퍼를 쓴다. 링크는 넣지 않는다 — 기존 메일에도 링크가
-    없고 공개 URL 설정 자체가 없다(설계 D6).
+    Run/Suite 보고서와 같은 셸·헬퍼를 쓴다. `wall_url` 이 주어질 때만 상황판
+    링크를 넣는다 — 공개 주소가 설정되지 않은 배포에서는 링크 없는 자족적
+    메일이 기본이다(P3-3 D6 · P3-4 §3.4).
     """
     status_value = context["status_value"]
     accent = _status_color(status_value)
@@ -1003,6 +1008,13 @@ def render_daily_report_html(context: dict) -> str:
     else:
         issue_html = _callout("확인이 필요한 건이 없습니다.", PASS_COLOR, PASS_SOFT_BG)
     body += _section(3, "확인 필요", issue_html, accent)
+    if wall_url and wall_url.strip():
+        body += (
+            f'<div style="margin:20px 0 4px;font-size:14px;">'
+            f'<a href="{escape(wall_url.strip())}" '
+            f'style="color:{INFO_COLOR};text-decoration:none;font-weight:700;">'
+            f"실시간 상황판 열기 →</a></div>"
+        )
     body += _footer()
 
     return _shell(title, body)

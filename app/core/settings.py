@@ -104,6 +104,10 @@ class E2ESettings(BaseSettings):
     # 사내망 전제이므로 기본은 켜 두고, 앱이 외부에서 접근 가능한 배포에서는
     # false 로 즉시 차단한다. false 면 /wall·/wall/fragment 가 404 다.
     wall_enabled: bool = Field(default=True, validation_alias="E2E_WALL_ENABLED")
+    # 메일에 넣을 공개 주소(예: https://e2e.example.com). 기본은 빈 문자열 —
+    # 배포 환경마다 다르고, 잘못된 URL 이 든 메일은 회수할 수 없다(P3-4 D6).
+    # 비어 있으면 일간 리포트는 링크 없이 지금처럼 자족적으로 나간다.
+    public_base_url: str = Field(default="", validation_alias="E2E_PUBLIC_BASE_URL")
     run_retention_cron: str = Field(default="0 3 * * *", validation_alias="E2E_RUN_RETENTION_CRON")
     # 일간 리포트 메일(P3-3). 메일은 되돌릴 수 없는 부수효과라 기본은 꺼 둔다 —
     # 상황판(E2E_WALL_ENABLED, 기본 true)과 반대 판단이다.

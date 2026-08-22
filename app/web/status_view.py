@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.status_colors import TONE_GLYPHS
 from app.core.status_labels import (
     module_status_badge_tone,
     module_status_label,
@@ -49,3 +50,86 @@ def status_badge_view(status: RunStatus | ModuleStatus | SuiteStatus) -> StatusB
         "RunStatus/ModuleStatus/SuiteStatus 중 하나를 넘기세요."
     )
     raise TypeError(msg)
+
+
+# 화면 전용 파생 톤 → SSOT 톤. 일간 현황의 "점검 안 함" 은 상태 축의 톤이 아니라
+# 집계 결과이므로 STATUS_TONES 를 늘리지 않고 여기서 접는다.
+_VIEW_TONE_ALIASES = {"not_inspected": "pending"}
+
+
+def tone_glyph(tone: str) -> str:
+    """톤 → 글리프. 템플릿이 자체 맵을 들지 않게 하는 단일 경로.
+
+    모르는 톤에 예외를 내지 않는다 — 템플릿 렌더 중 예외는 화면 전체를 죽이는데,
+    글리프 하나가 중립으로 나오는 것이 훨씬 가벼운 실패다.
+    """
+    return TONE_GLYPHS.get(_VIEW_TONE_ALIASES.get(tone, tone), TONE_GLYPHS["pending"])
+
+
+@dataclass(frozen=True)
+class StatusOption:
+    """필터 체크박스·`<option>`·범례가 쓰는 최소 표현."""
+
+    value: str
+    label: str
+
+
+# 화면마다 보여줄 상태 목록이 다르다. 목록을 이름으로 부르게 해서
+# "왜 이 화면엔 취소가 없나" 가 코드에 남게 한다.
+_STATUS_OPTION_SETS: dict[str, tuple[RunStatus, ...]] = {
+    # 관리자 Run 목록 필터 — 종료 결과 전체 + 취소
+    "admin_runs": (
+        RunStatus.PASSED,
+        RunStatus.ANOMALY,
+        RunStatus.ERROR,
+        RunStatus.CANCELLED,
+    ),
+    # 예약 캘린더 범례 — 취소된 Run 은 캘린더에 칠하지 않는다
+    "schedule_legend": (RunStatus.PASSED, RunStatus.ANOMALY, RunStatus.ERROR),
+}
+
+
+def status_options(name: str) -> list[StatusOption]:
+    """이름 붙은 상태 목록 → (값, 라벨). 라벨은 status_labels.py 가 유일한 출처다."""
+    try:
+        statuses = _STATUS_OPTION_SETS[name]
+    except KeyError:
+        msg = (
+            f"알 수 없는 상태 목록 이름: {name!r}. "
+            f"{sorted(_STATUS_OPTION_SETS)} 중 하나여야 합니다."
+        )
+        raise KeyError(msg) from None
+    return [StatusOption(status.value, run_status_label(status)) for status in statuses]
+
+
+# 모바일 즉시 점검 화면의 레거시 배지 클래스. 톤 이름과 1:1 이 아니다 —
+# 이 화면엔 badge-pending 이 없고(대기도 진행처럼 보인다), waiting_input 은
+# badge-waiting 이다. P4 가 이 화면을 이관할 때 톤 기반으로 정리한다.
+_MOBILE_TONE_CLASSES = {
+    "pending": "badge-running",
+    "running": "badge-running",
+    "waiting_input": "badge-waiting",
+    "passed": "badge-passed",
+    "anomaly": "badge-anomaly",
+    "error": "badge-error",
+    "cancelled": "badge-cancelled",
+}
+
+# 진행을 나타내는 상태만 스피너를 돌린다. SSOT 축이 아니라 이 화면의 뷰 규칙이다.
+_MOBILE_SPINNING = frozenset({RunStatus.PENDING, RunStatus.RUNNING})
+
+
+def mobile_status_view_map() -> dict[str, dict[str, object]]:
+    """모바일 즉시 점검 화면의 상태 → 표현 맵.
+
+    템플릿이 이 맵을 인라인으로 들고 있던 동안 라벨 8개 중 4개가 SSOT 와
+    어긋났고 FG-006 은 하나도 잡지 못했다(P3-4 §1.3). 서버가 만들어 내려보낸다.
+    """
+    return {
+        status.value: {
+            "label": run_status_label(status),
+            "cls": _MOBILE_TONE_CLASSES[run_status_badge_tone(status)],
+            "spin": status in _MOBILE_SPINNING,
+        }
+        for status in RunStatus
+    }

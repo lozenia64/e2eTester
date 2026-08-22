@@ -1,4 +1,4 @@
-"""프론트엔드 게이트 FG-001~006 — check_architecture_gates.py 의 프론트 대응물.
+"""프론트엔드 게이트 FG-001~007 — check_architecture_gates.py 의 프론트 대응물.
 
 디자인 시스템은 강제력이 없으면 6개월 안에 하드코딩으로 되돌아간다.
 각 규칙은 실제로 발생했던 사고를 막는다(설계 문서 §3.6 참조).
@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 TEMPLATE_DIR = "app/web/templates"
 FRONTEND_DIR = "app/web/frontend"
+MAIL_RENDERER = "app/notifications/report_renderer.py"
 
 # 스캔에서 통째로 제외할 디렉터리 이름. node_modules 는 서드파티 소스라 우리
 # 규칙의 대상이 아니고(.css/.ts 가 하나만 들어와도 FG-002/004 가 오발화한다),
@@ -59,21 +60,6 @@ FG005_ALLOWLIST = {
     "/static/favicon.svg",
 }
 
-# 상태→표현 매핑을 아직 중복으로 들고 있는 템플릿(구조 탐지 기준 실측 4개).
-# Step 7 이 화면을 이관할 때마다 한 줄씩 지운다. 비면 FG-006 이 완성된다 —
-# 오탐이 섞이지 않으므로 이 전제는 실제로 성립한다.
-# run.html·suite.html 은 P3-1 이 고쳤으므로 처음부터 여기에 없다.
-FG006_ALLOWLIST = {
-    # 상태→글리프 맵
-    "app/web/templates/dashboard/partials/_macros.html",
-    # 인라인 JS 의 상태→라벨+클래스 맵
-    "app/web/templates/mobile_trigger.html",
-    # <option value="PASSED">정상</option> 류 라벨 중복 + 필터 체크박스
-    "app/web/templates/admin/runs.html",
-    # 범례의 상태 라벨 중복
-    "app/web/templates/schedules.html",
-}
-
 # FG-006 은 **어휘가 아니라 구조**를 본다.
 #
 # 초안은 상태 색 쌍(`bg-red-100 text-red-700`)과 한국어 라벨 리터럴을 탐지했는데,
@@ -102,10 +88,17 @@ _STATUS_MAP_KEYS = (
     "queued",
     "failed",
 )
-_STATUS_MAP_KEY_RE = [re.compile(rf"['\"]?{key}['\"]?\s*:") for key in _STATUS_MAP_KEYS]
+_STATUS_MAP_KEY_RE = [
+    re.compile(rf"(?<![\w-])['\"]?{key}['\"]?\s*:", re.IGNORECASE) for key in _STATUS_MAP_KEYS
+]
 # 한 줄에 상태 키가 둘 이상 콜론과 함께 나오면 맵 리터럴로 판정한다. 하나만으로는
 # 평범한 CSS 선언(`color: …`)이나 산문과 구분되지 않는다.
 _STATUS_MAP_MIN_KEYS = 2
+# 맵 판정 창. allowlist 를 비우고 2~14줄을 실측했을 때 2~7은 같은 4파일을 잡되
+# 같은 맵을 더 잘게 중복 보고했고, 8~14는 `_macros.html`·`admin/runs.html`·
+# `mobile_trigger.html`·`schedules.html` 4파일/15건으로 안정화됐다.
+# 그중 가장 좁게 같은 결과를 낸 최소값 8을 채택한다.
+_STATUS_MAP_WINDOW = 8
 
 # 규칙 B(PAIR) — enum 값과 한국어 라벨이 같은 줄에 함께 있음.
 # `<option value="PASSED">정상</option>` 처럼 생성물(status.generated.ts)을 써야 하는 자리다.
@@ -122,29 +115,14 @@ _ENUM_VALUES = (
     "CANCELLED",
     "FAILED",
 )
-_DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상")
-
-# 차트 라이브러리(Chart.js/ECharts/Plotly) CDN 예외 — 이 계획(P1)의 범위 밖이다.
-# self-host 하려면 npm 의존성 추가 + 페이지별 Vite 엔트리가 필요한데, 현재
-# vite.config.ts 는 단일 엔트리만 지원해 그 구조 변경은 이후 작업으로 미룬다.
-# FG005_ALLOWLIST 와 달리 파일 전체가 아니라 "파일 + 정확한 URL" 쌍만 예외로
-# 둔다 — 내일 admin/runs.html 에 엉뚱한 CDN 이 추가되면 여전히 걸려야 한다.
-FG001_EXCEPTIONS: dict[str, set[str]] = {
-    "app/web/templates/insights.html": {
-        "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js",
-    },
-    "app/web/templates/admin/runs.html": {
-        "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js",
-        "https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js",
-    },
-    "app/web/templates/admin/stats.html": {
-        "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js",
-    },
-}
+_DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상", "취소")
 
 _EXTERNAL_URL = re.compile(r"""(?:src|href)\s*=\s*["'](https?://[^"']+)["']""")
 _HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _STATIC_REF = re.compile(r"""(?:src|href)\s*=\s*["'](/static/[^"'?]+)""")
+# 메일 상태 색 상수의 이름 규약. 레이아웃 색(PAGE_BG·INK·BORDER 등)은 상태와
+# 무관하므로 대상이 아니다 — 이름으로 갈리므로 값 allowlist 가 필요 없다.
+_MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_BG)\s*=\s*['\"]#")
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -179,15 +157,17 @@ def _iter_component_markup(root: Path):
 
 
 def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
-    """FG-001: 템플릿에 외부 CDN script/link 금지(차트 라이브러리 예외 제외)."""
+    """FG-001: 템플릿에 외부 CDN script/link 금지. 예외 없음.
+
+    차트 라이브러리 3종(Chart.js·ECharts·Plotly)에 예외를 두었던 이유는
+    "vite.config.ts 가 단일 엔트리만 지원한다" 였다. P3-2 가 wall 엔트리를
+    추가하며 그 전제가 소멸했고, P3-4 가 self-host 로 바꾸며 예외를 없앴다.
+    """
     problems: list[str] = []
     for path in chain(_iter(root, TEMPLATE_DIR, ".html"), _iter_component_markup(root)):
         rel = _rel(path, root)
-        exceptions = FG001_EXCEPTIONS.get(rel, set())
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for url in _EXTERNAL_URL.findall(line):
-                if url in exceptions:
-                    continue
                 problems.append(
                     f"[FG-001] {rel}:{lineno} 외부 자산 참조 `{url}` — "
                     "npm 으로 self-host 하고 asset 매크로를 쓰세요."
@@ -269,23 +249,30 @@ def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]
     """FG-006: 템플릿이 상태→표현 매핑을 중복으로 들고 있는 것을 막는다.
 
     run.html 이 자체 status_pill 맵을 들고 있어 ANOMALY/ERROR 배지가 회색·영문으로
-    렌더되던 사고(P3-1)를 막는다. FG-003 은 frontend/**/*.ts 만 보므로 템플릿은
-    무검증이었다.
+    렌더되던 사고(P3-1)를 막는다.
 
-    어휘(색 리터럴·한국어 단어)가 아니라 구조를 본다 — 위 상수 주석 참조.
+    allowlist 는 P3-4 가 마지막 템플릿을 이관하며 없앴다 — 예외 없는 규칙이다.
+
+    맵 판정은 **블록 단위**다. 줄 단위이던 동안 한 줄에 한 항목씩 쓴 맵
+    (mobile_trigger.html 의 STATUS_VIEW 8개)이 통째로 보이지 않았다(P3-4 §3.3).
     """
     problems: list[str] = []
     for path in _iter(root, TEMPLATE_DIR, ".html"):
         rel = _rel(path, root)
-        if rel in FG006_ALLOWLIST:
-            continue
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        flagged_windows: list[int] = []
+        for lineno, line in enumerate(lines, 1):
+            window = "\n".join(lines[lineno - 1 : lineno - 1 + _STATUS_MAP_WINDOW])
             matched = [
                 key
                 for key, pattern in zip(_STATUS_MAP_KEYS, _STATUS_MAP_KEY_RE, strict=True)
-                if pattern.search(line)
+                if pattern.search(window)
             ]
             if len(matched) >= _STATUS_MAP_MIN_KEYS:
+                # 같은 맵이 창을 옮겨가며 여러 번 잡히는 것을 막는다 — 블록당 1건.
+                if flagged_windows and lineno - flagged_windows[-1] < _STATUS_MAP_WINDOW:
+                    continue
+                flagged_windows.append(lineno)
                 keys = ", ".join(matched[:4])
                 problems.append(
                     f"[FG-006] {rel}:{lineno} 상태 키 맵 리터럴 (`{keys}`) — "
@@ -304,6 +291,26 @@ def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]
     return problems
 
 
+def check_fg007_mail_status_colors_from_ssot(root: Path = REPO_ROOT) -> list[str]:
+    """FG-007: 메일 상태 색은 status_colors.PALETTE 파생만.
+
+    화면과 메일이 같은 상태를 다른 색으로 말하던 것을 P3-4 가 통일했다.
+    되돌아가는 유일한 경로가 "여기에 hex 를 다시 적는 것" 이므로 그것만 막는다.
+    """
+    path = root / MAIL_RENDERER
+    if not path.exists():
+        return []
+    problems: list[str] = []
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if _MAIL_STATUS_CONST_RE.match(line):
+            name = line.split("=", 1)[0].strip()
+            problems.append(
+                f"[FG-007] {MAIL_RENDERER}:{lineno} 상태 색 `{name}` 이 hex 리터럴 — "
+                "app/core/status_colors.py 의 PALETTE 에서 파생시키세요."
+            )
+    return problems
+
+
 CHECKS = (
     check_fg001_no_cdn,
     check_fg002_no_hex,
@@ -311,6 +318,7 @@ CHECKS = (
     check_fg004_file_size,
     check_fg005_no_static_ref,
     check_fg006_no_template_status_literals,
+    check_fg007_mail_status_colors_from_ssot,
 )
 
 
@@ -323,7 +331,7 @@ def main() -> int:
         for problem in problems:
             print(f"  {problem}")
         return 1
-    print("프론트엔드 게이트 통과 (FG-001~006)")
+    print("프론트엔드 게이트 통과 (FG-001~007)")
     return 0
 
 

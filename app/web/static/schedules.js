@@ -22,10 +22,10 @@
     ANOMALY: "이상징후",
     FAILED: "이상징후",
     ERROR: "점검실패",
-    CANCELLED: "취소됨",
-    WAITING_INPUT: "OTP 대기",
+    CANCELLED: "취소",
+    WAITING_INPUT: "입력 대기",
     RUNNING: "실행 중",
-    PENDING: "대기 중",
+    PENDING: "대기",
   };
   const BADGE_CLASS = {
     PASSED: "bg-green-100 text-green-700",
