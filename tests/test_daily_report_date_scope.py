@@ -90,6 +90,16 @@ async def test_dashboard_echoes_the_requested_date():
     assert data["date_label"] == "2026-08-20"
 
 
+_SYSTEM_VIEWS = [
+    {
+        "system_code": "HOM",
+        "system_name": "홈페이지",
+        "module_total": 2,
+        "counts": {"passed": 2, "error": 0, "anomaly": 0, "not_inspected": 0},
+    }
+]
+
+
 _HEALING_FOR_DATE = {
     "kpi": {"month_auto_recovered": 10, "pending_patches": 1},
     "trend": [
@@ -117,6 +127,9 @@ class _RecordingDailyQueries:
             "date_label": label,
             "generated_at": datetime.now(UTC),
             "attention": [],
+            # build_daily_dashboard 는 systems 를 항상 낸다. 스텁이 이걸 빠뜨리면
+            # 패스스루(P3-2)가 KeyError 로 터진다 — 계약을 그대로 흉내낸다.
+            "systems": _SYSTEM_VIEWS,
         }
 
 
@@ -154,3 +167,22 @@ async def test_summary_forwards_date_label_and_builds_for_requested_day():
     assert result["date_label"] == "2026-08-20"
     self_healed = next(card for card in result["cards"] if card["key"] == "self_healed")
     assert self_healed["value"] == 5
+
+
+@pytest.mark.asyncio
+async def test_summary_passes_systems_through():
+    """systems 패스스루가 없으면 일간 리포트의 시스템별 표가 조용히 빈 채 발송된다.
+
+    build_daily_report 는 summary.get("systems", []) 로 읽어 예외를 내지 않으므로
+    이 단언이 유일한 방어선이다.
+    """
+    from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries
+
+    result = await DailySummaryQueries(
+        _RecordingDailyQueries(), _StubHealing(), _StubStats()
+    ).get_daily_summary(
+        user_id=None,
+        allowed_system_codes=None,
+        date_label="2026-08-20",
+    )
+    assert result["systems"] == _SYSTEM_VIEWS
