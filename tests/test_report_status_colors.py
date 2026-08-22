@@ -12,8 +12,11 @@ import pytest
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.notifications.report_renderer import (
     _STATUS_COLORS,
+    FAIL_COLOR,
     INFO_COLOR,
     NEUTRAL_COLOR,
+    PASS_COLOR,
+    WARN_COLOR,
     _status_color,
 )
 
@@ -46,7 +49,40 @@ def test_pending_and_queued_are_deliberately_neutral() -> None:
 
 def test_existing_values_are_unchanged() -> None:
     """설계 D5 — 커버리지만 메우고 값은 바꾸지 않는다."""
-    assert _status_color(ModuleStatus.PASSED.value) == "#2f8f4e"
-    assert _status_color(ModuleStatus.ERROR.value) == "#c0392b"
-    assert _status_color(ModuleStatus.ANOMALY.value) == "#b7791f"
-    assert _status_color(ModuleStatus.WAITING_INPUT.value) == "#b7791f"
+    assert _status_color(ModuleStatus.PASSED.value) == PASS_COLOR
+    assert _status_color(ModuleStatus.ERROR.value) == FAIL_COLOR
+    assert _status_color(ModuleStatus.ANOMALY.value) == WARN_COLOR
+    assert _status_color(ModuleStatus.WAITING_INPUT.value) == WARN_COLOR
+
+
+def test_mail_status_colors_are_derived_from_the_shared_palette() -> None:
+    """화면과 메일이 같은 상태를 다른 색으로 말하지 않는다(P3-4 §3.2).
+
+    메일의 (글자색, 옅은 배경) 쌍은 웹 팔레트의 (text, surface) 축에 대응한다.
+    """
+    from app.core.status_colors import PALETTE
+    from app.notifications import report_renderer as renderer
+
+    expected = {
+        "PASS": "passed",
+        "FAIL": "error",
+        "WARN": "anomaly",
+        "NEUTRAL": "pending",
+        "INFO": "running",
+    }
+    for prefix, tone in expected.items():
+        assert getattr(renderer, f"{prefix}_COLOR") == PALETTE[tone]["text"], prefix
+        assert getattr(renderer, f"{prefix}_SOFT_BG") == PALETTE[tone]["surface"], prefix
+
+
+def test_mail_layout_colors_are_untouched() -> None:
+    """레이아웃 색은 상태와 무관하다 — 팔레트 통일이 메일 크롬까지 바꾸면 안 된다."""
+    from app.notifications import report_renderer as renderer
+
+    assert renderer.PAGE_BG == "#f4f5f7"
+    assert renderer.CARD_BG == "#ffffff"
+    assert renderer.INK == "#1f2328"
+    assert renderer.MUTED == "#6b7280"
+    assert renderer.BORDER == "#e5e7eb"
+    assert renderer.SOFT_BG == "#f7f8fa"
+    assert renderer.LABEL_BG == "#f4f6f8"

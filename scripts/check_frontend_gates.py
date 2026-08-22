@@ -1,4 +1,4 @@
-"""프론트엔드 게이트 FG-001~006 — check_architecture_gates.py 의 프론트 대응물.
+"""프론트엔드 게이트 FG-001~007 — check_architecture_gates.py 의 프론트 대응물.
 
 디자인 시스템은 강제력이 없으면 6개월 안에 하드코딩으로 되돌아간다.
 각 규칙은 실제로 발생했던 사고를 막는다(설계 문서 §3.6 참조).
@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 TEMPLATE_DIR = "app/web/templates"
 FRONTEND_DIR = "app/web/frontend"
+MAIL_RENDERER = "app/notifications/report_renderer.py"
 
 # 스캔에서 통째로 제외할 디렉터리 이름. node_modules 는 서드파티 소스라 우리
 # 규칙의 대상이 아니고(.css/.ts 가 하나만 들어와도 FG-002/004 가 오발화한다),
@@ -127,6 +128,9 @@ _DOMAIN_LABELS = ("이상징후", "점검실패", "입력 대기", "정상")
 _EXTERNAL_URL = re.compile(r"""(?:src|href)\s*=\s*["'](https?://[^"']+)["']""")
 _HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _STATIC_REF = re.compile(r"""(?:src|href)\s*=\s*["'](/static/[^"'?]+)""")
+# 메일 상태 색 상수의 이름 규약. 레이아웃 색(PAGE_BG·INK·BORDER 등)은 상태와
+# 무관하므로 대상이 아니다 — 이름으로 갈리므로 값 allowlist 가 필요 없다.
+_MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_BG)\s*=\s*['\"]#")
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -288,6 +292,26 @@ def check_fg006_no_template_status_literals(root: Path = REPO_ROOT) -> list[str]
     return problems
 
 
+def check_fg007_mail_status_colors_from_ssot(root: Path = REPO_ROOT) -> list[str]:
+    """FG-007: 메일 상태 색은 status_colors.PALETTE 파생만.
+
+    화면과 메일이 같은 상태를 다른 색으로 말하던 것을 P3-4 가 통일했다.
+    되돌아가는 유일한 경로가 "여기에 hex 를 다시 적는 것" 이므로 그것만 막는다.
+    """
+    path = root / MAIL_RENDERER
+    if not path.exists():
+        return []
+    problems: list[str] = []
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if _MAIL_STATUS_CONST_RE.match(line):
+            name = line.split("=", 1)[0].strip()
+            problems.append(
+                f"[FG-007] {MAIL_RENDERER}:{lineno} 상태 색 `{name}` 이 hex 리터럴 — "
+                "app/core/status_colors.py 의 PALETTE 에서 파생시키세요."
+            )
+    return problems
+
+
 CHECKS = (
     check_fg001_no_cdn,
     check_fg002_no_hex,
@@ -295,6 +319,7 @@ CHECKS = (
     check_fg004_file_size,
     check_fg005_no_static_ref,
     check_fg006_no_template_status_literals,
+    check_fg007_mail_status_colors_from_ssot,
 )
 
 
@@ -307,7 +332,7 @@ def main() -> int:
         for problem in problems:
             print(f"  {problem}")
         return 1
-    print("프론트엔드 게이트 통과 (FG-001~006)")
+    print("프론트엔드 게이트 통과 (FG-001~007)")
     return 0
 
 

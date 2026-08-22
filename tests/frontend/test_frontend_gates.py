@@ -7,6 +7,7 @@ from scripts.check_frontend_gates import (
     check_fg004_file_size,
     check_fg005_no_static_ref,
     check_fg006_no_template_status_literals,
+    check_fg007_mail_status_colors_from_ssot,
 )
 
 
@@ -362,3 +363,33 @@ def test_fg006_allowlist_holds_only_real_offenders():
         "app/web/templates/admin/runs.html",
         "app/web/templates/schedules.html",
     }
+
+
+def test_fg007_flags_hardcoded_mail_status_color(tmp_path):
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nPASS_COLOR = "#2f8f4e"\n',
+    )
+    problems = check_fg007_mail_status_colors_from_ssot(tmp_path)
+    assert len(problems) == 1
+    assert "PASS_COLOR" in problems[0]
+
+
+def test_fg007_allows_palette_derived_status_color(tmp_path):
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nPASS_COLOR = PALETTE["passed"]["text"]\n',
+    )
+    assert check_fg007_mail_status_colors_from_ssot(tmp_path) == []
+
+
+def test_fg007_ignores_layout_colors(tmp_path):
+    """레이아웃 색은 상태와 무관하므로 hex 리터럴이 정당하다."""
+    _write(
+        tmp_path,
+        "app/notifications/report_renderer.py",
+        'PAGE_BG = "#f4f5f7"\nINK = "#1f2328"\nBORDER = "#e5e7eb"\n',
+    )
+    assert check_fg007_mail_status_colors_from_ssot(tmp_path) == []

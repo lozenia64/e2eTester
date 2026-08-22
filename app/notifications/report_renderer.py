@@ -21,6 +21,7 @@ from __future__ import annotations
 from html import escape
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
+from app.core.status_colors import PALETTE
 from app.core.status_labels import (
     MODULE_STATUS_LABELS,
     RUN_STATUS_LABELS,
@@ -37,16 +38,19 @@ BORDER = "#e5e7eb"
 SOFT_BG = "#f7f8fa"
 LABEL_BG = "#f4f6f8"
 
-PASS_COLOR = "#2f8f4e"
-PASS_SOFT_BG = "#e9f6ee"
-FAIL_COLOR = "#c0392b"
-FAIL_SOFT_BG = "#fdecea"
-WARN_COLOR = "#b7791f"
-WARN_SOFT_BG = "#fdf6e3"
-NEUTRAL_COLOR = "#6b7280"
-NEUTRAL_SOFT_BG = "#f1f3f5"
-INFO_COLOR = "#2563eb"
-INFO_SOFT_BG = "#eef3ff"
+# 상태 색은 화면과 같은 팔레트에서 파생한다(P3-4 §3.2).
+# 메일의 (글자색, 옅은 배경) 쌍이 웹 팔레트의 (text, surface) 축에 대응한다.
+# 값을 여기에 직접 적지 마라 — FG-007 이 막는다.
+PASS_COLOR = PALETTE["passed"]["text"]
+PASS_SOFT_BG = PALETTE["passed"]["surface"]
+FAIL_COLOR = PALETTE["error"]["text"]
+FAIL_SOFT_BG = PALETTE["error"]["surface"]
+WARN_COLOR = PALETTE["anomaly"]["text"]
+WARN_SOFT_BG = PALETTE["anomaly"]["surface"]
+NEUTRAL_COLOR = PALETTE["pending"]["text"]
+NEUTRAL_SOFT_BG = PALETTE["pending"]["surface"]
+INFO_COLOR = PALETTE["running"]["text"]
+INFO_SOFT_BG = PALETTE["running"]["surface"]
 
 # --- 스크린샷 크기 규칙 -------------------------------------------------------------
 # Outlook(윈도우)은 Word 렌더링 엔진이라 CSS max-width/height 를 무시하고 HTML
