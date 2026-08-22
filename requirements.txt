@@ -23,7 +23,7 @@ croniter>=6.2.4,<7.0
 # .env 파싱(출처 추적 보조 경로). 자체 줄 단위 파서 대체(따옴표/엣지케이스 처리 위임).
 python-dotenv>=1.2.2,<2.0
 # 비밀번호 해싱. Argon2id 기본 + 기존 bcrypt 해시 검증/업그레이드(passlib 의 유지보수 후속).
-pwdlib[argon2]>=0.2,<1.0
+pwdlib[argon2]>=0.3.1,<1.0
 redis>=8.0.1,<9.0
 # Run/Suite 입력값 at-rest 암호화(AES-GCM).
 # 하한 50.0: PYSEC-2026-3552/3553/3554 수정본. 상한 <49.0 이 이 수정본을 막아 주간
