@@ -106,6 +106,7 @@ def test_wire_persistence_builds_repos_atomically(tmp_path) -> None:
     assert container.scheduling.schedule_repository is not None
     assert container.scheduling.scheduler is None
     assert container.scheduling.retention_scheduler is None
+    assert container.scheduling.daily_report_scheduler is None
 
 
 def test_wire_orchestration_and_read_models_fill_late_fields(tmp_path) -> None:
@@ -131,3 +132,71 @@ def test_wire_orchestration_and_read_models_fill_late_fields(tmp_path) -> None:
     assert container.insights.stats_service is not None
     assert container.insights.insights_service is not None
     assert container.insights.ops_service is not None
+
+
+def test_wire_read_models_wires_daily_report_scheduler_when_email_config_available(
+    tmp_path, monkeypatch
+) -> None:
+    settings = E2ESettings(
+        E2E_DB_PATH=str(tmp_path / "daily-report.db"),
+        E2E_EXECUTION_MODE="local",
+        E2E_REDIS_URL="",
+    )
+    container = AppContainer(settings=settings)
+    container.wire_persistence()
+    container.wire_realtime()
+    container.wire_execution()
+    container.wire_orchestration()
+
+    fake_config = object()
+    fake_scheduler = object()
+    captured: dict[str, object] = {}
+
+    class _FakeEmailConfig:
+        @classmethod
+        def from_env(cls, system_codes):
+            captured["system_codes"] = list(system_codes)
+            return fake_config
+
+    class _FakeDailyReportEmailService:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    def _compose_daily_report_scheduler(service):
+        captured["scheduler_service"] = service
+        return fake_scheduler
+
+    monkeypatch.setattr(container_mod, "EmailNotificationConfig", _FakeEmailConfig, raising=False)
+    monkeypatch.setattr(
+        container_mod,
+        "DailyReportEmailService",
+        _FakeDailyReportEmailService,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        container_mod,
+        "resolve_daily_report_recipients",
+        # (수신자, 오류 목록) — 형제 리졸버와 같은 계약
+        lambda *_args, **_kwargs: (("qa@example.com",), []),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        container_mod,
+        "load_dotenv_file",
+        lambda *_args, **_kwargs: {"E2E_EMAIL_DAILY_REPORT_RECIPIENTS": "qa@example.com"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        container_mod,
+        "compose_daily_report_scheduler",
+        _compose_daily_report_scheduler,
+        raising=False,
+    )
+
+    container.wire_read_models()
+
+    assert captured["summary_queries"] is container.insights.daily_summary_queries
+    assert captured["config"] is fake_config
+    assert captured["recipients"] == ("qa@example.com",)
+    assert captured["dedup_store"]._db is container.es_db
+    assert container.scheduling.daily_report_scheduler is fake_scheduler

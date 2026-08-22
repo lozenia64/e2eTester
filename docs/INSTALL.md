@@ -61,6 +61,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 | `E2E_SCHEDULE_TZ` | cron·일간 대시보드 TZ |
 | `E2E_RUN_RETENTION_ENABLED` / `E2E_RUN_RETENTION_CRON` | 실패 Run 자동 삭제 |
 | `E2E_WALL_ENABLED` | 상황판 `/wall` 공개 여부(비인증 읽기 전용). 외부 접근 가능한 배포에서는 `false` |
+| `E2E_EMAIL_DAILY_REPORT_ENABLED` / `E2E_EMAIL_DAILY_REPORT_CRON` / `E2E_EMAIL_DAILY_REPORT_RECIPIENTS` | 일간 리포트 메일(어제 결과, 전사 단일). 기본 꺼짐 — 켜기 전 수신자를 본인 주소로 두고 하루 관찰 |
 | `E2E_AUTO_RERUN_ENABLED` / `E2E_RUN_MAX_DURATION_S` / `E2E_RECOVERY_TIER2_BUDGET` | 자동 복구 루프(예약 Run 자동 재실행·실행 시간 상한·로그인 재주행 예산) |
 | `E2E_RUN_CONCURRENCY` / `E2E_RUN_CONCURRENCY_HEAVY` / `E2E_RUN_CONCURRENCY_LIGHT` / `E2E_RUN_CONCURRENCY_INTERACTIVE` | 동시 Run |
 | `E2E_EXECUTION_MODE` / `E2E_REDIS_URL` / `E2E_WORKER_BASE_URL` / `E2E_WORKER_CONCURRENCY` / `E2E_SESSION_LEASE_TTL` | 워커·Redis |

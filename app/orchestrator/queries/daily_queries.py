@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
-from app.contexts.scheduling.scheduler import schedule_today_label, schedule_today_start_utc
+from app.contexts.scheduling.scheduler import schedule_day_start_utc, schedule_today_label
 
 if TYPE_CHECKING:
     from app.contexts.insights.infrastructure.ports import DailyStatusQueryPort
@@ -33,18 +33,21 @@ class DailyDashboardQueries:
         self,
         *,
         allowed_system_codes: list[str] | None = None,
+        date_label: str | None = None,
     ) -> dict:
-        """접근 가능한 시스템의 KST 오늘 시스템·모듈별 점검 상태 집계(PII 없음)."""
+        """접근 가능한 시스템의 지정일(기본 오늘) 시스템·모듈별 점검 상태 집계(PII 없음)."""
         systems = self._registry.list_systems()
         if allowed_system_codes is not None:
             allowed = set(allowed_system_codes)
             systems = [s for s in systems if s.system_code in allowed]
 
-        today_start_utc = schedule_today_start_utc()
-        date_label = schedule_today_label()
-        status_rows = await self._daily_status_query.list_for_date(date_label, allowed_system_codes)
+        target_label = date_label or schedule_today_label()
+        today_start_utc = schedule_day_start_utc(target_label)
+        status_rows = await self._daily_status_query.list_for_date(
+            target_label, allowed_system_codes
+        )
         run_summaries = await self._daily_status_query.list_run_summaries_for_date(
-            date_label, today_start_utc, allowed_system_codes
+            target_label, today_start_utc, allowed_system_codes
         )
         duration_by_module_run = {
             (row.last_run_id, row.module_id): row.duration_ms
@@ -57,5 +60,5 @@ class DailyDashboardQueries:
             run_summaries,
             duration_by_module_run=duration_by_module_run,
             generated_at=datetime.now(UTC),
-            date_label=date_label,
+            date_label=target_label,
         )

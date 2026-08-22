@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from app.contexts.insights.application.daily_summary import build_daily_summary
-from app.contexts.scheduling.scheduler import schedule_month_start_utc, schedule_today_label
+from app.contexts.scheduling.scheduler import schedule_month_start_utc
 
 if TYPE_CHECKING:
     from app.contexts.healing.service import HealingService
@@ -35,9 +35,11 @@ class DailySummaryQueries:
         user_id: str | None,
         allowed_system_codes: list[str] | None,
         is_admin: bool = False,
+        date_label: str | None = None,
     ) -> dict[str, Any]:
         dashboard = await self._daily_queries.get_daily_dashboard(
-            allowed_system_codes=allowed_system_codes
+            allowed_system_codes=allowed_system_codes,
+            date_label=date_label,
         )
         healing_metrics = await self._healing.metrics(allowed_system_codes=allowed_system_codes)
         savings = await self._stats.get_savings_summary(
@@ -49,7 +51,7 @@ class DailySummaryQueries:
             dashboard["totals"],
             healing_metrics,
             savings,
-            today_label=schedule_today_label(),
+            today_label=dashboard["date_label"],
             is_admin=is_admin,
         )
         # 프래그먼트가 히어로 문장·메타에 쓰는 원본도 함께 넘긴다.

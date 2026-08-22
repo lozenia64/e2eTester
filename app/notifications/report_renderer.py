@@ -85,6 +85,12 @@ _STATUS_COLORS = {
     SuiteStatus.FAILED.value: WARN_COLOR,
     SuiteStatus.SKIPPED.value: NEUTRAL_COLOR,
     SuiteStatus.CANCELLED.value: NEUTRAL_COLOR,
+    # 아래 3개는 이전까지 맵에 없어 기본값(NEUTRAL_COLOR)으로 흘러내렸다.
+    # RUNNING 은 진행 중이므로 중립이 아니어야 한다 — 웹 토큰도 파랑이다.
+    # PENDING/QUEUED 는 중립이 맞지만, 우연이 아니라 의도임을 명시한다.
+    ModuleStatus.RUNNING.value: INFO_COLOR,
+    ModuleStatus.PENDING.value: NEUTRAL_COLOR,
+    ModuleStatus.QUEUED.value: NEUTRAL_COLOR,
 }
 
 
@@ -281,6 +287,39 @@ def _module_table(modules: list[dict]) -> str:
         '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
         f'style="border-collapse:collapse;border:1px solid {BORDER};border-radius:10px;">'
         f"{head}<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _system_summary_table(systems: list[dict]) -> str:
+    """일간 리포트의 시스템별 요약 표 — 코드/이름/통과비/상태."""
+    head = (
+        f'<thead><tr style="background:{SOFT_BG};">'
+        + "".join(
+            f'<th style="padding:10px 12px;border:1px solid {BORDER};font-size:13px;'
+            f'font-weight:700;color:{MUTED};text-align:left;">{escape(title)}</th>'
+            for title in ("시스템", "이름", "통과", "상태")
+        )
+        + "</tr></thead>"
+    )
+    rows = "".join(
+        (
+            "<tr>"
+            f'<td style="padding:10px 12px;border:1px solid {BORDER};font-size:13px;'
+            f'font-weight:700;color:{INK};">{escape(system["code"])}</td>'
+            f'<td style="padding:10px 12px;border:1px solid {BORDER};font-size:13px;'
+            f'color:{INK};">{escape(system["name"])}</td>'
+            f'<td style="padding:10px 12px;border:1px solid {BORDER};font-size:13px;'
+            f'color:{MUTED};">{system["passed"]}/{system["total"]}</td>'
+            f'<td style="padding:10px 12px;border:1px solid {BORDER};font-size:13px;'
+            f'font-weight:700;color:{_status_color(system["status_value"])};">'
+            f"{escape(system['status_label'])}</td>"
+            "</tr>"
+        )
+        for system in systems
+    )
+    return (
+        '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
+        f'style="border-collapse:collapse;">{head}<tbody>{rows}</tbody></table>'
     )
 
 
@@ -928,3 +967,42 @@ def render_suite_report_html(context: dict, ai_content: dict | None = None) -> s
     ]
 
     return _shell(title, "".join(sections) + _footer())
+
+
+# --- 일간 리포트 (P3-3) -------------------------------------------------------------
+def render_daily_report_html(context: dict) -> str:
+    """일간 리포트 메일 본문.
+
+    Run/Suite 보고서와 같은 셸·헬퍼를 쓴다. 링크는 넣지 않는다 — 기존 메일에도 링크가
+    없고 공개 URL 설정 자체가 없다(설계 D6).
+    """
+    status_value = context["status_value"]
+    accent = _status_color(status_value)
+
+    title = _title_block(
+        f"[E2E] {context['date_label']} 점검 결과",
+        status_value,
+        context["headline"],
+        context["date_label"],
+    )
+
+    kpi = _kpi_cards([(label, f"{value}{unit}", INK) for label, value, unit in context["kpis"]])
+
+    body = _section(1, "요약", kpi, accent)
+    body += _section(2, "시스템별 결과", _system_summary_table(context["systems"]), accent)
+
+    issues = context["issues"]
+    if issues:
+        items = "".join(
+            f'<li style="margin-bottom:6px;">{escape(issue["system"])}'
+            f" · {escape(issue['module'])} — "
+            f"<b>{escape(issue['status_label'])}</b></li>"
+            for issue in issues
+        )
+        issue_html = f'<ul style="margin:0;padding-left:20px;font-size:14px;">{items}</ul>'
+    else:
+        issue_html = _callout("확인이 필요한 건이 없습니다.", PASS_COLOR, PASS_SOFT_BG)
+    body += _section(3, "확인 필요", issue_html, accent)
+    body += _footer()
+
+    return _shell(title, body)

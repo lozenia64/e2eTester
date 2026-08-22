@@ -60,12 +60,25 @@ def _ensure_utc(moment: datetime | None) -> datetime | None:
     return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
+def schedule_day_start_utc(date_label: str) -> datetime:
+    """스케줄 타임존 기준 ``date_label``(YYYY-MM-DD) 00:00:00 을 UTC 로 반환한다.
+
+    일간 집계가 임의 날짜를 조회할 때 쓴다(P3-3 일간 리포트는 어제를 본다).
+    """
+    tz, _ = _resolve_timezone()
+    day = datetime.strptime(date_label, "%Y-%m-%d")
+    return day.replace(tzinfo=tz).astimezone(UTC)
+
+
+def schedule_today_label() -> str:
+    """스케줄 타임존 기준 '오늘' 날짜 라벨(YYYY-MM-DD)."""
+    tz, _ = _resolve_timezone()
+    return datetime.now(tz).strftime("%Y-%m-%d")
+
+
 def schedule_today_start_utc() -> datetime:
     """스케줄 타임존 기준 '오늘' 00:00:00 을 UTC 로 반환한다."""
-    tz, _ = _resolve_timezone()
-    now_local = datetime.now(tz)
-    today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    return today_start_local.astimezone(UTC)
+    return schedule_day_start_utc(schedule_today_label())
 
 
 def schedule_month_start_utc() -> datetime:
@@ -74,12 +87,6 @@ def schedule_month_start_utc() -> datetime:
     now_local = datetime.now(tz)
     month_start_local = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return month_start_local.astimezone(UTC)
-
-
-def schedule_today_label() -> str:
-    """스케줄 타임존 기준 '오늘' 날짜 라벨(YYYY-MM-DD)."""
-    tz, _ = _resolve_timezone()
-    return datetime.now(tz).strftime("%Y-%m-%d")
 
 
 class SchedulerService:
