@@ -797,10 +797,18 @@ def test_reduced_motion_disables_cell_animation(browser, live_server: str) -> No
     context = browser.new_context(reduced_motion="reduce", viewport={"width": 1920, "height": 1080})
     page = context.new_page()
     page.goto(live_server, wait_until="networkidle")
-    names = page.evaluate(
+    motion = page.evaluate(
         """() => [...document.querySelectorAll('.dash-cell')]
-            .map((c) => getComputedStyle(c).animationName)"""
+            .map((c) => {
+                const style = getComputedStyle(c);
+                return { animationName: style.animationName, transitionProperty: style.transitionProperty };
+            })"""
     )
     context.close()
-    assert names, "셀이 없다"
+    assert motion, "셀이 없다"
+    names = [item["animationName"] for item in motion]
+    transitions = [item["transitionProperty"] for item in motion]
     assert all(name == "none" for name in names), f"reduced-motion 인데 애니메이션이 산다: {names}"
+    assert all(transition == "none" for transition in transitions), (
+        f"reduced-motion 인데 전이가 산다: {transitions}"
+    )
