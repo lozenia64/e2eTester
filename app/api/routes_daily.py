@@ -28,6 +28,7 @@ templates.env.globals["tone_glyph"] = tone_glyph
 _FRAGMENT_TEMPLATES = {
     "kpi": "dashboard/partials/zone_a_kpi.html",
     "matrix": "dashboard/partials/zone_b_matrix.html",
+    "activity": "dashboard/partials/zone_c_activity.html",
 }
 
 

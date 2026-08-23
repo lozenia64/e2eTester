@@ -365,3 +365,17 @@ def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegist
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/matrix").text
     assert "cell-flag--unstable" not in html
+
+
+def test_activity_fragment_renders_items(client):
+    res = client.get("/api/dashboard/daily/fragments/activity")
+    assert res.status_code == 200
+    html = res.text
+    assert 'id="dash-zone-activity"' in html
+    assert 'class="dash-activity"' in html
+    # 항목 하나 이상이 시각·시스템·모듈을 담는다
+    assert "dash-activity__item" in html
+
+
+def test_activity_fragment_unknown_zone_still_404(client):
+    assert client.get("/api/dashboard/daily/fragments/nope").status_code == 404
