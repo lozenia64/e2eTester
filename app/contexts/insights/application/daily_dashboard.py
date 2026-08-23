@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from app.core.enums import ModuleStatus
 from app.core.status_labels import (
@@ -145,6 +146,53 @@ def build_attention_items(system_views: list[dict[str, Any]]) -> list[dict[str, 
             )
     items.sort(key=lambda it: (-it["rank"], it["system_name"], it["module_name"] or ""))
     return items
+
+
+def build_activity_feed(
+    status_rows: list[DailyStatusRow],
+    systems: list[SystemDefinition],
+    *,
+    tz: ZoneInfo,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """최근 갱신된 모듈 상태를 시간 내림차순으로 — 대시보드 우측 활동 피드용.
+
+    신규 프로젝션·쿼리를 만들지 않는다. ``daily_system_status`` 행이 이미 들고 있는
+    ``updated_at``/``recovered`` 를 그대로 쓴다(설계 §3.4).
+    """
+    module_index: dict[tuple[str, str], str] = {
+        (system.system_code, module.module_id): module.name
+        for system in systems
+        for module in system.modules
+    }
+    system_names = {system.system_code: system.name for system in systems}
+
+    items: list[dict[str, Any]] = []
+    for row in status_rows:
+        if row.last_status in _NON_RESULT_STATUSES:
+            continue
+        module_name = module_index.get((row.system_code, row.module_id))
+        if module_name is None:
+            # 레지스트리에서 사라진 모듈의 잔여 행 — 이름을 지어내지 않고 버린다.
+            continue
+        local = row.updated_at.astimezone(tz)
+        items.append(
+            {
+                "system_code": row.system_code,
+                "system_name": system_names.get(row.system_code, row.system_code),
+                "module_id": row.module_id,
+                "module_name": module_name,
+                "status_label": module_status_label(row.last_status),
+                "tone": module_status_badge_tone(row.last_status),
+                "at": local.strftime("%H:%M"),
+                "at_iso": local.isoformat(),
+                "run_id": row.last_run_id,
+                "recovered": bool(row.recovered),
+            }
+        )
+
+    items.sort(key=lambda it: it["at_iso"], reverse=True)
+    return items[:limit]
 
 
 def _module_view_from_row(
