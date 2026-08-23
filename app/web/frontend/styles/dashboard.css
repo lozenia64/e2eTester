@@ -87,14 +87,6 @@ body:has(.dash) main > div {
   max-height: 42%;
 }
 
-#dash-host-kpi[data-kpi-compress="true"] {
-  gap: 0.25rem;
-}
-
-#dash-host-kpi[data-kpi-compress="true"] .dash-hero__title {
-  font-size: max(1rem, 1rem);
-}
-
 .dash-host-matrix {
   flex: 1 1 auto;
   min-height: 0;
@@ -591,94 +583,6 @@ body:has(.dash) main > div {
 .dash-sys-row__badge[data-tone="not_inspected"] { background: var(--c-zinc-100); color: var(--st-pending-solid); }
 
 /* ── Density tiers ── */
-.dash__systems[data-density="compact"] .dash-sys-row {
-  padding: 0.35rem 0.75rem;
-}
-
-.dash__systems[data-density="compact"] .dash-mod__label {
-  max-width: 8ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dash__systems[data-density="compact"] .dash-sys-row__segment {
-  height: 3px;
-}
-
-.dash__systems[data-density="dense"] .dash-sys-row__icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  font-size: 0.5rem;
-  border-radius: 0.375rem;
-}
-
-.dash__systems[data-density="dense"] .dash-sys-row__header,
-.dash__systems[data-density="minimal"] .dash-sys-row__header,
-.dash__systems[data-density="micro"] .dash-sys-row__header {
-  min-height: 1.75rem;
-}
-
-.dash__systems[data-density="dense"] .dash-mod__label {
-  max-width: 6ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dash__systems[data-density="dense"] .dash-sys-row__badge {
-  font-size: 0.6rem;
-  padding: 0.15rem 0.5rem;
-}
-
-.dash__systems[data-density="minimal"] .dash-mod__label {
-  display: none;
-}
-
-.dash__systems[data-density="minimal"] .dash-mod {
-  width: clamp(5px, 1cqw, 10px);
-  height: clamp(5px, 1cqw, 10px);
-  min-width: clamp(5px, 1cqw, 10px);
-  padding: 0;
-  border-radius: 50%;
-}
-
-.dash__systems[data-density="minimal"] .dash-mod--filled,
-.dash__systems[data-density="minimal"] .dash-mod--outline {
-  border: none;
-}
-
-.dash__systems[data-density="minimal"] .dash-mod--idle {
-  border: 1.5px dashed var(--pl-text-subtle);
-}
-
-.dash__systems[data-density="minimal"] .dash-sys-row__name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dash__systems[data-density="minimal"] .dash-sys-row__modules {
-  gap: 2px;
-}
-
-.dash__systems[data-density="dense"] .dash-sys-row__segment,
-.dash__systems[data-density="minimal"] .dash-sys-row__segment,
-.dash__systems[data-density="micro"] .dash-sys-row__segment {
-  display: none;
-}
-
-.dash__systems[data-density="micro"] .dash-sys-row {
-  padding: 0.25rem 0.5rem;
-}
-
-.dash__systems[data-density="micro"] .dash-sys-row__cta {
-  font-size: 0;
-}
-
-.dash__systems[data-density="micro"] .dash-sys-row__cta::after {
-  content: "점검";
-  font-size: 0.75rem;
-}
-
 /* ── Mobile card internal stack ── */
 @media (max-width: 767px) {
   .dash-hero__top {

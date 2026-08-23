@@ -112,7 +112,7 @@ def _wait_for_density_stable(page) -> None:
     page.wait_for_function(
         """() => {
             const sys = document.querySelector('.dash__systems');
-            if (!sys || !sys.dataset.density) return false;
+            if (!sys) return false;
             return sys.scrollHeight <= sys.clientHeight + 1;
         }""",
         timeout=20000,
@@ -392,43 +392,30 @@ def test_no_data_scrollable_dataset(page, live_server: str, width: int, height: 
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-006")
-def test_density_downgrades_on_resize_to_568(page, live_server: str) -> None:
-    page.set_viewport_size({"width": 1920, "height": 1080})
-    page.goto(f"{live_server}/")
-    page.wait_for_selector("#dash-zone-matrix[data-system-count='6']", timeout=15000)
-    _wait_for_density_stable(page)
-    density_tall = page.evaluate(
-        "() => document.querySelector('.dash__systems')?.dataset.density || ''"
-    )
-    # 6-system fixture: containerFits may already require micro at 1080p (plan risk note).
-    assert density_tall in ("comfortable", "compact", "dense", "minimal", "micro"), density_tall
-
-    page.set_viewport_size({"width": 1920, "height": 568})
-    page.wait_for_function(
+def test_no_density_dataset_and_still_fits_at_568(page, live_server: str) -> None:
+    """밀도 티어 JS 철거 후에도 좁은 뷰포트에서 넘치지 않아야 한다."""
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(live_server, wait_until="networkidle")
+    page.set_viewport_size({"width": 1280, "height": 568})
+    page.wait_for_timeout(300)
+    state = page.evaluate(
         """() => {
-            const d = document.querySelector('.dash__systems')?.dataset.density || '';
-            return ['dense', 'minimal', 'micro'].includes(d);
-        }""",
-        timeout=20000,
-    )
-    _wait_for_density_stable(page)
-
-    metrics = page.evaluate(
-        """() => {
-            const sys = document.querySelector('.dash__systems');
             const de = document.documentElement;
+            const sys = document.querySelector('#dash-zone-matrix');
             return {
-                density: sys?.dataset.density || '',
+                density: sys ? sys.dataset.density ?? null : null,
+                inlineFlex: sys
+                    ? [...sys.querySelectorAll('.dash-sys-row')].some((r) => r.style.flex !== '')
+                    : false,
                 docOk: de.scrollHeight <= window.innerHeight + 1,
-                zoneOk: sys && sys.scrollHeight <= sys.clientHeight + 1,
-                overflowY: sys ? getComputedStyle(sys).overflowY : '',
+                zoneOk: sys ? sys.scrollHeight <= sys.clientHeight + 1 : false,
             };
         }"""
     )
-    assert metrics["density"] in ("dense", "minimal", "micro"), metrics
-    assert metrics["docOk"], metrics
-    assert metrics["zoneOk"], metrics
-    assert metrics["overflowY"] == "hidden", metrics
+    assert state["density"] is None, "data-density 가 남아 있다 — 밀도 JS 가 살아있음"
+    assert state["inlineFlex"] is False, "행에 인라인 flex 가 남아 있다 — 밀도 JS 가 살아있음"
+    assert state["docOk"], "문서가 세로로 넘친다"
+    assert state["zoneOk"], "매트릭스 존이 내부 스크롤을 만든다"
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-008")

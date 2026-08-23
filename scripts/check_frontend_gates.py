@@ -50,7 +50,6 @@ FG005_ALLOWLIST = {
     "/static/admin-stats.js",
     "/static/anomalies.js",
     "/static/app.js",
-    "/static/dashboard.js",
     "/static/healing.js",
     "/static/insights.js",
     "/static/mobile-nav.js",

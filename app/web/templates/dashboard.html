@@ -46,5 +46,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/dashboard.js?v=22" defer></script>
+{% import "_assets.html" as dash_assets %}
+{{ dash_assets.asset_script("entries/dashboard.ts") }}
 {% endblock %}

@@ -162,7 +162,7 @@ def test_fg005_allows_legacy_page_scripts(tmp_path):
     _write(
         tmp_path,
         "app/web/templates/x.html",
-        '<script src="/static/dashboard.js?v=22" defer></script>',
+        '<script src="/static/admin-dashboard.js?v=22" defer></script>',
     )
     assert check_fg005_no_static_ref(tmp_path) == []
 
