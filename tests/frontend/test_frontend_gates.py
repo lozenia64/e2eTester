@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from scripts.check_frontend_gates import (
@@ -213,6 +214,27 @@ def test_dashboard_component_css_stays_with_its_owner():
         "@media (prefers-reduced-motion: reduce) {",
     )
     assert all(selector in system_matrix_css for selector in required_system_matrix)
+
+    reduced_motion_blocks = re.findall(
+        r"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+        system_matrix_css,
+        flags=re.DOTALL,
+    )
+    uncommented_blocks = [
+        re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL) for block in reduced_motion_blocks
+    ]
+
+    def has_reduced_motion_declaration(selector: str, declaration: str) -> bool:
+        rule = re.compile(
+            rf"{re.escape(selector)}\s*\{{[^}}]*\b{re.escape(declaration)}\s*;[^}}]*\}}",
+            flags=re.DOTALL,
+        )
+        return any(rule.search(block) for block in uncommented_blocks)
+
+    assert has_reduced_motion_declaration(
+        '.dash__systems[data-first-paint="true"] .dash-sys-row', "animation: none"
+    )
+    assert has_reduced_motion_declaration(".dash-sys-row:hover", "transform: none")
 
 
 def test_fg005_flags_direct_static_reference(tmp_path):
