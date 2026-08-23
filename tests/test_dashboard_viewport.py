@@ -489,6 +489,40 @@ def test_matrix_run_cell_has_token_focus_outline(page, live_server: str) -> None
     }
 
 
+def test_activity_run_link_has_visible_parent_focus_ring(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-activity__link")
+    item = (
+        page.locator(".dash-activity__item").filter(has=page.locator(".dash-activity__link")).first
+    )
+    link = item.locator(".dash-activity__link")
+    normal = item.evaluate("el => getComputedStyle(el).backgroundColor")
+    link.focus()
+    focus = item.evaluate(
+        """el => {
+            const style = getComputedStyle(el);
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--st-running-solid)';
+            document.body.append(probe);
+            const tokenColor = getComputedStyle(probe).color;
+            probe.remove();
+            return {
+                background: style.backgroundColor,
+                boxShadow: style.boxShadow,
+                tokenColor,
+                active: document.activeElement?.className || null,
+            };
+        }"""
+    )
+    assert focus["active"] == "dash-activity__link"
+    assert focus["background"] == normal
+    assert "inset" in focus["boxShadow"], focus
+    assert "2px" in focus["boxShadow"]
+    assert focus["tokenColor"] in focus["boxShadow"]
+    assert focus["tokenColor"] != normal
+
+
 @pytest.mark.spec("SPEC-UI-005", "AC-008")
 def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
     page.set_viewport_size({"width": 320, "height": 568})
