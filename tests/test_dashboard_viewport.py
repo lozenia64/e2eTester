@@ -9,6 +9,7 @@ import socket
 import threading
 import time
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 import uvicorn
@@ -219,6 +220,7 @@ def empty_day_live_server(
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     port = _free_port()
     app = _build_dashboard_test_app(

@@ -6,6 +6,7 @@ Premium Light 리디자인 후 fragment 응답이 카드 리스트·히어로 �
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -123,6 +124,7 @@ def _build_all_not_inspected_dashboard(registry: ModuleRegistry) -> dict:
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
 
@@ -168,6 +170,7 @@ def _build_realistic_six_system_dashboard() -> dict:
         run_summaries,
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
 
@@ -313,6 +316,7 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
         [make_run_summary_row(system_code=system.system_code)],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     user = User(
         user_id="u_recovered",
@@ -345,6 +349,7 @@ def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegist
         [make_run_summary_row(system_code=system.system_code)],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     user = User(
         user_id="u_clean",

@@ -296,6 +296,7 @@ def build_daily_dashboard_from_projection(
     duration_by_module_run: dict[tuple[str, str], int | None] | None = None,
     generated_at: datetime,
     date_label: str,
+    tz: ZoneInfo,
 ) -> dict[str, Any]:
     """``daily_system_status`` 프로젝션 + 당일 Run 요약으로 일간 현황을 집계한다."""
     durations = duration_by_module_run or {}
@@ -342,9 +343,10 @@ def build_daily_dashboard_from_projection(
     )
 
     return {
-        "generated_at": generated_at.isoformat(),
+        "generated_at": generated_at.astimezone(tz).isoformat(),
         "date_label": date_label,
         "totals": totals,
         "systems": system_views,
         "attention": build_attention_items(system_views),
+        "activity": build_activity_feed(status_rows, systems, tz=tz),
     }
