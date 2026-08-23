@@ -58,7 +58,8 @@
   text-decoration: none;
 }
 
-.dash-activity__item:hover {
+.dash-activity__item:hover,
+.dash-activity__item:focus-within {
   background: var(--pl-bg);
 }
 

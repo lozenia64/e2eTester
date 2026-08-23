@@ -26,3 +26,10 @@
 ## 우려사항
 
 - 수동 확인 시 활동 데이터가 비어 있어 비어 있지 않은 피드의 정렬·복구 기호는 자동 테스트/마크업 기준으로만 검증했다.
+
+## M1 후속 수정 검증
+
+- `.dash-activity__item:focus-within`에 hover와 동일한 `background: var(--pl-bg);`를 추가했다. `display: contents` 링크 대신 항목 컨테이너가 키보드 포커스를 표시한다.
+- `npm run build`: 통과 (584 modules transformed, built in 21.48s; 기존 eval/대형 청크 경고만 출력)
+- `python3 scripts/check_frontend_gates.py`: 통과 (FG-001~007)
+- `git diff --check`: 통과
