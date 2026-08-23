@@ -168,9 +168,22 @@ def test_dashboard_component_css_stays_with_its_owner():
     status_hero_css = (
         Path(__file__).resolve().parents[2] / "app/web/frontend/components/status-hero/styles.css"
     ).read_text(encoding="utf-8")
+    system_matrix_css = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/components/system-matrix/styles.css"
+    ).read_text(encoding="utf-8")
 
     forbidden = (".dash-hero", ".dash-sys-row", "@keyframes dash-row-in")
     assert all(selector not in dashboard_css for selector in forbidden)
+
+    required_dashboard_layout = (
+        ".dash-refresh {",
+        ".dash-refresh:hover {",
+        ".dash-refresh:disabled {",
+        ".dash-refresh__icon {",
+        ".dash-htmx-indicator {",
+        ".dash-htmx-indicator.htmx-request {",
+    )
+    assert all(selector in dashboard_css for selector in required_dashboard_layout)
 
     required_status_hero = (
         ".dash-hero {",
@@ -192,6 +205,14 @@ def test_dashboard_component_css_stays_with_its_owner():
         ".dash-htmx-indicator.htmx-request {",
     )
     assert all(selector not in status_hero_css for selector in forbidden_status_hero)
+
+    required_system_matrix = (
+        '.dash-sys-row[data-priority="attention"] {',
+        '.dash__systems[data-first-paint="true"] .dash-sys-row {',
+        "@keyframes dash-row-in {",
+        "@media (prefers-reduced-motion: reduce) {",
+    )
+    assert all(selector in system_matrix_css for selector in required_system_matrix)
 
 
 def test_fg005_flags_direct_static_reference(tmp_path):
