@@ -148,6 +148,18 @@ def test_fg004_flags_oversized_file_not_on_allowlist(tmp_path):
     assert "other.css" in problems[0]
 
 
+def test_fg004_flags_oversized_dashboard_stylesheet_after_component_split(tmp_path):
+    """대시보드 분할이 끝났으므로 dashboard.css는 더 이상 allowlist 예외가 아니다."""
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/dashboard.css",
+        "\n".join(f".x{i} {{ color: red; }}" for i in range(401)),
+    )
+    problems = check_fg004_file_size(tmp_path)
+    assert len(problems) == 1
+    assert "dashboard.css" in problems[0]
+
+
 def test_fg005_flags_direct_static_reference(tmp_path):
     _write(
         tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'

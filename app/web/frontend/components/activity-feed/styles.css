@@ -129,3 +129,95 @@
     .dash-activity__item { opacity: 1; transform: none; }
   }
 }
+
+/* 주의 항목 요약 — 활동 피드와 같은 "무슨 일이 있었나" 맥락이다. */
+.dash-attention {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: clamp(0.35rem, 0.8cqh, 0.5rem) clamp(0.5rem, 1.2cqi, 0.75rem);
+  border: 1px solid var(--pl-border);
+  border-radius: 0.75rem;
+  background: var(--pl-surface);
+  overflow: hidden;
+}
+
+.dash-attention[hidden] {
+  display: none !important;
+}
+
+.dash-attention__item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  flex: 1 1 0;
+  font-size: clamp(0.6rem, 1.2cqh, 0.7rem);
+  color: var(--pl-text-muted);
+}
+
+.dash-attention__dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--st-pending-solid);
+}
+
+.dash-attention__item[data-tone="passed"] .dash-attention__dot { background: var(--st-passed-solid); }
+.dash-attention__item[data-tone="anomaly"] .dash-attention__dot { background: var(--st-anomaly-solid); }
+.dash-attention__item[data-tone="error"] .dash-attention__dot { background: var(--st-error-solid); }
+.dash-attention__item[data-tone="running"] .dash-attention__dot { background: var(--st-running-solid); }
+.dash-attention__item[data-tone="waiting_input"] .dash-attention__dot { background: var(--st-waiting_input-solid); }
+.dash-attention__item[data-tone="skipped"] .dash-attention__dot { background: var(--st-skipped-solid); }
+.dash-attention__item[data-tone="cancelled"] .dash-attention__dot { background: var(--st-cancelled-solid); }
+.dash-attention__item[data-tone="not_inspected"] .dash-attention__dot,
+.dash-attention__item[data-tone="pending"] .dash-attention__dot { background: var(--st-pending-solid); }
+.dash-attention__item[data-tone="blocked"] .dash-attention__dot { background: var(--st-blocked-solid); }
+
+.dash-attention__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-attention__text strong {
+  font-weight: 700;
+  color: var(--pl-text);
+}
+
+.dash-attention__link {
+  flex-shrink: 0;
+  font-size: inherit;
+  font-weight: 700;
+  color: var(--st-running-solid);
+  text-decoration: none;
+}
+
+.dash-attention__more {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: clamp(0.55rem, 1cqh, 0.65rem);
+  font-weight: 800;
+  background: rgb(0 0 0 / 0.04);
+  color: var(--pl-text-muted);
+}
+
+.dash-attention__inbox {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: max(0.75rem, clamp(0.6rem, 1.2cqh, 0.75rem));
+  font-weight: 700;
+  color: var(--pl-accent);
+  text-decoration: none;
+}
+
+.dash-attention--compact {
+  padding: 0.25rem 0.5rem;
+}
+
+.dash-attention--compact .dash-attention__text {
+  font-size: 0.65rem;
+}
