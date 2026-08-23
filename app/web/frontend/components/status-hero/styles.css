@@ -88,7 +88,7 @@
   overflow: hidden;
 }
 
-/* HTMX 초기 placeholder와 Zone A 새로고침 액션. */
+/* HTMX 초기 placeholder와 Zone A 액션 컨테이너. */
 .dash-hero {
   display: flex;
   flex-direction: column;
@@ -137,47 +137,6 @@
   align-items: center;
   gap: 0.5rem;
   padding-bottom: 0.25rem;
-}
-
-.dash-refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--pl-border);
-  border-radius: 9999px;
-  background: var(--pl-surface);
-  font-size: clamp(0.625rem, 1.2cqh, 0.75rem);
-  font-weight: 700;
-  color: var(--pl-text-muted);
-  cursor: pointer;
-  transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
-}
-
-.dash-refresh:hover {
-  box-shadow: 0 4px 12px -4px rgb(0 0 0 / 0.1);
-}
-
-.dash-refresh:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.dash-refresh__icon {
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-.dash-htmx-indicator {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--st-running-solid);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.dash-htmx-indicator.htmx-request {
-  opacity: 1;
 }
 
 @media (max-width: 767px) {

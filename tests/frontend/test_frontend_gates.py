@@ -180,6 +180,10 @@ def test_dashboard_component_css_stays_with_its_owner():
         ".dash-hero__meta {",
         ".dash-hero__aside {",
         ".dash-hero__actions {",
+    )
+    assert all(selector in status_hero_css for selector in required_status_hero)
+
+    forbidden_status_hero = (
         ".dash-refresh {",
         ".dash-refresh:hover {",
         ".dash-refresh:disabled {",
@@ -187,7 +191,7 @@ def test_dashboard_component_css_stays_with_its_owner():
         ".dash-htmx-indicator {",
         ".dash-htmx-indicator.htmx-request {",
     )
-    assert all(selector in status_hero_css for selector in required_status_hero)
+    assert all(selector not in status_hero_css for selector in forbidden_status_hero)
 
 
 def test_fg005_flags_direct_static_reference(tmp_path):
