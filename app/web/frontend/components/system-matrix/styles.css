@@ -1,1 +1,146 @@
-/* 시스템 매트릭스 열 — Task 8 에서 채운다. */
+/* 시스템 매트릭스 열 — 한 행에 코드·이름·셀·카운트(설계 §3.3). */
+
+.dash-sys-row {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 0;
+  /* 코드 · 이름 · 셀 · 카운트 · (뱃지 또는 점검실행 CTA) */
+  grid-template-columns: auto minmax(0, 9rem) 1fr auto auto;
+  align-items: center;
+  gap: clamp(0.375rem, 1cqi, 0.75rem);
+  padding: clamp(0.35rem, 1cqh, 0.875rem) clamp(0.5rem, 1.5cqi, 1.25rem);
+  border-radius: clamp(0.625rem, 1.2cqh, 1rem);
+  background: var(--pl-surface);
+  box-shadow: var(--pl-shadow-sm), inset 0 0 0 1px var(--pl-border);
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.dash-sys-row:hover {
+  box-shadow: var(--pl-shadow-md), inset 0 0 0 1px var(--pl-border);
+  transform: translateY(-1px);
+}
+
+.dash-sys-row:focus-visible {
+  outline: 2px solid var(--st-running-solid);
+  outline-offset: 2px;
+}
+
+.dash-sys-row__cells {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: clamp(2px, 0.4cqi, 6px);
+  overflow: hidden;
+}
+
+.dash-cell {
+  position: relative;
+  display: grid;
+  width: clamp(1.125rem, 2.6cqh, 2.25rem);
+  min-width: 1.125rem;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.25rem;
+  background: var(--st-pending-surface);
+  color: var(--pl-text-muted);
+  font-size: clamp(0.5rem, 1.2cqh, 0.75rem);
+  overflow: hidden;
+}
+
+.dash-cell[data-tone="passed"] { background: var(--st-passed-solid); color: var(--c-white); }
+.dash-cell[data-tone="anomaly"] { background: var(--st-anomaly-solid); color: var(--c-white); }
+.dash-cell[data-tone="error"] { background: var(--st-error-solid); color: var(--c-white); }
+.dash-cell[data-tone="running"] { background: var(--st-running-solid); color: var(--c-white); }
+.dash-cell[data-tone="waiting_input"] { background: var(--st-waiting_input-solid); color: var(--c-white); }
+.dash-cell[data-tone="blocked"] { background: var(--st-blocked-solid); color: var(--c-white); }
+.dash-cell[data-tone="skipped"] { background: var(--st-skipped-surface); color: var(--st-skipped-text); }
+.dash-cell[data-tone="cancelled"] { background: var(--st-cancelled-surface); color: var(--st-cancelled-text); }
+.dash-cell[data-tone="not_inspected"],
+.dash-cell[data-tone="pending"] { background: var(--st-pending-surface); color: var(--st-pending-text); }
+
+/* 소요시간 미세 바 — 셀 하단. --ms-ratio 는 분 단위 비율(1분 = 1.0). */
+.dash-cell__ms {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: calc(min(var(--ms-ratio, 0), 1) * 100%);
+  background: var(--pl-surface);
+  opacity: 0.55;
+}
+
+.dash-cell__flag {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font-size: 0.5rem;
+  line-height: 1;
+}
+
+.dash-sys-row__icon {
+  display: grid;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.2rem 0.4rem;
+  place-items: center;
+  border-radius: 0.375rem;
+  color: var(--c-white);
+  font-size: clamp(0.5625rem, 1.2cqh, 0.75rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.dash-sys-row__icon[data-tone="passed"] { background: var(--st-passed-solid); }
+.dash-sys-row__icon[data-tone="anomaly"] { background: var(--st-anomaly-solid); }
+.dash-sys-row__icon[data-tone="error"] { background: var(--st-error-solid); }
+.dash-sys-row__icon[data-tone="running"] { background: var(--st-running-solid); }
+.dash-sys-row__icon[data-tone="waiting_input"] { background: var(--st-waiting_input-solid); }
+.dash-sys-row__icon[data-tone="blocked"] { background: var(--st-blocked-solid); }
+.dash-sys-row__icon[data-tone="skipped"] { background: var(--st-skipped-solid); }
+.dash-sys-row__icon[data-tone="cancelled"] { background: var(--st-cancelled-solid); }
+.dash-sys-row__icon[data-tone="not_inspected"],
+.dash-sys-row__icon[data-tone="pending"] { background: var(--st-pending-solid); }
+
+.dash-sys-row__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(0.875rem, 1.8cqh, 0.9375rem);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-sys-row__count {
+  font-size: clamp(0.6875rem, 1.4cqh, 0.8125rem);
+  font-variant-numeric: tabular-nums;
+  color: var(--pl-text-muted);
+}
+
+.dash-sys-row__cta {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  font-size: max(0.75rem, 0.75rem);
+  font-weight: 700;
+  color: var(--pl-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dash-sys-row__badge {
+  flex-shrink: 0;
+  padding: clamp(0.2rem, 0.4cqh, 0.3rem) clamp(0.45rem, 1cqi, 0.75rem);
+  border-radius: 9999px;
+  font-size: clamp(0.6rem, 1.2cqh, 0.7rem);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dash-sys-row__badge[data-tone="passed"] { background: var(--c-emerald-50); color: var(--st-passed-solid); }
+.dash-sys-row__badge[data-tone="anomaly"] { background: var(--c-amber-50); color: var(--st-anomaly-solid); }
+.dash-sys-row__badge[data-tone="error"] { background: var(--c-red-50); color: var(--st-error-solid); }
+.dash-sys-row__badge[data-tone="running"] { background: var(--c-blue-50); color: var(--st-running-solid); }
+.dash-sys-row__badge[data-tone="blocked"] { background: var(--c-orange-50); color: var(--st-blocked-solid); }
+.dash-sys-row__badge[data-tone="not_inspected"] { background: var(--c-zinc-100); color: var(--st-pending-solid); }

@@ -280,11 +280,14 @@ def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-007")
-def test_matrix_fragment_renders_segment_and_chevron(client: TestClient) -> None:
+def test_matrix_fragment_renders_module_cells(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/matrix").text
-    assert "dash-sys-row__segment" in html
-    assert "dash-sys-row__chevron" in html
-    assert "dash-mod__glyph" in html
+    assert "dash-sys-row__cells" in html
+    assert "dash-cell__glyph" in html
+    assert "dash-sys-row__count" in html
+    assert "dash-sys-row__segment" not in html
+    assert "dash-sys-row__chevron" not in html
+    assert "dash-mod" not in html
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-008")
@@ -305,7 +308,7 @@ def test_fragments_include_status_hero_contract(client: TestClient) -> None:
     assert 'class="status-hero__ring"' in kpi
     assert 'class="status-hero__headline"' in kpi
     assert 'class="status-hero__cards"' in kpi
-    assert "dash-sys-row__header" in matrix
+    assert "dash-sys-row__cells" in matrix
 
 
 def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> None:
@@ -340,7 +343,7 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/matrix").text
-    assert "cell-flag--unstable" in html
+    assert "dash-cell__flag" in html
 
 
 def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegistry) -> None:
@@ -373,7 +376,7 @@ def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegist
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/matrix").text
-    assert "cell-flag--unstable" not in html
+    assert "dash-cell__flag" not in html
 
 
 def test_activity_fragment_renders_items(client):

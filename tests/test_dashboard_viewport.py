@@ -730,3 +730,29 @@ def test_dashboard_uses_two_columns_at_1280_with_shell_relative_padding(
         state["dash"]["right"] - state["paddingLeft"], abs=2
     )
     assert 18 <= state["paddingLeft"] <= 22, state
+
+
+def test_matrix_row_is_single_line_with_cells(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(live_server, wait_until="networkidle")
+    shape = page.evaluate(
+        """() => {
+            const row = document.querySelector('.dash-sys-row');
+            if (!row) return null;
+            const cells = row.querySelectorAll('.dash-cell');
+            const tops = [...cells].map((c) => Math.round(c.getBoundingClientRect().top));
+            return {
+                cellCount: cells.length,
+                displays: [...cells].map((c) => getComputedStyle(c).display),
+                sameLine: tops.length > 0 && new Set(tops).size === 1,
+                legacyPills: row.querySelectorAll('.dash-mod').length,
+                legacySegments: row.querySelectorAll('.dash-seg').length,
+            };
+        }"""
+    )
+    assert shape is not None
+    assert shape["cellCount"] > 0, "모듈 셀이 없다"
+    assert set(shape["displays"]) == {"grid"}, "대시보드 CSS가 셀에 적용되지 않았다"
+    assert shape["sameLine"], "셀이 한 줄에 있지 않다"
+    assert shape["legacyPills"] == 0, "레거시 module_pill 이 남아 있다"
+    assert shape["legacySegments"] == 0, "레거시 segment bar 가 남아 있다"
