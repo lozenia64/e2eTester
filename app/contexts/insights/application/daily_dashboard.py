@@ -167,7 +167,7 @@ def build_activity_feed(
     }
     system_names = {system.system_code: system.name for system in systems}
 
-    items: list[dict[str, Any]] = []
+    timestamped_items: list[tuple[datetime, dict[str, Any]]] = []
     for row in status_rows:
         if row.last_status in _NON_RESULT_STATUSES:
             continue
@@ -176,23 +176,28 @@ def build_activity_feed(
             # 레지스트리에서 사라진 모듈의 잔여 행 — 이름을 지어내지 않고 버린다.
             continue
         local = row.updated_at.astimezone(tz)
-        items.append(
-            {
-                "system_code": row.system_code,
-                "system_name": system_names.get(row.system_code, row.system_code),
-                "module_id": row.module_id,
-                "module_name": module_name,
-                "status_label": module_status_label(row.last_status),
-                "tone": module_status_badge_tone(row.last_status),
-                "at": local.strftime("%H:%M"),
-                "at_iso": local.isoformat(),
-                "run_id": row.last_run_id,
-                "recovered": bool(row.recovered),
-            }
+        timestamped_items.append(
+            (
+                row.updated_at,
+                {
+                    "system_code": row.system_code,
+                    "system_name": system_names.get(row.system_code, row.system_code),
+                    "module_id": row.module_id,
+                    "module_name": module_name,
+                    "status_label": module_status_label(row.last_status),
+                    "tone": module_status_badge_tone(row.last_status),
+                    "at": local.strftime("%H:%M"),
+                    "at_iso": local.isoformat(),
+                    "run_id": row.last_run_id,
+                    "recovered": bool(row.recovered),
+                },
+            )
         )
 
-    items.sort(key=lambda it: it["at_iso"], reverse=True)
-    return items[:limit]
+    # ``at_iso``는 사람이 읽는 지역 시각이다. DST가 끝나는 날처럼 같은 벽시계
+    # 시간이 두 번 나타나면 문자열 비교가 실제 시간 순서를 뒤집을 수 있다.
+    timestamped_items.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in timestamped_items[:limit]]
 
 
 def _module_view_from_row(

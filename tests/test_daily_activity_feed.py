@@ -36,7 +36,16 @@ def _sysdef(code: str, module_ids: list[str]) -> SystemDefinition:
     )
 
 
-def _row_at(hour: int, minute: int, *, module_id: str, status: ModuleStatus, **kw):
+def _row_at(
+    hour: int,
+    minute: int,
+    *,
+    module_id: str,
+    status: ModuleStatus,
+    month: int = 8,
+    day: int = 15,
+    **kw,
+):
     row = make_status_row(system_code="hom", module_id=module_id, last_status=status, **kw)
     return type(row)(
         day_key=row.day_key,
@@ -45,7 +54,7 @@ def _row_at(hour: int, minute: int, *, module_id: str, status: ModuleStatus, **k
         last_status=row.last_status,
         last_run_id=row.last_run_id,
         duration_ms=row.duration_ms,
-        updated_at=datetime(2026, 8, 15, hour, minute, tzinfo=UTC),
+        updated_at=datetime(2026, month, day, hour, minute, tzinfo=UTC),
         recovered=row.recovered,
     )
 
@@ -59,6 +68,23 @@ def test_sorts_by_updated_at_descending():
     ]
     feed = build_activity_feed(rows, systems, tz=KST)
     assert [item["module_id"] for item in feed] == ["search", "order", "login"]
+
+
+def test_sorts_by_actual_instant_across_dst_fall_back():
+    """표시용 지역 시각 문자열이 아니라 실제 갱신 시각으로 정렬한다."""
+    new_york = ZoneInfo("America/New_York")
+    systems = [_sysdef("hom", ["login", "search"])]
+    rows = [
+        # 01:30 EDT — 실제로는 더 이른 시각
+        _row_at(5, 30, module_id="login", status=ModuleStatus.PASSED, month=11, day=1),
+        # 01:15 EST — 벽시계상 앞서 보이지만 실제로는 45분 뒤
+        _row_at(6, 15, module_id="search", status=ModuleStatus.PASSED, month=11, day=1),
+    ]
+
+    feed = build_activity_feed(rows, systems, tz=new_york)
+
+    assert [item["module_id"] for item in feed] == ["search", "login"]
+    assert [item["at"] for item in feed] == ["01:15", "01:30"]
 
 
 def test_respects_limit():
