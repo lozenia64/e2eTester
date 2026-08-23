@@ -240,7 +240,12 @@ def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기 참고).
     assert "점검실패" in html
     assert "우선 확인이 필요합니다" in html
-    assert "kpi-band" in html
+    assert 'class="status-hero"' in html
+    assert 'class="status-hero__ring"' in html
+    assert 'data-passed="' in html
+    assert 'data-total="' in html
+    assert 'class="status-hero__headline"' in html
+    assert 'class="status-hero__cards"' in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-002")
@@ -261,15 +266,17 @@ def test_kpi_fragment_renders_empty_day_summary(
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/kpi").text
-    assert "통과율" in html
+    assert 'class="status-hero__ring"' in html
+    assert 'data-passed="0"' in html
+    assert 'data-total="' in html
     assert "아직 점검이 시작되지 않았습니다" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-004")
 def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/kpi").text
+    assert 'class="status-hero__cards"' in html
     assert html.count('class="kpi-card"') == 4
-    assert "통과율" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-007")
@@ -291,11 +298,13 @@ def test_matrix_fragment_error_system_has_attention_priority(client: TestClient)
 
 
 @pytest.mark.spec("SPEC-UI-006", "AC-005")
-def test_fragments_include_visibility_wrappers(client: TestClient) -> None:
+def test_fragments_include_status_hero_contract(client: TestClient) -> None:
     kpi = client.get("/api/dashboard/daily/fragments/kpi").text
     matrix = client.get("/api/dashboard/daily/fragments/matrix").text
-    assert "dash-hero__top" in kpi
-    assert "dash-hero__aside" in kpi
+    assert 'class="status-hero"' in kpi
+    assert 'class="status-hero__ring"' in kpi
+    assert 'class="status-hero__headline"' in kpi
+    assert 'class="status-hero__cards"' in kpi
     assert "dash-sys-row__header" in matrix
 
 

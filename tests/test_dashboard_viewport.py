@@ -321,19 +321,21 @@ def test_dashboard_no_scroll_1920x1080(page, live_server: str) -> None:
 def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
-    page.wait_for_selector(".dash-hero__title")
-    title = page.locator(".dash-hero__title")
-    assert title.is_visible()
+    page.wait_for_selector(".status-hero__headline")
+    headline = page.locator(".status-hero__headline")
+    ring = page.locator(".status-hero__ring")
+    assert headline.is_visible()
+    assert ring.is_visible()
+    assert ring.get_attribute("data-passed") is not None
+    assert ring.get_attribute("data-total") is not None
     # _build_realistic_six_system_dashboard 는 hom 시스템에 ERROR 를 심어 두므로
-    # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기, 설계 D2 로
-    # 통과율 큰 숫자는 사라지고 밴드 1번 칸으로 옮겨졌다).
-    title_text = title.inner_text()
-    assert "점검실패" in title_text and "우선 확인이 필요합니다" in title_text
-    box = title.bounding_box()
+    # 히어로 문장은 진행 링 아래에 보존된 점검실패 분기를 탄다.
+    headline_text = headline.inner_text()
+    assert "점검실패" in headline_text and "우선 확인이 필요합니다" in headline_text
+    box = headline.bounding_box()
     assert box is not None and box["height"] >= 16 and box["width"] >= 120
-    first_card = page.locator(".kpi-card").first
+    first_card = page.locator(".status-hero__cards .kpi-card").first
     assert first_card.is_visible()
-    assert "통과율" in first_card.locator(".kpi-card__label").inner_text()
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-002")
@@ -467,12 +469,16 @@ def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
 def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{empty_day_live_server}/")
-    page.wait_for_selector(".dash-hero__title")
-    rect = _rect_in_container(page, ".dash-hero__title")
+    page.wait_for_selector(".status-hero__headline")
+    rect = _rect_in_container(page, ".status-hero__headline")
     assert rect and rect["width"] >= 120 and rect["height"] >= 16 and rect["inBox"]
-    # 설계 D2 이후로는 상태 문장이 .dash-hero__title 하나에 담긴다(별도 __summary 없음).
-    assert "아직 점검이 시작되지 않았습니다" in page.locator(".dash-hero__title").inner_text()
-    assert page.locator(".kpi-card").first.is_visible()
+    assert "아직 점검이 시작되지 않았습니다" in page.locator(
+        ".status-hero__headline"
+    ).inner_text()
+    ring = page.locator(".status-hero__ring")
+    assert ring.get_attribute("data-passed") == "0"
+    assert ring.get_attribute("data-total") is not None
+    assert page.locator(".status-hero__cards .kpi-card").first.is_visible()
 
 
 @pytest.mark.spec("SPEC-UI-006", "AC-002")
@@ -495,14 +501,13 @@ def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
 def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
-    page.wait_for_selector("#dash-zone-stats .kpi-card")
-    tiles = page.locator("#dash-zone-stats .kpi-card")
+    page.wait_for_selector(".status-hero__cards .kpi-card")
+    tiles = page.locator(".status-hero__cards .kpi-card")
     assert tiles.count() == 4
     for i in range(4):
-        sel = f"#dash-zone-stats .kpi-card:nth-child({i + 1})"
+        sel = f".status-hero__cards .kpi-card:nth-child({i + 1})"
         rect = _rect_in_container(page, sel)
         assert rect and rect["inBox"], f"tile {i} outside .dash"
-    assert "통과율" in tiles.first.locator(".kpi-card__label").inner_text()
 
 
 @pytest.mark.spec("SPEC-UI-008", "AC-001")
@@ -529,20 +534,18 @@ def test_main_padding_left_desktop_1280x720(page, live_server: str) -> None:
 def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
-    page.wait_for_selector(".dash-hero__title")
+    page.wait_for_selector(".status-hero__headline")
     m = _sidebar_inset_metrics(page)
     sw = m["sidebarWidth"]
-    title_left = page.eval_on_selector(".dash-hero__title", "el => el.getBoundingClientRect().left")
+    headline_left = page.eval_on_selector(
+        ".status-hero__headline", "el => el.getBoundingClientRect().left"
+    )
     tile_left = page.eval_on_selector(
-        "#dash-zone-stats .kpi-card:first-child",
+        ".status-hero__cards .kpi-card:first-child",
         "el => el.getBoundingClientRect().left",
     )
-    assert title_left >= sw - 1, {"title_left": title_left, "sidebarWidth": sw}
+    assert headline_left >= sw - 1, {"headline_left": headline_left, "sidebarWidth": sw}
     assert tile_left >= sw - 1, {"tile_left": tile_left, "sidebarWidth": sw}
-    assert (
-        "통과율"
-        in page.locator("#dash-zone-stats .kpi-card:first-child .kpi-card__label").inner_text()
-    )
 
 
 @pytest.mark.spec("SPEC-UI-008", "AC-004")
@@ -572,7 +575,7 @@ def test_no_main_inset_mobile_390x844(page, live_server: str) -> None:
     assert dash_left <= 1, dash_left
 
 
-# ── Task 7: dash-stats → kpi-band 교체 ──────────────────────────────────────
+# ── Task 7: status-hero 지배 상태 계약 ──────────────────────────────────────
 
 
 @pytest.fixture()
@@ -593,19 +596,23 @@ def kpi_fragment_html():
         return response.text
 
 
-def test_kpi_band_replaces_stats_band(kpi_fragment_html):
-    """밴드를 더하지 않고 교체한다 — 넌스크롤 예산이 늘면 안 된다."""
-    assert "kpi-band" in kpi_fragment_html
-    assert "dash-stats" not in kpi_fragment_html
+def test_status_hero_contains_ring_headline_and_card_stack(kpi_fragment_html):
+    """지배 상태는 진행 링·문장 요약·KPI 카드 스택을 한 컨테이너에 둔다."""
+    assert 'class="status-hero"' in kpi_fragment_html
+    assert 'class="status-hero__ring"' in kpi_fragment_html
+    assert 'data-passed="' in kpi_fragment_html
+    assert 'data-total="' in kpi_fragment_html
+    assert 'class="status-hero__headline"' in kpi_fragment_html
+    assert 'class="status-hero__cards"' in kpi_fragment_html
 
 
-def test_kpi_band_renders_exactly_four_cards(kpi_fragment_html):
+def test_status_hero_renders_exactly_four_cards(kpi_fragment_html):
     assert kpi_fragment_html.count('class="kpi-card"') == 4
 
 
-def test_hero_no_longer_duplicates_pass_rate(kpi_fragment_html):
-    """통과율은 밴드 1번 칸에만 있다(설계 D2)."""
-    assert "dash-hero__rate" not in kpi_fragment_html
+def test_status_hero_ring_exposes_passed_and_total(kpi_fragment_html):
+    assert 'data-passed="' in kpi_fragment_html
+    assert 'data-total="' in kpi_fragment_html
 
 
 def test_estimated_card_shows_badge_and_note(kpi_fragment_html):
