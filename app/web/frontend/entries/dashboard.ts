@@ -86,14 +86,6 @@ function bind(dash: HTMLElement): void {
     openDrawer(row.dataset.systemCode);
   });
 
-  dash.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const row = (event.target as HTMLElement | null)?.closest<HTMLElement>(".dash-sys-row");
-    if (!row || !dash.contains(row)) return;
-    event.preventDefault();
-    openDrawer(row.dataset.systemCode);
-  });
-
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) requestRefresh();
   });

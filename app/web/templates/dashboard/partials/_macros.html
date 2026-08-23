@@ -19,12 +19,9 @@
 <div class="dash-sys-row"
      data-system-code="{{ sys.system_code }}"
      data-priority="{{ priority }}"
-     data-accent-tone="{{ badge.tone }}"
-     tabindex="0"
-     role="button"
-     aria-label="{{ sys.system_name }} 상세 보기">
+     data-accent-tone="{{ badge.tone }}">
   <span class="dash-sys-row__icon" data-tone="{{ badge.tone }}">{{ sys.system_code | upper }}</span>
-  <span class="dash-sys-row__name">{{ sys.system_name }}</span>
+  <button type="button" class="dash-sys-row__name" data-action="detail" aria-label="{{ sys.system_name }} 상세 보기">{{ sys.system_name }}</button>
   <div class="dash-sys-row__cells">
     {% for mod in sys.modules %}{{ module_cell(mod) }}{% endfor %}
   </div>

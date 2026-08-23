@@ -22,7 +22,8 @@
   transform: translateY(-1px);
 }
 
-.dash-sys-row:focus-visible {
+.dash-sys-row__name:focus-visible,
+.dash-cell--link:focus-visible {
   outline: 2px solid var(--st-running-solid);
   outline-offset: 2px;
 }
@@ -105,12 +106,19 @@
 .dash-sys-row__icon[data-tone="pending"] { background: var(--st-pending-solid); }
 
 .dash-sys-row__name {
+  border: 0;
+  background: none;
+  padding: 0;
   min-width: 0;
   overflow: hidden;
+  font: inherit;
   font-size: clamp(0.875rem, 1.8cqh, 0.9375rem);
   font-weight: 700;
+  color: inherit;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .dash-sys-row__count {

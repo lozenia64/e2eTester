@@ -456,6 +456,39 @@ def test_dashboard_system_name_min_font(page, live_server: str) -> None:
     assert fs >= 14
 
 
+@pytest.mark.spec("SPEC-UI-007", "AC-009")
+def test_matrix_run_cell_has_token_focus_outline(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(f"{live_server}/")
+    page.wait_for_selector(".dash-cell--link")
+    page.locator(".dash-cell--link").first.focus()
+    outline = page.eval_on_selector(
+        ".dash-cell--link",
+        """el => {
+            const style = getComputedStyle(el);
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--st-running-solid)';
+            document.body.append(probe);
+            const tokenColor = getComputedStyle(probe).color;
+            probe.remove();
+            return {
+                width: style.outlineWidth,
+                style: style.outlineStyle,
+                color: style.outlineColor,
+                offset: style.outlineOffset,
+                tokenColor,
+            };
+        }""",
+    )
+    assert outline == {
+        "width": "2px",
+        "style": "solid",
+        "color": outline["tokenColor"],
+        "offset": "2px",
+        "tokenColor": outline["tokenColor"],
+    }
+
+
 @pytest.mark.spec("SPEC-UI-005", "AC-008")
 def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
     page.set_viewport_size({"width": 320, "height": 568})

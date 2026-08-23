@@ -6,6 +6,7 @@ Premium Light 리디자인 후 fragment 응답이 카드 리스트·히어로 �
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import re
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -288,6 +289,26 @@ def test_matrix_fragment_renders_module_cells(client: TestClient) -> None:
     assert "dash-sys-row__segment" not in html
     assert "dash-sys-row__chevron" not in html
     assert "dash-mod" not in html
+
+
+@pytest.mark.spec("SPEC-UI-007", "AC-009")
+def test_matrix_fragment_uses_native_name_button_without_row_button_semantics(
+    client: TestClient,
+) -> None:
+    """모듈 링크와 상세 제어는 중첩되지 않는 별도 네이티브 요소여야 한다."""
+    html = client.get("/api/dashboard/daily/fragments/matrix").text
+    row_start = html.index('<div class="dash-sys-row"')
+    row_tag = html[row_start : html.index(">", row_start) + 1]
+    assert "tabindex=" not in row_tag
+    assert 'role="button"' not in row_tag
+    assert "aria-label=" not in row_tag
+    name_button = re.search(
+        r'<button type="button" class="dash-sys-row__name" data-action="detail" '
+        r'aria-label="(?P<label>[^\"]+) 상세 보기">(?P<name>[^<]+)</button>',
+        html,
+    )
+    assert name_button is not None
+    assert name_button.group("label") == name_button.group("name")
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-008")
