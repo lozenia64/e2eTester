@@ -70,7 +70,14 @@ GATE_COMMANDS: dict[str, list[str]] = {
         "--db",
         "data/.ci_snapshot_validate.db",
     ),
-    "import_contracts": _py("-m", "importlinter.cli", "lint"),
+    # `python -m importlinter.cli` 는 모듈을 임포트만 하고 exit 0 을 낸다 —
+    # importlinter/cli.py 에 `if __name__ == "__main__":` 가드가 없기 때문이다.
+    # 그래서 이 게이트는 도입 이후 한 번도 계약을 검사한 적이 없었다.
+    # 콘솔 스크립트(`lint-imports`)의 진입점을 직접 호출한다. 스크립트 이름 대신
+    # sys.executable 을 쓰는 것은 이 파일의 다른 게이트와 같은 이유다(Windows PATHEXT).
+    "import_contracts": _py(
+        "-c", "from importlinter.cli import lint_imports_command; lint_imports_command()"
+    ),
     "pyright_decider": _py(
         "-m",
         "pyright",
