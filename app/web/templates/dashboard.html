@@ -2,6 +2,11 @@
 
 {% block title %}일간 점검 대시보드{% endblock %}
 
+{% block head_extra %}
+{% import "_assets.html" as dash_assets %}
+{{ dash_assets.asset_styles("entries/dashboard.ts") }}
+{% endblock %}
+
 {% block content %}
 <div class="dash"
      hx-ext="morph"
