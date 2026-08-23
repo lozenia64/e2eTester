@@ -716,8 +716,11 @@ def test_three_column_layout_at_1920(page, live_server: str) -> None:
     assert abs(boxes["matrix"]["top"] - boxes["activity"]["top"]) <= 2
 
 
-def test_only_activity_column_scrolls_internally(page, live_server: str) -> None:
-    page.set_viewport_size({"width": 1920, "height": 1080})
+@pytest.mark.parametrize("width,height", [(1366, 768), (1920, 1080), (2560, 1440)])
+def test_only_activity_column_scrolls_internally(
+    page, live_server: str, width: int, height: int
+) -> None:
+    page.set_viewport_size({"width": width, "height": height})
     page.goto(live_server, wait_until="networkidle")
     state = page.evaluate(
         """() => {
