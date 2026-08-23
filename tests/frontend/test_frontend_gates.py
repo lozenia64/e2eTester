@@ -237,6 +237,16 @@ def test_dashboard_component_css_stays_with_its_owner():
     assert has_reduced_motion_declaration(".dash-sys-row:hover", "transform: none")
 
 
+def test_dashboard_density_and_kpi_compression_hooks_are_removed():
+    """컨테이너 쿼리 이관 뒤 JS 밀도·KPI 압축 훅은 되살아나면 안 된다."""
+    frontend = Path(__file__).resolve().parents[2] / "app/web/frontend"
+    dashboard_css = (frontend / "styles/dashboard.css").read_text(encoding="utf-8")
+    kpi_card_css = (frontend / "components/kpi-card/styles.css").read_text(encoding="utf-8")
+
+    assert "data-density" not in dashboard_css
+    assert "data-kpi-compress" not in kpi_card_css
+
+
 def test_fg005_flags_direct_static_reference(tmp_path):
     _write(
         tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'
