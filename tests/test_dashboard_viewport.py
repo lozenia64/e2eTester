@@ -597,13 +597,15 @@ def kpi_fragment_html():
 
 
 def test_status_hero_contains_ring_headline_and_card_stack(kpi_fragment_html):
-    """지배 상태는 진행 링·문장 요약·KPI 카드 스택을 한 컨테이너에 둔다."""
+    """밴드를 더하지 않고 교체한다. 넌스크롤 예산이 늘면 안 된다."""
     assert 'class="status-hero"' in kpi_fragment_html
     assert 'class="status-hero__ring"' in kpi_fragment_html
     assert 'data-passed="' in kpi_fragment_html
     assert 'data-total="' in kpi_fragment_html
     assert 'class="status-hero__headline"' in kpi_fragment_html
     assert 'class="status-hero__cards"' in kpi_fragment_html
+    assert "dash-stats" not in kpi_fragment_html
+    assert "kpi-band" not in kpi_fragment_html
 
 
 def test_status_hero_renders_exactly_four_cards(kpi_fragment_html):
