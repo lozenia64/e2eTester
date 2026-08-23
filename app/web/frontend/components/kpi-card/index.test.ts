@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// @ts-expect-error Idiomorph 0.7.4는 선언 파일을 제공하지 않는다.
+import { Idiomorph } from "idiomorph";
 import { animateCountUp, bindKpiCards } from "./index";
 
 function makeCard(value: string): HTMLElement {
@@ -12,6 +14,14 @@ function makeCard(value: string): HTMLElement {
   card.appendChild(el);
   document.body.appendChild(card);
   return card;
+}
+
+function kpiFragment(value: string): string {
+  return `
+    <article id="kpi-passed" class="kpi-card" data-tone="passed" data-key="passed" data-size="md">
+      <span class="kpi-card__value" data-target="${value}">${value}</span>
+    </article>
+  `;
 }
 
 beforeEach(() => {
@@ -46,11 +56,15 @@ describe("bindKpiCards", () => {
     expect(textValue.textContent).toBe("추정치 미설정");
   });
 
-  it("이미 바인딩된 카드를 두 번 처리하지 않는다", () => {
-    const card = makeCard("7");
+  it("이미 바인딩된 카드를 두 번 처리해도 애니메이션을 다시 예약하지 않는다", () => {
+    const requestAnimationFrame = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+
+    makeCard("7");
     bindKpiCards(document);
     bindKpiCards(document);
-    expect(card.dataset.kpiBound).toBe("true");
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
   });
 
   it("이미 바인딩된 카드도 목표값이 바뀌면 다시 카운트업한다", () => {
@@ -66,5 +80,39 @@ describe("bindKpiCards", () => {
     bindKpiCards(document);
 
     expect(valueEl.textContent).toBe("9");
+  });
+
+  it("동일 KPI를 Idiomorph로 갱신한 뒤 다시 바인딩해도 애니메이션을 다시 예약하지 않는다", () => {
+    const requestAnimationFrame = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    document.body.innerHTML = `<section id="dash-zone-stats">${kpiFragment("7")}</section>`;
+
+    const zone = document.querySelector<HTMLElement>("#dash-zone-stats")!;
+    const card = document.querySelector<HTMLElement>("#kpi-passed")!;
+    bindKpiCards(document);
+
+    Idiomorph.morph(zone, kpiFragment("7"), { morphStyle: "innerHTML" });
+    expect(document.querySelector("#kpi-passed")).toBe(card);
+
+    bindKpiCards(document);
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it("목표값이 바뀐 KPI를 Idiomorph로 갱신하면 애니메이션을 한 번 더 예약한다", () => {
+    const requestAnimationFrame = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    document.body.innerHTML = `<section id="dash-zone-stats">${kpiFragment("7")}</section>`;
+
+    const zone = document.querySelector<HTMLElement>("#dash-zone-stats")!;
+    const card = document.querySelector<HTMLElement>("#kpi-passed")!;
+    bindKpiCards(document);
+
+    Idiomorph.morph(zone, kpiFragment("9"), { morphStyle: "innerHTML" });
+    expect(document.querySelector("#kpi-passed")).toBe(card);
+
+    bindKpiCards(document);
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(2);
   });
 });
