@@ -312,6 +312,9 @@ e2eTester/
         executor.py                # ChbotWorkflowExecutor
         manifest.yaml
     web/
+      frontend/
+        entries/
+          dashboard.ts              # 일간 대시보드 페이지 엔트리 (Vite)
       templates/
         base.html
         dashboard.html             # 일간 점검 현황 대시보드 (로그인 후 첫 화면)
@@ -336,7 +339,6 @@ e2eTester/
           stats.html
       static/
         app.js                     # 실행 화면(execute)·Run/Suite 화면 공용 스크립트
-        dashboard.js               # 일간 대시보드 렌더링
         schedules.js               # 예약 관리 센터 (페이지 전용)
         anomalies.js               # 이상징후 인박스 (페이지 전용)
         insights.js                # 시스템 인사이트 (페이지 전용)
