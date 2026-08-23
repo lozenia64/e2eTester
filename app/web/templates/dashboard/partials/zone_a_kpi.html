@@ -1,40 +1,51 @@
-{# Zone A hero + KPI 밴드 + attention strip.
-   밴드는 기존 dash-stats(상태 4타일)를 교체한 것이다 — 넌스크롤 뷰포트 예산을
-   늘리지 않기 위해 추가가 아니라 교체다(설계 D1). #}
+{# Zone A — 지배 상태(숫자 + 진행 링) + KPI 스택. 문장 요약은 링 아래로 보존(D8). #}
 {% import "components/kpi-card/macro.jinja" as kpi %}
 {% set t = data.totals %}
-<section id="dash-zone-hero" class="dash-hero">
-  <div class="dash-hero__top">
-    <div class="dash-hero__text">
-      <h1 class="dash-hero__title">
-        {% if t.modules == 0 %}점검 대상이 없습니다
-        {% elif t.error > 0 %}점검실패 {{ t.error }}건 — 우선 확인이 필요합니다
-        {% elif t.anomaly > 0 %}이상징후 {{ t.anomaly }}건이 감지되었습니다
-        {% elif t.running > 0 %}{{ t.running }}개 모듈이 진행 중입니다
-        {% elif t.not_inspected == t.modules %}오늘 아직 점검이 시작되지 않았습니다
-        {% else %}오늘 점검은 정상입니다
-        {% endif %}
-      </h1>
-      <p class="dash-hero__meta">
-        {{ data.date_label }} · {{ t.passed }}/{{ t.modules }} 모듈 정상
-        {% if t.anomaly > 0 %} · 이상징후 {{ t.anomaly }}건{% endif %}
-        {% if t.error > 0 %} · 점검실패 {{ t.error }}건{% endif %}
-        {% if data.generated_at %} · 갱신 {{ data.generated_at[11:16] }}{% endif %}
-      </p>
-    </div>
-    <div class="dash-hero__aside">
-      <div class="dash-hero__actions">
-        <button id="dash-refresh" type="button" class="dash-refresh" aria-label="새로고침">
-          <svg class="dash-refresh__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          새로고침
-        </button>
-        <span id="dash-htmx-busy" class="dash-htmx-indicator">갱신…</span>
-      </div>
+{% set hero_tone =
+     'error' if t.error > 0 else
+     'anomaly' if t.anomaly > 0 else
+     'running' if t.running > 0 else
+     'not_inspected' if t.not_inspected == t.modules else
+     'passed' %}
+<section id="dash-zone-hero" class="status-hero">
+  <div class="status-hero__ring"
+       data-tone="{{ hero_tone }}"
+       data-passed="{{ t.passed }}"
+       data-total="{{ t.modules }}">
+    <div class="status-hero__figure">
+      <span class="status-hero__value">{{ t.passed }}/{{ t.modules }}</span>
+      <span class="status-hero__unit">모듈 정상 · {{ t.pass_rate }}%</span>
     </div>
   </div>
-</section>
 
-{{ kpi.kpi_band(data.cards) }}
+  <h1 class="status-hero__headline">
+    {% if t.modules == 0 %}점검 대상이 없습니다
+    {% elif t.error > 0 %}점검실패 {{ t.error }}건 — 우선 확인이 필요합니다
+    {% elif t.anomaly > 0 %}이상징후 {{ t.anomaly }}건이 감지되었습니다
+    {% elif t.running > 0 %}{{ t.running }}개 모듈이 진행 중입니다
+    {% elif t.not_inspected == t.modules %}오늘 아직 점검이 시작되지 않았습니다
+    {% else %}오늘 점검은 정상입니다
+    {% endif %}
+  </h1>
+  <p class="status-hero__meta">
+    {{ data.date_label }}
+    {% if data.generated_at %} · 갱신 {{ data.generated_at[11:16] }}{% endif %}
+  </p>
+
+  <div class="dash-hero__actions">
+    <button id="dash-refresh" type="button" class="dash-refresh" aria-label="새로고침">
+      <svg class="dash-refresh__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      새로고침
+    </button>
+    <span id="dash-htmx-busy" class="dash-htmx-indicator">갱신…</span>
+  </div>
+
+  <div class="status-hero__cards">
+    {% for card in data.cards %}
+    {{ kpi.kpi_card(card.key, card.label, card.value, card.unit, card.period, card.note, card.tone, card.href, card.estimated) }}
+    {% endfor %}
+  </div>
+</section>
 
 {% if data.attention %}
 <section id="dash-zone-attention" class="dash-attention">

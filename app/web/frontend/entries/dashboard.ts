@@ -1,6 +1,7 @@
 // 일간 대시보드 페이지 엔트리. 드로어 · 새로고침 · 폴링만 맡는다.
 // 밀도 계산은 CSS 컨테이너 쿼리가 담당하므로 여기 없다(설계 §3.6).
 import "../components/status-hero/styles.css";
+import { bindStatusHero } from "../components/status-hero/index";
 import "../components/system-matrix/styles.css";
 import "../components/activity-feed/styles.css";
 import "idiomorph/dist/idiomorph-ext.esm.js";
@@ -38,6 +39,7 @@ function bind(dash: HTMLElement): void {
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
+    bindStatusHero(target);
     if (!dash.contains(target) && target !== dash) return;
     document.querySelector("#dash-error")?.classList.add("hidden");
 
@@ -100,5 +102,7 @@ function bind(dash: HTMLElement): void {
     if (!document.hidden) requestRefresh();
   }, REFRESH_MS);
 }
+
+document.addEventListener("DOMContentLoaded", () => bindStatusHero());
 
 if (root) bind(root);
