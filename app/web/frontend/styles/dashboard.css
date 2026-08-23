@@ -20,6 +20,11 @@ body:has(.dash) main > div {
   box-sizing: border-box;
 }
 
+body:has(.dash) main > div {
+  container-type: inline-size;
+  container-name: dash-shell;
+}
+
 @media (min-width: 768px) {
   body:has(.dash) main {
     padding-left: 16rem;
@@ -60,44 +65,88 @@ body:has(.dash) main > div {
     padding-left: 0;
     width: 100%;
   }
+
 }
 
 .dash {
   container-type: size;
   container-name: dash;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(16rem, 20rem) 1fr minmax(17.5rem, 21.25rem);
+  grid-template-rows: minmax(0, 1fr);
   width: 100%;
   max-width: 100%;
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  gap: clamp(0.25rem, 0.8cqh, 0.75rem);
+  gap: clamp(0.5rem, 1.2cqi, 1rem);
   padding: clamp(0.5rem, 1.5cqh, 1.5rem) clamp(0.75rem, 2cqi, 2rem);
   background: var(--pl-bg);
   color: var(--pl-text);
 }
 
 #dash-host-kpi {
-  flex-shrink: 0;
   display: flex;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
   gap: clamp(0.25rem, 0.6cqh, 0.625rem);
   overflow: hidden;
-  max-height: 42%;
 }
 
 .dash-host-matrix {
-  flex: 1 1 auto;
-  min-height: 0;
   display: flex;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.dash-host-activity {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dash-host-matrix > * {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* 1024~1440px — 피드를 좌측 열 하단으로 내린다(2열) */
+@container dash-shell (max-width: 1440px) {
+  .dash {
+    grid-template-columns: minmax(16rem, 20rem) 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 0.6fr);
+  }
+
+  #dash-host-kpi {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .dash-host-matrix {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .dash-host-activity {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 767px) {
+  .dash {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dash-host-activity {
+    flex: 0 0 auto;
+    max-height: 30%;
+  }
 }
 
 /* ── Zone A — Hero ── */

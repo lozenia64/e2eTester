@@ -615,3 +615,111 @@ def test_estimated_card_shows_badge_and_note(kpi_fragment_html):
 
 def test_pending_patches_card_links_to_patches(kpi_fragment_html):
     assert 'href="/self-healing#patches"' in kpi_fragment_html
+
+
+def test_three_column_layout_at_1920(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(live_server, wait_until="networkidle")
+    boxes = page.evaluate(
+        """() => {
+            const pick = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return { left: Math.round(r.left), top: Math.round(r.top), w: Math.round(r.width) };
+            };
+            return {
+                hero: pick('#dash-host-kpi'),
+                matrix: pick('#dash-host-matrix'),
+                activity: pick('#dash-host-activity'),
+            };
+        }"""
+    )
+    assert boxes["hero"] and boxes["matrix"] and boxes["activity"]
+    # 세 열이 같은 행에 나란히 — 좌→우 순서
+    assert boxes["hero"]["left"] < boxes["matrix"]["left"] < boxes["activity"]["left"]
+    assert abs(boxes["hero"]["top"] - boxes["matrix"]["top"]) <= 2
+    assert abs(boxes["matrix"]["top"] - boxes["activity"]["top"]) <= 2
+
+
+def test_only_activity_column_scrolls_internally(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(live_server, wait_until="networkidle")
+    state = page.evaluate(
+        """() => {
+            const ov = (sel) => {
+                const el = document.querySelector(sel);
+                return el ? getComputedStyle(el).overflowY : null;
+            };
+            return {
+                doc: document.documentElement.scrollHeight <= window.innerHeight + 1,
+                hero: ov('#dash-host-kpi'),
+                matrix: ov('#dash-host-matrix'),
+                activity: ov('#dash-host-activity'),
+            };
+        }"""
+    )
+    assert state["doc"], "문서가 세로로 넘친다"
+    assert state["hero"] == "hidden"
+    assert state["matrix"] == "hidden"
+    assert state["activity"] in ("auto", "scroll")
+
+
+def test_stacks_to_single_column_on_mobile(page, live_server: str) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(live_server, wait_until="networkidle")
+    boxes = page.evaluate(
+        """() => {
+            const pick = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return { left: Math.round(r.left), top: Math.round(r.top) };
+            };
+            return { hero: pick('#dash-host-kpi'), matrix: pick('#dash-host-matrix') };
+        }"""
+    )
+    assert boxes["hero"]["left"] == boxes["matrix"]["left"], "모바일에서 열이 나란히 있다"
+    assert boxes["matrix"]["top"] > boxes["hero"]["top"], "모바일에서 세로 스택이 아니다"
+
+
+def test_dashboard_uses_two_columns_at_1280_with_shell_relative_padding(
+    page, live_server: str
+) -> None:
+    """dash-shell 분기 누락으로 생기는 빈 셋째 열과 viewport 기준 cqi를 막는다."""
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(live_server, wait_until="networkidle")
+    state = page.evaluate(
+        """() => {
+            const pick = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return {
+                    left: r.left,
+                    top: r.top,
+                    right: r.right,
+                    bottom: r.bottom,
+                };
+            };
+            const dash = document.querySelector('.dash');
+            const matrix = pick('#dash-host-matrix');
+            return {
+                dash: dash ? pick('.dash') : null,
+                hero: pick('#dash-host-kpi'),
+                matrix,
+                activity: pick('#dash-host-activity'),
+                paddingLeft: dash ? parseFloat(getComputedStyle(dash).paddingLeft) : null,
+            };
+        }"""
+    )
+    assert state["dash"] and state["hero"] and state["matrix"] and state["activity"]
+    assert state["hero"]["left"] < state["matrix"]["left"]
+    assert state["activity"]["left"] == pytest.approx(state["hero"]["left"], abs=2)
+    assert state["activity"]["top"] > state["hero"]["top"]
+    assert state["matrix"]["top"] == pytest.approx(state["hero"]["top"], abs=2)
+    assert state["matrix"]["bottom"] == pytest.approx(state["activity"]["bottom"], abs=2)
+    assert state["matrix"]["right"] == pytest.approx(
+        state["dash"]["right"] - state["paddingLeft"], abs=2
+    )
+    assert 18 <= state["paddingLeft"] <= 22, state
