@@ -29,12 +29,13 @@ export function animateCountUp(
 export function bindKpiCards(root: ParentNode = document): void {
   const cards = root.querySelectorAll<HTMLElement>(".kpi-card");
   cards.forEach((card) => {
-    if (card.dataset.kpiBound === "true") return;
-    card.dataset.kpiBound = "true";
     const valueEl = card.querySelector<HTMLElement>(".kpi-card__value");
     if (!valueEl) return;
     const raw = valueEl.dataset.target ?? "";
     if (raw === "") return;
+    if (card.dataset.kpiBound === "true" && card.dataset.kpiTarget === raw) return;
+    card.dataset.kpiBound = "true";
+    card.dataset.kpiTarget = raw;
     const target = Number(raw);
     // 숫자가 아닌 값(예: "추정치 미설정")은 원문 그대로 표시한다(애니메이션은 생략).
     if (Number.isNaN(target)) {

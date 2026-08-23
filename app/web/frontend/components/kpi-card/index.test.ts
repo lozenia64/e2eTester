@@ -17,6 +17,7 @@ function makeCard(value: string): HTMLElement {
 beforeEach(() => {
   document.body.innerHTML = "";
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("animateCountUp", () => {
@@ -50,5 +51,20 @@ describe("bindKpiCards", () => {
     bindKpiCards(document);
     bindKpiCards(document);
     expect(card.dataset.kpiBound).toBe("true");
+  });
+
+  it("이미 바인딩된 카드도 목표값이 바뀌면 다시 카운트업한다", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+
+    const card = makeCard("7");
+    const valueEl = card.querySelector<HTMLElement>(".kpi-card__value")!;
+
+    bindKpiCards(document);
+    expect(valueEl.textContent).toBe("7");
+
+    valueEl.dataset.target = "9";
+    bindKpiCards(document);
+
+    expect(valueEl.textContent).toBe("9");
   });
 });
