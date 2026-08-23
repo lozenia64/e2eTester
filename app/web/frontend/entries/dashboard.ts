@@ -3,6 +3,7 @@
 import "../components/status-hero/styles.css";
 import "../components/system-matrix/styles.css";
 import "../components/activity-feed/styles.css";
+import "idiomorph/dist/idiomorph-ext.esm.js";
 
 const REFRESH_MS = 30_000;
 
@@ -32,11 +33,24 @@ const PASSTHROUGH_SELECTORS = [
 ];
 
 function bind(dash: HTMLElement): void {
+  let firstPaintDone = false;
+
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
     if (!dash.contains(target) && target !== dash) return;
     document.querySelector("#dash-error")?.classList.add("hidden");
+
+    if (target.id !== "dash-host-matrix") return;
+    const list = target.querySelector<HTMLElement>(".dash__systems");
+    if (!list) return;
+    if (firstPaintDone) {
+      delete list.dataset.firstPaint;
+      return;
+    }
+    firstPaintDone = true;
+    list.dataset.firstPaint = "true";
+    window.setTimeout(() => delete list.dataset.firstPaint, 800);
   });
 
   document.body.addEventListener("htmx:responseError", (event) => {

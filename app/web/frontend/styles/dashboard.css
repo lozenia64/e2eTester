@@ -318,7 +318,6 @@ body:has(.dash) main > div {
   cursor: pointer;
   box-shadow: var(--pl-shadow-sm), inset 0 0 0 1px var(--pl-border);
   transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
-  animation: dash-row-in 0.35s var(--ease-out) both;
 }
 
 .dash-sys-row[data-priority="attention"] {
@@ -432,12 +431,19 @@ body:has(.dash) main > div {
   flex-wrap: nowrap;
 }
 
-.dash-sys-row:nth-child(1) { animation-delay: 0ms; }
-.dash-sys-row:nth-child(2) { animation-delay: 40ms; }
-.dash-sys-row:nth-child(3) { animation-delay: 80ms; }
-.dash-sys-row:nth-child(4) { animation-delay: 120ms; }
-.dash-sys-row:nth-child(5) { animation-delay: 160ms; }
-.dash-sys-row:nth-child(6) { animation-delay: 200ms; }
+/* 첫 로드에서만 재생한다. morph 는 노드를 보존하므로 갱신 시 재생될 신규 노드가
+   없지만, 매트릭스가 통째로 새로 그려지는 경로(빈 상태 → 데이터)에서도 반복되지
+   않도록 클래스로 한 번만 건다. */
+.dash__systems[data-first-paint="true"] .dash-sys-row {
+  animation: dash-row-in 0.35s var(--ease-out) both;
+}
+
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(1) { animation-delay: 0ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(2) { animation-delay: 40ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(3) { animation-delay: 80ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(4) { animation-delay: 120ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(5) { animation-delay: 160ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(6) { animation-delay: 200ms; }
 
 @keyframes dash-row-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -782,7 +788,7 @@ body:has(.dash) main > div {
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  .dash-sys-row {
+  .dash__systems[data-first-paint="true"] .dash-sys-row {
     animation: none;
   }
 

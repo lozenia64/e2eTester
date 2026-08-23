@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="dash"
+     hx-ext="morph"
      x-data="{ drawerOpen: false }"
      @dash-close-drawer.window="drawerOpen = false"
      @dash-open-drawer.window="drawerOpen = true">
@@ -12,7 +13,7 @@
        hx-get="/api/dashboard/daily/fragments/kpi"
        hx-trigger="load, dash-refresh from:body"
        hx-indicator="#dash-htmx-busy"
-       hx-swap="innerHTML">
+       hx-swap="morph:innerHTML">
     <div class="dash-hero" aria-hidden="true">
       <div class="dash-hero__top">
         <div class="dash-hero__text">
@@ -29,9 +30,20 @@
        hx-get="/api/dashboard/daily/fragments/matrix"
        hx-trigger="load, dash-refresh from:body"
        hx-indicator="#dash-htmx-busy"
-       hx-swap="innerHTML">
+       hx-swap="morph:innerHTML">
     <div class="dash__systems" aria-hidden="true">
       <div class="dash-sys-row" style="opacity:0.4"></div>
+    </div>
+  </div>
+
+  <div id="dash-host-activity"
+       class="dash-host-activity"
+       hx-get="/api/dashboard/daily/fragments/activity"
+       hx-trigger="load, dash-refresh from:body"
+       hx-indicator="#dash-htmx-busy"
+       hx-swap="morph:innerHTML">
+    <div class="dash-activity" aria-hidden="true">
+      <p class="dash-activity__eyebrow">최근 활동</p>
     </div>
   </div>
 
