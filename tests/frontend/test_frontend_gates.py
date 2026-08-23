@@ -160,6 +160,16 @@ def test_fg004_flags_oversized_dashboard_stylesheet_after_component_split(tmp_pa
     assert "dashboard.css" in problems[0]
 
 
+def test_dashboard_stylesheet_keeps_only_layout_skeleton():
+    """대시보드의 컴포넌트 CSS는 각 소유 stylesheet에만 둔다."""
+    dashboard_css = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/styles/dashboard.css"
+    ).read_text(encoding="utf-8")
+
+    forbidden = (".dash-hero", ".dash-sys-row", "@keyframes dash-row-in")
+    assert all(selector not in dashboard_css for selector in forbidden)
+
+
 def test_fg005_flags_direct_static_reference(tmp_path):
     _write(
         tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'

@@ -325,3 +325,63 @@
 .dash-panel-dot[data-tone="cancelled"] { background: var(--st-cancelled-solid); }
 .dash-panel-dot[data-tone="not_inspected"],
 .dash-panel-dot[data-tone="pending"] { background: var(--st-pending-solid); }
+
+/* 매트릭스의 주의 행과 최초 렌더 모션. */
+.dash-sys-row[data-priority="attention"] {
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-error-solid);
+  padding-left: calc(clamp(0.5rem, 1.5cqi, 1.25rem) - 3px);
+}
+
+.dash-sys-row[data-priority="attention"][data-accent-tone="anomaly"] {
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-anomaly-solid);
+}
+
+.dash-sys-row[data-priority="attention"][data-accent-tone="running"],
+.dash-sys-row[data-priority="attention"][data-accent-tone="waiting_input"] {
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-running-solid);
+}
+
+.dash-sys-row[data-priority="attention"][data-accent-tone="blocked"] {
+  box-shadow:
+    var(--pl-shadow-sm),
+    inset 0 0 0 1px var(--pl-border),
+    inset 3px 0 0 var(--st-blocked-solid);
+}
+
+/* 첫 로드에서만 재생한다. morph 는 노드를 보존하므로 갱신 시 재생될 신규 노드가
+   없지만, 매트릭스가 통째로 새로 그려지는 경로(빈 상태 → 데이터)에서도 반복되지
+   않도록 클래스로 한 번만 건다. */
+.dash__systems[data-first-paint="true"] .dash-sys-row {
+  animation: dash-row-in 0.35s var(--ease-out) both;
+}
+
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(1) { animation-delay: 0ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(2) { animation-delay: 40ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(3) { animation-delay: 80ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(4) { animation-delay: 120ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(5) { animation-delay: 160ms; }
+.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(6) { animation-delay: 200ms; }
+
+@keyframes dash-row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash__systems[data-first-paint="true"] .dash-sys-row {
+    animation: none;
+  }
+
+  .dash-sys-row:hover {
+    transform: none;
+  }
+}
