@@ -791,3 +791,16 @@ def test_matrix_row_is_single_line_with_cells(page, live_server: str) -> None:
     assert shape["sameLine"], "셀이 한 줄에 있지 않다"
     assert shape["legacyPills"] == 0, "레거시 module_pill 이 남아 있다"
     assert shape["legacySegments"] == 0, "레거시 segment bar 가 남아 있다"
+
+
+def test_reduced_motion_disables_cell_animation(browser, live_server: str) -> None:
+    context = browser.new_context(reduced_motion="reduce", viewport={"width": 1920, "height": 1080})
+    page = context.new_page()
+    page.goto(live_server, wait_until="networkidle")
+    names = page.evaluate(
+        """() => [...document.querySelectorAll('.dash-cell')]
+            .map((c) => getComputedStyle(c).animationName)"""
+    )
+    context.close()
+    assert names, "셀이 없다"
+    assert all(name == "none" for name in names), f"reduced-motion 인데 애니메이션이 산다: {names}"

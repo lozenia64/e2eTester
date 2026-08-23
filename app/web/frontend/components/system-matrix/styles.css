@@ -152,3 +152,41 @@
 .dash-sys-row__badge[data-tone="running"] { background: var(--c-blue-50); color: var(--st-running-solid); }
 .dash-sys-row__badge[data-tone="blocked"] { background: var(--c-orange-50); color: var(--st-blocked-solid); }
 .dash-sys-row__badge[data-tone="not_inspected"] { background: var(--c-zinc-100); color: var(--st-pending-solid); }
+
+/* ── 모션 4계층 중 전이·지속(설계 §3.5) ──
+   morph 가 노드를 보존하므로 data-tone 변화가 transition 을 탄다. */
+
+.dash-cell {
+  transition: background-color 0.4s var(--ease-out), color 0.4s var(--ease-out);
+}
+
+/* 진행 중 — shimmer. 맥동은 waiting_input 만 쓴다(wall.css 결정 승계). */
+@keyframes dash-cell-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+.dash-cell[data-tone="running"] {
+  animation: dash-cell-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes dash-cell-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.92); }
+}
+
+.dash-cell[data-tone="waiting_input"] {
+  animation: dash-cell-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-cell {
+    transition: none;
+    animation: none;
+  }
+
+  .dash-cell[data-tone="running"],
+  .dash-cell[data-tone="waiting_input"] {
+    animation: none;
+  }
+}
