@@ -26,7 +26,13 @@ function requestRefresh(): void {
 }
 
 // 행 안의 링크·CTA 는 드로어를 열지 않고 자기 목적지로 간다.
-const PASSTHROUGH_SELECTORS = [".dash-cell--link", ".dash-sys-row__cta", ".dash-activity__link"];
+const PASSTHROUGH_SELECTORS = [
+  ".dash-cell--link",
+  ".dash-mod--link",
+  ".dash-seg--link",
+  ".dash-sys-row__cta",
+  ".dash-activity__link",
+];
 
 function bind(dash: HTMLElement): void {
   document.body.addEventListener("htmx:afterSwap", (event) => {
