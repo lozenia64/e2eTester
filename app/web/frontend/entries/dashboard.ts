@@ -4,17 +4,14 @@ import "../components/status-hero/styles.css";
 import "../components/system-matrix/styles.css";
 import "../components/activity-feed/styles.css";
 
-declare const htmx: {
-  ajax: (verb: string, path: string, opts: { target: string; swap: string }) => void;
-};
-
 const REFRESH_MS = 30_000;
 
 const root = document.querySelector<HTMLElement>(".dash");
 
 function openDrawer(systemCode: string | undefined): void {
-  if (!systemCode || typeof htmx === "undefined") return;
-  htmx.ajax("GET", `/api/dashboard/daily/fragments/system/${systemCode}/panel`, {
+  const htmx = window.htmx;
+  if (!systemCode || !htmx) return;
+  htmx.ajax("get", `/api/dashboard/daily/fragments/system/${systemCode}/panel`, {
     target: "#dash-drawer-body",
     swap: "innerHTML",
   });

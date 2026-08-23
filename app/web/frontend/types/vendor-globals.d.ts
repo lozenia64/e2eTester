@@ -4,10 +4,13 @@
 // 이 파일과 entries/vendor-*.ts 를 함께 삭제한다.
 export {};
 
+type Htmx = typeof import("htmx.org").default;
+
 declare global {
   interface Window {
     Chart: unknown;
     echarts: unknown;
     Plotly: unknown;
+    htmx?: Htmx;
   }
 }
