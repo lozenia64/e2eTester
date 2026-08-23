@@ -10,8 +10,8 @@ from app.api.dependencies import get_daily_queries, get_daily_summary_queries
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
 from app.contexts.insights.application.daily_dashboard import system_summary_badge
+from app.core.status_view import tone_glyph
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
-from app.web.status_view import tone_glyph
 
 if TYPE_CHECKING:
     from app.orchestrator.queries import DailyDashboardQueries

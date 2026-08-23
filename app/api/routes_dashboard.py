@@ -16,9 +16,9 @@ from app.api.dependencies import (
 from app.contexts.identity.dependencies import get_current_user, require_admin
 from app.contexts.identity.models import User
 from app.contexts.suite.views.view import filter_suite_for_user
+from app.core.status_view import status_badge_view, status_options, tone_glyph
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
-from app.web.status_view import status_badge_view, status_options, tone_glyph
 
 if TYPE_CHECKING:
     from app.contexts.healing.service import HealingService

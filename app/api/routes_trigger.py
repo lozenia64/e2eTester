@@ -22,8 +22,8 @@ from fastapi.templating import Jinja2Templates
 from app.api.dependencies import get_schedule_service
 from app.core.requests import SubmitOtpRequest
 from app.core.schedule_models import Schedule
+from app.core.status_view import mobile_status_view_map
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
-from app.web.status_view import mobile_status_view_map
 
 if TYPE_CHECKING:
     from app.contexts.scheduling.scheduler import SchedulerService

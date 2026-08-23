@@ -50,10 +50,10 @@ e2eTester/
       routes_healing.py            # 자가 치유 센터 (/api/healing/*)
       routes_admin.py
       routes_otp.py                # SMS 중계 인바운드 OTP (/api/otp/inbound)
+      routes_identity.py           # /login, /auth/*, /account/password
       ws_runs.py
       ws_suites.py
     contexts/identity/             # 인증·사용자(identity) 컨텍스트 (구 app/auth)
-      router.py                    # /login, /auth/*, /account/password
       dependencies.py
       jwt.py
       service.py
