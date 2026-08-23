@@ -6,7 +6,9 @@
   {% else %}
   <ol class="dash-activity__list">
     {% for item in data.activity %}
-    <li class="dash-activity__item" data-tone="{{ item.tone }}" data-module="{{ item.system_code }}:{{ item.module_id }}">
+    <li class="dash-activity__item"
+        id="dash-activity-{{ item.system_code | e }}-{{ item.module_id | e }}"
+        data-tone="{{ item.tone }}" data-module="{{ item.system_code }}:{{ item.module_id }}">
       {% if item.run_id %}<a class="dash-activity__link" href="/runs/{{ item.run_id }}">{% endif %}
       <span class="dash-activity__time">{{ item.at }}</span>
       <span class="dash-activity__dot" aria-hidden="true"></span>

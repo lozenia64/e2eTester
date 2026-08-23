@@ -232,6 +232,18 @@ def test_matrix_fragment_renders_card_rows(client: TestClient) -> None:
     assert "dash-matrix-chart" not in html
 
 
+def test_matrix_fragment_uses_unique_stable_system_row_ids(
+    client: TestClient, dashboard_data: dict
+) -> None:
+    """주의도 정렬이 바뀌어도 morph가 같은 시스템 행을 보존할 식별자가 필요하다."""
+    html = client.get("/api/dashboard/daily/fragments/matrix").text
+    row_ids = re.findall(r'<div class="dash-sys-row"\s+id="([^"]+)"', html)
+    expected_ids = [f"dash-system-{system['system_code']}" for system in dashboard_data["systems"]]
+
+    assert row_ids == expected_ids
+    assert len(row_ids) == len(set(row_ids))
+
+
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/kpi")
@@ -408,6 +420,19 @@ def test_activity_fragment_renders_items(client):
     assert 'class="dash-activity"' in html
     # 항목 하나 이상이 시각·시스템·모듈을 담는다
     assert "dash-activity__item" in html
+
+
+def test_activity_fragment_uses_unique_stable_item_ids(client, dashboard_data: dict) -> None:
+    """시간 역순 재정렬에도 morph가 같은 시스템·모듈 활동을 보존해야 한다."""
+    html = client.get("/api/dashboard/daily/fragments/activity").text
+    item_ids = re.findall(r'<li class="dash-activity__item"\s+id="([^"]+)"', html)
+    expected_ids = [
+        f"dash-activity-{item['system_code']}-{item['module_id']}"
+        for item in dashboard_data["activity"]
+    ]
+
+    assert item_ids == expected_ids
+    assert len(item_ids) == len(set(item_ids))
 
 
 def test_activity_fragment_unknown_zone_still_404(client):

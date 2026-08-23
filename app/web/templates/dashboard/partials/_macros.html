@@ -16,7 +16,7 @@
 {% set attention_tones = ['error', 'anomaly', 'running', 'waiting_input', 'blocked'] %}
 {% set priority = 'attention' if badge.tone in attention_tones else 'normal' %}
 {% set show_cta = badge.tone == 'not_inspected' and sys.inspected == 0 %}
-<div class="dash-sys-row"
+<div class="dash-sys-row" id="dash-system-{{ sys.system_code | e }}"
      data-system-code="{{ sys.system_code }}"
      data-priority="{{ priority }}"
      data-accent-tone="{{ badge.tone }}">
