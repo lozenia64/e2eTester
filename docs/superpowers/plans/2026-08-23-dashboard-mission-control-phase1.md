@@ -425,8 +425,14 @@ Expected: PASS
 
 `app.contexts.insights` → `app.core` 방향 의존은 기존에도 있으므로 새 위반이 없어야 한다.
 
-Run: `python3 -m lint_imports --config pyproject.toml`
-Expected: 통과
+Run: `python3 -c "from importlinter.cli import lint_imports_command; lint_imports_command()"`
+Expected: 통과(새 위반 0건)
+
+> **정정(구현 중 확인):** 초안은 `python3 -m lint_imports` 라고 적었으나 그런 모듈은 없다.
+> 패키지는 `import-linter`, 모듈은 `importlinter`, 실행 진입점은 콘솔 스크립트 `lint-imports`
+> (= `importlinter.cli:lint_imports_command`)다. 또한 저장소 CI 게이트도 같은 오류로
+> `python -m importlinter.cli lint` 를 쓰고 있어 **검사 없이 exit 0** 을 내고 있었다
+> (`scripts/ci/gates.py`, 별도 커밋으로 수정).
 
 - [ ] **Step 8: 커밋**
 
@@ -716,6 +722,18 @@ printf '/* 활동 피드 열 — Task 9 에서 채운다. */\n' > app/web/fronte
 ```
 
 > `base.html` 이 `_assets.html` 을 임포트해도 자식 블록에는 전달되지 않는다. 블록 안에서 별도 이름(`dash_assets`)으로 다시 임포트한다.
+
+> **정정(구현 중 확인):** 이 단계는 `asset_script` 만 넣고 **`asset_styles` 를 빠뜨렸다.**
+> `entries/dashboard.ts` 가 컴포넌트 CSS 3종을 import 하므로 Vite 는 dashboard 전용 CSS 를
+> 방출하는데, 템플릿이 그 링크를 렌더하지 않아 **Task 4~7 내내 컴포넌트 스타일이 한 번도
+> 적용되지 않았다.** 빌드·타입체크·린트·게이트·Playwright 가 전부 통과하는 결함이었다
+> (통과한 단언이 DOM 존재 여부와 main 번들에서 오는 배치뿐이었다).
+>
+> 실제 구현은 `base.html` 의 `</head>` 직전에 `{% block head_extra %}{% endblock %}` 을 열고
+> `dashboard.html` 이 그 블록에서 `asset_styles("entries/dashboard.ts")` 를 렌더한다.
+> `{% block scripts %}`(body 끝)에 넣으면 FOUC 가 나므로 금지한다 — 상위 설계
+> `2026-08-19-frontend-elevation-design.md` §1.4 가 제거한 결함이다.
+> 재발 방지는 `tests/frontend/test_dashboard_entry_css_head.py` 가 맡는다.
 
 - [ ] **Step 7: 밀도 CSS 블록을 지운다**
 
@@ -1096,7 +1114,7 @@ Expected: FAIL — 세 열이 세로로 쌓여 `left` 가 모두 같다
 }
 
 /* 1024~1440px — 피드를 좌측 열 하단으로 내린다(2열) */
-@container dash (max-width: 1440px) {
+@container dash-shell (max-width: 1440px) {
   .dash {
     grid-template-columns: minmax(16rem, 20rem) 1fr;
     grid-template-rows: minmax(0, 1fr) minmax(0, 0.6fr);
@@ -1120,6 +1138,16 @@ Expected: FAIL — 세 열이 세로로 쌓여 `left` 가 모두 같다
 ```
 
 `#dash-host-kpi` 의 옛 `max-height: 42%` 선언은 삭제한다 — 세로 2단 시절의 예산이며 3열에서는 의미가 없다.
+
+> **정정(구현 중 확인):** 초안은 `@container dash (...)` 안에서 `.dash` 자신의
+> `grid-template-columns` 를 바꾸게 했는데 **동작하지 않는다.** 컨테이너 쿼리는 컨테이너의
+> **자손**만 스타일링하며 `.dash` 는 자기 자신의 자손이 아니다. 그대로 두면 1440px 이하에서
+> 3열 선언이 남아 빈 셋째 열이 생긴다.
+>
+> 실제 구현은 상위 래퍼 `body:has(.dash) main > div` 에
+> `container-type: inline-size; container-name: dash-shell;` 을 선언하고 위 분기를
+> `@container dash-shell` 로 건다. `size` 가 아니라 `inline-size` 를 쓰는 이유는 블록축
+> containment 가 `.dash` 의 `height: 100%` 해석을 망가뜨릴 수 있기 때문이다.
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
@@ -1996,3 +2024,25 @@ git commit -m "refactor(web): dashboard.css 를 컴포넌트 3종으로 분할 �
 - [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
 
 **2단계(타입 스케일)·3단계(차트 통합)는 이 계획의 범위가 아니다.** 스펙 §3.7 · §3.8 을 각각 별도 계획으로 만든다.
+
+---
+
+## 실행 결과 (2026-08-24)
+
+1단계 완료. 위 체크리스트 11항목을 격리 환경(별도 worktree + 전용 빌드)에서 전부 검증했다.
+
+| 검증 | 결과 |
+| --- | --- |
+| 전체 pytest | 1133 passed, 2 skipped |
+| Vitest | 26 passed (5 files) |
+| CI 게이트 | 16종 전부 통과 |
+| 3해상도 넌스크롤 | 1366·1920·2560 전부 통과, 피드 열만 내부 스크롤 |
+
+계획이 예상하지 못한 결함 3건이 구현 중 드러나 함께 고쳤다:
+
+- **htmx 전역 소실** — CDN → npm self-host 전환 이후 `window.htmx` 가 없어 드로어가 죽어 있었다
+- **`generated_at` UTC 표시** — 대시보드·상황판의 "갱신 HH:MM" 이 9시간 어긋나 있었다
+- **엔트리 CSS 미로드** — 위 Task 4 Step 6 정정 참조
+
+morph 도입이 파생시킨 문제 3건도 구현 중 발견해 처리했다: 반복 요소 안정 ID 부재(전체 재렌더),
+`dataset` 가드가 morph 에 지워짐(카운트업 반복 재생), 노드 보존으로 값 변경 시 미재생.
