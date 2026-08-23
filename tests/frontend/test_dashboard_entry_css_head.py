@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 BASE = Path("app/web/templates/base.html")
 DASHBOARD = Path("app/web/templates/dashboard.html")
 

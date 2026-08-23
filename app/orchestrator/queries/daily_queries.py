@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
-from app.core.schedule_time import resolve_schedule_timezone
 from app.contexts.scheduling.scheduler import schedule_day_start_utc, schedule_today_label
+from app.core.schedule_time import resolve_schedule_timezone
 
 if TYPE_CHECKING:
     from app.contexts.insights.infrastructure.ports import DailyStatusQueryPort

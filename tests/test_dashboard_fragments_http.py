@@ -5,8 +5,8 @@ Premium Light 리디자인 후 fragment 응답이 카드 리스트·히어로 �
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import re
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest

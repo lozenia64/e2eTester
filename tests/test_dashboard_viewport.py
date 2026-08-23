@@ -505,9 +505,7 @@ def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
     page.wait_for_selector(".status-hero__headline")
     rect = _rect_in_container(page, ".status-hero__headline")
     assert rect and rect["width"] >= 120 and rect["height"] >= 16 and rect["inBox"]
-    assert "아직 점검이 시작되지 않았습니다" in page.locator(
-        ".status-hero__headline"
-    ).inner_text()
+    assert "아직 점검이 시작되지 않았습니다" in page.locator(".status-hero__headline").inner_text()
     ring = page.locator(".status-hero__ring")
     assert ring.get_attribute("data-passed") == "0"
     assert ring.get_attribute("data-total") is not None
