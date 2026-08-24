@@ -141,7 +141,7 @@ _MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_
 # 브라우저가 문서 헤드에서 리터럴 색으로 읽는다. 파일 allowlist 로 처리하면
 # base.html·admin/base.html·login.html 이 영구 항목이 되어 "allowlist 가
 # 비면 완성" 전제가 깨진다(FG-006 이 그 실패를 겪었다). 규칙에서 제외한다.
-_THEME_COLOR_META = re.compile(r'''<meta\s+name=["']theme-color["']''', re.IGNORECASE)
+_THEME_COLOR_META = re.compile(r"""<meta\s+name=["']theme-color["']""", re.IGNORECASE)
 
 
 def _rel(path: Path, root: Path) -> str:
