@@ -723,9 +723,9 @@ git commit -m "docs(ci): FG-002 확장 범위 반영"
 
 ## 완료 확인
 
-- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] 템플릿에 `--st-*` · `--ease-spring` 정의 0건
-- [ ] `app/web/static/*.js` 에 상태 hex 0건
-- [ ] `FG002_ALLOWLIST` 8줄 — 이후 사이클이 한 줄씩 지운다
-- [ ] 7개 화면에서 상태 색이 보이고, SSOT 값(`#10b981` · `#f59e0b` · `#ef4444`)과 일치
-- [ ] `/admin/runs` 추이 차트 막대에 색이 있다
+- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과
+- [x] 템플릿에 `--st-*` · `--ease-spring` 정의 0건
+- [x] `app/web/static/*.js` 에 상태 hex 0건
+- [x] `FG002_ALLOWLIST` 8줄 — 이후 사이클이 한 줄씩 지운다
+- [x] 7개 화면에서 상태 색이 보이고, SSOT 값(`#10b981` · `#f59e0b` · `#ef4444`)과 일치
+- [x] `/admin/runs` 추이 차트 막대에 색이 있다
