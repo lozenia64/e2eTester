@@ -867,3 +867,34 @@ def test_wall_is_dark(page, live_server: str) -> None:
     )
     print("WALL DARK:", got)
     assert got["lum"] < 0.15, got
+
+
+@pytest.mark.parametrize("w,h", [(1920, 1080), (2560, 1440)])
+def test_wall_never_scrolls(page, live_server: str, w: int, h: int) -> None:
+    page.set_viewport_size({"width": w, "height": h})
+    page.goto(f"{live_server}/wall", wait_until="networkidle")
+    page.wait_for_selector("body.wall")
+    got = page.evaluate(
+        """() => ({
+            docOk: document.documentElement.scrollHeight <= window.innerHeight + 1,
+            bodyOverflow: getComputedStyle(document.body).overflow,
+        })"""
+    )
+    print(f"WALL SCROLL {w}x{h}:", got)
+    assert got["docOk"], got
+
+
+def test_wall_timeline_spans_are_positioned_and_visible(page, live_server: str) -> None:
+    """서버가 내려준 백분율이 실제 픽셀로 반영되는가."""
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/wall", wait_until="networkidle")
+    page.wait_for_selector(".wall-lane__span")
+    got = page.evaluate(
+        """() => [...document.querySelectorAll('.wall-lane__span')].map((s) => {
+            const r = s.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height) };
+        })"""
+    )
+    print("WALL SPANS:", got)
+    assert got, "스팬이 하나도 없다"
+    assert all(s["w"] >= 4 and s["h"] >= 4 for s in got), got
