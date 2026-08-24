@@ -51,7 +51,7 @@
 - Consumes: `app/web/frontend/styles/tokens.generated.css` 의 `--st-{tone}-solid` (tone ∈ `STATUS_TONES`), `app/web/frontend/styles/primitives.css` 의 `--c-gray-200` · `--c-indigo-600` · `--ease-out`
 - Produces: 전역 `:root` 에 `--st-passed` · `--st-anomaly` · `--st-error` · `--st-running` · `--st-cancelled` · `--st-blocked` · `--st-idle` · `--st-track` · `--st-active` · `--ease-spring` 10개. Task 2 가 템플릿 정의를 지운 뒤 이 값들이 실효를 갖는다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/frontend/test_legacy_aliases.py` 를 만든다.
 
@@ -131,12 +131,12 @@ def test_base_css_imports_the_alias_file() -> None:
     assert '@import "./legacy-aliases.css";' in text
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_legacy_aliases.py -v`
 Expected: FAIL — `test_alias_file_exists` 가 `AssertionError: legacy-aliases.css 가 없다`, 나머지는 `FileNotFoundError`
 
-- [ ] **Step 3: 별칭 파일을 만든다**
+- [x] **Step 3: 별칭 파일을 만든다**
 
 `app/web/frontend/styles/legacy-aliases.css`:
 
@@ -179,7 +179,7 @@ Expected: FAIL — `test_alias_file_exists` 가 `AssertionError: legacy-aliases.
 }
 ```
 
-- [ ] **Step 4: base.css 에 임포트를 넣는다**
+- [x] **Step 4: base.css 에 임포트를 넣는다**
 
 `app/web/frontend/styles/base.css` 의 `@import "./tokens.generated.css";` 바로 다음 줄에 추가한다. 순서가 중요하다 — 별칭이 가리키는 토큰이 먼저 정의돼 있어야 한다.
 
@@ -192,17 +192,17 @@ Expected: FAIL — `test_alias_file_exists` 가 `AssertionError: legacy-aliases.
 @import "./dashboard.css";
 ```
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_legacy_aliases.py -v`
 Expected: PASS (5 passed)
 
-- [ ] **Step 6: 빌드가 깨지지 않는지 확인한다**
+- [x] **Step 6: 빌드가 깨지지 않는지 확인한다**
 
 Run: `npm run build`
 Expected: 성공. `app/web/static/dist/assets/main-*.css` 가 재생성된다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add app/web/frontend/styles/legacy-aliases.css app/web/frontend/styles/base.css tests/frontend/test_legacy_aliases.py
