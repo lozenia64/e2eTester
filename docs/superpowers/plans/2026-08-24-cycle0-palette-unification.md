@@ -700,7 +700,7 @@ git commit -m "feat(ci): FG-002 를 templates/ · static/*.js 까지 확장"
 | FG-002 | `app/web/frontend/` · `app/web/templates/` · `app/web/static/*.js` 내 하드코딩 hex 금지 (생성물·`theme-color` meta 제외, allowlist 축소형) |
 ```
 
-- [ ] **Step 2: 전체 게이트를 돌린다**
+- [x] **Step 2: 전체 게이트를 돌린다**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Expected: 전 게이트 통과
