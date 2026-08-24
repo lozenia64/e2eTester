@@ -133,11 +133,27 @@ def test_root_carries_the_exec_shell_class(client) -> None:
     assert 'class="exec' in _html(client)
 
 
-def test_accordion_is_gone(client) -> None:
-    """<details> 가 남아 있으면 '펼치기 전에는 안 보이는' 문제가 그대로다."""
+def test_system_accordions_are_gone(client) -> None:
+    """시스템 카드가 <details> 로 남아 있으면 '펼치기 전에는 안 보이는' 문제가 그대로다.
+
+    **`<details>` 를 통째로 금지하지 않는다.** 초안은 그렇게 적었는데, 그러면
+    예약 등록 폼의 접이식까지 함께 죽어 설계 D7("접이식으로 유지", 사용자 결정)을
+    어긴다. 없애려는 것은 시스템 카드 6개의 아코디언이지 접이식 자체가 아니다.
+    """
     html = _html(client)
-    assert "<details" not in html
+    assert 'class="system-card' not in html
     assert "system-card--suite" not in html
+
+
+def test_schedule_form_stays_collapsible(client) -> None:
+    """D7: 예약 등록 폼은 접이식으로 유지한다.
+
+    cron 빌더는 세그먼트 컨트롤·요일 칩 7개·시각·주기·미리보기·이름·등록 버튼까지
+    약 80줄이다. 항상 펼쳐 두면 넌스크롤 예산에서 우측 열을 잡아먹어 실행 버튼을
+    아래로 밀어낸다 — 이 화면의 목표와 정면으로 어긋난다.
+    """
+    html = _html(client)
+    assert '<details class="sched' in html
 
 
 def test_every_system_has_a_left_target_and_a_right_panel(client) -> None:
@@ -184,7 +200,7 @@ def test_single_system_user_still_gets_a_layout(client) -> None:
 - [ ] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
-Expected: FAIL — `test_root_carries_the_exec_shell_class` · `test_accordion_is_gone` · `test_every_system_has_a_left_target_and_a_right_panel` · `test_suite_is_selected_first` 4건. `test_form_contract_survives` 는 PASS(현행 마크업이 이미 만족).
+Expected: FAIL — `test_root_carries_the_exec_shell_class` · `test_system_accordions_are_gone` · `test_every_system_has_a_left_target_and_a_right_panel` · `test_suite_is_selected_first` 4건. `test_form_contract_survives` 와 `test_schedule_form_stays_collapsible` 은 PASS(현행 마크업이 이미 만족).
 
 `FakeRunService` 시그니처가 맞지 않으면 `tests/test_dashboard_fragments_http.py` 의 정의를 보고 `list_systems()` 가 필요한 형태를 돌려주도록 픽스처를 맞춘다.
 
@@ -1106,7 +1122,7 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 
 - [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
 - [ ] `npm run test && npm run typecheck && npm run lint` 통과
-- [ ] `execute.html` 에 `<details>` 0건
+- [ ] `execute.html` 에 `class="system-card` 0건, 예약 폼의 `<details class="sched` 는 **살아 있다**(D7)
 - [ ] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
 - [ ] 내부 스크롤러 1개(우측 패널)
 - [ ] 좌측 배지 톤·라벨이 `/` 대시보드와 **문자 단위로** 일치 — 미점검 시스템이 양쪽 다 "미점검"
