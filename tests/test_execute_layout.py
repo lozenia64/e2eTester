@@ -180,3 +180,16 @@ def test_removed_system_accordions_leave_no_stale_copy(client) -> None:
     """시스템 패널은 좌측 선택으로 바뀌었으므로 카드 펼치기 안내가 남으면 안 된다."""
     html = _html(client)
     assert "카드를 펼쳐" not in html
+
+
+def test_module_graph_is_the_first_thing_in_the_panel(client) -> None:
+    """그래프가 인증 폼 아래 묻히면 '지배 요소' 가 아니다."""
+    html = _html(client)
+    panel_start = html.index('data-exec-panel="hom"')
+    graph_at = html.index('data-role="module-graph-canvas"', panel_start)
+    auth_at = html.index('name="auth_method"', panel_start)
+    assert graph_at < auth_at, "모듈 그래프가 인증 필드보다 뒤에 있다"
+
+
+def test_graph_has_its_own_wrapper(client) -> None:
+    assert "exec-graph" in _html(client)
