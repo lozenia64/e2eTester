@@ -126,6 +126,25 @@ def test_fg002_flags_data_name_theme_color_meta(tmp_path):
     assert "#0ca30c" in problems[0]
 
 
+def test_fg002_flags_aria_name_theme_color_meta(tmp_path):
+    """aria-name도 theme-color 예외를 활성화하는 name 속성이 아니다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta aria-name="theme-color" content="#0ca30c">',
+    )
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+
+
+def test_fg002_theme_color_name_pattern_matches_approved_attribute_boundary():
+    """theme-color 예외는 승인된 name 속성 경계만 쓴다."""
+    import scripts.check_frontend_gates as gates
+
+    assert gates._THEME_COLOR_NAME.pattern == r"""(?<![\w-])name\s*=\s*["']theme-color["']"""
+
+
 def test_fg002_flags_hex_beside_theme_color_meta_on_same_line(tmp_path):
     """theme-color content만 예외이고 같은 줄의 style 색은 여전히 위반이다."""
     _write(

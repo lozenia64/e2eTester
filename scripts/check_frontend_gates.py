@@ -143,7 +143,7 @@ _MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_
 # 비면 완성" 전제가 깨진다(FG-006 이 그 실패를 겪었다). meta 태그만 규칙에서
 # 제외한다. 같은 줄의 다른 hex는 계속 검사한다.
 _META_TAG = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
-_THEME_COLOR_NAME = re.compile(r"""(?<![\w:-])name\s*=\s*["']theme-color["']""", re.IGNORECASE)
+_THEME_COLOR_NAME = re.compile(r"""(?<![\w-])name\s*=\s*["']theme-color["']""", re.IGNORECASE)
 
 
 def _rel(path: Path, root: Path) -> str:
