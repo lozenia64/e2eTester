@@ -509,7 +509,7 @@ git commit -m "fix(web): 레거시 차트 색을 상태 토큰에서 읽도록"
 - Consumes: 기존 `_iter` · `_rel` · `_HEX` · `GENERATED_FILES`
 - Produces: `FG002_ALLOWLIST` (문자열 집합, 저장소 상대경로). 이후 사이클이 화면을 승격할 때마다 한 줄씩 지운다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/frontend/test_frontend_gates.py` 의 FG-002 섹션에 추가한다. 기존 `_write(root, rel, text)` 헬퍼를 그대로 쓴다.
 
@@ -576,12 +576,12 @@ def test_fg002_allowlist_only_holds_files_that_still_have_hex():
     assert not stale, f"hex 가 남아 있지 않은 allowlist 항목 — 지우세요: {stale}"
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_frontend_gates.py -k fg002 -v`
 Expected: FAIL — 새 테스트 5건이 `AttributeError: module has no attribute 'FG002_ALLOWLIST'` 또는 `assert len(problems) == 1` 에서 `0 == 1`
 
-- [ ] **Step 3: 게이트를 고친다**
+- [x] **Step 3: 게이트를 고친다**
 
 `scripts/check_frontend_gates.py` 상단, `MAIL_RENDERER` 정의 아래에 추가한다:
 
@@ -664,19 +664,19 @@ def check_fg002_no_hex(root: Path = REPO_ROOT) -> list[str]:
     return problems
 ```
 
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_frontend_gates.py -v`
 Expected: PASS (기존 + 신규 전부)
 
-- [ ] **Step 5: 게이트를 실제 저장소에 돌린다**
+- [x] **Step 5: 게이트를 실제 저장소에 돌린다**
 
 Run: `python3 scripts/check_frontend_gates.py`
 Expected: `프론트엔드 게이트 통과 (FG-001~007)`
 
 실패하면 메시지가 가리키는 파일을 본다. allowlist 에 없는 템플릿에서 hex 가 나왔다면 Task 2 가 놓친 자리이거나 목록에 빠진 파일이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add scripts/check_frontend_gates.py tests/frontend/test_frontend_gates.py

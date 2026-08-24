@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = "app/web/templates"
 FRONTEND_DIR = "app/web/frontend"
 MAIL_RENDERER = "app/notifications/report_renderer.py"
+STATIC_DIR = "app/web/static"
 
 # 스캔에서 통째로 제외할 디렉터리 이름. node_modules 는 서드파티 소스라 우리
 # 규칙의 대상이 아니고(.css/.ts 가 하나만 들어와도 FG-002/004 가 오발화한다),
@@ -31,6 +32,21 @@ GENERATED_FILES = {
     "app/web/frontend/styles/tokens.generated.css",
     "app/web/frontend/lib/status.generated.ts",
     "app/web/frontend/styles/primitives.css",
+}
+
+# FG-002 가 templates/ · static/*.js 까지 보게 되며 생긴 유예 목록.
+# 인라인 <style> 에 색 리터럴을 든 화면들이다(실측 277건). 화면별 승격
+# 사이클이 인라인 스타일을 컴포넌트 CSS 로 옮길 때마다 여기서 한 줄씩
+# 지운다. 비면 FG-002 가 완성된다.
+FG002_ALLOWLIST = {
+    "app/web/templates/admin/runs.html",
+    "app/web/templates/admin/index.html",
+    "app/web/templates/schedules.html",
+    "app/web/templates/mobile_trigger.html",
+    "app/web/templates/self_healing.html",
+    "app/web/templates/insights.html",
+    "app/web/templates/presets.html",
+    "app/web/templates/anomalies.html",
 }
 
 # 프론트엔드 툴체인 도입 이전부터 있던 레거시 모놀리식 스타일시트.
@@ -121,6 +137,11 @@ _STATIC_REF = re.compile(r"""(?:src|href)\s*=\s*["'](/static/[^"'?]+)""")
 # 메일 상태 색 상수의 이름 규약. 레이아웃 색(PAGE_BG·INK·BORDER 등)은 상태와
 # 무관하므로 대상이 아니다 — 이름으로 갈리므로 값 allowlist 가 필요 없다.
 _MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_BG)\s*=\s*['\"]#")
+# <meta name="theme-color" content="#4f46e5"> 는 CSS 변수를 쓸 수 없다 —
+# 브라우저가 문서 헤드에서 리터럴 색으로 읽는다. 파일 allowlist 로 처리하면
+# base.html·admin/base.html·login.html 이 영구 항목이 되어 "allowlist 가
+# 비면 완성" 전제가 깨진다(FG-006 이 그 실패를 겪었다). 규칙에서 제외한다.
+_THEME_COLOR_META = re.compile(r'''<meta\s+name=["']theme-color["']''', re.IGNORECASE)
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -154,6 +175,18 @@ def _iter_component_markup(root: Path):
     return _iter(root, FRONTEND_DIR, ".jinja")
 
 
+def _iter_legacy_scripts(root: Path):
+    """static/ **최상위**의 손으로 쓴 스크립트만.
+
+    rglob 을 쓰면 static/dist/ 의 빌드 산출물(plotly 4.6MB 등)이 딸려 들어와
+    hex 수만 건으로 게이트가 무의미해진다. 우리가 쓴 파일만 본다.
+    """
+    base = root / STATIC_DIR
+    if not base.exists():
+        return []
+    return sorted(path for path in base.glob("*.js") if path.is_file())
+
+
 def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
     """FG-001: 템플릿에 외부 CDN script/link 금지. 예외 없음.
 
@@ -174,13 +207,25 @@ def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
 
 
 def check_fg002_no_hex(root: Path = REPO_ROOT) -> list[str]:
-    """FG-002: frontend/ 내 하드코딩 hex 금지(생성물 제외)."""
+    """FG-002: 하드코딩 hex 금지(생성물·유예 목록 제외).
+
+    frontend/ 만 보던 동안 templates/ 와 static/*.js 는 **어떤 색 게이트도**
+    보지 않았다. 그 사각지대에서 상태 팔레트 사본 7벌이 자랐고, 같은 상태가
+    화면마다 다른 색으로 보였다(#0ca30c vs SSOT #10b981).
+    """
     problems: list[str] = []
-    for path in _iter(root, FRONTEND_DIR, ".css", ".ts", ".jinja"):
+    sources = chain(
+        _iter(root, FRONTEND_DIR, ".css", ".ts", ".jinja"),
+        _iter(root, TEMPLATE_DIR, ".html"),
+        _iter_legacy_scripts(root),
+    )
+    for path in sources:
         rel = _rel(path, root)
-        if rel in GENERATED_FILES:
+        if rel in GENERATED_FILES or rel in FG002_ALLOWLIST:
             continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if _THEME_COLOR_META.search(line):
+                continue
             for hex_value in _HEX.findall(line):
                 problems.append(
                     f"[FG-002] {rel}:{lineno} 하드코딩 색 `{hex_value}` — "
