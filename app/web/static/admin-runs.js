@@ -646,6 +646,14 @@
       state.trendChart.destroy();
       state.trendChart = null;
     }
+    // Chart.js 는 CSS 변수를 해석하지 못한다 — 계산된 값을 넘겨야 한다.
+    // 토큰은 tokens.generated.css 가 :root 에 싣는다(SSOT: app/core/status_colors.py).
+    function statusSolid(tone) {
+      const value = getComputedStyle(document.documentElement)
+        .getPropertyValue(`--st-${tone}-solid`)
+        .trim();
+      return value || "transparent";
+    }
     state.trendChart = new Chart(canvas, {
       type: "bar",
       data: {
@@ -654,25 +662,25 @@
           {
             label: "정상",
             data: trend.map((d) => d.passed),
-            backgroundColor: "#0ca30c",
+            backgroundColor: statusSolid("passed"),
             stack: "status",
           },
           {
             label: "이상징후",
             data: trend.map((d) => d.anomaly),
-            backgroundColor: "#fab219",
+            backgroundColor: statusSolid("anomaly"),
             stack: "status",
           },
           {
             label: "점검실패",
             data: trend.map((d) => d.error),
-            backgroundColor: "#d03b3b",
+            backgroundColor: statusSolid("error"),
             stack: "status",
           },
           {
             label: "취소",
             data: trend.map((d) => d.cancelled),
-            backgroundColor: "#9ca3af",
+            backgroundColor: statusSolid("cancelled"),
             stack: "status",
           },
         ],

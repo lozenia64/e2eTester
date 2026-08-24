@@ -406,12 +406,12 @@ CSS 별칭이 닿지 않는 유일한 자리다 — Chart.js 는 JS 값으로 �
 - Consumes: `:root` 에 정의된 `--st-{tone}-solid` (Task 1 의 별칭이 아니라 SSOT 토큰을 직접 읽는다 — 별칭은 소멸 예정이므로 새 코드가 의존하면 안 된다)
 - Produces: 없음(내부 변경)
 
-- [ ] **Step 1: 실패를 다시 확인한다**
+- [x] **Step 1: 실패를 다시 확인한다**
 
 Run: `python3 -m pytest "tests/frontend/test_status_palette_single_source.py::test_rogue_palette_value_is_gone" -v`
 Expected: FAIL 4건 — `#0ca30c` · `#fab219` · `#d03b3b` 이 `admin-runs.js` 에서, `#b6b4ad` 는 이미 통과
 
-- [ ] **Step 2: admin-runs.js 의 차트 색을 토큰에서 읽는다**
+- [x] **Step 2: admin-runs.js 의 차트 색을 토큰에서 읽는다**
 
 `app/web/static/admin-runs.js` 의 `state.trendChart = new Chart(...)` 블록 **위**에 헬퍼를 추가한다. 같은 파일 계열이 이미 쓰는 방식(`admin-dashboard.js:23` 의 `toneVar`)과 같은 모양이되, Chart.js 는 `var(...)` 문자열을 해석하지 못하므로 계산된 값을 넘긴다.
 
@@ -457,7 +457,7 @@ Expected: FAIL 4건 — `#0ca30c` · `#fab219` · `#d03b3b` 이 `admin-runs.js` 
         ],
 ```
 
-- [ ] **Step 3: admin-dashboard.js 의 중복 분기를 지운다**
+- [x] **Step 3: admin-dashboard.js 의 중복 분기를 지운다**
 
 `app/web/static/admin-dashboard.js:75-79` 의 `systemDotColor` 는 `not_checked` 를 특별 취급하는데, `TONE_VARS` (`:21`)가 이미 `not_checked: "var(--st-idle)"` 를 담고 있어 결과가 같다. `#9ca3af` 리터럴만 남기는 죽은 분기다.
 
@@ -477,16 +477,18 @@ Expected: FAIL 4건 — `#0ca30c` · `#fab219` · `#d03b3b` 이 `admin-runs.js` 
 
 `:175` 의 `const color = tone === "not_checked" ? "#9ca3af" : toneVar(tone);` 도 같은 이유로 `const color = toneVar(tone);` 로 줄인다.
 
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_status_palette_single_source.py -v`
 Expected: PASS (전부)
 
-- [ ] **Step 5: 차트를 눈으로 확인한다**
+- [x] **Step 5: 차트를 눈으로 확인한다**
 
 앱을 admin 계정으로 띄워 `/admin/runs` 의 추이 막대 차트가 **색을 갖는지** 확인한다. `statusSolid` 가 빈 문자열을 받으면 막대가 투명해지므로, 색이 보이면 토큰 해석이 성공한 것이다.
 
-- [ ] **Step 6: 커밋**
+확인 근거(사용자 제공, 2026-08-24): `main-BWo2x1nu.css`에 `--st-passed-solid:#10b981`·`--st-anomaly-solid:#f59e0b`·`--st-error-solid:#ef4444`·`--st-cancelled-solid:#71717a`가 `:root` SSOT 값으로 실려 있어 `statusSolid()`의 빈 문자열 fallback은 발생하지 않는다.
+
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/web/static/admin-runs.js app/web/static/admin-dashboard.js
