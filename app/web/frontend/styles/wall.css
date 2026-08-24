@@ -4,6 +4,16 @@
 @import "./primitives.css";
 @import "./tokens.generated.css";
 
+/* 상황판 스코프 다크(설계 §4.2, D3). 테마 축을 만들지 않는다 —
+   이 매핑은 wall.css 안에서만 유효하다. */
+body.wall {
+  --wl-bg: var(--c-ink-950);
+  --wl-surface: var(--c-ink-900);
+  --wl-line: var(--c-ink-800);
+  --wl-dim: var(--c-ink-400);
+  --wl-ink: var(--c-ink-100);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -13,8 +23,8 @@
 body.wall {
   overflow: hidden;
   height: 100dvh;
-  background: var(--pl-bg);
-  color: var(--pl-text);
+  background: var(--wl-bg);
+  color: var(--wl-ink);
   font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
 }
 
@@ -40,14 +50,14 @@ body.wall {
 .wall-hero__detail {
   margin-top: 1vmin;
   font-size: clamp(1rem, 4vmin, 4rem);
-  color: var(--pl-text-muted);
+  color: var(--wl-dim);
 }
 
-.wall-hero[data-tone="passed"] .wall-hero__headline { color: var(--st-passed-text); }
-.wall-hero[data-tone="anomaly"] .wall-hero__headline { color: var(--st-anomaly-text); }
-.wall-hero[data-tone="error"] .wall-hero__headline { color: var(--st-error-text); }
-.wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-text); }
-.wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-text); }
+.wall-hero[data-tone="passed"] .wall-hero__headline { color: var(--st-passed-solid); }
+.wall-hero[data-tone="anomaly"] .wall-hero__headline { color: var(--st-anomaly-solid); }
+.wall-hero[data-tone="error"] .wall-hero__headline { color: var(--st-error-solid); }
+.wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-solid); }
+.wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-solid); }
 
 .wall-matrix {
   display: grid;
@@ -62,7 +72,7 @@ body.wall {
   gap: 0.5vmin;
   padding: 1.5vmin 1vmin;
   border-radius: 1.5vmin;
-  background: var(--pl-surface);
+  background: var(--wl-surface);
 }
 
 .wall-sys__code {
@@ -79,12 +89,12 @@ body.wall {
 .wall-sys__count {
   font-size: clamp(0.75rem, 1.8vmin, 1.75rem);
   font-weight: 700;
-  color: var(--pl-text-muted);
+  color: var(--wl-dim);
 }
 
 .wall-sys__name {
   font-size: clamp(0.625rem, 1.4vmin, 1.25rem);
-  color: var(--pl-text-subtle);
+  color: var(--wl-dim);
 }
 
 .wall-sys[data-tone="passed"] .wall-sys__bar { background: var(--st-passed-solid); }
@@ -102,7 +112,7 @@ body.wall {
 
 .wall-meta {
   font-size: clamp(0.75rem, 2vmin, 2rem);
-  color: var(--pl-text-subtle);
+  color: var(--wl-dim);
 }
 
 /* OTP 대기가 지배 요소일 때만 히어로 전체가 맥동한다 — 3~5m 거리에서 배지
