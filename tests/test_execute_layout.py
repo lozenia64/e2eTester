@@ -99,6 +99,16 @@ def test_system_accordions_are_gone(client) -> None:
     assert "system-card--suite" not in html
 
 
+def test_orphaned_system_card_css_is_gone() -> None:
+    """Task 1 이 마지막 소비자를 없앴다 — 죽은 규칙을 남기면 app.css 가 계속 부풀어 있다.
+
+    app.css 는 FG-004 의 400줄 상한을 넘겨 allowlist 에 올라 있다. 그 목록을
+    비우는 것이 프로그램의 목표 중 하나이므로, 소비자가 사라진 규칙은 바로 지운다.
+    """
+    css = Path("app/web/frontend/styles/app.css").read_text(encoding="utf-8")
+    assert "system-card" not in css
+
+
 def test_schedule_form_stays_collapsible(client) -> None:
     """D7: 긴 cron 빌더는 실행 버튼의 초기 가시성을 위해 접이식으로 유지한다."""
     assert '<details class="sched' in _html(client)
