@@ -694,7 +694,7 @@ git commit -m "feat(ci): FG-002 를 templates/ · static/*.js 까지 확장"
 - Consumes: Task 4 의 확장된 FG-002
 - Produces: 없음(문서)
 
-- [ ] **Step 1: CI.md 의 FG-002 설명을 고친다**
+- [x] **Step 1: CI.md 의 FG-002 설명을 고친다**
 
 ```markdown
 | FG-002 | `app/web/frontend/` · `app/web/templates/` · `app/web/static/*.js` 내 하드코딩 hex 금지 (생성물·`theme-color` meta 제외, allowlist 축소형) |
@@ -707,12 +707,12 @@ Expected: 전 게이트 통과
 
 `check_docs_consistency.py` 가 실패하면 `docs/CI.md` 의 표현이 게이트 스크립트의 docstring 과 어긋난 것이므로 양쪽을 맞춘다.
 
-- [ ] **Step 3: 프론트엔드 테스트도 확인한다**
+- [x] **Step 3: 프론트엔드 테스트도 확인한다**
 
 Run: `npm run test && npm run typecheck && npm run lint`
 Expected: 전부 통과. 이 사이클은 TS 를 건드리지 않으므로 변화가 없어야 한다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add docs/CI.md
