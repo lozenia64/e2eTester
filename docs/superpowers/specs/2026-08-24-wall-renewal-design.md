@@ -308,6 +308,8 @@ def build_timeline(systems: list[dict], *, now_iso: str) -> dict[str, Any]
 | `run_history_index` 기반 타임라인 | 다중 Run 이 일상화되면 승격. `started_at`/`ended_at`/`module_passed` 등 더 풍부한 필드가 있다 |
 | 대시보드 2단계(타입 스케일)·3단계(차트 통합) | `2026-08-23-dashboard-mission-control-design.md` §3.7 · §3.8 |
 
+- 스팬 내부 모듈 색 조각(§4.1 ② · D4) — 모듈에 구간(start/end)이 없어 1단계에서 보류. 구현하려면 조각 폭 규약을 먼저 정해야 한다.
+
 ---
 
 ## 9. 참조
