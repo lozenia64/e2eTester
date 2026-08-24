@@ -287,7 +287,7 @@ def _system_view_from_projection(
 
     latest = run_summaries[0] if run_summaries else None
 
-    return {
+    view = {
         "system_code": system.system_code,
         "system_name": system.name,
         "display_order": system.display_order,
@@ -306,6 +306,9 @@ def _system_view_from_projection(
         "last_at": stamps[-1] if stamps else None,
         "modules": module_views,
     }
+    # 대시보드 화면이 그때그때 파생시키던 것을 응답에 싣는다 — 규칙은 여기 한 곳뿐이다.
+    view["summary_badge"] = system_summary_badge(view)
+    return view
 
 
 def build_daily_dashboard_from_projection(

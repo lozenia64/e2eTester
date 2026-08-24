@@ -716,7 +716,7 @@ git commit -m "refactor(execute): 소비자가 사라진 시스템 카드 CSS �
 
 #### 3a. 서버가 파생 배지를 응답에 싣는다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/test_daily_dashboard.py` 에 추가한다. 페이로드를 만드는 방식은 그 파일이 이미 쓰는 빌더 호출을 그대로 가져다 쓴다.
 
@@ -759,12 +759,12 @@ def test_existing_system_keys_are_untouched() -> None:
             assert key in system, key
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_daily_dashboard.py -k summary_badge -v`
 Expected: FAIL — `KeyError: 'summary_badge'`
 
-- [ ] **Step 3: 한 줄을 얹는다**
+- [x] **Step 3: 한 줄을 얹는다**
 
 `daily_dashboard.py` 의 시스템 뷰를 반환하는 dict(`:290` 부근, `"system_code"` 로 시작하는 리터럴)를 변수로 받고 그 뒤에 얹는다. `system_summary_badge` 는 완성된 뷰를 받으므로 순서가 중요하다.
 
@@ -779,19 +779,19 @@ Expected: FAIL — `KeyError: 'summary_badge'`
     return view
 ```
 
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/test_daily_dashboard.py tests/test_dashboard_fragments_http.py -v`
 Expected: PASS — 기존 대시보드 테스트도 함께 통과해야 한다(기존 키 불변)
 
-- [ ] **Step 5: API 문서를 갱신한다**
+- [x] **Step 5: API 문서를 갱신한다**
 
 `docs/E2E_ARCHITECTURE.md` §5.2 의 `/api/dashboard/daily` 항목에 `systems[].summary_badge` 를 적는다. DOCS_GOVERNANCE 의 "API 변경 → §5.2 갱신" 항목이다.
 
 Run: `python3 scripts/check_docs_consistency.py`
 Expected: 통과
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/contexts/insights/application/daily_dashboard.py tests/test_daily_dashboard.py docs/E2E_ARCHITECTURE.md
