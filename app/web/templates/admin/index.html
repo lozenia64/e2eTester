@@ -5,15 +5,6 @@
 {% block content %}
 <style>
   .adm-dash {
-    --st-passed: #0ca30c;
-    --st-anomaly: #fab219;
-    --st-error: #d03b3b;
-    --st-running: #2a78d6;
-    --st-cancelled: #9ca3af;
-    --st-blocked: #ec835a;
-    --st-idle: #e5e7eb;
-    --st-track: #ecebe6;
-    --ease-spring: cubic-bezier(.22, 1, .36, 1);
     --adm-cell-size: 1.75rem;
     --adm-label-col: 8.5rem;
   }
@@ -200,7 +191,7 @@
     animation: adm-cell-pulse 1.6s ease-in-out infinite;
   }
   .adm-cell[data-tone="cancelled"] { background: var(--st-cancelled); }
-  .adm-cell[data-tone="not_checked"] { background: var(--st-idle); border-color: #e5e7eb; }
+  .adm-cell[data-tone="not_checked"] { background: var(--st-pending-surface); border-color: var(--st-pending-border); }
 
   @keyframes adm-cell-pulse {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-running) 40%, transparent); }

@@ -223,7 +223,7 @@ Task 1 의 별칭이 실효를 갖게 하는 단계다. **여기서 화면 색�
 - Consumes: Task 1 이 만든 전역 별칭 10개
 - Produces: 템플릿에 상태 토큰 정의 0건. 이후 Task 4 의 FG-002 확장이 이 상태를 잠근다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/frontend/test_status_palette_single_source.py` 를 만든다.
 
@@ -315,12 +315,12 @@ def test_ssot_values_are_not_copied_into_templates() -> None:
     assert not offenders, f"SSOT 색을 베낀 자리: {offenders}"
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_status_palette_single_source.py -v`
 Expected: FAIL — `--st-passed` · `--st-anomaly` · `--st-error` · `--st-idle` · `--ease-spring` 등이 템플릿에서 검출되고, `#0ca30c` 등 로그 hex 도 검출된다. `test_ssot_values_are_not_copied_into_templates` 는 PASS 여야 한다(베낀 자리는 없다).
 
-- [ ] **Step 3: 템플릿 5개에서 정의를 지운다**
+- [x] **Step 3: 템플릿 5개에서 정의를 지운다**
 
 각 파일에서 **토큰 정의 줄만** 지운다. 셀렉터 블록 자체와 다른 선언은 남긴다.
 
@@ -345,7 +345,7 @@ Expected: FAIL — `--st-passed` · `--st-anomaly` · `--st-error` · `--st-idle
 
 `insights.html` 의 `.insight { … }` 와 `schedules.html` 의 `.schedc { … }` 도 정의만 들어 있으므로 블록째 사라진다. `schedules.html` 은 `--st-active` 가 포함된 6줄이다.
 
-- [ ] **Step 4: admin 템플릿 2개를 고친다**
+- [x] **Step 4: admin 템플릿 2개를 고친다**
 
 `app/web/templates/admin/runs.html` — `.adm-runs { … }` 는 정의 5줄만 있으므로 블록째 제거한다.
 
@@ -371,12 +371,12 @@ Expected: FAIL — `--st-passed` · `--st-anomaly` · `--st-error` · `--st-idle
 
 `:375` 의 범례 점(`style="background:var(--st-idle)"`)은 전경이므로 별칭 그대로 둔다.
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/frontend/test_status_palette_single_source.py -v`
 Expected: 템플릿 관련 전부 PASS. **`test_rogue_palette_value_is_gone[#0ca30c]` 등 4건은 아직 FAIL** — `admin-runs.js` 가 같은 hex 를 들고 있다(Task 3 이 처리).
 
-- [ ] **Step 6: 눈으로 확인한다**
+- [x] **Step 6: 눈으로 확인한다**
 
 Run: `npm run build`
 
@@ -384,7 +384,7 @@ Run: `npm run build`
 
 확인 항목: 녹색·주황·빨강이 각각 `#10b981` · `#f59e0b` · `#ef4444` 로 보이고, 어떤 요소도 색이 빠져 투명·검정으로 떨어지지 않는다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add app/web/templates tests/frontend/test_status_palette_single_source.py
