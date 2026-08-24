@@ -15,60 +15,6 @@
 <div class="exec" x-data="{ selected: 'suite' }">
 {% include "execute/_system_list.html" %}
 <div class="exec-detail" id="suite-section">
-{#
-<!-- 페이지 헤더 -->
-<div>
-    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Run Inspection</p>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">점검 실행</h1>
-    <p class="mt-1.5 text-sm text-gray-500">시스템을 선택해 점검을 시작하면 Run이 생성되고, 모듈별 진행 상태가 실시간으로 갱신됩니다.</p>
-</div>
-
-<!-- 상태 카드 -->
-<div class="grid gap-3 md:grid-cols-3">
-    <div class="status-metric-card">
-        <div class="status-metric-card__head">
-            <div class="status-metric-card__identity">
-                <span class="status-metric-card__icon status-metric-card__icon--indigo" aria-hidden="true">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
-                </span>
-                <span class="status-metric-card__title">등록 시스템</span>
-            </div>
-            <span class="status-metric-card__kpi status-metric-card__kpi--indigo" aria-label="등록된 시스템 수">
-                <span class="status-metric-card__kpi-value">{{ systems|length }}</span>
-                <span class="status-metric-card__kpi-unit">개</span>
-            </span>
-        </div>
-        <p class="status-metric-card__summary">개별·전체 순차 점검 모두 지원</p>
-    </div>
-
-    <div class="status-metric-card">
-        <div class="status-metric-card__head">
-            <div class="status-metric-card__identity">
-                <span class="status-metric-card__icon status-metric-card__icon--violet" aria-hidden="true">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-                </span>
-                <span class="status-metric-card__title">AI 분석 상태</span>
-            </div>
-            <span class="status-metric-card__badge {{ tone_pill.get(analyzer_status.color, 'bg-gray-100 text-gray-600') }}">{{ analyzer_status.title }}</span>
-        </div>
-        <p class="status-metric-card__summary">{{ analyzer_status.message }}</p>
-    </div>
-
-    <div class="status-metric-card">
-        <div class="status-metric-card__head">
-            <div class="status-metric-card__identity">
-                <span class="status-metric-card__icon status-metric-card__icon--sky" aria-hidden="true">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                </span>
-                <span class="status-metric-card__title">종료 메일 상태</span>
-            </div>
-            <span class="status-metric-card__badge {{ tone_pill.get(email_status.color, 'bg-gray-100 text-gray-600') }}">{{ email_status.title }}</span>
-        </div>
-        <p class="status-metric-card__summary">{{ email_status.message }}</p>
-    </div>
-</div>
-
- #}
 <!-- 시스템 목록 -->
 <div>
     <div>

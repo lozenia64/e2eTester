@@ -60,7 +60,7 @@
 - Consumes: `execute.html` 의 기존 컨텍스트 — `systems`(리스트), `systems_payload`(dict), `analyzer_status`, `email_status`, `current_user`. 라우트(`app/api/routes_dashboard.py:56`)는 **바꾸지 않는다.**
 - Produces: `.exec` 루트 요소, `x-data="{ selected: '<첫 항목 키>' }"` Alpine 스코프, 좌측 항목의 `data-exec-target="{key}"`, 우측 패널의 `data-exec-panel="{key}"`. `key` 는 `suite` 또는 `system.system_code`. Task 2·3 이 이 계약 위에 얹힌다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/test_execute_layout.py` 를 만든다. 기존 템플릿 렌더 테스트의 방식을 따른다 — `TestClient` 로 `/runs/execute` 를 받아 HTML 을 문자열로 단언한다. 인증 의존성 오버라이드 방식은 `tests/test_dashboard_fragments_http.py` 를 참고한다.
 
@@ -197,14 +197,14 @@ def test_single_system_user_still_gets_a_layout(client) -> None:
     assert 'data-exec-target="mhm"' not in html
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
 Expected: FAIL — `test_root_carries_the_exec_shell_class` · `test_system_accordions_are_gone` · `test_every_system_has_a_left_target_and_a_right_panel` · `test_suite_is_selected_first` 4건. `test_form_contract_survives` 와 `test_schedule_form_stays_collapsible` 은 PASS(현행 마크업이 이미 만족).
 
 `FakeRunService` 시그니처가 맞지 않으면 `tests/test_dashboard_fragments_http.py` 의 정의를 보고 `list_systems()` 가 필요한 형태를 돌려주도록 픽스처를 맞춘다.
 
-- [ ] **Step 3: 셸 CSS 를 만든다**
+- [x] **Step 3: 셸 CSS 를 만든다**
 
 `app/web/frontend/styles/execute.css`:
 
@@ -372,7 +372,7 @@ body:has(.exec) main > div {
 .exec-panel[hidden] { display: none; }
 ```
 
-- [ ] **Step 4: base.css 에 임포트를 넣고 `[x-cloak]` 을 승격시킨다**
+- [x] **Step 4: base.css 에 임포트를 넣고 `[x-cloak]` 을 승격시킨다**
 
 `app/web/frontend/styles/base.css` 의 `@import "./dashboard.css";` 다음 줄:
 
@@ -384,7 +384,7 @@ body:has(.exec) main > div {
 
 `execute.css` 에 같은 규칙을 다시 쓰지 마라 — 그것이 중복이다. 옮긴 뒤 대시보드 드로어(`dashboard.html:59`)가 여전히 깜빡이지 않는지 확인한다.
 
-- [ ] **Step 5: 좌측 목록 포함 파일을 만든다**
+- [x] **Step 5: 좌측 목록 포함 파일을 만든다**
 
 `app/web/templates/execute/_system_list.html`:
 
@@ -433,7 +433,7 @@ body:has(.exec) main > div {
 </aside>
 ```
 
-- [ ] **Step 6: execute.html 을 2열로 바꾼다**
+- [x] **Step 6: execute.html 을 2열로 바꾼다**
 
 `{% block content %}` 의 구조를 바꾼다. **폼 내부는 손대지 않는다** — `<details>`/`<summary>` 껍데기만 벗기고 `<form>` 이하를 그대로 패널 안으로 옮긴다.
 
@@ -483,12 +483,12 @@ body:has(.exec) main > div {
 2. **`{% set tone_pill = ... %}`(`execute.html:6`)을 지운다.** 색명 키 맵이며 P3-4 가 P4 로 넘긴 부채다. 유일한 사용처가 상태 카드 3종인데 Step 5 에서 텍스트로 대체했다.
 3. **페이지 헤더(`execute.html:16~21`)를 지운다.** 넌스크롤 2열에서 헤더는 높이만 먹고, 좌측 열의 "무엇을 점검할까"가 그 역할을 한다. 사이드바가 이미 현재 위치를 표시한다.
 
-- [ ] **Step 7: 테스트가 통과하는지 확인한다**
+- [x] **Step 7: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
 Expected: PASS (6 passed)
 
-- [ ] **Step 8: 빌드하고 눈으로 확인한다**
+- [x] **Step 8: 빌드하고 눈으로 확인한다**
 
 Run: `npm run build`
 
@@ -498,7 +498,7 @@ Run: `npm run build`
 - 전체 순차 점검이 처음부터 선택돼 있다
 - 실행 버튼이 스크롤 없이 보인다(모듈 많은 시스템은 우측 열이 내부 스크롤)
 
-- [ ] **Step 9: 커밋**
+- [x] **Step 9: 커밋**
 
 ```bash
 git add app/web/frontend/styles/execute.css app/web/frontend/styles/base.css app/web/templates/execute.html app/web/templates/execute/_system_list.html tests/test_execute_layout.py
