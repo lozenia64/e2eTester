@@ -257,6 +257,8 @@ def test_timeline_lane_carries_geometry_from_server():
     html = client.get("/wall").text
     assert "--lane-left:" in html
     assert "--lane-width:" in html
+    assert 'class="wall-lane__span"\n                data-tone="passed"' in html
+    assert 'class="wall-lane__span"\n                data-tone="anomaly"' in html
 
 
 def test_timeline_marks_now():
