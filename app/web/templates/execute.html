@@ -3,7 +3,6 @@
 {% block title %}E2E Systems{% endblock %}
 
 {% block content %}
-{% set tone_pill = {'red': 'bg-red-100 text-red-700', 'orange': 'bg-orange-100 text-orange-700', 'yellow': 'bg-amber-100 text-amber-700', 'blue': 'bg-blue-100 text-blue-700'} %}
 {% set system_visual = {
     'hom': {'accent': 'indigo', 'channel': 'pc'},
     'mhm': {'accent': 'sky', 'channel': 'mobile'},
@@ -13,6 +12,10 @@
     'chbot': {'accent': 'cyan', 'channel': 'mobile'},
 } %}
 
+<div class="exec" x-data="{ selected: 'suite' }">
+{% include "execute/_system_list.html" %}
+<div class="exec-detail" id="suite-section">
+{#
 <!-- 페이지 헤더 -->
 <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Run Inspection</p>
@@ -65,15 +68,16 @@
     </div>
 </div>
 
+ #}
 <!-- 시스템 목록 -->
-<div class="space-y-4">
+<div>
     <div>
         <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템</h2>
         <p class="text-sm text-gray-500">카드를 펼쳐 입력값을 채운 뒤 점검을 시작하세요. 맨 위 카드에서 전체 시스템 순차 점검도 시작할 수 있습니다.</p>
     </div>
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2" id="suite-section">
-        <details class="system-card system-card--suite group col-span-full">
-            <summary class="system-card__summary">
+    <div>
+        <section class="exec-panel" data-exec-panel="suite" x-show="selected === 'suite'" x-cloak>
+            <div class="system-card__summary" hidden>
                 <div class="system-card__identity">
                     <span class="system-card__icon" aria-hidden="true">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 15l3 3m0 0l3-3m-3 3V9"/></svg>
@@ -89,8 +93,8 @@
                     <span class="system-card__chip system-card__chip--highlight">순차 실행</span>
                     <svg class="system-card__chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                 </div>
-            </summary>
-            <form id="suite-form" class="system-card__body grid gap-x-4 gap-y-5 sm:grid-cols-2">
+            </div>
+            <form id="suite-form" class="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                 <p class="sm:col-span-2 text-xs leading-relaxed text-gray-500">선택한 시스템을 display_order 순으로 실행합니다. 한 시스템이 실패해도 다음 시스템 점검은 계속됩니다.</p>
 
                 <label class="form-field flex flex-col gap-1.5">
@@ -162,8 +166,8 @@
                     </div>
                 </div>
 
-                <details class="sched group sm:col-span-2 overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/70 via-white to-white shadow-sm" data-role="schedule-form" data-mode="daily" data-dom="1" data-interval-unit="hour">
-                    <summary class="flex cursor-pointer list-none items-center gap-3 p-5 transition hover:bg-violet-50/40 [&::-webkit-details-marker]:hidden">
+                <div class="sched group sm:col-span-2 overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/70 via-white to-white shadow-sm" data-role="schedule-form" data-mode="daily" data-dom="1" data-interval-unit="hour">
+                    <div class="flex items-center gap-3 p-5">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600/10 text-violet-600">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 13.5V16l1.5 1"/></svg>
                         </span>
@@ -172,7 +176,7 @@
                             <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 맞춰 전체 점검을 자동으로 실행합니다. <span class="font-medium text-violet-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
                         </div>
                         <svg class="h-5 w-5 shrink-0 text-violet-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </summary>
+                    </div>
                     <div class="border-t border-violet-100/70 px-5 pb-5 pt-4">
                     <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 선택한 시스템·브라우저 모드·시스템별 인증 정보로 전체 모듈을 순차 실행합니다. 무인 실행이라 OTP 대기에서 멈출 수 있습니다.</p>
 
@@ -244,19 +248,19 @@
                     </div>
                     <p class="is-hidden mt-2 text-sm font-medium text-red-600" data-role="suite-schedule-feedback" role="alert"></p>
                     </div>
-                </details>
+                </div>
 
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
                     <p class="is-hidden text-sm font-medium text-red-600" data-role="suite-feedback" role="alert"></p>
                     <button type="submit" id="suite-start-button" class="inline-flex items-center justify-center rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-60">전체 점검 시작</button>
                 </div>
             </form>
-        </details>
+        </section>
 
         {% for system in systems %}
         {% set visual = system_visual.get(system.system_code, {'accent': 'indigo', 'channel': 'pc'}) %}
-        <details class="system-card system-card--accent-{{ visual.accent }} system-card--channel-{{ visual.channel }} group">
-            <summary class="system-card__summary">
+        <section class="exec-panel exec-panel--accent-{{ visual.accent }}" data-exec-panel="{{ system.system_code }}" x-show="selected === '{{ system.system_code }}'" x-cloak>
+            <div class="system-card__summary" hidden>
                 <div class="system-card__identity">
                     <span class="system-card__icon" aria-hidden="true">
                         {% if visual.channel == 'mobile' %}
@@ -281,8 +285,8 @@
                     {% endif %}
                     <svg class="system-card__chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                 </div>
-            </summary>
-            <form class="system-form system-card__body grid gap-x-4 gap-y-5 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
+            </div>
+            <form class="system-form grid gap-x-4 gap-y-5 sm:grid-cols-2" data-system-code="{{ system.system_code }}">
                 <script type="application/json" data-role="system-definition">{{ systems_payload[system.system_code] | tojson }}</script>
                 {% if system.supported_auth_methods %}
                 <section class="preset-panel sm:col-span-2" data-role="preset-panel" data-system-code="{{ system.system_code }}">
@@ -364,8 +368,8 @@
                     {% endif %}
                 </label>
                 {% endfor %}
-                <details class="sched group sm:col-span-2 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-white shadow-sm" data-role="schedule-form" data-mode="daily" data-dom="1" data-interval-unit="hour">
-                    <summary class="flex cursor-pointer list-none items-center gap-3 p-5 transition hover:bg-indigo-50/40 [&::-webkit-details-marker]:hidden">
+                <div class="sched group sm:col-span-2 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-white shadow-sm" data-role="schedule-form" data-mode="daily" data-dom="1" data-interval-unit="hour">
+                    <div class="flex items-center gap-3 p-5">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-600">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 13.5V16l1.5 1"/></svg>
                         </span>
@@ -374,7 +378,7 @@
                             <p class="mt-0.5 truncate text-xs leading-relaxed text-gray-500">정해진 일정에 맞춰 점검을 자동으로 실행합니다. <span class="font-medium text-indigo-600 group-open:hidden">클릭해 일정을 설정하세요.</span></p>
                         </div>
                         <svg class="h-5 w-5 shrink-0 text-indigo-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </summary>
+                    </div>
                     <div class="border-t border-indigo-100/70 px-5 pb-5 pt-4">
                     <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 ring-1 ring-inset ring-amber-100">위에서 입력한 값·모듈 선택 그대로 자동 실행됩니다. 무인 실행이라 OTP 대기에서 멈출 수 있습니다.</p>
 
@@ -454,16 +458,17 @@
                     </div>
                     <p class="is-hidden mt-2 text-sm font-medium text-red-600" data-role="schedule-feedback" role="alert"></p>
                     </div>
-                </details>
+                </div>
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-5 sm:col-span-2">
                     <p class="is-hidden text-sm font-medium text-red-600" data-role="form-feedback" role="alert"></p>
                     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60" data-system-code="{{ system.system_code }}">점검 시작</button>
                 </div>
             </form>
-        </details>
+        </section>
         {% endfor %}
 
     </div>
+</div>
 </div>
 
 <!-- 진행 중 / 최근 Run -->

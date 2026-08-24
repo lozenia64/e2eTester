@@ -8,3 +8,8 @@
 @import "./legacy-aliases.css";
 @import "./app.css";
 @import "./dashboard.css";
+@import "./execute.css";
+
+[x-cloak] {
+  display: none !important;
+}

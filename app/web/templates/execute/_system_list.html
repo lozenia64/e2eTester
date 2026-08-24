@@ -1,0 +1,21 @@
+{# 좌측 선택 목록. 오늘 상태 배지는 Cycle 1a Task 3 이 채운다(자리만 둔다). #}
+<aside class="exec-master">
+  <p class="exec-master__title">무엇을 점검할까</p>
+  <div class="exec-master__list" role="tablist" aria-label="점검 대상">
+    <button type="button" role="tab" class="exec-item exec-item--suite" data-exec-target="suite" :aria-selected="selected === 'suite'" @click="selected = 'suite'">
+      <span class="exec-item__name">전체 순차 점검</span>
+      <span class="exec-item__meta">{{ systems|length }}개</span>
+    </button>
+    {% for system in systems %}
+    <button type="button" role="tab" class="exec-item" data-exec-target="{{ system.system_code }}" :aria-selected="selected === '{{ system.system_code }}'" @click="selected = '{{ system.system_code }}'">
+      <span class="exec-item__name">{{ system.name }}</span>
+      <span class="exec-item__badge" data-exec-badge="{{ system.system_code }}"></span>
+    </button>
+    {% endfor %}
+  </div>
+  <div class="exec-env">
+    <div class="exec-env__row"><span>등록 시스템</span><span>{{ systems|length }}개</span></div>
+    <div class="exec-env__row"><span>AI 분석</span><span>{{ analyzer_status.title }}</span></div>
+    <div class="exec-env__row"><span>종료 메일</span><span>{{ email_status.title }}</span></div>
+  </div>
+</aside>
