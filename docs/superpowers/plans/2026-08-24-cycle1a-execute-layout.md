@@ -800,7 +800,7 @@ git commit -m "feat(dashboard): 시스템별 파생 배지를 응답에 노출"
 
 #### 3b. 배지 컴포넌트에 라벨 주입구를 연다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/components/status-badge/index.test.ts` 에 추가한다.
 
@@ -821,12 +821,12 @@ it("합성 상태의 톤은 pending 으로 떨어진다 — 색은 회색이어�
 });
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `npm run test -- status-badge`
 Expected: FAIL — 첫 테스트가 `"대기"` 를 받는다. `MODULE_STATUS_LABELS` 에 `not_inspected` 키가 없어 `pending` 라벨로 떨어지기 때문이다(설계 §4.5.1)
 
-- [ ] **Step 3: 주입구를 연다**
+- [x] **Step 3: 주입구를 연다**
 
 ```typescript
 export function renderStatusBadge(
@@ -844,12 +844,12 @@ export function renderStatusBadge(
 }
 ```
 
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `npm run test && npm run typecheck && npm run lint`
 Expected: PASS — 기존 호출부는 `label` 을 넘기지 않으므로 동작이 바뀌지 않는다
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add app/web/frontend/components/status-badge/
