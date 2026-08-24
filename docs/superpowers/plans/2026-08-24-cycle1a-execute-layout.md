@@ -640,7 +640,7 @@ Task 1 이 `class="system-card"` 의 **마지막 소비자를 없앴다.** `app.
 
 `::-webkit-details-marker` 규칙은 `<details>` 전용이라 특히 무의미해졌다.
 
-- [ ] **Step 1: 소비자가 정말 없는지 확인한다**
+- [x] **Step 1: 소비자가 정말 없는지 확인한다**
 
 Run: `grep -rn "system-card" app/web/templates/ app/web/frontend/ --include=*.html --include=*.jinja --include=*.ts --include=*.css | grep -v "styles/app.css"`
 
@@ -648,7 +648,7 @@ Expected: `primitives.css` 의 주석 한 줄 외에 없음. `app/web/static/app
 
 템플릿이나 컴포넌트에서 하나라도 나오면 **멈추고 보고해라.** 내가 놓친 소비자가 있다는 뜻이다.
 
-- [ ] **Step 2: 실패하는 테스트를 쓴다**
+- [x] **Step 2: 실패하는 테스트를 쓴다**
 
 `tests/test_execute_layout.py` 에 추가한다.
 
@@ -665,12 +665,12 @@ def test_orphaned_system_card_css_is_gone() -> None:
     assert "system-card" not in css
 ```
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -k orphan -v`
 Expected: FAIL — 약 60곳이 남아 있다
 
-- [ ] **Step 4: 지운다**
+- [x] **Step 4: 지운다**
 
 `.system-card` 로 시작하는 규칙 전부를 지운다. **미디어쿼리 안에도 흩어져 있으므로**(예: `:354` 부근) 파일 전체를 훑어야 한다. 규칙만 지우고 그것을 감싼 미디어쿼리 블록이 비면 그 블록도 함께 지운다.
 
@@ -678,7 +678,7 @@ Expected: FAIL — 약 60곳이 남아 있다
 
 **다른 선택자는 건드리지 마라.** 같은 미디어쿼리 안에 `.status-metric-card` 등 살아 있는 규칙이 섞여 있을 수 있다.
 
-- [ ] **Step 5: 확인한다**
+- [x] **Step 5: 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v && python3 scripts/check_frontend_gates.py && npm run build`
 Expected: 전부 통과
@@ -687,7 +687,7 @@ Run: `wc -l app/web/frontend/styles/app.css`
 
 그다음 `/runs/execute` 와 `/` 를 열어 **레이아웃이 무너지지 않았는지** 확인한다. 지운 규칙이 실제로 아무 요소에도 안 걸렸다면 화면은 변하지 않아야 한다 — 하나라도 달라 보이면 살아 있는 소비자를 지운 것이다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/web/frontend/styles/app.css tests/test_execute_layout.py
