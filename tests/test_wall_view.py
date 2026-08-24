@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from app.contexts.insights.application.wall_view import build_wall_view
 from app.core.enums import ModuleStatus
 from app.core.status_labels import STATUS_TONES, module_status_label
@@ -285,3 +287,111 @@ def test_wall_view_source_has_no_status_label_literals():
     source = Path("app/contexts/insights/application/wall_view.py").read_text(encoding="utf-8")
     for forbidden in ("정상", "이상징후", "점검실패", "입력 대기", "실행 중"):
         assert forbidden not in source, forbidden
+
+
+def _sys_with_span(code: str, first: str, last: str, *, anomaly: int = 0) -> dict:
+    return {
+        "system_code": code,
+        "system_name": code,
+        "module_total": 3,
+        "counts": {
+            "passed": 3 - anomaly,
+            "anomaly": anomaly,
+            "error": 0,
+            "running": 0,
+            "other": 0,
+            "not_inspected": 0,
+        },
+        "modules": [],
+        "first_at": first,
+        "last_at": last,
+    }
+
+
+def test_timeline_is_empty_when_nothing_was_inspected():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [_sys_with_span("HOM", None, None)]
+    tl = build_timeline(systems, now_iso="2026-08-24T08:25:00+09:00")
+    assert tl["has_data"] is False
+    assert tl["lanes"] == []
+
+
+def test_timeline_places_lane_by_elapsed_ratio():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [
+        _sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T07:30:00+09:00"),
+        _sys_with_span("MHM", "2026-08-24T08:00:00+09:00", "2026-08-24T08:15:00+09:00"),
+    ]
+    tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
+    assert tl["has_data"] is True
+    assert tl["span_minutes"] == 120  # 07:00 -> 09:00
+    hom, mhm = tl["lanes"]
+    assert hom["left_pct"] == 0.0
+    assert hom["width_pct"] == 25.0  # 30분 / 120분
+    assert mhm["left_pct"] == 50.0  # 60분 / 120분
+    assert mhm["width_pct"] == 12.5  # 15분 / 120분
+    assert tl["now_pct"] == 100.0
+
+
+def test_timeline_enforces_minimum_window_of_30_minutes():
+    """전 시스템이 몇 분 안에 끝나도 스팬이 화면을 가득 채우지 않는다(설계 §4.3)."""
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [_sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T07:05:00+09:00")]
+    tl = build_timeline(systems, now_iso="2026-08-24T07:06:00+09:00")
+    assert tl["span_minutes"] == 30
+    assert tl["lanes"][0]["width_pct"] == pytest.approx(16.67, abs=0.01)  # 5분 / 30분
+
+
+def test_timeline_enforces_minimum_lane_width():
+    """26초 Run 이 사라지지 않는다(설계 §4.3)."""
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [
+        _sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T08:00:00+09:00"),
+        _sys_with_span("CHB", "2026-08-24T07:30:00+09:00", "2026-08-24T07:30:26+09:00"),
+    ]
+    tl = build_timeline(systems, now_iso="2026-08-24T08:25:00+09:00")
+    chb = tl["lanes"][1]
+    assert chb["width_pct"] == 0.8
+
+
+def test_timeline_survives_reversed_timestamps():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [_sys_with_span("HOM", "2026-08-24T08:00:00+09:00", "2026-08-24T07:00:00+09:00")]
+    tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
+    assert tl["lanes"][0]["width_pct"] == 0.8
+    assert tl["lanes"][0]["left_pct"] >= 0.0
+
+
+def test_timeline_lane_tone_matches_system_tone():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [
+        _sys_with_span("FP", "2026-08-24T07:00:00+09:00", "2026-08-24T07:10:00+09:00", anomaly=1)
+    ]
+    tl = build_timeline(systems, now_iso="2026-08-24T08:00:00+09:00")
+    assert tl["lanes"][0]["tone"] == "anomaly"
+
+
+def test_timeline_emits_five_ticks_spanning_the_window():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [_sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T07:30:00+09:00")]
+    tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
+    assert [t["left_pct"] for t in tl["ticks"]] == [0.0, 25.0, 50.0, 75.0, 100.0]
+    assert [t["label"] for t in tl["ticks"]] == ["07:00", "07:30", "08:00", "08:30", "09:00"]
+
+
+def test_systems_never_inspected_are_dropped_from_lanes():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [
+        _sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T07:30:00+09:00"),
+        _sys_with_span("HRP", None, None),
+    ]
+    tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
+    assert [lane["code"] for lane in tl["lanes"]] == ["HOM"]

@@ -6,6 +6,7 @@ this module reduces it to the view shape the wall template needs.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.enums import ModuleStatus
@@ -106,6 +107,70 @@ def _system_tone(counts: dict[str, Any]) -> str:
         if int(counts.get(bucket, 0) or 0) > 0:
             return _BUCKET_TO_TONE[bucket]
     return "passed"
+
+
+# 점검 창이 짧아도 스팬이 화면을 가득 채우지 않게 하는 하한(설계 §4.3).
+_MIN_WINDOW = timedelta(minutes=30)
+# 26초 Run 이 사라지지 않게 하는 폭 하한(%). 1920px 에서 약 15px.
+_MIN_LANE_WIDTH_PCT = 0.8
+_TICK_COUNT = 5
+
+
+def _pct(part: timedelta, whole: timedelta) -> float:
+    if whole.total_seconds() <= 0:
+        return 0.0
+    return round(part.total_seconds() / whole.total_seconds() * 100, 4)
+
+
+def build_timeline(systems: list[dict[str, Any]], *, now_iso: str) -> dict[str, Any]:
+    """오늘의 점검 창을 x축으로 하는 시스템별 스팬(설계 §4.3).
+
+    축의 범위는 '오늘 첫 점검 → 지금'이다. 24시간 축은 실측상 94% 가 빈 공간이 된다
+    (설계 §2). 창이 30분보다 짧으면 30분으로 늘려 잡는다.
+    """
+    now = datetime.fromisoformat(now_iso)
+    spans = [
+        (
+            system,
+            datetime.fromisoformat(system["first_at"]),
+            datetime.fromisoformat(system["last_at"]),
+        )
+        for system in systems
+        if system.get("first_at") and system.get("last_at")
+    ]
+    if not spans:
+        return {"has_data": False, "span_minutes": 0, "now_pct": 0.0, "lanes": [], "ticks": []}
+
+    origin = min(first for _, first, _ in spans)
+    end = max(now, origin + _MIN_WINDOW)
+    window = end - origin
+
+    lanes = [
+        {
+            "code": system["system_code"],
+            "name": system.get("system_name", system["system_code"]),
+            "tone": _system_tone(system.get("counts", {})),
+            "left_pct": _pct(max(first - origin, timedelta(0)), window),
+            "width_pct": max(_pct(max(last - first, timedelta(0)), window), _MIN_LANE_WIDTH_PCT),
+        }
+        for system, first, last in spans
+    ]
+
+    ticks = [
+        {
+            "label": (origin + window * (i / (_TICK_COUNT - 1))).strftime("%H:%M"),
+            "left_pct": round(i / (_TICK_COUNT - 1) * 100, 4),
+        }
+        for i in range(_TICK_COUNT)
+    ]
+
+    return {
+        "has_data": True,
+        "span_minutes": int(window.total_seconds() // 60),
+        "now_pct": _pct(now - origin, window),
+        "lanes": lanes,
+        "ticks": ticks,
+    }
 
 
 def build_wall_view(summary: dict[str, Any]) -> dict[str, Any]:
