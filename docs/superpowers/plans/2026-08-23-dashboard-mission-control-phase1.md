@@ -194,8 +194,12 @@ def test_carries_label_tone_run_id_and_recovered():
     systems = [_sysdef("hom", ["login"])]
     rows = [
         _row_at(
-            5, 0, module_id="login", status=ModuleStatus.PASSED,
-            last_run_id="run-42", recovered=True,
+            5,
+            0,
+            module_id="login",
+            status=ModuleStatus.PASSED,
+            last_run_id="run-42",
+            recovered=True,
         )
     ]
     feed = build_activity_feed(rows, systems, tz=KST)
