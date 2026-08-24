@@ -78,27 +78,47 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 
+from datetime import UTC, datetime
+
 from app.api.dependencies import get_run_service
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
+from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import FakeRunService
 
 
+GEN_AT = datetime(2026, 8, 25, 5, 0, tzinfo=UTC)
+
+
+def _user(codes: list[str]) -> User:
+    """User 는 hashed_password·created_at 이 필수다(기본값 없음) — 빠뜨리면 ValidationError."""
+    return User(
+        user_id="exec_user",
+        email="operator@test.local",
+        name="점검자",
+        role="user",
+        hashed_password="x",
+        is_active=True,
+        allowed_system_codes=codes,
+        created_at=GEN_AT,
+    )
+
+
 @pytest.fixture()
-def client() -> TestClient:
+def registry() -> ModuleRegistry:
+    return ModuleRegistry()
+
+
+@pytest.fixture()
+def client(registry: ModuleRegistry) -> TestClient:
+    codes = [s.system_code for s in registry.list_systems()]
     app = FastAPI()
     app.include_router(dashboard_router)
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
-    user = User(
-        user_id="u1",
-        email="operator@example.com",
-        name="점검자",
-        role="user",
-        allowed_system_codes=["hom", "mhm", "fp", "hrp", "hwtc", "chbot"],
-    )
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_run_service] = lambda: FakeRunService()
+    app.dependency_overrides[get_current_user] = lambda: _user(codes)
+    # FakeRunService 는 registry 를 받는다 — 인자 없이 만들면 TypeError.
+    app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return TestClient(app)
 
 
@@ -154,15 +174,7 @@ def test_form_contract_survives(client) -> None:
 
 def test_single_system_user_still_gets_a_layout(client) -> None:
     """allowed_system_codes 가 1개인 사용자에게도 좌우 2열이 성립해야 한다."""
-    app = client.app
-    solo = User(
-        user_id="u2",
-        email="solo@example.com",
-        name="단일",
-        role="user",
-        allowed_system_codes=["hom"],
-    )
-    app.dependency_overrides[get_current_user] = lambda: solo
+    client.app.dependency_overrides[get_current_user] = lambda: _user(["hom"])
     html = client.get("/runs/execute").text
     assert 'data-exec-target="suite"' in html
     assert 'data-exec-target="hom"' in html
@@ -344,13 +356,17 @@ body:has(.exec) main > div {
 .exec-panel[hidden] { display: none; }
 ```
 
-- [ ] **Step 4: base.css 에 임포트를 넣는다**
+- [ ] **Step 4: base.css 에 임포트를 넣고 `[x-cloak]` 을 승격시킨다**
 
 `app/web/frontend/styles/base.css` 의 `@import "./dashboard.css";` 다음 줄:
 
 ```css
 @import "./execute.css";
 ```
+
+그리고 `[x-cloak] { display: none !important; }`(현재 `dashboard.css:255`)를 `base.css` 로 옮긴다. 이 규칙은 Alpine 이 초기화되기 전 `x-show` 요소가 번쩍이는 것을 막는 **전역 리셋**인데, 화면 하나의 스타일시트 안에 있다. 이 계획이 두 번째 소비자를 만드므로 승격 조건("두 번째 화면이 요구하면 올린다")이 충족됐다.
+
+`execute.css` 에 같은 규칙을 다시 쓰지 마라 — 그것이 중복이다. 옮긴 뒤 대시보드 드로어(`dashboard.html:59`)가 여전히 깜빡이지 않는지 확인한다.
 
 - [ ] **Step 5: 좌측 목록 포함 파일을 만든다**
 
@@ -516,7 +532,11 @@ Expected: FAIL — `exec-graph` 없음, 그래프가 폼 필드 뒤
 
 - [ ] **Step 3: 그래프 스타일을 이사시킨다**
 
-`app/web/frontend/styles/app.css` 의 `427~570` 구간(`.module-graph-viewport` 부터 `.module-graph-node.is-locked` 계열까지)을 **잘라내어** `execute.css` 끝으로 옮긴다. 선언은 한 줄도 바꾸지 않는다 — 이사만 한다.
+`app/web/frontend/styles/app.css` 의 모듈 그래프 절을 **잘라내어** `execute.css` 끝으로 옮긴다. 선언은 한 줄도 바꾸지 않는다 — 이사만 한다.
+
+경계는 줄 번호가 아니라 **선택자로 잡는다**(앞선 태스크가 줄 수를 바꿀 수 있다). 시작은 `.module-graph-viewport`(현재 `:427`), 끝은 `.module-graph-node.is-locked .module-graph-title` 블록의 닫는 중괄호(현재 `:576`)다. 그 사이 약 150줄이 전부 `.module-graph-*` 선택자인지 옮기기 전에 확인한다.
+
+Run: `grep -n "^\.[a-z]" app/web/frontend/styles/app.css | sed -n '/427/,/576/p'`
 
 옮긴 뒤 `execute.css` 에 크기 규칙을 덧붙인다:
 
@@ -908,7 +928,17 @@ git commit -m "feat(execute): 좌측 목록에 오늘 상태 배지 — 대시�
 
 - [ ] **Step 1: 테스트를 쓴다**
 
-`tests/test_dashboard_viewport.py` 의 구조(uvicorn 스레드 + Playwright)를 그대로 따른다. 포트 확보 `_free_port()` · 앱 조립 · `pytest.importorskip("playwright")` 포함.
+`tests/test_dashboard_viewport.py` 의 구조를 따른다. **그 파일의 실제 이름을 쓴다** — 초안이 지어낸 `page_factory` · `BASE_URL` 은 존재하지 않는다. 실측한 재사용 자산은 이렇다.
+
+| 이름 | 종류 | 용도 |
+| --- | --- | --- |
+| `_free_port()` | 헬퍼 | 빈 포트 확보 |
+| `_wait_for_server(host, port)` | 헬퍼 | 기동 대기 |
+| `_assert_no_scroll(page, selector)` | 헬퍼 | **이미 있다** — 요소가 스크롤하지 않음을 단언 |
+| `browser` | 모듈 스코프 픽스처 | `sync_playwright()` 수명 관리 |
+| `live_server` | 모듈 스코프 픽스처 | uvicorn 스레드를 띄우고 `base_url` 문자열을 yield |
+
+주의: 그 파일의 `_build_dashboard_test_app()` 은 **daily 라우터만** 조립한다. `/runs/execute` 는 `routes_dashboard.py` 의 라우터가 서빙하므로 **이 파일용 앱 빌더를 따로 만든다.** Task 1 의 `client` 픽스처가 조립한 것과 같은 구성(dashboard 라우터 + `/static` 마운트 + `get_current_user`·`get_run_service` 오버라이드)을 uvicorn 으로 띄우면 된다.
 
 ```python
 """점검 실행 넌스크롤 Playwright 테스트.
@@ -919,10 +949,19 @@ Chromium 미설치 시 ``python3 -m playwright install chromium`` 후 재실행.
 VIEWPORTS = [(1366, 768), (1920, 1080), (2560, 1440)]
 
 
+@pytest.fixture()
+def page(browser, live_server):
+    """뷰포트를 바꿔 가며 쓰므로 컨텍스트를 테스트마다 새로 연다."""
+    context = browser.new_context()
+    page = context.new_page()
+    yield page
+    context.close()
+
+
 @pytest.mark.parametrize("width,height", VIEWPORTS)
-def test_no_page_scroll(page_factory, width, height):
-    page = page_factory(width, height)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_no_page_scroll(page, live_server, width, height):
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector(".exec")
     overflow = page.evaluate(
         "() => document.documentElement.scrollHeight - document.documentElement.clientHeight"
@@ -931,17 +970,25 @@ def test_no_page_scroll(page_factory, width, height):
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
-def test_start_button_is_visible_without_scrolling(page_factory, width, height):
-    page = page_factory(width, height)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_start_button_is_visible_without_scrolling(page, live_server, width, height):
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector("#suite-start-button")
     assert page.locator("#suite-start-button").is_visible()
 
 
-def test_exactly_one_internal_scroller(page_factory):
+def test_left_column_does_not_scroll(page, live_server):
+    """좌측 목록은 넌스크롤 예산에서 스크롤을 갖지 않는다 — 기존 헬퍼를 재사용한다."""
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
+    page.wait_for_selector(".exec")
+    _assert_no_scroll(page, ".exec-master")
+
+
+def test_exactly_one_internal_scroller(page, live_server):
     """스크롤 소유권은 우측 조건 열 하나뿐이다(설계 §4.2 규격 2번)."""
-    page = page_factory(1920, 1080)
-    page.goto(f"{BASE_URL}/runs/execute")
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector(".exec")
     scrollers = page.evaluate(
         """() => Array.from(document.querySelectorAll('.exec *'))
@@ -955,16 +1002,16 @@ def test_exactly_one_internal_scroller(page_factory):
     assert len(scrollers) <= 1, f"내부 스크롤러가 여럿: {scrollers}"
 
 
-def test_selecting_a_system_swaps_the_panel(page_factory):
-    page = page_factory(1920, 1080)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_selecting_a_system_swaps_the_panel(page, live_server):
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector('[data-exec-target="hom"]')
     page.click('[data-exec-target="hom"]')
     assert page.locator('[data-exec-panel="hom"]').is_visible()
     assert not page.locator('[data-exec-panel="suite"]').is_visible()
 ```
 
-`page_factory` 픽스처와 `BASE_URL` 은 `tests/test_dashboard_viewport.py` 의 서버 기동 픽스처를 그대로 옮겨 쓴다. 그 파일이 픽스처를 모듈 안에 두고 있으면 공용 모듈로 뽑지 말고 **복사한다** — 두 번째 사용처가 생겼을 뿐이고, 세 번째가 생기면 그때 뽑는다.
+`browser` · `live_server` 픽스처와 `_free_port` · `_wait_for_server` · `_assert_no_scroll` 헬퍼는 `tests/test_dashboard_viewport.py` 에서 **복사한다.** 공용 모듈로 뽑지 마라 — 두 번째 사용처가 생겼을 뿐이고, 세 번째가 생기면 그때 뽑는다. 다만 `live_server` 가 조립하는 앱은 위 주의대로 dashboard 라우터판으로 바꿔야 한다.
 
 - [ ] **Step 2: 실행한다**
 
@@ -1007,9 +1054,29 @@ git commit -m "test(execute): 넌스크롤·스크롤 소유권·패널 전환 �
 - 좌측: 점검 대상 선택 목록(SUITE + 허용 시스템). 각 항목에 오늘 상태 배지
 - 우측: 선택 대상의 실행 조건 패널. 모듈 의존성 그래프가 상단 지배 요소
 - 기본 선택은 SUITE
-- 모든 뷰포트에서 `body` 세로 스크롤 0. 내부 스크롤은 우측 패널 하나
 - `< 1024px` 에서 1열로 붕괴하고 좌측 목록은 가로 스크롤 칩 행이 된다
 ```
+
+§5 수용 기준에 **AC 를 신설한다.** 이 저장소는 `tests/test_spec_traceability.py` 가 `@pytest.mark.spec("SPEC-...", "AC-...")` 마커를 실제 AC 제목과 대조한다. FR 만 추가하면 새 테스트에 마커를 달 수 없다.
+
+```markdown
+### AC-003: 넌스크롤 마스터-디테일
+
+- **Given** 허용 시스템이 1~6개인 `operator`
+- **When** `GET /runs/execute` 를 1366 · 1920 · 2560 px 에서 연다
+- **Then** `body` 세로 스크롤이 0이고, 실행 버튼이 스크롤 없이 보이며,
+  내부 스크롤을 갖는 영역은 우측 조건 열 하나뿐이다
+- **And** 좌측 항목을 선택하면 해당 패널만 보이고 나머지는 감춰진다
+```
+
+그다음 Task 4 가 만든 `tests/test_execute_viewport.py` 의 넌스크롤·패널 전환 테스트에 마커를 단다.
+
+```python
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
+```
+
+Run: `python3 -m pytest tests/test_spec_traceability.py -v`
+Expected: PASS — 마커가 실재하는 AC 를 가리켜야 한다. 실패하면 AC 제목 형식(`### AC-003:`)이 어긋난 것이다.
 
 - [ ] **Step 2: 문서 정합성 가드를 돌린다**
 
@@ -1047,7 +1114,9 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 - [ ] `docs/E2E_ARCHITECTURE.md` §5.2 에 새 필드 반영
 - [ ] `/api/dashboard/daily` 차단 상태에서도 실행 동작
 - [ ] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
-- [ ] `app.css` 가 약 140줄 줄었다(모듈 그래프 절 이사)
+- [ ] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
+- [ ] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
+- [ ] `app.css` 가 약 150줄 줄었다(모듈 그래프 절 `:427`~`:576` 이사)
 
 ## 이 계획이 남기는 것
 
