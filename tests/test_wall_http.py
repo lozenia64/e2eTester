@@ -251,6 +251,16 @@ def test_timeline_renders_a_lane_per_inspected_system():
     assert html.count('class="wall-lane"') == 2  # SUMMARY 의 시스템 2개
 
 
+def test_timeline_lanes_have_unique_stable_system_ids():
+    """시스템 삽입·재정렬에도 morph가 같은 레인을 보존할 식별자가 필요하다."""
+    client, _ = _client()
+    html = client.get("/wall").text
+
+    assert 'id="wall-lane-HOM"' in html
+    assert 'id="wall-lane-FP"' in html
+    assert html.count('id="wall-lane-') == 2
+
+
 def test_timeline_lane_carries_geometry_from_server():
     """좌표 계산은 서버가 한다 — 클라이언트 JS 가 없어도 그려진다(D2)."""
     client, _ = _client()

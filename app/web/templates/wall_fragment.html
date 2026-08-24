@@ -19,7 +19,7 @@
     {% else %}
     <div class="wall-timeline__lanes">
       {% for lane in tl.lanes %}
-      <div class="wall-lane">
+      <div class="wall-lane" id="wall-lane-{{ lane.code | e }}">
         <span class="wall-lane__code">{{ lane.code }}</span>
         <div class="wall-lane__track">
           <span class="wall-lane__span"
