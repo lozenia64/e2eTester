@@ -69,6 +69,120 @@ def test_fg002_ignores_generated_tokens(tmp_path):
     assert check_fg002_no_hex(tmp_path) == []
 
 
+def test_fg002_flags_hex_in_template(tmp_path):
+    """templates/ 는 어떤 색 게이트도 보지 않던 사각지대였다."""
+    _write(tmp_path, "app/web/templates/x.html", "<style>.a { color: #0ca30c; }</style>")
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+
+
+def test_fg002_flags_hex_in_legacy_script(tmp_path):
+    _write(tmp_path, "app/web/static/legacy.js", 'const c = "#d03b3b";')
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#d03b3b" in problems[0]
+
+
+def test_fg002_ignores_built_bundles(tmp_path):
+    """static/dist 는 빌드 산출물이다 — 우리가 쓴 코드가 아니다."""
+    _write(tmp_path, "app/web/static/dist/assets/main-abc.js", 'var x="#123456";')
+    assert check_fg002_no_hex(tmp_path) == []
+
+
+def test_fg002_allows_theme_color_meta(tmp_path):
+    """<meta name="theme-color"> 는 CSS 변수를 쓸 수 없다 — 브라우저가 리터럴로 읽는다.
+
+    파일 allowlist 로 처리하면 base.html·admin/base.html·login.html 이 영구
+    항목으로 남아 "allowlist 가 비면 완성" 전제가 깨진다(FG-006 이 겪은 실패).
+    """
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta name="theme-color" content="#4f46e5">',
+    )
+    assert check_fg002_no_hex(tmp_path) == []
+
+
+def test_fg002_allows_theme_color_content_before_name_attribute(tmp_path):
+    """theme-color 속성 순서는 고정되지 않는다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta content="#4f46e5" name="theme-color">',
+    )
+    assert check_fg002_no_hex(tmp_path) == []
+
+
+def test_fg002_flags_data_name_theme_color_meta(tmp_path):
+    """data-name은 theme-color 예외를 활성화하는 name 속성이 아니다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta data-name="theme-color" content="#0ca30c">',
+    )
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+
+
+def test_fg002_flags_aria_name_theme_color_meta(tmp_path):
+    """aria-name도 theme-color 예외를 활성화하는 name 속성이 아니다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta aria-name="theme-color" content="#0ca30c">',
+    )
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+
+
+def test_fg002_theme_color_name_pattern_matches_approved_attribute_boundary():
+    """theme-color 예외는 승인된 name 속성 경계만 쓴다."""
+    import scripts.check_frontend_gates as gates
+
+    assert gates._THEME_COLOR_NAME.pattern == r"""(?<![\w-])name\s*=\s*["']theme-color["']"""
+
+
+def test_fg002_flags_hex_beside_theme_color_meta_on_same_line(tmp_path):
+    """theme-color content만 예외이고 같은 줄의 style 색은 여전히 위반이다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta name="theme-color" content="#4f46e5"><style>.a { color: #0ca30c; }</style>',
+    )
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+    assert ":1 " in problems[0]
+
+
+def test_fg002_allowlisted_template_is_skipped(tmp_path):
+    import scripts.check_frontend_gates as gates
+
+    _write(tmp_path, "app/web/templates/insights.html", "<style>.a { color: #123456; }</style>")
+    original = gates.FG002_ALLOWLIST
+    gates.FG002_ALLOWLIST = {"app/web/templates/insights.html"}
+    try:
+        assert check_fg002_no_hex(tmp_path) == []
+    finally:
+        gates.FG002_ALLOWLIST = original
+
+
+def test_fg002_allowlist_only_holds_files_that_still_have_hex():
+    """유예 목록이 실효를 잃은 줄을 품고 있으면 '비면 완성' 신호가 거짓이 된다."""
+    import scripts.check_frontend_gates as gates
+
+    stale = []
+    for rel in gates.FG002_ALLOWLIST:
+        path = gates.REPO_ROOT / rel
+        assert path.exists(), f"allowlist 가 없는 파일을 가리킨다: {rel}"
+        if not re.search(r"#[0-9a-fA-F]{3,8}\b", path.read_text(encoding="utf-8")):
+            stale.append(rel)
+    assert not stale, f"hex 가 남아 있지 않은 allowlist 항목 — 지우세요: {stale}"
+
+
 def test_fg003_flags_hardcoded_korean_status_label(tmp_path):
     _write(tmp_path, "app/web/frontend/lib/x.ts", 'const label = "점검실패";')
     problems = check_fg003_status_source(tmp_path)

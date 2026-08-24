@@ -73,8 +73,6 @@
   }
 
   function systemDotColor(tone) {
-    if (tone === "not_checked") return "var(--st-idle)";
-    if (tone === "passed") return "var(--st-passed)";
     return toneVar(tone);
   }
 
@@ -172,7 +170,7 @@
   }
 
   function statusPillStyle(tone) {
-    const color = tone === "not_checked" ? "#9ca3af" : toneVar(tone);
+    const color = toneVar(tone);
     return `color:${color};background:color-mix(in srgb, ${color} 12%, white)`;
   }
 

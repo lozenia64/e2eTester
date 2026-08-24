@@ -5,5 +5,6 @@
 @import "tailwindcss";
 @import "./primitives.css";
 @import "./tokens.generated.css";
+@import "./legacy-aliases.css";
 @import "./app.css";
 @import "./dashboard.css";

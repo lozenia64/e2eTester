@@ -4,13 +4,6 @@
 
 {% block content %}
 <style>
-  .adm-runs {
-    --st-passed: #0ca30c;
-    --st-anomaly: #fab219;
-    --st-error: #d03b3b;
-    --st-cancelled: #9ca3af;
-    --ease-spring: cubic-bezier(.22, 1, .36, 1);
-  }
   .adm-runs .adm-panel {
     border-radius: 1rem;
     border: 1px solid #e5e7eb;
@@ -91,7 +84,7 @@
     line-height: 1;
     font-size: 0.875rem;
   }
-  .adm-runs .adm-filter-chip button:hover { color: #ef4444; }
+  .adm-runs .adm-filter-chip button:hover { color: var(--st-error-solid); }
   .adm-runs .adm-trend {
     display: flex;
     align-items: flex-end;
@@ -131,7 +124,7 @@
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .adm-runs .adm-attention-card:hover {
-    border-color: #f59e0b;
+    border-color: var(--st-anomaly-solid);
     box-shadow: 0 4px 12px rgb(245 158 11 / 0.12);
   }
   .adm-runs .adm-attention-card--error {
@@ -531,7 +524,7 @@
     font-size: 0.75rem;
     line-height: 1;
   }
-  .adm-runs .adm-saved-view button:hover { color: #ef4444; }
+  .adm-runs .adm-saved-view button:hover { color: var(--st-error-solid); }
   .adm-runs .adm-heatmap-wrap {
     position: relative;
     width: 100%;

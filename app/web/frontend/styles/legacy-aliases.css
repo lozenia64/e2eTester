@@ -1,0 +1,18 @@
+/* 레거시 화면이 쓰는 짧은 상태 별칭 — 한시적 파일.
+
+   인라인 <style> 을 든 화면 7개가 `--st-passed` 같은 짧은 이름을 각자 정의하고
+   있었다. 이름은 SSOT 와 같은데 값이 달라서 같은 상태가 화면마다 다른 색으로 보였다.
+   여기서는 SSOT 토큰만 이어 붙인다. 마지막 사용처가 사라지면 이 파일도 제거한다.
+ */
+:root {
+  --st-passed: var(--st-passed-solid);
+  --st-anomaly: var(--st-anomaly-solid);
+  --st-error: var(--st-error-solid);
+  --st-running: var(--st-running-solid);
+  --st-cancelled: var(--st-cancelled-solid);
+  --st-blocked: var(--st-blocked-solid);
+  --st-idle: var(--st-pending-solid);
+  --st-track: var(--c-gray-200);
+  --st-active: var(--c-indigo-600);
+  --ease-spring: var(--ease-out);
+}

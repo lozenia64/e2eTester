@@ -47,7 +47,7 @@ SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_f
 | 규칙 | 내용 |
 | --- | --- |
 | FG-001 | 템플릿에 외부 CDN `<script>`/`<link>` 금지 |
-| FG-002 | `app/web/frontend/` 내 하드코딩 hex 금지 (생성물 제외) |
+| FG-002 | `app/web/frontend/` · `app/web/templates/` · `app/web/static/*.js` 내 하드코딩 hex 금지 (생성물·`theme-color` meta 제외, allowlist 축소형) |
 | FG-003 | 상태 라벨은 `lib/status.generated.ts` 경유만 |
 | FG-004 | 엔트리·컴포넌트 파일 400줄 상한 |
 | FG-005 | 템플릿의 `/static/` 직접 참조 금지 (allowlist 제외) |

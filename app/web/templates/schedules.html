@@ -5,15 +5,6 @@
 {% block content %}
 <style>
   /* ── 예약 점검 관리 센터 (scoped: .schedc-*) ─────────────────────────── */
-  .schedc {
-    --st-passed: #0ca30c;
-    --st-anomaly: #fab219;
-    --st-error: #d03b3b;
-    --st-idle: #b6b4ad;
-    --st-active: #4f46e5;
-    --ease-spring: cubic-bezier(.22, 1, .36, 1);
-  }
-
   .schedc-reveal {
     opacity: 0;
     transform: translateY(12px);
@@ -110,7 +101,7 @@
 
   .schedc-issue-card { border-left-width: 4px; }
   .schedc-issue-card[data-issue="stuck"] { border-left-color: var(--st-error); }
-  .schedc-issue-card[data-issue="failing"] { border-left-color: #f97316; }
+  .schedc-issue-card[data-issue="failing"] { border-left-color: var(--st-blocked-solid); }
   .schedc-issue-card[data-issue="missed"] { border-left-color: var(--st-anomaly); }
   .schedc-issue-card[data-issue="stale"] { border-left-color: var(--st-idle); }
 
