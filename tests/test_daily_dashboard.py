@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -56,7 +57,7 @@ def test_only_one_dashboard_builder_exists():
 def test_no_runs_marks_all_modules_not_inspected():
     systems = [_sysdef("hom", ["a", "b"])]
     data = build_daily_dashboard_from_projection(
-        systems, [], [], generated_at=GEN_AT, date_label="2026-07-08"
+        systems, [], [], generated_at=GEN_AT, date_label="2026-07-08", tz=ZoneInfo("Asia/Seoul")
     )
 
     assert data["date_label"] == "2026-07-08"
@@ -97,7 +98,12 @@ def test_latest_meaningful_status_wins_and_skips_non_results():
         ),
     ]
     data = build_daily_dashboard_from_projection(
-        systems, status_rows, run_summaries, generated_at=GEN_AT, date_label="d"
+        systems,
+        status_rows,
+        run_summaries,
+        generated_at=GEN_AT,
+        date_label="d",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
     sys = data["systems"][0]
@@ -128,6 +134,7 @@ def test_recovered_flag_surfaces_on_module_view():
         [make_run_summary_row(system_code="hom", run_id="run_recovered", requested_at=GEN_AT)],
         generated_at=GEN_AT,
         date_label="d",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
     module = data["systems"][0]["modules"][0]
@@ -142,6 +149,7 @@ def test_recovered_flag_defaults_false_for_clean_module():
         [make_run_summary_row(system_code="hom")],
         generated_at=GEN_AT,
         date_label="d",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
     module = data["systems"][0]["modules"][0]
@@ -163,7 +171,12 @@ def test_totals_and_attention_sort_puts_anomaly_before_passed():
         make_run_summary_row(system_code="b"),
     ]
     data = build_daily_dashboard_from_projection(
-        systems, status_rows, run_summaries, generated_at=GEN_AT, date_label="d"
+        systems,
+        status_rows,
+        run_summaries,
+        generated_at=GEN_AT,
+        date_label="d",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
     # 이상징후 시스템(b)이 전체 정상 시스템(a)보다 먼저
@@ -192,7 +205,12 @@ def test_display_order_within_same_attention_rank():
         make_run_summary_row(system_code="b"),
     ]
     data = build_daily_dashboard_from_projection(
-        systems, status_rows, run_summaries, generated_at=GEN_AT, date_label="d"
+        systems,
+        status_rows,
+        run_summaries,
+        generated_at=GEN_AT,
+        date_label="d",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     assert [s["system_code"] for s in data["systems"]] == ["a", "b"]
 
@@ -329,3 +347,35 @@ def test_system_summary_badge_not_inspected_when_zero_modules():
     }
     badge = system_summary_badge(view)
     assert badge == {"label": "미점검", "tone": "not_inspected"}
+
+
+def test_dashboard_includes_activity_feed():
+    systems = [_sysdef("hom", ["login", "search"])]
+    rows = [
+        make_status_row(system_code="hom", module_id="login", last_status=ModuleStatus.PASSED),
+        make_status_row(system_code="hom", module_id="search", last_status=ModuleStatus.ERROR),
+    ]
+    data = build_daily_dashboard_from_projection(
+        systems,
+        rows,
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-07-08",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+    assert "activity" in data
+    assert len(data["activity"]) == 2
+    assert {item["module_id"] for item in data["activity"]} == {"login", "search"}
+
+
+def test_generated_at_is_rendered_in_schedule_timezone():
+    # GEN_AT = 2026-07-08 03:00 UTC == 12:00 KST
+    data = build_daily_dashboard_from_projection(
+        [],
+        [],
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-07-08",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+    assert data["generated_at"][11:16] == "12:00"

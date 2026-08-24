@@ -9,7 +9,7 @@ import "../components/status-badge/styles.css";
 import "../components/kpi-card/styles.css";
 
 import Alpine from "alpinejs";
-import "htmx.org";
+import htmx from "htmx.org";
 import { normalizeTone, renderStatusBadge, statusLabel } from "../components/status-badge/index";
 import { bindKpiCards } from "../components/kpi-card/index";
 
@@ -25,6 +25,7 @@ declare global {
 }
 
 window.Alpine = Alpine;
+window.htmx = htmx;
 Alpine.start();
 
 // 레거시 app.js 가 참조하는 다리. P3 에서 app.js 가 소멸하면 함께 제거한다.

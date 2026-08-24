@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from app.contexts.insights.application.daily_dashboard import build_daily_dashboard_from_projection
 from app.contexts.scheduling.scheduler import schedule_day_start_utc, schedule_today_label
+from app.core.schedule_time import resolve_schedule_timezone
 
 if TYPE_CHECKING:
     from app.contexts.insights.infrastructure.ports import DailyStatusQueryPort
@@ -54,6 +55,7 @@ class DailyDashboardQueries:
             for row in status_rows
             if row.last_run_id
         }
+        tz, _ = resolve_schedule_timezone()
         return build_daily_dashboard_from_projection(
             systems,
             status_rows,
@@ -61,4 +63,5 @@ class DailyDashboardQueries:
             duration_by_module_run=duration_by_module_run,
             generated_at=datetime.now(UTC),
             date_label=target_label,
+            tz=tz,
         )

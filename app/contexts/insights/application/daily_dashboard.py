@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from app.core.enums import ModuleStatus
 from app.core.status_labels import (
@@ -147,6 +148,58 @@ def build_attention_items(system_views: list[dict[str, Any]]) -> list[dict[str, 
     return items
 
 
+def build_activity_feed(
+    status_rows: list[DailyStatusRow],
+    systems: list[SystemDefinition],
+    *,
+    tz: ZoneInfo,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """최근 갱신된 모듈 상태를 시간 내림차순으로 — 대시보드 우측 활동 피드용.
+
+    신규 프로젝션·쿼리를 만들지 않는다. ``daily_system_status`` 행이 이미 들고 있는
+    ``updated_at``/``recovered`` 를 그대로 쓴다(설계 §3.4).
+    """
+    module_index: dict[tuple[str, str], str] = {
+        (system.system_code, module.module_id): module.name
+        for system in systems
+        for module in system.modules
+    }
+    system_names = {system.system_code: system.name for system in systems}
+
+    timestamped_items: list[tuple[datetime, dict[str, Any]]] = []
+    for row in status_rows:
+        if row.last_status in _NON_RESULT_STATUSES:
+            continue
+        module_name = module_index.get((row.system_code, row.module_id))
+        if module_name is None:
+            # 레지스트리에서 사라진 모듈의 잔여 행 — 이름을 지어내지 않고 버린다.
+            continue
+        local = row.updated_at.astimezone(tz)
+        timestamped_items.append(
+            (
+                row.updated_at,
+                {
+                    "system_code": row.system_code,
+                    "system_name": system_names.get(row.system_code, row.system_code),
+                    "module_id": row.module_id,
+                    "module_name": module_name,
+                    "status_label": module_status_label(row.last_status),
+                    "tone": module_status_badge_tone(row.last_status),
+                    "at": local.strftime("%H:%M"),
+                    "at_iso": local.isoformat(),
+                    "run_id": row.last_run_id,
+                    "recovered": bool(row.recovered),
+                },
+            )
+        )
+
+    # ``at_iso``는 사람이 읽는 지역 시각이다. DST가 끝나는 날처럼 같은 벽시계
+    # 시간이 두 번 나타나면 문자열 비교가 실제 시간 순서를 뒤집을 수 있다.
+    timestamped_items.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in timestamped_items[:limit]]
+
+
 def _module_view_from_row(
     module: RunModule | Any,
     *,
@@ -248,6 +301,7 @@ def build_daily_dashboard_from_projection(
     duration_by_module_run: dict[tuple[str, str], int | None] | None = None,
     generated_at: datetime,
     date_label: str,
+    tz: ZoneInfo,
 ) -> dict[str, Any]:
     """``daily_system_status`` 프로젝션 + 당일 Run 요약으로 일간 현황을 집계한다."""
     durations = duration_by_module_run or {}
@@ -294,9 +348,10 @@ def build_daily_dashboard_from_projection(
     )
 
     return {
-        "generated_at": generated_at.isoformat(),
+        "generated_at": generated_at.astimezone(tz).isoformat(),
         "date_label": date_label,
         "totals": totals,
         "systems": system_views,
         "attention": build_attention_items(system_views),
+        "activity": build_activity_feed(status_rows, systems, tz=tz),
     }

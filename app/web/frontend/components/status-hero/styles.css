@@ -1,0 +1,158 @@
+/* 지배 상태 열 — 대형 숫자 + conic-gradient 진행 링(설계 §3.2). */
+
+.status-hero {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.5rem, 1.2cqh, 1rem);
+  padding: clamp(0.75rem, 2cqh, 1.5rem);
+  border-radius: clamp(0.75rem, 1.4cqh, 1.25rem);
+  background: var(--pl-surface);
+  box-shadow: var(--pl-shadow-md), inset 0 0 0 1px var(--pl-border);
+  text-align: center;
+}
+
+.status-hero__ring {
+  position: relative;
+  display: grid;
+  width: min(100%, clamp(7rem, 26cqh, 14rem));
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--ring-color, var(--st-pending-solid)) var(--ring-deg, 0deg),
+    var(--pl-border) var(--ring-deg, 0deg)
+  );
+  transition: background 0.6s var(--ease-out);
+}
+
+/* 링 안쪽을 파내 도넛으로 만든다 — 추가 엘리먼트 없이 배경 한 겹으로. */
+.status-hero__ring::before {
+  content: "";
+  position: absolute;
+  inset: clamp(0.5rem, 1.6cqh, 0.9rem);
+  border-radius: 50%;
+  background: var(--pl-surface);
+}
+
+.status-hero__ring[data-tone="passed"] { --ring-color: var(--st-passed-solid); }
+.status-hero__ring[data-tone="anomaly"] { --ring-color: var(--st-anomaly-solid); }
+.status-hero__ring[data-tone="error"] { --ring-color: var(--st-error-solid); }
+.status-hero__ring[data-tone="running"] { --ring-color: var(--st-running-solid); }
+.status-hero__ring[data-tone="waiting_input"] { --ring-color: var(--st-waiting_input-solid); }
+.status-hero__ring[data-tone="blocked"] { --ring-color: var(--st-blocked-solid); }
+.status-hero__ring[data-tone="not_inspected"],
+.status-hero__ring[data-tone="pending"] { --ring-color: var(--st-pending-solid); }
+
+.status-hero__figure {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.status-hero__value {
+  font-size: clamp(1.75rem, 7cqh, 3.5rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.status-hero__unit {
+  margin-top: 0.25rem;
+  font-size: clamp(0.6875rem, 1.6cqh, 0.875rem);
+  color: var(--pl-text-muted);
+}
+
+.status-hero__headline {
+  font-size: clamp(0.875rem, 2.2cqh, 1.125rem);
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.status-hero__meta {
+  font-size: clamp(0.6875rem, 1.4cqh, 0.8125rem);
+  color: var(--pl-text-muted);
+}
+
+.status-hero__cards {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: clamp(0.25rem, 0.8cqh, 0.5rem);
+  overflow: hidden;
+}
+
+/* HTMX 초기 placeholder와 Zone A 액션 컨테이너. */
+.dash-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.dash-hero__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.dash-hero__text {
+  flex: 1 1 12rem;
+  min-width: 12rem;
+}
+
+.dash-hero__aside {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.dash-hero__title {
+  margin: 0;
+  font-size: max(1rem, clamp(1rem, 3cqh, 2rem));
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--pl-text);
+  overflow: visible;
+}
+
+.dash-hero__meta {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.65rem, 1.4cqh, 0.8rem);
+  font-weight: 500;
+  color: var(--pl-text-muted);
+}
+
+.dash-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+@media (max-width: 767px) {
+  .dash-hero__top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dash-hero__aside {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-hero__ring { transition: none; }
+}

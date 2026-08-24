@@ -16,7 +16,7 @@ from app.core.status_labels import (
     suite_status_badge_tone,
     suite_status_label,
 )
-from app.web.status_view import StatusBadgeView, status_badge_view
+from app.core.status_view import StatusBadgeView, status_badge_view
 
 
 @pytest.mark.parametrize("status", list(ModuleStatus))

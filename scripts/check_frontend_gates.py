@@ -38,7 +38,6 @@ GENERATED_FILES = {
 # 향후 단계에서 컴포넌트 단위로 쪼갤 때마다 여기서 한 줄씩 지운다. 비면 FG-004 가 완성된다.
 FG004_ALLOWLIST = {
     "app/web/frontend/styles/app.css",
-    "app/web/frontend/styles/dashboard.css",
 }
 
 # P3 이관 완료 전까지 템플릿이 직접 로드하는 레거시 페이지 스크립트.
@@ -50,7 +49,6 @@ FG005_ALLOWLIST = {
     "/static/admin-stats.js",
     "/static/anomalies.js",
     "/static/app.js",
-    "/static/dashboard.js",
     "/static/healing.js",
     "/static/insights.js",
     "/static/mobile-nav.js",

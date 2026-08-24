@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from app.core.enums import RunStatus
 from app.core.status_labels import run_status_label
-from app.web.status_view import mobile_status_view_map
+from app.core.status_view import mobile_status_view_map
 
 # 이 화면에만 있는 레거시 배지 클래스. P4 가 화면을 이관하면 사라진다.
 _LEGACY_CLASSES = {

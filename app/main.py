@@ -13,6 +13,7 @@ from app.api.routes_anomalies import router as anomalies_router
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_healing import router as healing_router
+from app.api.routes_identity import router as auth_router
 from app.api.routes_insights import router as insights_router
 from app.api.routes_otp import router as otp_router
 from app.api.routes_presets import router as presets_router
@@ -25,7 +26,6 @@ from app.api.routes_wall import router as wall_router
 from app.api.ws_runs import router as ws_runs_router
 from app.api.ws_suites import router as ws_suites_router
 from app.composition.container import AppContainer
-from app.contexts.identity.router import router as auth_router
 from app.core.logging import bind_log_context, clear_log_context
 from app.core.settings import get_settings
 

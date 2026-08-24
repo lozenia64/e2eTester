@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from scripts.check_frontend_gates import (
@@ -148,6 +149,104 @@ def test_fg004_flags_oversized_file_not_on_allowlist(tmp_path):
     assert "other.css" in problems[0]
 
 
+def test_fg004_flags_oversized_dashboard_stylesheet_after_component_split(tmp_path):
+    """대시보드 분할이 끝났으므로 dashboard.css는 더 이상 allowlist 예외가 아니다."""
+    _write(
+        tmp_path,
+        "app/web/frontend/styles/dashboard.css",
+        "\n".join(f".x{i} {{ color: red; }}" for i in range(401)),
+    )
+    problems = check_fg004_file_size(tmp_path)
+    assert len(problems) == 1
+    assert "dashboard.css" in problems[0]
+
+
+def test_dashboard_component_css_stays_with_its_owner():
+    """대시보드 레이아웃과 Zone A 컴포넌트 CSS의 소유권을 함께 고정한다."""
+    dashboard_css = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/styles/dashboard.css"
+    ).read_text(encoding="utf-8")
+    status_hero_css = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/components/status-hero/styles.css"
+    ).read_text(encoding="utf-8")
+    system_matrix_css = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/components/system-matrix/styles.css"
+    ).read_text(encoding="utf-8")
+
+    forbidden = (".dash-hero", ".dash-sys-row", "@keyframes dash-row-in")
+    assert all(selector not in dashboard_css for selector in forbidden)
+
+    required_dashboard_layout = (
+        ".dash-refresh {",
+        ".dash-refresh:hover {",
+        ".dash-refresh:disabled {",
+        ".dash-refresh__icon {",
+        ".dash-htmx-indicator {",
+        ".dash-htmx-indicator.htmx-request {",
+    )
+    assert all(selector in dashboard_css for selector in required_dashboard_layout)
+
+    required_status_hero = (
+        ".dash-hero {",
+        ".dash-hero__top {",
+        ".dash-hero__text {",
+        ".dash-hero__title {",
+        ".dash-hero__meta {",
+        ".dash-hero__aside {",
+        ".dash-hero__actions {",
+    )
+    assert all(selector in status_hero_css for selector in required_status_hero)
+
+    forbidden_status_hero = (
+        ".dash-refresh {",
+        ".dash-refresh:hover {",
+        ".dash-refresh:disabled {",
+        ".dash-refresh__icon {",
+        ".dash-htmx-indicator {",
+        ".dash-htmx-indicator.htmx-request {",
+    )
+    assert all(selector not in status_hero_css for selector in forbidden_status_hero)
+
+    required_system_matrix = (
+        '.dash-sys-row[data-priority="attention"] {',
+        '.dash__systems[data-first-paint="true"] .dash-sys-row {',
+        "@keyframes dash-row-in {",
+        "@media (prefers-reduced-motion: reduce) {",
+    )
+    assert all(selector in system_matrix_css for selector in required_system_matrix)
+
+    reduced_motion_blocks = re.findall(
+        r"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+        system_matrix_css,
+        flags=re.DOTALL,
+    )
+    uncommented_blocks = [
+        re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL) for block in reduced_motion_blocks
+    ]
+
+    def has_reduced_motion_declaration(selector: str, declaration: str) -> bool:
+        rule = re.compile(
+            rf"{re.escape(selector)}\s*\{{[^}}]*\b{re.escape(declaration)}\s*;[^}}]*\}}",
+            flags=re.DOTALL,
+        )
+        return any(rule.search(block) for block in uncommented_blocks)
+
+    assert has_reduced_motion_declaration(
+        '.dash__systems[data-first-paint="true"] .dash-sys-row', "animation: none"
+    )
+    assert has_reduced_motion_declaration(".dash-sys-row:hover", "transform: none")
+
+
+def test_dashboard_density_and_kpi_compression_hooks_are_removed():
+    """컨테이너 쿼리 이관 뒤 JS 밀도·KPI 압축 훅은 되살아나면 안 된다."""
+    frontend = Path(__file__).resolve().parents[2] / "app/web/frontend"
+    dashboard_css = (frontend / "styles/dashboard.css").read_text(encoding="utf-8")
+    kpi_card_css = (frontend / "components/kpi-card/styles.css").read_text(encoding="utf-8")
+
+    assert "data-density" not in dashboard_css
+    assert "data-kpi-compress" not in kpi_card_css
+
+
 def test_fg005_flags_direct_static_reference(tmp_path):
     _write(
         tmp_path, "app/web/templates/x.html", '<link rel="stylesheet" href="/static/app.css?v=16">'
@@ -162,7 +261,7 @@ def test_fg005_allows_legacy_page_scripts(tmp_path):
     _write(
         tmp_path,
         "app/web/templates/x.html",
-        '<script src="/static/dashboard.js?v=22" defer></script>',
+        '<script src="/static/admin-dashboard.js?v=22" defer></script>',
     )
     assert check_fg005_no_static_ref(tmp_path) == []
 

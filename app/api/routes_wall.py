@@ -23,8 +23,8 @@ from fastapi.templating import Jinja2Templates
 from app.api.dependencies import get_daily_summary_queries
 from app.contexts.insights.application.wall_view import build_wall_view
 from app.core.settings import get_settings
+from app.core.status_view import status_badge_view
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
-from app.web.status_view import status_badge_view
 
 if TYPE_CHECKING:
     from app.orchestrator.queries.daily_summary_queries import DailySummaryQueries

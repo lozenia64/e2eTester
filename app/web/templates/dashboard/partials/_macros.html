@@ -1,73 +1,35 @@
-{# Premium Light dashboard macros #}
+{# Mission Control 매트릭스 매크로 — 한 행 = 코드 · 이름 · 모듈 셀 · 통과 수. #}
 
-{% macro module_glyph(tone) -%}
-<span class="dash-mod__glyph" aria-hidden="true">{{ tone_glyph(tone) }}</span>
-{%- endmacro %}
-
-
-{% macro module_pill(mod) -%}
+{% macro module_cell(mod) -%}
 {% set tone = mod.tone or 'not_inspected' %}
-{% set filled = tone in ['passed', 'anomaly', 'error', 'running', 'waiting_input'] %}
-{% set idle = tone in ['not_inspected', 'pending'] %}
-{% set live = tone in ['running', 'waiting_input'] %}
 {% set tip = mod.name ~ ' · ' ~ (mod.status_label or '') %}
 {%- if mod.run_id -%}
-<a href="/runs/{{ mod.run_id }}" class="dash-mod dash-mod--link{% if filled %} dash-mod--filled{% elif idle %} dash-mod--idle{% else %} dash-mod--outline{% endif %}{% if live %} dash-mod--live{% endif %}"
-   data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ mod.name }} Run 상세">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span>{% if mod.recovered %}<span class="cell-flag cell-flag--unstable" title="자동 복구 발생">⟳</span>{% endif %}</a>
+<a href="/runs/{{ mod.run_id }}" class="dash-cell dash-cell--link" data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ tip }}"><span class="dash-cell__glyph" aria-hidden="true">{{ tone_glyph(tone) }}</span>{% if mod.duration_ms %}<span class="dash-cell__ms" style="--ms-ratio: {{ (mod.duration_ms / 60000) | round(3) }}" aria-hidden="true"></span>{% endif %}{% if mod.recovered %}<span class="dash-cell__flag" title="자동 복구 발생">⟳</span>{% endif %}</a>
 {%- else -%}
-<span class="dash-mod{% if filled %} dash-mod--filled{% elif idle %} dash-mod--idle{% else %} dash-mod--outline{% endif %}{% if live %} dash-mod--live{% endif %}"
-      data-tone="{{ tone }}" title="{{ tip }}">{{ module_glyph(tone) }}<span class="dash-mod__label">{{ mod.name }}</span>{% if mod.recovered %}<span class="cell-flag cell-flag--unstable" title="자동 복구 발생">⟳</span>{% endif %}</span>
+<span class="dash-cell" data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ tip }}"><span class="dash-cell__glyph" aria-hidden="true">{{ tone_glyph(tone) }}</span></span>
 {%- endif -%}
-{%- endmacro %}
-
-
-{% macro module_segment_bar(sys) -%}
-<div class="dash-sys-row__segment" role="presentation">
-  {% for mod in sys.modules %}
-  {% set tone = mod.tone or 'not_inspected' %}
-  {% set tip = mod.name ~ ' · ' ~ (mod.status_label or '') %}
-  {%- if mod.run_id -%}
-  <a href="/runs/{{ mod.run_id }}" class="dash-seg dash-seg--link" data-tone="{{ tone }}" title="{{ tip }}" aria-label="{{ mod.name }}"></a>
-  {%- else -%}
-  <span class="dash-seg" data-tone="{{ tone }}" title="{{ tip }}"></span>
-  {%- endif -%}
-  {% endfor %}
-</div>
 {%- endmacro %}
 
 
 {% macro system_row(sys) -%}
 {% set badge = system_summary_badge(sys) %}
-{% set code_label = sys.system_code | upper %}
 {% set attention_tones = ['error', 'anomaly', 'running', 'waiting_input', 'blocked'] %}
 {% set priority = 'attention' if badge.tone in attention_tones else 'normal' %}
 {% set show_cta = badge.tone == 'not_inspected' and sys.inspected == 0 %}
-<div class="dash-sys-row"
+<div class="dash-sys-row" id="dash-system-{{ sys.system_code | e }}"
      data-system-code="{{ sys.system_code }}"
      data-priority="{{ priority }}"
-     data-accent-tone="{{ badge.tone }}"
-     tabindex="0"
-     role="button"
-     aria-label="{{ sys.system_name }} 상세 보기">
-  <div class="dash-sys-row__header">
-    <div class="dash-sys-row__identity">
-      <span class="dash-sys-row__icon" data-tone="{{ badge.tone }}">{{ code_label }}</span>
-      <div class="dash-sys-row__text">
-        <span class="dash-sys-row__name">{{ sys.system_name }}</span>
-        <span class="dash-sys-row__meta">{{ sys.inspected }}/{{ sys.module_total }} 모듈</span>
-      </div>
-    </div>
-    <span class="dash-sys-row__badge" data-tone="{{ badge.tone }}">{{ badge.label }}</span>
-    {% if show_cta %}
-    <a href="/runs/execute" class="dash-sys-row__cta" data-action="execute">점검 실행</a>
-    {% endif %}
-    <span class="dash-sys-row__chevron" aria-hidden="true">›</span>
+     data-accent-tone="{{ badge.tone }}">
+  <span class="dash-sys-row__icon" data-tone="{{ badge.tone }}">{{ sys.system_code | upper }}</span>
+  <button type="button" class="dash-sys-row__name" data-action="detail" aria-label="{{ sys.system_name }} 상세 보기">{{ sys.system_name }}</button>
+  <div class="dash-sys-row__cells">
+    {% for mod in sys.modules %}{{ module_cell(mod) }}{% endfor %}
   </div>
-  {{ module_segment_bar(sys) }}
-  <div class="dash-sys-row__modules">
-    {% for mod in sys.modules %}
-    {{ module_pill(mod) }}
-    {% endfor %}
-  </div>
+  <span class="dash-sys-row__count">{{ sys.inspected }}/{{ sys.module_total }}</span>
+  {% if show_cta %}
+  <a href="/runs/execute" class="dash-sys-row__cta" data-action="execute">점검 실행</a>
+  {% else %}
+  <span class="dash-sys-row__badge" data-tone="{{ badge.tone }}">{{ badge.label }}</span>
+  {% endif %}
 </div>
 {%- endmacro %}

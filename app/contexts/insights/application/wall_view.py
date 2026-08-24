@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.enums import ModuleStatus
-from app.web.status_view import status_badge_view
+from app.core.status_view import status_badge_view
 
 # System block color priority for wall-only aggregation.
 _WORST_BUCKET_ORDER = ("error", "anomaly", "running", "other", "not_inspected")

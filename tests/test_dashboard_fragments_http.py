@@ -5,7 +5,9 @@ Premium Light 리디자인 후 fragment 응답이 카드 리스트·히어로 �
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -123,6 +125,7 @@ def _build_all_not_inspected_dashboard(registry: ModuleRegistry) -> dict:
         [],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
 
@@ -168,6 +171,7 @@ def _build_realistic_six_system_dashboard() -> dict:
         run_summaries,
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
 
 
@@ -228,6 +232,18 @@ def test_matrix_fragment_renders_card_rows(client: TestClient) -> None:
     assert "dash-matrix-chart" not in html
 
 
+def test_matrix_fragment_uses_unique_stable_system_row_ids(
+    client: TestClient, dashboard_data: dict
+) -> None:
+    """주의도 정렬이 바뀌어도 morph가 같은 시스템 행을 보존할 식별자가 필요하다."""
+    html = client.get("/api/dashboard/daily/fragments/matrix").text
+    row_ids = re.findall(r'<div class="dash-sys-row"\s+id="([^"]+)"', html)
+    expected_ids = [f"dash-system-{system['system_code']}" for system in dashboard_data["systems"]]
+
+    assert row_ids == expected_ids
+    assert len(row_ids) == len(set(row_ids))
+
+
 @pytest.mark.spec("SPEC-UI-004", "AC-006")
 def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/kpi")
@@ -237,7 +253,12 @@ def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     # 히어로 문장은 점검실패 분기를 탄다(zone_a_kpi.html 의 상태 분기 참고).
     assert "점검실패" in html
     assert "우선 확인이 필요합니다" in html
-    assert "kpi-band" in html
+    assert 'class="status-hero"' in html
+    assert 'class="status-hero__ring"' in html
+    assert 'data-passed="' in html
+    assert 'data-total="' in html
+    assert 'class="status-hero__headline"' in html
+    assert 'class="status-hero__cards"' in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-002")
@@ -258,23 +279,48 @@ def test_kpi_fragment_renders_empty_day_summary(
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/kpi").text
-    assert "통과율" in html
+    assert 'class="status-hero__ring"' in html
+    assert 'data-passed="0"' in html
+    assert 'data-total="' in html
     assert "아직 점검이 시작되지 않았습니다" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-004")
 def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/kpi").text
+    assert 'class="status-hero__cards"' in html
     assert html.count('class="kpi-card"') == 4
-    assert "통과율" in html
 
 
 @pytest.mark.spec("SPEC-UI-005", "AC-007")
-def test_matrix_fragment_renders_segment_and_chevron(client: TestClient) -> None:
+def test_matrix_fragment_renders_module_cells(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/matrix").text
-    assert "dash-sys-row__segment" in html
-    assert "dash-sys-row__chevron" in html
-    assert "dash-mod__glyph" in html
+    assert "dash-sys-row__cells" in html
+    assert "dash-cell__glyph" in html
+    assert "dash-sys-row__count" in html
+    assert "dash-sys-row__segment" not in html
+    assert "dash-sys-row__chevron" not in html
+    assert "dash-mod" not in html
+
+
+@pytest.mark.spec("SPEC-UI-007", "AC-009")
+def test_matrix_fragment_uses_native_name_button_without_row_button_semantics(
+    client: TestClient,
+) -> None:
+    """모듈 링크와 상세 제어는 중첩되지 않는 별도 네이티브 요소여야 한다."""
+    html = client.get("/api/dashboard/daily/fragments/matrix").text
+    row_start = html.index('<div class="dash-sys-row"')
+    row_tag = html[row_start : html.index(">", row_start) + 1]
+    assert "tabindex=" not in row_tag
+    assert 'role="button"' not in row_tag
+    assert "aria-label=" not in row_tag
+    name_button = re.search(
+        r'<button type="button" class="dash-sys-row__name" data-action="detail" '
+        r'aria-label="(?P<label>[^\"]+) 상세 보기">(?P<name>[^<]+)</button>',
+        html,
+    )
+    assert name_button is not None
+    assert name_button.group("label") == name_button.group("name")
 
 
 @pytest.mark.spec("SPEC-UI-007", "AC-008")
@@ -288,12 +334,14 @@ def test_matrix_fragment_error_system_has_attention_priority(client: TestClient)
 
 
 @pytest.mark.spec("SPEC-UI-006", "AC-005")
-def test_fragments_include_visibility_wrappers(client: TestClient) -> None:
+def test_fragments_include_status_hero_contract(client: TestClient) -> None:
     kpi = client.get("/api/dashboard/daily/fragments/kpi").text
     matrix = client.get("/api/dashboard/daily/fragments/matrix").text
-    assert "dash-hero__top" in kpi
-    assert "dash-hero__aside" in kpi
-    assert "dash-sys-row__header" in matrix
+    assert 'class="status-hero"' in kpi
+    assert 'class="status-hero__ring"' in kpi
+    assert 'class="status-hero__headline"' in kpi
+    assert 'class="status-hero__cards"' in kpi
+    assert "dash-sys-row__cells" in matrix
 
 
 def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> None:
@@ -313,6 +361,7 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
         [make_run_summary_row(system_code=system.system_code)],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     user = User(
         user_id="u_recovered",
@@ -327,7 +376,7 @@ def test_matrix_fragment_shows_recovered_cell_flag(registry: ModuleRegistry) -> 
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/matrix").text
-    assert "cell-flag--unstable" in html
+    assert "dash-cell__flag" in html
 
 
 def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegistry) -> None:
@@ -345,6 +394,7 @@ def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegist
         [make_run_summary_row(system_code=system.system_code)],
         generated_at=GEN_AT,
         date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
     )
     user = User(
         user_id="u_clean",
@@ -359,4 +409,31 @@ def test_matrix_fragment_omits_cell_flag_for_clean_module(registry: ModuleRegist
     app = _build_app(user=user, dashboard_data=data, registry=registry)
     with TestClient(app) as c:
         html = c.get("/api/dashboard/daily/fragments/matrix").text
-    assert "cell-flag--unstable" not in html
+    assert "dash-cell__flag" not in html
+
+
+def test_activity_fragment_renders_items(client):
+    res = client.get("/api/dashboard/daily/fragments/activity")
+    assert res.status_code == 200
+    html = res.text
+    assert 'id="dash-zone-activity"' in html
+    assert 'class="dash-activity"' in html
+    # 항목 하나 이상이 시각·시스템·모듈을 담는다
+    assert "dash-activity__item" in html
+
+
+def test_activity_fragment_uses_unique_stable_item_ids(client, dashboard_data: dict) -> None:
+    """시간 역순 재정렬에도 morph가 같은 시스템·모듈 활동을 보존해야 한다."""
+    html = client.get("/api/dashboard/daily/fragments/activity").text
+    item_ids = re.findall(r'<li class="dash-activity__item"\s+id="([^"]+)"', html)
+    expected_ids = [
+        f"dash-activity-{item['system_code']}-{item['module_id']}"
+        for item in dashboard_data["activity"]
+    ]
+
+    assert item_ids == expected_ids
+    assert len(item_ids) == len(set(item_ids))
+
+
+def test_activity_fragment_unknown_zone_still_404(client):
+    assert client.get("/api/dashboard/daily/fragments/nope").status_code == 404

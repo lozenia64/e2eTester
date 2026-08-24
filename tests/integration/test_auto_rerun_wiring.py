@@ -158,9 +158,11 @@ async def test_manual_error_run_never_auto_reruns_even_when_enabled(tmp_path):
 
 @pytest.mark.asyncio
 async def test_scheduled_error_run_does_not_auto_rerun_by_default(tmp_path):
-    """settings 미지정(기본값 auto_rerun_enabled=False)이면 예약 ERROR Run 도 그대로 끝난다."""
+    """환경 파일 미지정(기본값 auto_rerun_enabled=False)이면 예약 ERROR Run 도 그대로 끝난다."""
+    settings = E2ESettings(_env_file=None)
+
     finished, _ = await _run_to_completion(
-        triggered_by="schedule", settings=None, tmp_path=tmp_path
+        triggered_by="schedule", settings=settings, tmp_path=tmp_path
     )
 
     assert finished.status == RunStatus.ERROR

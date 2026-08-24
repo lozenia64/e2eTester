@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from app.core.status_colors import TONE_GLYPHS
 from app.core.status_labels import STATUS_TONES
-from app.web.status_view import tone_glyph
+from app.core.status_view import tone_glyph
 
 
 def test_every_tone_has_a_glyph() -> None:

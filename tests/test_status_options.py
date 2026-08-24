@@ -10,7 +10,7 @@ import pytest
 
 from app.core.enums import RunStatus
 from app.core.status_labels import run_status_label
-from app.web.status_view import status_options
+from app.core.status_view import status_options
 
 
 def test_admin_runs_filter_covers_the_four_terminal_states() -> None:

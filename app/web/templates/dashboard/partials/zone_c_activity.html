@@ -1,0 +1,25 @@
+{# Zone C — 라이브 활동 피드. 상태 라벨·톤은 서버가 주입한다(FG-006). #}
+<div id="dash-zone-activity" class="dash-activity">
+  <p class="dash-activity__eyebrow">최근 활동</p>
+  {% if not data.activity %}
+  <p class="dash-activity__empty">오늘 기록된 점검 활동이 없습니다.</p>
+  {% else %}
+  <ol class="dash-activity__list">
+    {% for item in data.activity %}
+    <li class="dash-activity__item"
+        id="dash-activity-{{ item.system_code | e }}-{{ item.module_id | e }}"
+        data-tone="{{ item.tone }}" data-module="{{ item.system_code }}:{{ item.module_id }}">
+      {% if item.run_id %}<a class="dash-activity__link" href="/runs/{{ item.run_id }}">{% endif %}
+      <span class="dash-activity__time">{{ item.at }}</span>
+      <span class="dash-activity__dot" aria-hidden="true"></span>
+      <span class="dash-activity__text">
+        <span class="dash-activity__where">{{ item.system_name }} · {{ item.module_name }}</span>
+        <span class="dash-activity__status">{{ item.status_label }}</span>
+      </span>
+      {% if item.recovered %}<span class="dash-activity__recovered" title="자동 복구 발생">⟳</span>{% endif %}
+      {% if item.run_id %}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</div>

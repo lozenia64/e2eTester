@@ -14,7 +14,7 @@ import pytest
 
 from app.core.enums import ModuleStatus, RunStatus, SuiteStatus
 from app.core.status_labels import STATUS_TONES, module_status_label
-from app.web.status_view import status_badge_view
+from app.core.status_view import status_badge_view
 
 GENERATED_TS = Path("app/web/frontend/lib/status.generated.ts")
 
