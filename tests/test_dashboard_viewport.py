@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 
+from app.api import routes_wall
 from app.api.dependencies import get_daily_queries, get_daily_summary_queries, get_run_service
 from app.api.routes_daily import router as daily_router
 from app.api.routes_dashboard import router as dashboard_router
@@ -148,6 +149,8 @@ def _build_dashboard_test_app(
     app = FastAPI()
     app.include_router(dashboard_router)
     app.include_router(daily_router)
+    app.include_router(routes_wall.router)
+    app.dependency_overrides[routes_wall.wall_enabled] = lambda: True
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_daily_queries] = lambda: FakeDailyDashboardQueries(dashboard_data)
@@ -847,3 +850,51 @@ def test_reduced_motion_disables_cell_animation(browser, live_server: str) -> No
     assert all(transition == "none" for transition in transitions), (
         f"reduced-motion 인데 전이가 산다: {transitions}"
     )
+
+
+def test_wall_is_dark(page, live_server: str) -> None:
+    """상황판이 실제로 어두운가 — DOM 존재가 아니라 computed style 로 본다(설계 §6)."""
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/wall", wait_until="networkidle")
+    page.wait_for_selector("body.wall")
+    got = page.evaluate(
+        """() => {
+            const cs = getComputedStyle(document.body);
+            const rgb = cs.backgroundColor.match(/\\d+/g).map(Number);
+            const lum = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255;
+            return { bg: cs.backgroundColor, lum, color: cs.color };
+        }"""
+    )
+    print("WALL DARK:", got)
+    assert got["lum"] < 0.15, got
+
+
+@pytest.mark.parametrize("w,h", [(1920, 1080), (2560, 1440)])
+def test_wall_never_scrolls(page, live_server: str, w: int, h: int) -> None:
+    page.set_viewport_size({"width": w, "height": h})
+    page.goto(f"{live_server}/wall", wait_until="networkidle")
+    page.wait_for_selector("body.wall")
+    got = page.evaluate(
+        """() => ({
+            docOk: document.documentElement.scrollHeight <= window.innerHeight + 1,
+            bodyOverflow: getComputedStyle(document.body).overflow,
+        })"""
+    )
+    print(f"WALL SCROLL {w}x{h}:", got)
+    assert got["docOk"], got
+
+
+def test_wall_timeline_spans_are_positioned_and_visible(page, live_server: str) -> None:
+    """서버가 내려준 백분율이 실제 픽셀로 반영되는가."""
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/wall", wait_until="networkidle")
+    page.wait_for_selector(".wall-lane__span")
+    got = page.evaluate(
+        """() => [...document.querySelectorAll('.wall-lane__span')].map((s) => {
+            const r = s.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height) };
+        })"""
+    )
+    print("WALL SPANS:", got)
+    assert got, "스팬이 하나도 없다"
+    assert all(s["w"] >= 4 and s["h"] >= 4 for s in got), got

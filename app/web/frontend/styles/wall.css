@@ -4,6 +4,16 @@
 @import "./primitives.css";
 @import "./tokens.generated.css";
 
+/* 상황판 스코프 다크(설계 §4.2, D3). 테마 축을 만들지 않는다 —
+   이 매핑은 wall.css 안에서만 유효하다. */
+body.wall {
+  --wl-bg: var(--c-ink-950);
+  --wl-surface: var(--c-ink-900);
+  --wl-line: var(--c-ink-800);
+  --wl-dim: var(--c-ink-400);
+  --wl-ink: var(--c-ink-100);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -13,8 +23,8 @@
 body.wall {
   overflow: hidden;
   height: 100dvh;
-  background: var(--pl-bg);
-  color: var(--pl-text);
+  background: var(--wl-bg);
+  color: var(--wl-ink);
   font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
 }
 
@@ -40,59 +50,101 @@ body.wall {
 .wall-hero__detail {
   margin-top: 1vmin;
   font-size: clamp(1rem, 4vmin, 4rem);
-  color: var(--pl-text-muted);
+  color: var(--wl-dim);
 }
 
-.wall-hero[data-tone="passed"] .wall-hero__headline { color: var(--st-passed-text); }
-.wall-hero[data-tone="anomaly"] .wall-hero__headline { color: var(--st-anomaly-text); }
-.wall-hero[data-tone="error"] .wall-hero__headline { color: var(--st-error-text); }
-.wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-text); }
-.wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-text); }
+.wall-hero[data-tone="passed"] .wall-hero__headline { color: var(--st-passed-solid); }
+.wall-hero[data-tone="anomaly"] .wall-hero__headline { color: var(--st-anomaly-solid); }
+.wall-hero[data-tone="error"] .wall-hero__headline { color: var(--st-error-solid); }
+.wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-solid); }
+.wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-solid); }
 
-.wall-matrix {
+/* ── 오늘의 타임라인 ──
+   x 좌표는 서버가 백분율로 계산해 --lane-* 로 내려준다(설계 §4.3, D2).
+   차트 라이브러리를 쓰지 않으므로 JS 가 죽어도 이 화면은 그대로 남는다. */
+.wall-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1vmin;
+}
+
+.wall-timeline__empty {
+  padding: 6vmin 0;
+  font-size: clamp(1rem, 5vmin, 5rem);
+  font-weight: 700;
+  color: var(--wl-dim);
+}
+
+.wall-timeline__lanes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1vmin;
+}
+
+.wall-lane {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: 12vmin 1fr;
+  align-items: center;
   gap: 1.5vmin;
 }
 
-.wall-sys {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5vmin;
-  padding: 1.5vmin 1vmin;
-  border-radius: 1.5vmin;
-  background: var(--pl-surface);
-}
-
-.wall-sys__code {
+.wall-lane__code {
   font-size: clamp(0.875rem, 2.4vmin, 2.25rem);
   font-weight: 800;
+  color: var(--wl-dim);
+  text-align: right;
+  letter-spacing: 0.04em;
 }
 
-.wall-sys__bar {
-  width: 100%;
-  height: 2vmin;
-  border-radius: 1vmin;
+.wall-lane__track {
+  position: relative;
+  height: 3vmin;
+  border-radius: 0.6vmin;
+  background: var(--wl-surface);
+  overflow: hidden;
 }
 
-.wall-sys__count {
-  font-size: clamp(0.75rem, 1.8vmin, 1.75rem);
-  font-weight: 700;
-  color: var(--pl-text-muted);
+.wall-lane__span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--lane-left);
+  width: var(--lane-width);
+  border-radius: 0.6vmin;
 }
 
-.wall-sys__name {
-  font-size: clamp(0.625rem, 1.4vmin, 1.25rem);
-  color: var(--pl-text-subtle);
+.wall-lane__span[data-tone="passed"] { background: var(--st-passed-solid); }
+.wall-lane__span[data-tone="anomaly"] { background: var(--st-anomaly-solid); }
+.wall-lane__span[data-tone="error"] { background: var(--st-error-solid); }
+.wall-lane__span[data-tone="running"] { background: var(--st-running-solid); }
+.wall-lane__span[data-tone="blocked"] { background: var(--st-blocked-solid); }
+.wall-lane__span[data-tone="pending"] { background: var(--st-pending-solid); }
+
+/* "지금" — 레인 전체를 가로지르는 세로선. 오른쪽 끝에서 새 스팬이 태어난다. */
+.wall-timeline__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(12vmin + 1.5vmin + var(--now-left) * (100% - 13.5vmin) / 100%);
+  width: 0.3vmin;
+  background: var(--st-running-solid);
 }
 
-.wall-sys[data-tone="passed"] .wall-sys__bar { background: var(--st-passed-solid); }
-.wall-sys[data-tone="anomaly"] .wall-sys__bar { background: var(--st-anomaly-solid); }
-.wall-sys[data-tone="error"] .wall-sys__bar { background: var(--st-error-solid); }
-.wall-sys[data-tone="running"] .wall-sys__bar { background: var(--st-running-solid); }
-.wall-sys[data-tone="blocked"] .wall-sys__bar { background: var(--st-blocked-solid); }
-.wall-sys[data-tone="pending"] .wall-sys__bar { background: var(--st-pending-solid); }
+.wall-timeline__axis {
+  position: relative;
+  height: 3vmin;
+  margin-left: calc(12vmin + 1.5vmin);
+}
+
+.wall-timeline__tick {
+  position: absolute;
+  left: var(--tick-left);
+  transform: translateX(-50%);
+  font-size: clamp(0.625rem, 1.6vmin, 1.5rem);
+  color: var(--wl-dim);
+  white-space: nowrap;
+}
 
 .wall-strip {
   display: grid;
@@ -102,11 +154,43 @@ body.wall {
 
 .wall-meta {
   font-size: clamp(0.75rem, 2vmin, 2rem);
-  color: var(--pl-text-subtle);
+  color: var(--wl-dim);
 }
 
 /* OTP 대기가 지배 요소일 때만 히어로 전체가 맥동한다 — 3~5m 거리에서 배지
    크기의 맥동은 보이지 않기 때문이다(설계 §3.10). */
+/* ── 모션 ──
+   원칙: 변한 것만 움직인다. morph 가 노드를 보존하므로 새로 삽입된 스팬만
+   진입 애니메이션을 탄다(설계 §4.4). */
+@starting-style {
+  .wall-lane__span {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+.wall-lane__span {
+  transition: width 0.6s var(--ease-out), opacity 0.6s var(--ease-out);
+}
+
+@keyframes wall-now-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.wall-timeline__now {
+  animation: wall-now-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes wall-span-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.wall-lane__span[data-tone="running"] {
+  animation: wall-span-shimmer 1.8s ease-in-out infinite;
+}
+
 @keyframes wall-attention {
   0%,
   100% {
@@ -122,6 +206,12 @@ body.wall {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .wall-lane__span,
+  .wall-timeline__now {
+    transition: none;
+    animation: none;
+  }
+
   .wall-body[data-dominant="waiting_input"] .wall-hero {
     animation: none;
   }

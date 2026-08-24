@@ -205,6 +205,7 @@ def _module_view_from_row(
     *,
     status_row: DailyStatusRow | None,
     duration_ms: int | None,
+    tz: ZoneInfo,
 ) -> dict[str, Any]:
     status = status_row.last_status if status_row is not None else None
     run_id = status_row.last_run_id if status_row is not None else None
@@ -214,6 +215,11 @@ def _module_view_from_row(
         run_id = None
         duration_ms = None
         recovered = False
+    at_iso = (
+        status_row.updated_at.astimezone(tz).isoformat()
+        if status_row is not None and status is not None
+        else None
+    )
     tone = module_status_badge_tone(status) if status is not None else "not_inspected"
     label = module_status_label(status) if status is not None else "미점검"
     return {
@@ -229,6 +235,8 @@ def _module_view_from_row(
         "duration_ms": duration_ms,
         # 자동 복구 가시성(설계 §3.4) — `daily_system_status` 프로젝션의 recovered 컬럼에서 읽는다.
         "recovered": recovered,
+        # 상황판 타임라인의 x 좌표 원천(설계 §4.3). 로컬 타임존 ISO.
+        "at_iso": at_iso,
     }
 
 
@@ -238,6 +246,7 @@ def _system_view_from_projection(
     run_summaries: list[DailyRunSummaryRow],
     *,
     duration_by_module_run: dict[tuple[str, str], int | None],
+    tz: ZoneInfo,
 ) -> dict[str, Any]:
     modules = sorted(system.modules, key=lambda m: m.order)
     module_views = [
@@ -254,6 +263,7 @@ def _system_view_from_projection(
                 if module.module_id in status_rows and status_rows[module.module_id].last_run_id
                 else None
             ),
+            tz=tz,
         )
         for module in modules
     ]
@@ -268,6 +278,8 @@ def _system_view_from_projection(
     }
     for view in module_views:
         counts[view["bucket"]] += 1
+
+    stamps = sorted(view["at_iso"] for view in module_views if view["at_iso"])
 
     module_total = len(module_views)
     inspected = module_total - counts["not_inspected"]
@@ -289,6 +301,9 @@ def _system_view_from_projection(
         "latest_run_status_label": (run_status_label(latest.status) if latest else "미점검"),
         "latest_run_tone": (run_status_badge_tone(latest.status) if latest else "not_inspected"),
         "triggered_by": latest.triggered_by if latest else None,
+        # 상황판 타임라인의 시스템 스팬(설계 §4.3). 점검이 없으면 None.
+        "first_at": stamps[0] if stamps else None,
+        "last_at": stamps[-1] if stamps else None,
         "modules": module_views,
     }
 
@@ -322,6 +337,7 @@ def build_daily_dashboard_from_projection(
                 status_by_system.get(system.system_code, {}),
                 summaries_by_system.get(system.system_code, []),
                 duration_by_module_run=durations,
+                tz=tz,
             )
             for system in sorted(systems, key=lambda s: s.display_order)
         ]

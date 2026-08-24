@@ -9,7 +9,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     {{ assets.asset_styles("entries/wall.ts") }}
 </head>
-<body class="wall">
+<body class="wall" hx-ext="morph">
     {% include "wall_fragment.html" %}
     {{ assets.asset_script("entries/wall.ts") }}
 </body>
