@@ -59,50 +59,92 @@ body.wall {
 .wall-hero[data-tone="running"] .wall-hero__headline { color: var(--st-running-solid); }
 .wall-hero[data-tone="waiting_input"] .wall-hero__headline { color: var(--st-waiting_input-solid); }
 
-.wall-matrix {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1.5vmin;
-}
-
-.wall-sys {
+/* ── 오늘의 타임라인 ──
+   x 좌표는 서버가 백분율로 계산해 --lane-* 로 내려준다(설계 §4.3, D2).
+   차트 라이브러리를 쓰지 않으므로 JS 가 죽어도 이 화면은 그대로 남는다. */
+.wall-timeline {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.5vmin;
-  padding: 1.5vmin 1vmin;
-  border-radius: 1.5vmin;
-  background: var(--wl-surface);
+  gap: 1vmin;
 }
 
-.wall-sys__code {
-  font-size: clamp(0.875rem, 2.4vmin, 2.25rem);
-  font-weight: 800;
-}
-
-.wall-sys__bar {
-  width: 100%;
-  height: 2vmin;
-  border-radius: 1vmin;
-}
-
-.wall-sys__count {
-  font-size: clamp(0.75rem, 1.8vmin, 1.75rem);
+.wall-timeline__empty {
+  padding: 6vmin 0;
+  font-size: clamp(1rem, 5vmin, 5rem);
   font-weight: 700;
   color: var(--wl-dim);
 }
 
-.wall-sys__name {
-  font-size: clamp(0.625rem, 1.4vmin, 1.25rem);
-  color: var(--wl-dim);
+.wall-timeline__lanes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1vmin;
 }
 
-.wall-sys[data-tone="passed"] .wall-sys__bar { background: var(--st-passed-solid); }
-.wall-sys[data-tone="anomaly"] .wall-sys__bar { background: var(--st-anomaly-solid); }
-.wall-sys[data-tone="error"] .wall-sys__bar { background: var(--st-error-solid); }
-.wall-sys[data-tone="running"] .wall-sys__bar { background: var(--st-running-solid); }
-.wall-sys[data-tone="blocked"] .wall-sys__bar { background: var(--st-blocked-solid); }
-.wall-sys[data-tone="pending"] .wall-sys__bar { background: var(--st-pending-solid); }
+.wall-lane {
+  display: grid;
+  grid-template-columns: 12vmin 1fr;
+  align-items: center;
+  gap: 1.5vmin;
+}
+
+.wall-lane__code {
+  font-size: clamp(0.875rem, 2.4vmin, 2.25rem);
+  font-weight: 800;
+  color: var(--wl-dim);
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+.wall-lane__track {
+  position: relative;
+  height: 3vmin;
+  border-radius: 0.6vmin;
+  background: var(--wl-surface);
+  overflow: hidden;
+}
+
+.wall-lane__span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--lane-left);
+  width: var(--lane-width);
+  border-radius: 0.6vmin;
+}
+
+.wall-lane__span[data-tone="passed"] { background: var(--st-passed-solid); }
+.wall-lane__span[data-tone="anomaly"] { background: var(--st-anomaly-solid); }
+.wall-lane__span[data-tone="error"] { background: var(--st-error-solid); }
+.wall-lane__span[data-tone="running"] { background: var(--st-running-solid); }
+.wall-lane__span[data-tone="blocked"] { background: var(--st-blocked-solid); }
+.wall-lane__span[data-tone="pending"] { background: var(--st-pending-solid); }
+
+/* "지금" — 레인 전체를 가로지르는 세로선. 오른쪽 끝에서 새 스팬이 태어난다. */
+.wall-timeline__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(12vmin + 1.5vmin + var(--now-left) * (100% - 13.5vmin) / 100%);
+  width: 0.3vmin;
+  background: var(--st-running-solid);
+}
+
+.wall-timeline__axis {
+  position: relative;
+  height: 3vmin;
+  margin-left: calc(12vmin + 1.5vmin);
+}
+
+.wall-timeline__tick {
+  position: absolute;
+  left: var(--tick-left);
+  transform: translateX(-50%);
+  font-size: clamp(0.625rem, 1.6vmin, 1.5rem);
+  color: var(--wl-dim);
+  white-space: nowrap;
+}
 
 .wall-strip {
   display: grid;

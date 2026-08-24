@@ -12,15 +12,31 @@
     {% if d.detail %}<p class="wall-hero__detail">{{ d.detail }}</p>{% endif %}
   </section>
 
-  <section class="wall-matrix">
-    {% for system in view.systems %}
-    <div class="wall-sys" data-wall-system="{{ system.code }}" data-tone="{{ system.tone }}">
-      <span class="wall-sys__code">{{ system.code }}</span>
-      <span class="wall-sys__bar" aria-hidden="true"></span>
-      <span class="wall-sys__count">{{ system.passed }}/{{ system.total }}</span>
-      <span class="wall-sys__name">{{ system.name }}</span>
+  {% set tl = view.timeline %}
+  <section class="wall-timeline">
+    {% if not tl.has_data %}
+    <p class="wall-timeline__empty">오늘 점검 대기 중</p>
+    {% else %}
+    <div class="wall-timeline__lanes">
+      {% for lane in tl.lanes %}
+      <div class="wall-lane">
+        <span class="wall-lane__code">{{ lane.code }}</span>
+        <div class="wall-lane__track">
+          <span class="wall-lane__span"
+                data-tone="{{ lane.tone }}"
+                style="--lane-left: {{ lane.left_pct }}%; --lane-width: {{ lane.width_pct }}%"
+                aria-hidden="true"></span>
+        </div>
+      </div>
+      {% endfor %}
+      <span class="wall-timeline__now" style="--now-left: {{ tl.now_pct }}%" aria-hidden="true"></span>
     </div>
-    {% endfor %}
+    <div class="wall-timeline__axis">
+      {% for tick in tl.ticks %}
+      <span class="wall-timeline__tick" style="--tick-left: {{ tick.left_pct }}%">{{ tick.label }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
   </section>
 
   <section class="wall-strip">

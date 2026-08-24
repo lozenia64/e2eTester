@@ -77,6 +77,25 @@ SUMMARY: dict[str, Any] = {
                 "not_inspected": 0,
             },
             "modules": [],
+            "first_at": "2026-08-20T07:00:00+09:00",
+            "last_at": "2026-08-20T07:30:00+09:00",
+        },
+        {
+            "system_code": "FP",
+            "system_name": "위촉서류",
+            "module_total": 6,
+            "pass_rate": 67,
+            "counts": {
+                "passed": 4,
+                "anomaly": 2,
+                "error": 0,
+                "running": 0,
+                "other": 0,
+                "not_inspected": 0,
+            },
+            "modules": [],
+            "first_at": "2026-08-20T08:00:00+09:00",
+            "last_at": "2026-08-20T08:15:00+09:00",
         },
     ],
     "totals": {
@@ -90,25 +109,28 @@ SUMMARY: dict[str, Any] = {
     },
     "attention": [],
     "date_label": "2026-08-20",
-    "generated_at": "2026-08-20T09:14:00+00:00",
+    "generated_at": "2026-08-20T09:00:00+09:00",
 }
 
 
 class _FakeSummaryQueries:
-    def __init__(self) -> None:
+    def __init__(self, summary: dict[str, Any] | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.summary = summary if summary is not None else SUMMARY
 
     async def get_daily_summary(self, *, user_id, allowed_system_codes, is_admin=False):
         self.calls.append(
             {"user_id": user_id, "allowed": allowed_system_codes, "is_admin": is_admin}
         )
-        return SUMMARY
+        return self.summary
 
 
-def _client(*, enabled: bool = True) -> tuple[TestClient, _FakeSummaryQueries]:
+def _client(
+    *, enabled: bool = True, summary: dict[str, Any] | None = None
+) -> tuple[TestClient, _FakeSummaryQueries]:
     app = FastAPI()
     app.include_router(routes_wall.router)
-    fake = _FakeSummaryQueries()
+    fake = _FakeSummaryQueries(summary)
     app.dependency_overrides[get_daily_summary_queries] = lambda: fake
     app.dependency_overrides[routes_wall.wall_enabled] = lambda: enabled
     return TestClient(app), fake
@@ -181,21 +203,6 @@ def test_page_does_not_extend_base_layout():
     assert 'extends "base.html"' not in source
 
 
-def test_matrix_renders_every_system():
-    client, _ = _client()
-    with client:
-        body = client.get("/wall").text
-    assert 'data-wall-system="HOM"' in body
-    assert "대표홈" in body
-
-
-def test_matrix_system_carries_its_tone():
-    client, _ = _client()
-    with client:
-        body = client.get("/wall").text
-    assert 'data-tone="passed"' in body
-
-
 def test_strip_renders_three_large_cards():
     """통과율은 히어로가 흡수 — 스트립은 3장(설계 §3.5)."""
     client, _ = _client()
@@ -235,3 +242,40 @@ def test_fragment_is_self_replacing():
     with client:
         body = client.get("/wall/fragment").text
     assert 'id="wall-body"' in body
+
+
+def test_timeline_renders_a_lane_per_inspected_system():
+    client, _ = _client()
+    html = client.get("/wall").text
+    assert 'class="wall-timeline"' in html
+    assert html.count('class="wall-lane"') == 2  # SUMMARY 의 시스템 2개
+
+
+def test_timeline_lane_carries_geometry_from_server():
+    """좌표 계산은 서버가 한다 — 클라이언트 JS 가 없어도 그려진다(D2)."""
+    client, _ = _client()
+    html = client.get("/wall").text
+    assert "--lane-left:" in html
+    assert "--lane-width:" in html
+
+
+def test_timeline_marks_now():
+    client, _ = _client()
+    html = client.get("/wall").text
+    assert 'class="wall-timeline__now"' in html
+
+
+def test_timeline_shows_waiting_message_when_nothing_inspected():
+    empty = {**SUMMARY, "systems": []}
+    client, _ = _client(summary=empty)
+    html = client.get("/wall").text
+    assert "오늘 점검 대기 중" in html
+    assert 'class="wall-lane"' not in html
+
+
+def test_matrix_markup_is_gone():
+    """매트릭스는 타임라인의 y축으로 흡수됐다(D1)."""
+    client, _ = _client()
+    html = client.get("/wall").text
+    assert 'class="wall-matrix"' not in html
+    assert 'class="wall-sys"' not in html
