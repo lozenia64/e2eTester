@@ -177,6 +177,7 @@ def build_wall_view(summary: dict[str, Any]) -> dict[str, Any]:
     """Daily summary -> wall view. Never carries ``my_seconds``."""
     totals = summary.get("totals", {})
     attention = summary.get("attention", []) or []
+    generated_at = summary.get("generated_at", "")
     return {
         "dominant": _dominant(totals, attention),
         "systems": [
@@ -194,6 +195,11 @@ def build_wall_view(summary: dict[str, Any]) -> dict[str, Any]:
             for card in summary.get("cards", [])
             if card.get("key") not in _STRIP_EXCLUDED_CARD_KEYS
         ],
+        "timeline": (
+            build_timeline(summary.get("systems", []), now_iso=generated_at)
+            if generated_at
+            else {"has_data": False, "span_minutes": 0, "now_pct": 0.0, "lanes": [], "ticks": []}
+        ),
         "date_label": summary.get("date_label", ""),
-        "generated_at": summary.get("generated_at", ""),
+        "generated_at": generated_at,
     }

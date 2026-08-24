@@ -395,3 +395,28 @@ def test_systems_never_inspected_are_dropped_from_lanes():
     ]
     tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
     assert [lane["code"] for lane in tl["lanes"]] == ["HOM"]
+
+
+def test_wall_view_carries_timeline():
+    summary = _summary()
+    summary["systems"] = [
+        _sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T07:30:00+09:00"),
+    ]
+    summary["generated_at"] = "2026-08-24T09:00:00+09:00"
+    view = build_wall_view(summary)
+    assert view["timeline"]["has_data"] is True
+    assert view["timeline"]["lanes"][0]["code"] == "HOM"
+
+
+def test_wall_view_timeline_is_empty_without_generated_at():
+    """generated_at 이 비면 축을 그릴 수 없다 — 빈 상태로 떨어진다."""
+    summary = _summary()
+    summary["generated_at"] = ""
+    view = build_wall_view(summary)
+    assert view["timeline"]["has_data"] is False
+
+
+def test_wall_view_keeps_existing_keys():
+    view = build_wall_view(_summary())
+    for key in ("dominant", "systems", "strip", "date_label", "generated_at"):
+        assert key in view
