@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -60,16 +62,46 @@ def _html(client: TestClient) -> str:
     return response.text
 
 
+class _AncestorCapture(HTMLParser):
+    """렌더된 HTML의 특정 id가 어느 레이아웃 컨테이너에 속하는지 기록한다."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._stack: list[dict[str, str]] = []
+        self.ancestors: dict[str, list[dict[str, str]]] = {}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        node = {key: value or "" for key, value in attrs}
+        element = {"tag": tag, **node}
+        if node.get("id") in {"runs-section", "schedules-section"}:
+            self.ancestors[node["id"]] = [*self._stack, element]
+        self._stack.append(element)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        return None
+
+    def handle_endtag(self, tag: str) -> None:
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index]["tag"] == tag:
+                del self._stack[index:]
+                return
+
+
 def test_root_carries_the_exec_shell_class(client) -> None:
     """넌스크롤 셸은 body:has(.exec) 로 걸린다 — 클래스가 없으면 셸이 통째로 안 붙는다."""
     assert 'class="exec' in _html(client)
 
 
-def test_accordion_is_gone(client) -> None:
-    """<details> 가 남아 있으면 '펼치기 전에는 안 보이는' 문제가 그대로다."""
+def test_system_accordions_are_gone(client) -> None:
+    """시스템 카드 아코디언만 제거하고, 예약 폼의 접이식은 유지한다."""
     html = _html(client)
-    assert "<details" not in html
+    assert 'class="system-card' not in html
     assert "system-card--suite" not in html
+
+
+def test_schedule_form_stays_collapsible(client) -> None:
+    """D7: 긴 cron 빌더는 실행 버튼의 초기 가시성을 위해 접이식으로 유지한다."""
+    assert '<details class="sched' in _html(client)
 
 
 def test_every_system_has_a_left_target_and_a_right_panel(client) -> None:
@@ -91,6 +123,7 @@ def test_form_contract_survives(client) -> None:
         'id="suite-form"',
         'id="suite-start-button"',
         'id="suite-section"',
+        'name="browser_mode"',
         'class="system-form',
         'data-role="system-definition"',
         'data-role="preset-panel"',
@@ -104,6 +137,26 @@ def test_form_contract_survives(client) -> None:
         assert hook in html, hook
 
 
+def test_x_cloak_is_global_for_execute_and_dashboard_consumers(client) -> None:
+    """Alpine 초기화 전 execute 패널과 dashboard 드로어가 같은 전역 리셋을 쓴다."""
+    base_css = Path("app/web/frontend/styles/base.css").read_text(encoding="utf-8")
+    dashboard_template = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
+
+    assert base_css.count("[x-cloak]") == 1
+    assert "x-cloak" in _html(client)
+    assert "x-cloak" in dashboard_template
+
+
+def test_exec_shell_assigns_overflow_to_the_detail_owner() -> None:
+    """뷰포트 셸은 잠그고, 실제 콘텐츠 오버플로는 우측 detail만 소유한다."""
+    execute_css = Path("app/web/frontend/styles/execute.css").read_text(encoding="utf-8")
+
+    shell_rule = execute_css.split("body:has(.exec) {", 1)[1].split("}", 1)[0]
+    detail_rule = execute_css.split(".exec-detail {", 1)[1].split("}", 1)[0]
+    assert "overflow: hidden;" in shell_rule
+    assert "overflow-y: auto;" in detail_rule
+
+
 def test_single_system_user_still_gets_a_layout(client) -> None:
     """allowed_system_codes 가 1개인 사용자에게도 좌우 2열이 성립해야 한다."""
     client.app.dependency_overrides[get_current_user] = lambda: _user(["hom"])
@@ -111,3 +164,19 @@ def test_single_system_user_still_gets_a_layout(client) -> None:
     assert 'data-exec-target="suite"' in html
     assert 'data-exec-target="hom"' in html
     assert 'data-exec-target="mhm"' not in html
+
+
+def test_results_and_saved_schedules_remain_in_the_detail_scroller(client) -> None:
+    """실행 뒤 표시되는 결과·저장 예약은 넌스크롤 셸 밖으로 밀려나면 안 된다."""
+    parser = _AncestorCapture()
+    parser.feed(_html(client))
+
+    for section_id in ("runs-section", "schedules-section"):
+        ancestors = parser.ancestors[section_id]
+        assert any("exec-detail" in node.get("class", "").split() for node in ancestors)
+
+
+def test_removed_system_accordions_leave_no_stale_copy(client) -> None:
+    """시스템 패널은 좌측 선택으로 바뀌었으므로 카드 펼치기 안내가 남으면 안 된다."""
+    html = _html(client)
+    assert "카드를 펼쳐" not in html
