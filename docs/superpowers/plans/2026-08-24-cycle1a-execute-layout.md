@@ -634,6 +634,68 @@ git commit -m "feat(execute): 모듈 의존성 그래프를 패널 상단 지배
 
 ---
 
+#### 2b. Task 1 이 만든 고아 CSS 를 치운다
+
+Task 1 이 `class="system-card"` 의 **마지막 소비자를 없앴다.** `app.css` 의 `.system-card*` 규칙은 이제 아무도 쓰지 않는다 — 실측 60곳, 약 250줄이다. 이 사이클이 만든 죽은 코드이므로 이 사이클이 치운다.
+
+`::-webkit-details-marker` 규칙은 `<details>` 전용이라 특히 무의미해졌다.
+
+- [ ] **Step 1: 소비자가 정말 없는지 확인한다**
+
+Run: `grep -rn "system-card" app/web/templates/ app/web/frontend/ --include=*.html --include=*.jinja --include=*.ts --include=*.css | grep -v "styles/app.css"`
+
+Expected: `primitives.css` 의 주석 한 줄 외에 없음. `app/web/static/app.js:530` 의 `bindSystemCardExpand` 는 `details.system-card` 를 찾는데 그 요소가 사라져 아무것도 못 찾는다 — **죽은 경로이며 Cycle 1b 가 함수째 지운다.** CSS 를 먼저 지워도 무해하다.
+
+템플릿이나 컴포넌트에서 하나라도 나오면 **멈추고 보고해라.** 내가 놓친 소비자가 있다는 뜻이다.
+
+- [ ] **Step 2: 실패하는 테스트를 쓴다**
+
+`tests/test_execute_layout.py` 에 추가한다.
+
+```python
+def test_orphaned_system_card_css_is_gone() -> None:
+    """Task 1 이 마지막 소비자를 없앴다 — 죽은 규칙을 남기면 app.css 가 계속 부풀어 있다.
+
+    app.css 는 FG-004 의 400줄 상한을 넘겨 allowlist 에 올라 있다. 그 목록을
+    비우는 것이 프로그램의 목표 중 하나이므로, 소비자가 사라진 규칙은 바로 지운다.
+    """
+    from pathlib import Path
+
+    css = Path("app/web/frontend/styles/app.css").read_text(encoding="utf-8")
+    assert "system-card" not in css
+```
+
+- [ ] **Step 3: 실패를 확인한다**
+
+Run: `python3 -m pytest tests/test_execute_layout.py -k orphan -v`
+Expected: FAIL — 약 60곳이 남아 있다
+
+- [ ] **Step 4: 지운다**
+
+`.system-card` 로 시작하는 규칙 전부를 지운다. **미디어쿼리 안에도 흩어져 있으므로**(예: `:354` 부근) 파일 전체를 훑어야 한다. 규칙만 지우고 그것을 감싼 미디어쿼리 블록이 비면 그 블록도 함께 지운다.
+
+`:116` 의 `/* 대시보드 시스템 카드 (Bento grid accordion ...) */` 주석도 함께 지운다 — 설명할 대상이 사라졌다.
+
+**다른 선택자는 건드리지 마라.** 같은 미디어쿼리 안에 `.status-metric-card` 등 살아 있는 규칙이 섞여 있을 수 있다.
+
+- [ ] **Step 5: 확인한다**
+
+Run: `python3 -m pytest tests/test_execute_layout.py -v && python3 scripts/check_frontend_gates.py && npm run build`
+Expected: 전부 통과
+
+Run: `wc -l app/web/frontend/styles/app.css`
+
+그다음 `/runs/execute` 와 `/` 를 열어 **레이아웃이 무너지지 않았는지** 확인한다. 지운 규칙이 실제로 아무 요소에도 안 걸렸다면 화면은 변하지 않아야 한다 — 하나라도 달라 보이면 살아 있는 소비자를 지운 것이다.
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add app/web/frontend/styles/app.css tests/test_execute_layout.py
+git commit -m "refactor(execute): 소비자가 사라진 시스템 카드 CSS 삭제"
+```
+
+---
+
 ### Task 3: 좌측 목록의 오늘 상태 배지
 
 `/api/dashboard/daily` 를 재사용하되(D6), **응답에 톤·라벨이 없다는 실측**을 반영해 서버가 이미 가진 파생을 노출한다. 세 단계로 나누고 각각 커밋한다 — 리뷰어가 API 필드 추가는 반려하면서 컴포넌트 변경은 승인할 수 있어야 한다.
@@ -1132,7 +1194,8 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 - [ ] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
 - [ ] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
 - [ ] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
-- [ ] `app.css` 가 약 150줄 줄었다(모듈 그래프 절 `:427`~`:576` 이사)
+- [ ] `app.css` 가 약 400줄 줄었다(모듈 그래프 150줄 이사 + 고아 시스템 카드 250줄 삭제)
+- [ ] `app.css` 에 `system-card` 0건(Task 2b)
 
 ## 이 계획이 남기는 것
 
