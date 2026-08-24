@@ -77,7 +77,7 @@
 
 | 사이클 | 화면 | 잘라낼 레거시 | 완료 신호 |
 | --- | --- | --- | --- |
-| **0** | (없음 — 팔레트 통일) | 템플릿 6벌 로그 `--st-*` 18줄 | FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
+| **0** | (없음 — 팔레트 통일) | 템플릿 7벌의 로그 토큰 정의 · `admin-runs.js` 차트 색 4개 | `legacy-aliases.css` 신설 · FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
 | **1** | 점검 실행 | `app.js` 약 1,400줄(모듈 그래프 620 + 프리셋 패널 540 + 폼 바인딩 약 240) · `app.css` 프리셋(846~1086) · 모듈그래프(427~570) 절 | `entries/execute.ts` 신설 |
 | **2** | 수트 상세 | `app.js` 약 700줄 | `entries/suite.ts` 신설 |
 | **3** | 런 상세 | `app.js` 약 700줄 | `entries/run.ts` 신설 |
@@ -116,7 +116,7 @@
 
 | 기준 | 측정 |
 | --- | --- |
-| 팔레트 단일화 | 템플릿 6개에 `--st-*` 재정의 0건. 6개 화면의 상태 색이 `tokens.generated.css` 값과 일치 |
+| 팔레트 단일화 | 템플릿 7개에 `--st-*` · `--ease-spring` 정의 0건. 7개 화면의 상태 색이 `tokens.generated.css` 값으로 해석됨. `admin-runs.js` 차트에 상태 hex 0건 |
 | 게이트 사각지대 폐쇄 | FG-002 가 `templates/` · `static/*.js` 를 스캔. 파일 allowlist 는 사이클마다 감소 |
 | 실행 버튼 상시 노출 | 1366 · 1920 · 2560 px 에서 스크롤 없이 실행 버튼이 보인다 |
 | 스크롤 소유권 | `body` 세로 스크롤 0. 내부 스크롤을 갖는 영역이 정확히 하나(우측 조건 열) |
@@ -130,7 +130,25 @@
 
 ### 4.1 Cycle 0 — 팔레트 통일
 
-**삭제.** `admin/index.html:8-10` · `admin/runs.html:8-10` · `anomalies.html:9-11` · `insights.html:9-11` · `schedules.html:9-11` · `self_healing.html:9-11`, 총 18줄. 6벌 모두 SSOT 와 **이름이 같고 값만 다른** 재정의이므로 지우기만 하면 `tokens.generated.css` 값이 상속된다. 마크업은 한 줄도 건드리지 않는다.
+> **정정(계획 작성 중 실측):** 초안은 "지우기만 하면 `tokens.generated.css` 값이 상속된다"고 적었으나 **틀렸다.** 로그 블록이 정의하는 것은 `--st-passed` 같은 **짧은 이름**이고, SSOT 가 생성하는 것은 `--st-passed-solid` 등 **접미사 있는 이름**이다. 짧은 이름은 `tokens.generated.css` 에 존재하지 않으므로, 지우기만 하면 `var(--st-passed)` 가 미정의가 되어 색이 상속되는 것이 아니라 **사라진다.** 따라서 Cycle 0 은 삭제가 아니라 **별칭 치환**이다.
+
+**대응 관계 실측.**
+
+| 짧은 이름 | 로그 값 | SSOT 대응 | 처리 |
+| --- | --- | --- | --- |
+| `--st-passed` · `--st-anomaly` · `--st-error` · `--st-running` · `--st-cancelled` · `--st-blocked` | `#0ca30c` `#fab219` `#d03b3b` `#2a78d6` `#9ca3af` `#ec835a` | `--st-*-solid` 존재 | SSOT `-solid` 로 별칭 |
+| `--st-idle` | `#b6b4ad` (4벌) · `#e5e7eb` (`admin/index`) | **없음** — `STATUS_TONES` 에 `idle` 이 없다 | `--st-pending-solid` 로 별칭(D10) |
+| `--st-track` | `#ecebe6` | **없음** — 링·바의 트랙 배경이지 상태색이 아니다 | `--c-gray-200` primitive(D10) |
+| `--st-active` | `#4f46e5` | 없음 — 선택 강조이지 상태색이 아니다 | `--c-indigo-600` primitive(D10) |
+| `--ease-spring` | `cubic-bezier(.22, 1, .36, 1)` | `--ease-out` 이 **같은 곡선** | `--ease-out` 로 별칭. 사용처 51곳은 무변경(D9) |
+
+`--ease-spring` 은 위 6개 파일에 더해 `presets.html:9` 까지 **7벌**이다(`presets.html` 은 상태색은 재정의하지 않는다).
+
+**별칭의 거처.** `app/web/frontend/styles/legacy-aliases.css` 를 신설하고 `base.css` 가 `tokens.generated.css` 다음에 `@import` 한다(D9). `primitives.css` 에 넣지 않는 이유는 그 파일이 "중립 팔레트, 상태색은 `tokens.generated.css` 담당"을 명시하고 있어서다. 새 파일은 **소멸 조건을 자기 안에 적는다** — 화면별 사이클이 컴포넌트로 이관할 때마다 별칭이 한 줄씩 줄고, 마지막 화면이 끝나면 파일과 `base.css` 의 `@import` 한 줄이 함께 사라진다.
+
+**템플릿 변경.** 7개 파일의 인라인 `<style>` 에서 위 토큰 **정의만** 지운다. `var(--st-passed)` 를 쓰는 51곳의 사용처와 마크업은 한 줄도 건드리지 않는다.
+
+**레거시 JS.** `admin-runs.js:657~675` 의 Chart.js 데이터셋 색 4개가 로그 팔레트 hex 를 직접 들고 있다(`#0ca30c` · `#fab219` · `#d03b3b` · `#9ca3af`). CSS 별칭이 닿지 않는 유일한 자리이므로, 같은 파일 계열이 이미 쓰는 방식(`admin-dashboard.js:23` 의 `toneVar`)대로 `var(--st-*)` 문자열을 `getComputedStyle` 로 해석해 넘긴다.
 
 **게이트 확장.** `check_frontend_gates.py:179` 의 FG-002 순회 대상에 `TEMPLATE_DIR` 과 `app/web/static/*.js` 를 추가한다. 두 곳에 하드코딩 hex 가 대량으로 남아 있으므로(§1.1) **파일 단위 allowlist** 를 함께 도입하고, 사이클마다 한 줄씩 지운다 — FG-004 · FG-005 가 이미 쓰는 방식이다.
 
@@ -222,6 +240,8 @@
 | **D6** | 좌측 상태 배지는 `/api/dashboard/daily` **재사용** | 새 read model·라우트 변경 0. 대안(execute 컨텍스트에 상태 주입)은 라우트·뷰모델·템플릿 3층을 동시에 바꾼다. 사용자 결정 |
 | **D7** | 예약 등록 폼(`execute.html:165~245`)을 이번 사이클에서 **옮기지 않는다** | 성격상 예약 관리(Cycle 6)의 것이지만 "실행하면서 바로 예약"이 의도된 동선일 수 있다. 우측 열 하단 접이식으로 유지하고 Cycle 6 에서 중복 여부를 판단한다. 사용자 결정 |
 | **D8** | 마스터-디테일은 서버 렌더 폼 6개를 **유지한 채** 표시만 전환 | 렌더 경로를 바꾸지 않아 폼 바인딩·`data-role`·검증이 전부 산다(§4.4) |
+| **D9** | 짧은 별칭은 **신설 `legacy-aliases.css`** 에 두고 사용처 51곳은 건드리지 않는다 | 사용처를 `-solid` 로 일괄 치환하면 Cycle 0 이 51곳 수정으로 부풀고, 화면별 사이클이 어차피 그 CSS 를 컴포넌트로 옮기며 지운다. `primitives.css` 는 "상태색은 `tokens.generated.css` 담당"을 명시하므로 거처가 아니다. 파일이 **소멸 조건을 자기 안에 적어** allowlist 와 같은 방식으로 줄어든다 |
+| **D10** | `--st-idle` → `--st-pending-solid`, `--st-track` → `--c-gray-200`, `--st-active` → `--c-indigo-600` | `STATUS_TONES` 에 `idle` 은 없다. 의미상 "아직 점검 안 함" = `pending` 이다. `track`·`active` 는 애초에 상태색이 아니므로 `--st-` 이름을 떠나 중립 primitive 로 간다. 색이 미세하게 이동한다(`#b6b4ad` → `#a1a1aa`) — §4.1 의 "SSOT 로 수렴"과 같은 성격 |
 
 ---
 
