@@ -44,4 +44,19 @@ describe("renderStatusBadge", () => {
     expect(renderStatusBadge("passed", { size: "sm" }).dataset.size).toBe("sm");
     expect(renderStatusBadge("passed").dataset.size).toBe("md");
   });
+
+  it("라벨을 주면 그것을 쓴다 — 서버가 합성 상태 이름을 줄 때 필요하다", () => {
+    const el = renderStatusBadge("not_inspected", { label: "미점검" });
+    expect(el.textContent).toBe("미점검");
+  });
+
+  it("라벨을 안 주면 기존 동작 그대로다", () => {
+    const el = renderStatusBadge("passed");
+    expect(el.textContent).toBe("정상");
+  });
+
+  it("합성 상태의 톤은 pending 으로 떨어진다 — 색은 회색이어야 한다", () => {
+    const el = renderStatusBadge("not_inspected", { label: "미점검" });
+    expect(el.dataset.tone).toBe("pending");
+  });
 });
