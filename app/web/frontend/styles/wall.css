@@ -159,6 +159,38 @@ body.wall {
 
 /* OTP 대기가 지배 요소일 때만 히어로 전체가 맥동한다 — 3~5m 거리에서 배지
    크기의 맥동은 보이지 않기 때문이다(설계 §3.10). */
+/* ── 모션 ──
+   원칙: 변한 것만 움직인다. morph 가 노드를 보존하므로 새로 삽입된 스팬만
+   진입 애니메이션을 탄다(설계 §4.4). */
+@starting-style {
+  .wall-lane__span {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+.wall-lane__span {
+  transition: width 0.6s var(--ease-out), opacity 0.6s var(--ease-out);
+}
+
+@keyframes wall-now-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.wall-timeline__now {
+  animation: wall-now-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes wall-span-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.wall-lane__span[data-tone="running"] {
+  animation: wall-span-shimmer 1.8s ease-in-out infinite;
+}
+
 @keyframes wall-attention {
   0%,
   100% {
@@ -174,6 +206,12 @@ body.wall {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .wall-lane__span,
+  .wall-timeline__now {
+    transition: none;
+    animation: none;
+  }
+
   .wall-body[data-dominant="waiting_input"] .wall-hero {
     animation: none;
   }

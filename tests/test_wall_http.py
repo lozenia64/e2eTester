@@ -233,7 +233,7 @@ def test_body_declares_htmx_polling_target():
     with client:
         body = client.get("/wall").text
     assert 'hx-get="/wall/fragment"' in body
-    assert 'hx-swap="outerHTML"' in body
+    assert 'hx-swap="morph:outerHTML"' in body
 
 
 def test_fragment_is_self_replacing():
@@ -281,3 +281,21 @@ def test_matrix_markup_is_gone():
     html = client.get("/wall").text
     assert 'class="wall-matrix"' not in html
     assert 'class="wall-sys"' not in html
+
+
+def test_body_declares_morph_extension_outside_the_swap_target():
+    """확장 선언이 교체 대상 안에 있으면 첫 교체 후 사라진다(설계 §4.4)."""
+    client, _ = _client()
+    html = client.get("/wall").text
+    body_open = html.index("<body")
+    wall_body = html.index('id="wall-body"')
+    assert 'hx-ext="morph"' in html
+    assert html.index('hx-ext="morph"') < wall_body
+    assert html.index('hx-ext="morph"') > body_open
+
+
+def test_fragment_uses_morph_swap():
+    client, _ = _client()
+    html = client.get("/wall/fragment").text
+    assert 'hx-swap="morph:outerHTML"' in html
+    assert 'hx-swap="outerHTML"' not in html
