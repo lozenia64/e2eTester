@@ -8,7 +8,7 @@
 
 **Tech Stack:** Jinja2, Alpine.js 3(이미 전역), Tailwind CSS v4, CSS Grid + 컨테이너 쿼리, Vite, pytest + Playwright
 
-**Spec:** `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§1.3 숨겨진 그래프 · §1.4 아코디언 문제 · §4.3 레이아웃 · §4.4 왜 싼가 · §4.5 데이터 경로 · D6 · D8)
+**Spec:** `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§1.3 숨겨진 그래프 · §1.4 아코디언 문제 · §4.3 레이아웃 · §4.4 왜 싼가 · §4.5 데이터 경로 · §4.5.1 라벨 주입구 · D6 · D8 · D11)
 
 **선행:** `docs/superpowers/plans/2026-08-24-cycle0-palette-unification.md` 완료(상태 색이 SSOT 로 수렴한 상태여야 좌측 배지 색이 대시보드와 일치한다)
 
@@ -17,11 +17,12 @@
 ## Global Constraints
 
 - **색 SSOT 는 `app/core/status_colors.py` 의 `PALETTE`.** 새 hex 를 적지 않는다. Cycle 0 이 FG-002 를 `templates/` 까지 확장했으므로 템플릿의 새 hex 는 **게이트가 막는다.**
-- **상태 라벨·톤은 서버 주입만**(FG-003 · FG-006). 템플릿·TS 가 상태 키 맵이나 한국어 상태 라벨을 들지 않는다. 배지는 `app/web/frontend/components/status-badge` 를 쓴다.
+- **상태 라벨·톤은 서버 주입만**(FG-003 · FG-006). 템플릿·TS 가 상태 키 맵이나 한국어 상태 라벨을 들지 않는다. 배지는 `app/web/frontend/components/status-badge` 를 쓴다. **`counts` 에서 톤을 유도하는 코드를 프론트에 두지 않는다** — 그것이 FG-006 이 막는 매핑 복제다(Task 3a 가 서버에서 파생을 노출하는 이유).
 - **`/static/` 직접 참조 금지**(FG-005). 자산은 `_assets.html` 매크로 경유.
 - **엔트리·컴포넌트 파일 400줄 상한**(FG-004).
 - **넌스크롤 예산:** `body` 세로 스크롤 0. 내부 스크롤을 갖는 영역은 **우측 조건 열 하나뿐.**
-- **동작 불변:** `SPEC-UI-002` 의 AC-001(Suite preset 검증) · AC-002(depends_on)은 **서버측 규칙**이며 이 계획은 API 를 건드리지 않는다. 회귀 확인은 `tests/test_presets_http.py` · `tests/test_suite_aggregate.py` · `tests/test_suite_decider.py` 로 한다. 폼 `name` 속성과 `data-role` 값은 하나도 바꾸지 않는다 — `app.js` 가 그걸로 찾는다.
+- **API 변경은 추가만.** Task 3a 가 `/api/dashboard/daily` 응답에 `summary_badge` 를 **더한다.** 기존 키는 하나도 바꾸거나 지우지 않는다 — 대시보드 화면이 같은 응답을 쓰고 있다. 실행 화면 라우트(`routes_dashboard.py:56`)는 건드리지 않는다.
+- **동작 불변:** `SPEC-UI-002` 의 AC-001(Suite preset 검증) · AC-002(depends_on)은 **서버측 규칙**이며 이 계획은 그 규칙을 건드리지 않는다. 회귀 확인은 `tests/test_presets_http.py` · `tests/test_suite_aggregate.py` · `tests/test_suite_decider.py` 로 한다. 폼 `name` 속성과 `data-role` 값은 하나도 바꾸지 않는다 — `app.js` 가 그걸로 찾는다.
 - **좌측 항목 수는 1~7개로 변한다**(`current_user.allowed_system_codes` 필터 + SUITE 1개). 1개일 때도 레이아웃이 성립해야 한다.
 - **UI 문자열은 한국어**(AGENTS.md).
 - **PR 전 필수:** `python3 scripts/ci/run_all_gates.py --profile full`
@@ -34,10 +35,14 @@
 | `app/web/frontend/styles/base.css` | 전역 임포트 체인 | 수정(1줄) |
 | `app/web/templates/execute.html` | 화면 마크업 | 수정(대폭 — 아코디언 → 2열) |
 | `app/web/templates/execute/_system_list.html` | 좌측 선택 목록 | **신규**(포함 파일) |
-| `app/web/static/app.css` → `execute.css` | 모듈 그래프 스타일 이사(`app.css:427~570`) | 이동 |
+| `app/web/frontend/styles/app.css` → `execute.css` | 모듈 그래프 스타일 이사(`app.css:427~570`) | 이동 |
+| `app/contexts/insights/application/daily_dashboard.py` | 시스템 뷰에 `summary_badge` 파생 노출 | 수정(Task 3a, 1줄) |
+| `app/web/frontend/components/status-badge/index.ts` | 배지 컴포넌트 — 서버 라벨 주입구 | 수정(Task 3b, 1줄) |
+| `app/web/frontend/entries/execute-badges.ts` | 좌측 목록 배지 로더 | **신규**(Task 3c) |
+| `docs/E2E_ARCHITECTURE.md` §5.2 | API 응답 필드 문서 | 수정(Task 3a) |
 | `tests/test_execute_layout.py` | 템플릿 렌더 계약 | **신규** |
 | `tests/test_execute_viewport.py` | 넌스크롤 · 스크롤 소유권 Playwright | **신규** |
-| `docs/specs/dashboard/02-execute-page.md` | AC Spec | 수정(Task 6) |
+| `docs/specs/dashboard/02-execute-page.md` | AC Spec | 수정(Task 5) |
 
 ---
 
@@ -595,25 +600,167 @@ git commit -m "feat(execute): 모듈 의존성 그래프를 패널 상단 지배
 
 ### Task 3: 좌측 목록의 오늘 상태 배지
 
-`/api/dashboard/daily` 를 재사용한다(D6). 서버 변경 0.
+`/api/dashboard/daily` 를 재사용하되(D6), **응답에 톤·라벨이 없다는 실측**을 반영해 서버가 이미 가진 파생을 노출한다. 세 단계로 나누고 각각 커밋한다 — 리뷰어가 API 필드 추가는 반려하면서 컴포넌트 변경은 승인할 수 있어야 한다.
 
 **Files:**
-- Create: `app/web/frontend/entries/execute-badges.ts`
-- Create: `app/web/frontend/entries/execute-badges.test.ts`
-- Modify: `vite.config.ts`
-- Modify: `app/web/templates/execute.html` (스크립트 블록)
+- Modify: `app/contexts/insights/application/daily_dashboard.py` (시스템 뷰 반환 dict)
+- Modify: `app/web/frontend/components/status-badge/index.ts` · `index.test.ts`
+- Create: `app/web/frontend/entries/execute-badges.ts` · `execute-badges.test.ts`
+- Modify: `vite.config.ts`, `app/web/templates/execute.html`, `docs/E2E_ARCHITECTURE.md` §5.2
+- Test: `tests/test_daily_dashboard.py`
 
 **Interfaces:**
-- Consumes: `GET /api/dashboard/daily` 응답. `components/status-badge` 의 `renderStatusBadge(tone, label)` · `normalizeTone(value)`(`app/web/frontend/components/status-badge/index.ts`). 실제 시그니처를 열어 확인하고 그대로 쓴다
-- Produces: `applySystemBadges(root: ParentNode, systems: Array<{system_code: string, tone: string, label: string}>): void` — `[data-exec-badge="{code}"]` 에 배지를 렌더한다. 목록에 없는 코드는 비워 둔다
+- Consumes: `daily_dashboard.py:90` 의 **기존 공개 함수** `system_summary_badge(system_view: dict) -> dict[str, str]` — `{"label", "tone"}` 을 돌려준다. 새로 만들지 않는다
+- Produces:
+  - 응답의 각 시스템 항목에 `summary_badge: {"label": str, "tone": str}` 추가. 기존 키는 하나도 바뀌지 않는다
+  - `renderStatusBadge(status: string, options: { size?: "sm" | "md"; label?: string })` — `label` 이 새로 열리는 주입구
+  - `applySystemBadges(root: ParentNode, systems: SystemBadge[]): void`, `type SystemBadge = { system_code: string; summary_badge: { label: string; tone: string } }`
 
-- [ ] **Step 1: 응답 형태를 실측한다**
+#### 3a. 서버가 파생 배지를 응답에 싣는다
 
-Run: `python3 -m pytest tests/test_daily_dashboard.py -v`
+- [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-그리고 `app/contexts/insights/application/daily_dashboard.py` 를 열어 시스템별 항목의 **정확한 키 이름**(`system_code` · `tone` · `status_label` 등)을 확인한다. 아래 테스트의 픽스처를 그 키에 맞춘다. **추측하지 않는다** — 키 하나가 다르면 배지가 조용히 비어 버린다.
+`tests/test_daily_dashboard.py` 에 추가한다. 페이로드를 만드는 방식은 그 파일이 이미 쓰는 빌더 호출을 그대로 가져다 쓴다.
 
-- [ ] **Step 2: 실패하는 테스트를 쓴다**
+```python
+def test_each_system_carries_a_summary_badge() -> None:
+    """좌측 목록이 counts 에서 톤을 유도하면 FG-006 이 막는 매핑 복제가 된다.
+
+    서버가 이미 system_summary_badge() 로 파생을 갖고 있으므로 그것을 노출한다.
+    """
+    payload = _build()  # 이 파일이 이미 쓰는 빌더 호출을 그대로 사용
+    assert payload["systems"], "시스템이 비어 있으면 이 테스트가 의미 없다"
+    for system in payload["systems"]:
+        badge = system["summary_badge"]
+        assert set(badge) == {"label", "tone"}
+        assert badge["label"] and badge["tone"]
+
+
+def test_summary_badge_matches_the_shared_helper() -> None:
+    """규칙을 두 곳에 쓰지 않았는지 — 파생은 한 함수에서만 나와야 한다."""
+    from app.contexts.insights.application.daily_dashboard import system_summary_badge
+
+    payload = _build()
+    for system in payload["systems"]:
+        assert system["summary_badge"] == system_summary_badge(system)
+
+
+def test_existing_system_keys_are_untouched() -> None:
+    """대시보드 화면이 쓰는 키가 하나라도 사라지면 그 화면이 조용히 깨진다."""
+    payload = _build()
+    for system in payload["systems"]:
+        for key in (
+            "system_code",
+            "system_name",
+            "display_order",
+            "module_total",
+            "inspected",
+            "pass_rate",
+            "counts",
+        ):
+            assert key in system, key
+```
+
+- [ ] **Step 2: 실패를 확인한다**
+
+Run: `python3 -m pytest tests/test_daily_dashboard.py -k summary_badge -v`
+Expected: FAIL — `KeyError: 'summary_badge'`
+
+- [ ] **Step 3: 한 줄을 얹는다**
+
+`daily_dashboard.py` 의 시스템 뷰를 반환하는 dict(`:290` 부근, `"system_code"` 로 시작하는 리터럴)를 변수로 받고 그 뒤에 얹는다. `system_summary_badge` 는 완성된 뷰를 받으므로 순서가 중요하다.
+
+```python
+    view = {
+        "system_code": system.system_code,
+        ...
+        "latest_run_status": str(latest.status) if latest else None,
+    }
+    # 대시보드 화면이 그때그때 파생시키던 것을 응답에 싣는다 — 규칙은 여기 한 곳뿐이다.
+    view["summary_badge"] = system_summary_badge(view)
+    return view
+```
+
+- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+
+Run: `python3 -m pytest tests/test_daily_dashboard.py tests/test_dashboard_fragments_http.py -v`
+Expected: PASS — 기존 대시보드 테스트도 함께 통과해야 한다(기존 키 불변)
+
+- [ ] **Step 5: API 문서를 갱신한다**
+
+`docs/E2E_ARCHITECTURE.md` §5.2 의 `/api/dashboard/daily` 항목에 `systems[].summary_badge` 를 적는다. DOCS_GOVERNANCE 의 "API 변경 → §5.2 갱신" 항목이다.
+
+Run: `python3 scripts/check_docs_consistency.py`
+Expected: 통과
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add app/contexts/insights/application/daily_dashboard.py tests/test_daily_dashboard.py docs/E2E_ARCHITECTURE.md
+git commit -m "feat(dashboard): 시스템별 파생 배지를 응답에 노출"
+```
+
+#### 3b. 배지 컴포넌트에 라벨 주입구를 연다
+
+- [ ] **Step 1: 실패하는 테스트를 쓴다**
+
+`app/web/frontend/components/status-badge/index.test.ts` 에 추가한다.
+
+```typescript
+it("라벨을 주면 그것을 쓴다 — 서버가 합성 상태 이름을 줄 때 필요하다", () => {
+  const el = renderStatusBadge("not_inspected", { label: "미점검" });
+  expect(el.textContent).toBe("미점검");
+});
+
+it("라벨을 안 주면 기존 동작 그대로다", () => {
+  const el = renderStatusBadge("passed");
+  expect(el.textContent).toBe("정상");
+});
+
+it("합성 상태의 톤은 pending 으로 떨어진다 — 색은 회색이어야 한다", () => {
+  const el = renderStatusBadge("not_inspected", { label: "미점검" });
+  expect(el.dataset.tone).toBe("pending");
+});
+```
+
+- [ ] **Step 2: 실패를 확인한다**
+
+Run: `npm run test -- status-badge`
+Expected: FAIL — 첫 테스트가 `"대기"` 를 받는다. `MODULE_STATUS_LABELS` 에 `not_inspected` 키가 없어 `pending` 라벨로 떨어지기 때문이다(설계 §4.5.1)
+
+- [ ] **Step 3: 주입구를 연다**
+
+```typescript
+export function renderStatusBadge(
+  status: string,
+  options: { size?: "sm" | "md"; label?: string } = {},
+): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "status-badge";
+  el.dataset.tone = normalizeTone(status);
+  el.dataset.size = options.size ?? "md";
+  // 서버가 라벨을 주면 그것이 우선이다. not_inspected 처럼 enum 밖의 합성 상태는
+  // MODULE_STATUS_LABELS 에 없어 statusLabel() 이 "대기" 로 떨어뜨린다(설계 D11).
+  el.textContent = options.label ?? statusLabel(status);
+  return el;
+}
+```
+
+- [ ] **Step 4: 테스트가 통과하는지 확인한다**
+
+Run: `npm run test && npm run typecheck && npm run lint`
+Expected: PASS — 기존 호출부는 `label` 을 넘기지 않으므로 동작이 바뀌지 않는다
+
+- [ ] **Step 5: 커밋**
+
+```bash
+git add app/web/frontend/components/status-badge/
+git commit -m "feat(status-badge): 서버 라벨 주입구 추가"
+```
+
+#### 3c. 좌측 목록에 배지를 건다
+
+- [ ] **Step 1: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/entries/execute-badges.test.ts`:
 
@@ -627,78 +774,93 @@ function host(codes: string[]): HTMLElement {
   return root;
 }
 
+const HOM = { system_code: "hom", summary_badge: { label: "정상", tone: "passed" } };
+
 describe("applySystemBadges", () => {
   it("코드가 맞는 자리에 배지를 넣는다", () => {
     const root = host(["hom", "mhm"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
-    expect(root.querySelector('[data-exec-badge="hom"]')!.textContent).toContain("정상");
+    applySystemBadges(root, [HOM]);
+    const slot = root.querySelector('[data-exec-badge="hom"]')!;
+    expect(slot.textContent).toContain("정상");
+    expect(slot.querySelector(".status-badge")!.getAttribute("data-tone")).toBe("passed");
+  });
+
+  it("서버 라벨을 그대로 쓴다 — 미점검이 대기로 바뀌면 안 된다", () => {
+    const root = host(["hwtc"]);
+    applySystemBadges(root, [
+      { system_code: "hwtc", summary_badge: { label: "미점검", tone: "not_inspected" } },
+    ]);
+    expect(root.querySelector('[data-exec-badge="hwtc"]')!.textContent).toBe("미점검");
   });
 
   it("응답에 없는 시스템 자리는 비워 둔다", () => {
     const root = host(["hom", "mhm"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
+    applySystemBadges(root, [HOM]);
     expect(root.querySelector('[data-exec-badge="mhm"]')!.innerHTML).toBe("");
   });
 
   it("두 번 불러도 배지가 겹쳐 쌓이지 않는다", () => {
     const root = host(["hom"]);
-    const data = [{ system_code: "hom", tone: "passed", label: "정상" }];
-    applySystemBadges(root, data);
-    applySystemBadges(root, data);
+    applySystemBadges(root, [HOM]);
+    applySystemBadges(root, [HOM]);
     expect(root.querySelectorAll('[data-exec-badge="hom"] > *').length).toBe(1);
   });
 
   it("빈 배열이면 모든 자리를 비운다 — 조회 실패 시 화면은 살아야 한다", () => {
     const root = host(["hom"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
+    applySystemBadges(root, [HOM]);
     applySystemBadges(root, []);
     expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
   });
 });
 ```
 
-- [ ] **Step 3: 실패를 확인한다**
+- [ ] **Step 2: 실패를 확인한다**
 
 Run: `npm run test -- execute-badges`
 Expected: FAIL — `Cannot find module './execute-badges'`
 
-- [ ] **Step 4: 엔트리를 만든다**
-
-`app/web/frontend/entries/execute-badges.ts`. 상태 라벨을 **하드코딩하지 않는다**(FG-003) — 서버가 준 `label` 을 그대로 쓰고, 톤만 `normalizeTone` 으로 정규화한다.
+- [ ] **Step 3: 엔트리를 만든다**
 
 ```typescript
-// 좌측 목록의 오늘 상태 배지. 서버 변경 없이 대시보드 API 를 재사용한다(설계 D6).
-// 이 호출이 실패해도 실행 기능은 살아야 하므로, 실패는 '배지 없음' 으로만 나타난다.
-import { normalizeTone, renderStatusBadge } from "../components/status-badge/index";
+// 좌측 목록의 오늘 상태 배지. 새 엔드포인트 없이 대시보드 API 를 재사용한다(설계 D6).
+// 톤·라벨은 서버가 파생해 summary_badge 로 내려준다 — 여기서 counts 를 해석하지 않는다.
+// 이 호출이 실패해도 실행 기능은 살아야 하므로, 실패는 배지 없음으로만 나타난다.
+import { renderStatusBadge } from "../components/status-badge/index";
 
-type SystemStatus = { system_code: string; tone: string; label: string };
+type SystemBadge = {
+  system_code: string;
+  summary_badge: { label: string; tone: string };
+};
 
-export function applySystemBadges(root: ParentNode, systems: SystemStatus[]): void {
+export function applySystemBadges(root: ParentNode, systems: SystemBadge[]): void {
   const byCode = new Map(systems.map((s) => [s.system_code, s]));
   for (const slot of root.querySelectorAll<HTMLElement>("[data-exec-badge]")) {
-    const code = slot.dataset.execBadge ?? "";
-    const status = byCode.get(code);
+    const system = byCode.get(slot.dataset.execBadge ?? "");
     slot.innerHTML = "";
-    if (!status) continue;
-    slot.append(renderStatusBadge(normalizeTone(status.tone), status.label));
+    if (!system) continue;
+    const { tone, label } = system.summary_badge;
+    slot.append(renderStatusBadge(tone, { label, size: "sm" }));
   }
 }
 
 export async function loadSystemBadges(root: ParentNode = document): Promise<void> {
   try {
-    const response = await fetch("/api/dashboard/daily", { headers: { Accept: "application/json" } });
+    const response = await fetch("/api/dashboard/daily", {
+      headers: { Accept: "application/json" },
+    });
     if (!response.ok) return;
-    const payload = await response.json();
-    applySystemBadges(root, extractSystems(payload));
+    const payload = (await response.json()) as { systems?: SystemBadge[] };
+    applySystemBadges(root, payload.systems ?? []);
   } catch {
     // 배지는 부가 정보다. 실패해도 화면의 주 기능은 건드리지 않는다.
   }
 }
+
+document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
 ```
 
-`extractSystems(payload)` 는 Step 1 에서 실측한 응답 구조에 맞춰 작성한다. `renderStatusBadge` 의 실제 반환 타입(Element 인지 문자열인지)도 `components/status-badge/index.ts` 를 열어 확인하고 `append` 여부를 맞춘다.
-
-- [ ] **Step 5: Vite 엔트리로 등록한다**
+- [ ] **Step 4: Vite 엔트리로 등록한다**
 
 `vite.config.ts` 의 `rollupOptions.input` 에 추가한다.
 
@@ -715,31 +877,23 @@ export async function loadSystemBadges(root: ParentNode = document): Promise<voi
 {% endblock %}
 ```
 
-엔트리 하단에서 기동한다:
+- [ ] **Step 5: 테스트가 통과하는지 확인한다**
 
-```typescript
-document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
-```
-
-- [ ] **Step 6: 테스트가 통과하는지 확인한다**
-
-Run: `npm run test && npm run typecheck && npm run lint`
+Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 Expected: 전부 PASS
 
-- [ ] **Step 7: 눈으로 확인한다**
+- [ ] **Step 6: 눈으로 확인한다**
 
-`/runs/execute` 좌측 목록에 오늘 상태 배지가 뜨고, 색과 라벨이 `/` 대시보드와 **같은지** 확인한다. 다르면 Cycle 0 이 덜 끝났거나 `normalizeTone` 매핑이 어긋난 것이다.
+`/runs/execute` 좌측 목록의 배지가 같은 시각 `/` 대시보드와 **문자 단위로 같은지** 확인한다. 특히 미점검 시스템이 양쪽 다 "미점검" 이어야 한다 — 한쪽이 "대기" 면 3b 가 덜 된 것이다.
 
 개발자 도구 Network 에서 `/api/dashboard/daily` 를 차단해 두고 새로고침해 **실행 버튼이 여전히 동작하는지** 확인한다.
 
-- [ ] **Step 8: 커밋**
+- [ ] **Step 7: 커밋**
 
 ```bash
 git add app/web/frontend/entries/execute-badges.ts app/web/frontend/entries/execute-badges.test.ts vite.config.ts app/web/templates/execute.html
 git commit -m "feat(execute): 좌측 목록에 오늘 상태 배지 — 대시보드 API 재사용"
 ```
-
----
 
 ### Task 4: 넌스크롤 회귀 테스트
 
@@ -888,8 +1042,11 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 - [ ] `execute.html` 에 `<details>` 0건
 - [ ] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
 - [ ] 내부 스크롤러 1개(우측 패널)
-- [ ] 좌측 배지 색·라벨이 `/` 대시보드와 일치
+- [ ] 좌측 배지 톤·라벨이 `/` 대시보드와 **문자 단위로** 일치 — 미점검 시스템이 양쪽 다 "미점검"
+- [ ] `/api/dashboard/daily` 응답에 `summary_badge` 추가, 기존 키 불변(대시보드 화면 무영향)
+- [ ] `docs/E2E_ARCHITECTURE.md` §5.2 에 새 필드 반영
 - [ ] `/api/dashboard/daily` 차단 상태에서도 실행 동작
+- [ ] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
 - [ ] `app.css` 가 약 140줄 줄었다(모듈 그래프 절 이사)
 
 ## 이 계획이 남기는 것
