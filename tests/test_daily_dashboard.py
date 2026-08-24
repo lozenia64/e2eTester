@@ -379,3 +379,71 @@ def test_generated_at_is_rendered_in_schedule_timezone():
         tz=ZoneInfo("Asia/Seoul"),
     )
     assert data["generated_at"][11:16] == "12:00"
+
+
+def test_module_view_carries_local_at_iso():
+    from zoneinfo import ZoneInfo
+
+    systems = [_sysdef("hom", ["login"])]
+    rows = [make_status_row(system_code="hom", module_id="login", last_status=ModuleStatus.PASSED)]
+    data = build_daily_dashboard_from_projection(
+        systems,
+        rows,
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-07-08",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+    module = data["systems"][0]["modules"][0]
+    assert module["at_iso"].startswith("2026-08-15T18:00")
+
+
+def test_system_view_carries_first_and_last_at():
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    from app.contexts.insights.contracts.query_rows import DailyStatusRow
+
+    def _row(module_id: str, hour: int) -> DailyStatusRow:
+        return DailyStatusRow(
+            day_key="2026-08-15",
+            system_code="hom",
+            module_id=module_id,
+            last_status=ModuleStatus.PASSED,
+            last_run_id="run-1",
+            duration_ms=1000,
+            updated_at=datetime(2026, 8, 15, hour, 0, tzinfo=UTC),
+            recovered=False,
+        )
+
+    systems = [_sysdef("hom", ["a", "b", "c"])]
+    rows = [_row("b", 3), _row("a", 1), _row("c", 5)]
+    data = build_daily_dashboard_from_projection(
+        systems,
+        rows,
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+    system = data["systems"][0]
+    assert system["first_at"].startswith("2026-08-15T10:00")
+    assert system["last_at"].startswith("2026-08-15T14:00")
+
+
+def test_system_without_inspection_has_no_span():
+    from zoneinfo import ZoneInfo
+
+    systems = [_sysdef("hom", ["login"])]
+    data = build_daily_dashboard_from_projection(
+        systems,
+        [],
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-08-15",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+    system = data["systems"][0]
+    assert system["first_at"] is None
+    assert system["last_at"] is None
+    assert system["modules"][0]["at_iso"] is None
