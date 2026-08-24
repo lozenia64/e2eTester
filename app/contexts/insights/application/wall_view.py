@@ -145,16 +145,20 @@ def build_timeline(systems: list[dict[str, Any]], *, now_iso: str) -> dict[str, 
     end = max(now, origin + _MIN_WINDOW)
     window = end - origin
 
-    lanes = [
-        {
-            "code": system["system_code"],
-            "name": system.get("system_name", system["system_code"]),
-            "tone": _system_tone(system.get("counts", {})),
-            "left_pct": _pct(max(first - origin, timedelta(0)), window),
-            "width_pct": max(_pct(max(last - first, timedelta(0)), window), _MIN_LANE_WIDTH_PCT),
-        }
-        for system, first, last in spans
-    ]
+    lanes = []
+    for system, first, last in spans:
+        width = max(_pct(max(last - first, timedelta(0)), window), _MIN_LANE_WIDTH_PCT)
+        left = _pct(max(first - origin, timedelta(0)), window)
+        lanes.append(
+            {
+                "code": system["system_code"],
+                "name": system.get("system_name", system["system_code"]),
+                "tone": _system_tone(system.get("counts", {})),
+                # 최소 폭을 준 스팬이 트랙 밖으로 밀려 안 보이는 것을 막는다.
+                "left_pct": max(0.0, min(left, 100.0 - width)),
+                "width_pct": width,
+            }
+        )
 
     ticks = [
         {

@@ -358,6 +358,19 @@ def test_timeline_enforces_minimum_lane_width():
     assert chb["width_pct"] == 0.8
 
 
+def test_timeline_keeps_minimum_width_lane_inside_right_edge():
+    from app.contexts.insights.application.wall_view import build_timeline
+
+    systems = [
+        _sys_with_span("HOM", "2026-08-24T07:00:00+09:00", "2026-08-24T08:00:00+09:00"),
+        _sys_with_span("FP", "2026-08-24T09:00:00+09:00", "2026-08-24T09:00:00+09:00"),
+    ]
+    tl = build_timeline(systems, now_iso="2026-08-24T09:00:00+09:00")
+
+    fp = tl["lanes"][1]
+    assert fp["left_pct"] + fp["width_pct"] <= 100.0
+
+
 def test_timeline_survives_reversed_timestamps():
     from app.contexts.insights.application.wall_view import build_timeline
 
