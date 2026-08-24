@@ -104,6 +104,29 @@ def test_fg002_allows_theme_color_meta(tmp_path):
     assert check_fg002_no_hex(tmp_path) == []
 
 
+def test_fg002_allows_theme_color_content_before_name_attribute(tmp_path):
+    """theme-color 속성 순서는 고정되지 않는다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta content="#4f46e5" name="theme-color">',
+    )
+    assert check_fg002_no_hex(tmp_path) == []
+
+
+def test_fg002_flags_hex_beside_theme_color_meta_on_same_line(tmp_path):
+    """theme-color content만 예외이고 같은 줄의 style 색은 여전히 위반이다."""
+    _write(
+        tmp_path,
+        "app/web/templates/base.html",
+        '<meta name="theme-color" content="#4f46e5"><style>.a { color: #0ca30c; }</style>',
+    )
+    problems = check_fg002_no_hex(tmp_path)
+    assert len(problems) == 1
+    assert "#0ca30c" in problems[0]
+    assert ":1 " in problems[0]
+
+
 def test_fg002_allowlisted_template_is_skipped(tmp_path):
     import scripts.check_frontend_gates as gates
 

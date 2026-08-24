@@ -140,8 +140,10 @@ _MAIL_STATUS_CONST_RE = re.compile(r"^(PASS|FAIL|WARN|NEUTRAL|INFO)_(COLOR|SOFT_
 # <meta name="theme-color" content="#4f46e5"> 는 CSS 변수를 쓸 수 없다 —
 # 브라우저가 문서 헤드에서 리터럴 색으로 읽는다. 파일 allowlist 로 처리하면
 # base.html·admin/base.html·login.html 이 영구 항목이 되어 "allowlist 가
-# 비면 완성" 전제가 깨진다(FG-006 이 그 실패를 겪었다). 규칙에서 제외한다.
-_THEME_COLOR_META = re.compile(r"""<meta\s+name=["']theme-color["']""", re.IGNORECASE)
+# 비면 완성" 전제가 깨진다(FG-006 이 그 실패를 겪었다). meta 태그만 규칙에서
+# 제외한다. 같은 줄의 다른 hex는 계속 검사한다.
+_META_TAG = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
+_THEME_COLOR_NAME = re.compile(r"""\bname\s*=\s*["']theme-color["']""", re.IGNORECASE)
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -187,6 +189,19 @@ def _iter_legacy_scripts(root: Path):
     return sorted(path for path in base.glob("*.js") if path.is_file())
 
 
+def _without_theme_color_meta(line: str) -> str:
+    """theme-color meta 태그만 비우고 나머지 줄은 그대로 둔다."""
+    parts: list[str] = []
+    previous_end = 0
+    for tag in _META_TAG.finditer(line):
+        parts.append(line[previous_end : tag.start()])
+        if not _THEME_COLOR_NAME.search(tag.group()):
+            parts.append(tag.group())
+        previous_end = tag.end()
+    parts.append(line[previous_end:])
+    return "".join(parts)
+
+
 def check_fg001_no_cdn(root: Path = REPO_ROOT) -> list[str]:
     """FG-001: 템플릿에 외부 CDN script/link 금지. 예외 없음.
 
@@ -224,9 +239,8 @@ def check_fg002_no_hex(root: Path = REPO_ROOT) -> list[str]:
         if rel in GENERATED_FILES or rel in FG002_ALLOWLIST:
             continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if _THEME_COLOR_META.search(line):
-                continue
-            for hex_value in _HEX.findall(line):
+            line_without_theme_color_meta = _without_theme_color_meta(line)
+            for hex_value in _HEX.findall(line_without_theme_color_meta):
                 problems.append(
                     f"[FG-002] {rel}:{lineno} 하드코딩 색 `{hex_value}` — "
                     "var(--st-*) 또는 var(--c-*) 토큰을 쓰세요."
