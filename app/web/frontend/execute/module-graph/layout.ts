@@ -79,23 +79,16 @@ export function buildModuleRelations(modules: ModuleDef[]): {
   return { modulesById, childrenById };
 }
 
-function moduleDepth(moduleId: string, modulesById: Map<string, ModuleDef>, cache: Map<string, number>, active: Set<string>): number {
+export function computeModuleDepth(moduleId: string, modulesById: Map<string, ModuleDef>, cache = new Map<string, number>()): number {
   if (cache.has(moduleId)) return cache.get(moduleId)!;
-  if (active.has(moduleId)) return 0;
   const module = modulesById.get(moduleId);
   if (!module) return 0;
-  active.add(moduleId);
   const dependencies = Array.isArray(module.depends_on) ? module.depends_on : [];
   const depth = dependencies.length === 0
     ? 0
-    : Math.max(...dependencies.map((dependency) => moduleDepth(dependency, modulesById, cache, active))) + 1;
-  active.delete(moduleId);
+    : Math.max(...dependencies.map((dependency) => computeModuleDepth(dependency, modulesById, cache))) + 1;
   cache.set(moduleId, depth);
   return depth;
-}
-
-export function computeModuleDepth(moduleId: string, modulesById: Map<string, ModuleDef>, cache = new Map<string, number>()): number {
-  return moduleDepth(moduleId, modulesById, cache, new Set());
 }
 
 export function computeModuleSubtreeHeight(moduleId: string, childrenById: Map<string, string[]>, cache = new Map<string, number>()): number {

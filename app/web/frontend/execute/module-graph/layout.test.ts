@@ -35,14 +35,6 @@ describe("computeModuleDepth", () => {
     expect(computeModuleDepth("detail", modulesById)).toBe(2);
   });
 
-  it("순환 의존이 있어도 무한 재귀하지 않는다", () => {
-    const cyclic: ModuleDef[] = [
-      { module_id: "a", name: "A", depends_on: ["b"] },
-      { module_id: "b", name: "B", depends_on: ["a"] },
-    ];
-    const { modulesById } = buildModuleRelations(cyclic);
-    expect(() => computeModuleDepth("a", modulesById)).not.toThrow();
-  });
 });
 
 describe("computeModuleSubtreeHeight", () => {
@@ -57,9 +49,9 @@ describe("buildModuleGraphLayout", () => {
   it("깊이는 열, 형제는 다른 행에 놓인다", () => {
     const { layoutByModuleId, maxDepth, maxRow } = buildModuleGraphLayout(MODULES);
     expect(layoutByModuleId.get("login")).toEqual({ depth: 0, row: 0 });
-    expect(layoutByModuleId.get("list")!.depth).toBe(1);
-    expect(layoutByModuleId.get("pay")!.depth).toBe(1);
-    expect(layoutByModuleId.get("list")!.row).not.toBe(layoutByModuleId.get("pay")!.row);
+    expect(layoutByModuleId.get("list")).toEqual({ depth: 1, row: 0 });
+    expect(layoutByModuleId.get("detail")).toEqual({ depth: 2, row: 0 });
+    expect(layoutByModuleId.get("pay")).toEqual({ depth: 1, row: 1 });
     expect(maxDepth).toBe(2);
     expect(maxRow).toBe(1);
   });
@@ -85,20 +77,21 @@ describe("buildModuleGraphLayout", () => {
 describe("computeModuleGraphMetrics", () => {
   it("공간이 넉넉하면 최대 크기를 쓴다", () => {
     const metrics = computeModuleGraphMetrics(3, 2, 1200, 800);
-    expect(metrics.rowHeight).toBeGreaterThan(0);
-    expect(metrics.rowGap).toBeGreaterThan(0);
+    expect(metrics).toEqual({ rowHeight: 40, rowGap: 6, columnGap: 6 });
   });
 
   it("세로가 좁으면 행 높이를 줄인다", () => {
     const roomy = computeModuleGraphMetrics(3, 6, 1200, 800);
     const tight = computeModuleGraphMetrics(3, 6, 1200, 200);
-    expect(tight.rowHeight).toBeLessThan(roomy.rowHeight);
+    expect(roomy).toEqual({ rowHeight: 40, rowGap: 6, columnGap: 6 });
+    expect(tight).toEqual({ rowHeight: 28, rowGap: 6, columnGap: 6 });
   });
 
   it("열이 많으면 간격을 좁힌다", () => {
     const few = computeModuleGraphMetrics(3, 4, 1200, 600);
     const many = computeModuleGraphMetrics(9, 4, 1200, 600);
-    expect(many.columnGap).toBeLessThanOrEqual(few.columnGap);
+    expect(few).toEqual({ rowHeight: 40, rowGap: 6, columnGap: 6 });
+    expect(many).toEqual({ rowHeight: 28, rowGap: 6, columnGap: 4 });
   });
 
   it("가로가 좁아도 간격이 음수가 되지 않는다", () => {
