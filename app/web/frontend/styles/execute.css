@@ -73,6 +73,7 @@ body:has(.exec) main > div {
 .exec-detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--pl-border); border-radius: 1rem; background: var(--pl-surface); box-shadow: var(--pl-shadow-sm); }
 .exec-panel { padding: 1.25rem; }
 .exec-panel[hidden] { display: none; }
+#suite-start-button { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1; }
 .exec-form__section {
   border: 1px solid var(--c-gray-200);
   border-radius: 1rem;

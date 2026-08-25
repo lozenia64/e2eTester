@@ -22,7 +22,6 @@ from app.contexts.identity.models import User
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import FakeRunService
 
-
 pytest.importorskip("playwright")
 
 GEN_AT = datetime(2026, 8, 25, 5, 0, tzinfo=UTC)
@@ -148,7 +147,14 @@ def test_start_button_is_visible_without_scrolling(
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
     page.wait_for_selector("#suite-start-button")
-    assert page.locator("#suite-start-button").is_visible()
+    button = page.locator("#suite-start-button")
+    assert button.is_visible()
+    box = button.bounding_box()
+    assert box is not None
+    assert 0 <= box["x"]
+    assert 0 <= box["y"]
+    assert box["x"] + box["width"] <= width
+    assert box["y"] + box["height"] <= height
 
 
 def test_left_column_does_not_scroll(page, live_server: str) -> None:
