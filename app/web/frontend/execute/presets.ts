@@ -64,18 +64,12 @@ function setInlineFeedback(element: Element | null, message: string, tone = "err
   element.textContent = message;
 }
 
-function showToast(message: string): void {
-  const container = document.getElementById("toast-container");
-  if (!container) {
-    window.alert(message);
-    return;
-  }
-  const toast = document.createElement("div");
-  toast.className = "pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm font-medium shadow-lg";
-  toast.setAttribute("role", "alert");
-  toast.textContent = message;
-  container.appendChild(toast);
-  window.setTimeout(() => toast.remove(), 4000);
+function notifyLegacySuiteUi(): void {
+  document.dispatchEvent(new Event("execute:presets-updated"));
+}
+
+function notifyLegacyToast(message: string): void {
+  document.dispatchEvent(new CustomEvent("execute:preset-toast", { detail: { message } }));
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -136,8 +130,7 @@ export async function loadPresets(): Promise<void> {
 function renderAllPresetUI(): void {
   renderIndividualPresetPanels();
   renderSuitePresetLists();
-  const suiteForm = document.getElementById("suite-form");
-  if (suiteForm instanceof HTMLFormElement) updateSuiteSystemSelectorState(suiteForm);
+  notifyLegacySuiteUi();
 }
 
 function renderIndividualPresetPanels(): void {
@@ -226,7 +219,7 @@ async function deletePresetById(presetId: string, form: HTMLFormElement): Promis
     renderAllPresetUI();
     setInlineFeedback(form.querySelector('[data-role="preset-feedback"]'), "프리셋을 삭제했습니다.", "success");
   } catch (error) {
-    showToast(error instanceof Error ? error.message : "프리셋 삭제에 실패했습니다.");
+    notifyLegacyToast(error instanceof Error ? error.message : "프리셋 삭제에 실패했습니다.");
     console.error(error);
   }
 }
@@ -287,23 +280,8 @@ function buildSuitePresetChip(suiteForm: HTMLFormElement, systemCode: string, pr
     if (presetState.suitePresetSelection.get(systemCode) === preset.preset_id) presetState.suitePresetSelection.delete(systemCode);
     else presetState.suitePresetSelection.set(systemCode, preset.preset_id);
     renderSuitePresetLists();
-    updateSuiteSystemSelectorState(suiteForm);
+    notifyLegacySuiteUi();
     setInlineFeedback(suiteForm.querySelector('[data-role="suite-feedback"]'), "");
   });
   return chip;
-}
-
-function updateSuiteSystemSelectorState(form: HTMLFormElement): void {
-  const selectedCodes = new Set([...form.querySelectorAll<HTMLInputElement>('[data-role="suite-system-checkbox"]')].filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.systemCode ?? checkbox.value));
-  for (const panel of form.querySelectorAll<HTMLElement>("[data-suite-auth-for]")) {
-    const systemCode = panel.dataset.suiteAuthFor ?? "";
-    panel.classList.toggle("is-hidden", !selectedCodes.has(systemCode));
-    const status = panel.querySelector<HTMLElement>('[data-role="suite-preset-status"]');
-    if (!status) continue;
-    const presets = presetState.presetsBySystem[systemCode] ?? [];
-    const selected = presetState.suitePresetSelection.get(systemCode);
-    if (!presets.length) { status.textContent = "프리셋 없음"; status.className = "suite-preset-status suite-preset-status--warn"; }
-    else if (selected && presets.some((preset) => preset.preset_id === selected)) { status.textContent = "선택됨"; status.className = "suite-preset-status suite-preset-status--ok"; }
-    else { status.textContent = "미선택"; status.className = "suite-preset-status suite-preset-status--pending"; }
-  }
 }

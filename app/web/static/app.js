@@ -2385,6 +2385,19 @@ function updateComparisonPanel(runPayload) {
     }
 }
 
+// Task 4가 Suite 실행 코드를 이관할 때 프리셋 상태/알림 이벤트와 함께 제거한다.
+// 프리셋 모듈은 상태만 바꾸고, Suite UI 갱신과 토스트 표현의 소유권은 이 레거시 호출부에 둔다.
+document.addEventListener("execute:presets-updated", () => {
+    const suiteForm = document.getElementById("suite-form");
+    if (suiteForm) {
+        updateSuiteSystemSelectorState(suiteForm);
+    }
+});
+
+document.addEventListener("execute:preset-toast", (event) => {
+    showToast(event.detail?.message || "프리셋 삭제에 실패했습니다.");
+});
+
 document.addEventListener("DOMContentLoaded", () => {
     bindSystemButtons();
     bindSuiteForm();

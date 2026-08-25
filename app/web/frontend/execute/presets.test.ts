@@ -15,7 +15,7 @@ describe("presetSummaryText", () => {
       updated_at: "2026-08-26T00:00:00+00:00",
     });
 
-    expect(text).toContain("홍길동");
+    expect(text).toBe("휴대폰인증 · 홍길동 · 010-1234-5678");
   });
 
   it("입력이 비어도 예외를 던지지 않는다", () => {
@@ -39,7 +39,9 @@ describe("applyPresetToForm", () => {
     form.innerHTML = `
       <input name="login_id">
       <select name="auth_method"><option value="phone">휴대폰인증</option></select>
+      <div class="conditional-field is-hidden" data-show-when-key="auth_method" data-show-when-value="phone" data-required="true"><input name="phone_number"></div>
       <div data-role="module-selector">
+        <p data-role="module-selection-summary"></p>
         <button data-role="module-graph-node" data-module-id="login" data-order="0" data-selected="false"></button>
         <button data-role="module-graph-node" data-module-id="list" data-order="1" data-selected="false"></button>
       </div>`;
@@ -57,8 +59,12 @@ describe("applyPresetToForm", () => {
     });
 
     expect(form.querySelector<HTMLInputElement>('[name="login_id"]')!.value).toBe("hong");
+    expect(form.querySelector<HTMLSelectElement>('[name="auth_method"]')!.value).toBe("phone");
+    expect(form.querySelector(".conditional-field")!.classList.contains("is-hidden")).toBe(false);
+    expect(form.querySelector<HTMLInputElement>('[name="phone_number"]')!.required).toBe(true);
     expect(form.querySelector<HTMLButtonElement>('[data-module-id="login"]')!.dataset.selected).toBe("false");
     expect(form.querySelector<HTMLButtonElement>('[data-module-id="list"]')!.dataset.selected).toBe("true");
+    expect(form.querySelector('[data-role="module-selection-summary"]')!.textContent).toBe("1 / 2 선택 · 1개 제외");
   });
 
   it("프리셋에 없는 필드는 건드리지 않는다", () => {
