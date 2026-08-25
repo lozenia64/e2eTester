@@ -1004,7 +1004,7 @@ git commit -m "feat(execute): 좌측 목록에 오늘 상태 배지 — 대시�
 - Consumes: Task 1~3 의 완성된 화면
 - Produces: 없음(회귀 가드)
 
-- [ ] **Step 1: 테스트를 쓴다**
+- [x] **Step 1: 테스트를 쓴다**
 
 `tests/test_dashboard_viewport.py` 의 구조를 따른다. **그 파일의 실제 이름을 쓴다** — 초안이 지어낸 `page_factory` · `BASE_URL` 은 존재하지 않는다. 실측한 재사용 자산은 이렇다.
 
@@ -1091,14 +1091,14 @@ def test_selecting_a_system_swaps_the_panel(page, live_server):
 
 `browser` · `live_server` 픽스처와 `_free_port` · `_wait_for_server` · `_assert_no_scroll` 헬퍼는 `tests/test_dashboard_viewport.py` 에서 **복사한다.** 공용 모듈로 뽑지 마라 — 두 번째 사용처가 생겼을 뿐이고, 세 번째가 생기면 그때 뽑는다. 다만 `live_server` 가 조립하는 앱은 위 주의대로 dashboard 라우터판으로 바꿔야 한다.
 
-- [ ] **Step 2: 실행한다**
+- [x] **Step 2: 실행한다**
 
 Run: `python3 -m pytest tests/test_execute_viewport.py -v`
 Expected: PASS. 실패하면 어느 뷰포트에서 몇 px 넘쳤는지 메시지가 알려준다 — `.exec` 의 `padding` 이나 `.exec-env` 높이를 줄인다.
 
 Chromium 이 없으면 `python3 -m playwright install chromium` 후 재실행.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add tests/test_execute_viewport.py
