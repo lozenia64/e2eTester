@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { applySystemBadges } from "./execute-badges";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { applySystemBadges, loadSystemBadges } from "./execute-badges";
 
 function host(codes: string[]): HTMLElement {
   const root = document.createElement("div");
@@ -8,6 +8,10 @@ function host(codes: string[]): HTMLElement {
 }
 
 const HOM = { system_code: "hom", summary_badge: { label: "정상", tone: "passed" } };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("applySystemBadges", () => {
   it("코드가 맞는 자리에 배지를 넣는다", () => {
@@ -44,5 +48,34 @@ describe("applySystemBadges", () => {
     applySystemBadges(root, [HOM]);
     applySystemBadges(root, []);
     expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
+  });
+});
+
+describe("loadSystemBadges", () => {
+  it("조회가 거부돼도 배지를 비워 두고 실행 제어를 바꾸지 않는다", async () => {
+    const root = host(["hom"]);
+    const start = document.createElement("button");
+    start.disabled = false;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network blocked")));
+
+    await expect(loadSystemBadges(root)).resolves.toBeUndefined();
+
+    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
+    expect(start.disabled).toBe(false);
+  });
+
+  it("non-OK 응답도 배지를 비워 두고 실행 제어를 바꾸지 않는다", async () => {
+    const root = host(["hom"]);
+    const start = document.createElement("button");
+    start.disabled = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, json: vi.fn().mockResolvedValue({ systems: [HOM] }) }),
+    );
+
+    await expect(loadSystemBadges(root)).resolves.toBeUndefined();
+
+    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
+    expect(start.disabled).toBe(false);
   });
 });
