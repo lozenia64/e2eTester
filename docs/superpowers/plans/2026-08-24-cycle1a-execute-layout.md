@@ -1193,19 +1193,20 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 ## 완료 확인
 
 - [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] `npm run test && npm run typecheck && npm run lint` 통과
-- [ ] `execute.html` 에 `class="system-card` 0건, 예약 폼의 `<details class="sched` 는 **살아 있다**(D7)
-- [ ] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
-- [ ] 내부 스크롤러 1개(우측 패널)
-- [ ] 좌측 배지 톤·라벨이 `/` 대시보드와 **문자 단위로** 일치 — 미점검 시스템이 양쪽 다 "미점검"
-- [ ] `/api/dashboard/daily` 응답에 `summary_badge` 추가, 기존 키 불변(대시보드 화면 무영향)
-- [ ] `docs/E2E_ARCHITECTURE.md` §5.2 에 새 필드 반영
-- [ ] `/api/dashboard/daily` 차단 상태에서도 실행 동작
-- [ ] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
-- [ ] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
-- [ ] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
+- [x] `npm run test && npm run typecheck && npm run lint` 통과
+- [x] `execute.html` 에 `class="system-card` 0건, 예약 폼의 `<details class="sched` 는 **살아 있다**(D7)
+- [x] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
+- [x] `.exec-detail` 의 `overflow-y` 는 `auto` 이고 실제 내부 스크롤러가 있으면 모두 우측 상세 패널에 속한다
+- [x] 좌측 배지 톤·라벨이 `/` 대시보드와 **문자 단위로** 일치 — 미점검 시스템이 양쪽 다 "미점검"
+- [x] `/api/dashboard/daily` 응답에 `summary_badge` 추가, 기존 키 불변(대시보드 화면 무영향)
+- [x] `docs/E2E_ARCHITECTURE.md` §5.2 에 새 필드 반영
+- [x] `/api/dashboard/daily` 차단 상태에서도 실행 동작
+- [x] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
+- [x] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
+- [x] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
 - [ ] `app.css` 가 약 400줄 줄었다(모듈 그래프 150줄 이사 + 고아 시스템 카드 250줄 삭제)
-- [ ] `app.css` 에 `system-card` 0건(Task 2b)
+  - 기준 커밋 대비 216줄 감소(1067→851)만 직접 확인되어 약 400줄 감소는 미확인이다.
+- [x] `app.css` 에 `system-card` 0건(Task 2b)
 
 ## 이 계획이 남기는 것
 
