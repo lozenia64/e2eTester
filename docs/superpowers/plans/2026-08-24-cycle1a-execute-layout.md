@@ -1105,6 +1105,16 @@ git add tests/test_execute_viewport.py
 git commit -m "test(execute): 넌스크롤·스크롤 소유권·패널 전환 회귀 검증"
 ```
 
+- [x] **후속 결정: 상세 열 sticky 실행 액션 바**
+
+수트와 개별 시스템의 feedback·submit을 같은 `.exec-action-bar`로 묶고,
+`.exec-detail` 안에서 `position: sticky; bottom: 0`으로 고정한다. `fixed`는 상세 열
+문맥을 벗어나므로, 그래프 축소는 지배 요소 규격을 훼손하므로, 좌측 목록 이동은 실행
+폼과 feedback을 분리하므로 기각한다. `tests/test_execute_viewport.py`는 수트와 HOM
+선택 뒤 실행 버튼의 `bounding_box`가 1366 · 1920 · 2560 px 뷰포트 안에 있고 action
+bar 계산 위치가 `sticky`인지 검증한다. 임시 `position: static` 변이에서 수트 버튼
+하단이 `1224.25px`로 768px 뷰포트를 넘는 RED를 확인한 뒤 원복했다.
+
 ---
 
 ### Task 5: AC Spec 갱신과 전체 게이트
