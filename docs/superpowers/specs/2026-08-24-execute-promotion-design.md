@@ -83,7 +83,7 @@
 | --- | --- | --- | --- |
 | **0** ✅ | (없음 — 팔레트 통일) | 템플릿 7벌의 로그 토큰 정의 · `admin-runs.js` 차트 색 4개 | `legacy-aliases.css` 신설 · FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
 | **1a** ✅ | 점검 실행 — 레이아웃 | `app.css` 모듈그래프 절 167줄 이사 · 고아 `.system-card*` 253줄 삭제 | 넌스크롤 마스터-디테일 · sticky 액션 바 · `AC-003` |
-| **1b** ✅ | 점검 실행 — 이관 | `app.js` 점검 실행 몫 이관 · `app.css` 프리셋 절(**경계 `:426`~`:666`**) 제거 | `entries/execute.ts` 신설 · `execute.css`·`execute-graph.css`·`execute-presets.css` 책임 분리 |
+| **1b** | 점검 실행 — 이관(최종 gate 대기) | `app.js` 점검 실행 몫 이관 · `app.css` 프리셋 절(**경계 `:426`~`:666`**) 제거 | `entries/execute.ts` 신설 · `execute.css`·`execute-graph.css`·`execute-presets.css` 책임 분리 |
 | **2** | 수트 상세 | `app.js` 약 700줄 | `entries/suite.ts` 신설 |
 | **3** | 런 상세 | `app.js` 약 700줄 | `entries/run.ts` 신설 |
 | **4** | Run 이력 | `app.js` 약 640줄 | `app.js` **삭제** · `FG005_ALLOWLIST` 에서 제거 · `main.ts:32` 의 `window.__statusBadge` 다리 제거 |
@@ -375,15 +375,15 @@ FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 �
 
 **Cycle 1b 의 검증도 같은 질문을 통과해야 한다 — "이 단언이 실패할 수 있는 실제 경우는 무엇인가."** 답하지 못하면 그 테스트는 통과 여부와 무관하게 아무것도 지키지 않는다.
 
-### 8.2.2 Cycle 1b 실제 완료 실측 (2026-08-26)
+### 8.2.2 Cycle 1b 구현 실측 — 최종 gate 대기 (2026-08-26)
 
 | 산출물 | 실측 결과 |
 | --- | --- |
-| 프리셋 CSS 소유권 | `/* ===== 인증 프리셋 (내 점검 세트) ===== */` 경계의 241줄을 `execute-presets.css`로 이사. 프리셋 선택자 33개는 `app.css` 0개 / `execute-presets.css` 33개 |
+| 프리셋 CSS 소유권 | `/* ===== 인증 프리셋 (내 점검 세트) ===== */` 경계의 241줄을 `execute-presets.css`로 이사. 테스트 검증 인벤토리의 **선택자 출현 33회(고유 선택자 이름 32개)**는 `app.css` 0개 / `execute-presets.css`에 모두 존재 |
 | 그래프 CSS 소유권 | 모듈 그래프 선택자는 `app.css`·`execute.css`에 0개, `execute-graph.css`에만 존재. 핵심 border/stroke/viewport 선언을 회귀 테스트가 단언 |
 | 스타일 줄 수 | `app.css` **750줄**, `execute.css` **95줄**, `execute-graph.css` **184줄**, `execute-presets.css` **240줄**. 모두 FG-004 상한 400줄 미만 |
 | CSS 배선·팔레트 | `base.css:11~13`에서 세 stylesheet를 각각 1회 임포트. 세 파일 hex 0건 |
-| 회귀·전체 검증 | `test_execute_preset_css_migration.py` 2 passed. full profile **16개 gate 통과** |
+| 회귀·focused 검증 | `test_execute_preset_css_migration.py` 2 passed. 최종 HEAD full profile은 사용자 실행 대기 |
 | 자바스크립트 잔여 | `app.js` **1,949줄**, `function ` **86개**. 모듈 그래프·프리셋·실행 폼 바인딩 0개 |
 | 프로세스 확인 | full gate 직전 `vite build --watch` 및 vite node 프로세스 없음 |
 
@@ -397,7 +397,7 @@ FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 �
 | 타입 스케일(`--fs-*`) | `2026-08-23-dashboard-mission-control-design.md` §3.7 (2단계) |
 | 차트 통합(plotly 2종 제거, −5.5MB) | 같은 문서 §3.8 (3단계). `/insights` 승격과 함께 가는 것이 자연스럽다 |
 | View Transitions | 페이지 전환 모핑. 네이티브 CSS + htmx `transition:true`, 신규 의존성 0 |
-| `app.css` 분할 완료 | 1,411 → 991줄(1a) → **750줄**(1b, 프리셋 절 −241). `execute.css` 계열 세 파일은 모두 400줄 미만이라 FG-004 allowlist 예외가 없다 |
+| `app.css` 분할 실측 | 1,411 → 991줄(1a) → **750줄**(1b 코드). `execute.css` 계열 세 파일은 모두 400줄 미만이며 최종 full gate 후 완료를 확정한다 |
 
 ---
 

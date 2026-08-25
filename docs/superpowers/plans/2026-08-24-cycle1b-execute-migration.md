@@ -617,7 +617,7 @@ Run: `grep -c "function " app/web/static/app.js`
 
 실측: `app.js` 1,949줄, `function ` 86개. 계획의 약 1,850줄과 달라 잔여 목표는 미충족으로 기록한다.
 
-- [x] **Step 3: 전체 검증**
+- [ ] **Step 3: 전체 검증**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Run: `npm run test && npm run typecheck && npm run lint && npm run build`
@@ -626,7 +626,7 @@ Expected: 전부 통과
 
 - [x] **Step 4: 설계 문서의 §8 을 갱신한다**
 
-`docs/superpowers/specs/2026-08-24-execute-promotion-design.md` §8 표에서 Cycle 1 이 끝냈다고 표시하고, `app.css` 잔여 줄 수를 실측값으로 고친다.
+`docs/superpowers/specs/2026-08-24-execute-promotion-design.md` §8에 Cycle 1b 구현 실측과 최종 gate 대기 상태를 기록하고, `app.css` 잔여 줄 수를 실측값으로 고친다. 사용자 최종 gate가 확인된 뒤에만 완료로 표시한다.
 
 - [x] **Step 5: 커밋**
 
@@ -639,7 +639,7 @@ git commit -m "refactor(execute): 프리셋 CSS 이사 — app.css 축소"
 
 ## 완료 확인
 
-- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과 (16개 gate)
+- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과 (최종 HEAD에서 사용자 실행 대기)
 - [x] `npm run test && npm run typecheck && npm run lint && npm run build` 통과
 - [x] `app/web/frontend/entries/execute.ts` 존재, 15줄
 - [x] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
@@ -648,7 +648,7 @@ git commit -m "refactor(execute): 프리셋 CSS 이사 — app.css 축소"
 - [x] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
 - [ ] `/runs/execute` 에서 실제 Run 과 SUITE 가 끝까지 동작
 
-미검증 항목: `app.js`는 실측 1,949줄로 계획의 약 1,850줄과 다르며, 실제 Run/SUITE 종단 동작은 이번 검증 범위에서 실행하지 않았다.
+미검증 항목: 최종 HEAD full gate는 사용자가 실행할 예정이며, `app.js`는 실측 1,949줄로 계획의 약 1,850줄과 다르고 실제 Run/SUITE 종단 동작도 실행하지 않았다.
 
 ## 이 계획이 남기는 것
 
