@@ -251,7 +251,3 @@ body:has(.dash) main > div {
   box-shadow: -12px 0 40px rgb(0 0 0 / 0.1);
   border-left: 1px solid var(--pl-border);
 }
-
-[x-cloak] {
-  display: none !important;
-}

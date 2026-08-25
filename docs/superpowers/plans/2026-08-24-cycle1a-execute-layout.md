@@ -8,7 +8,7 @@
 
 **Tech Stack:** Jinja2, Alpine.js 3(이미 전역), Tailwind CSS v4, CSS Grid + 컨테이너 쿼리, Vite, pytest + Playwright
 
-**Spec:** `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§1.3 숨겨진 그래프 · §1.4 아코디언 문제 · §4.3 레이아웃 · §4.4 왜 싼가 · §4.5 데이터 경로 · D6 · D8)
+**Spec:** `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§1.3 숨겨진 그래프 · §1.4 아코디언 문제 · §4.3 레이아웃 · §4.4 왜 싼가 · §4.5 데이터 경로 · §4.5.1 라벨 주입구 · D6 · D8 · D11)
 
 **선행:** `docs/superpowers/plans/2026-08-24-cycle0-palette-unification.md` 완료(상태 색이 SSOT 로 수렴한 상태여야 좌측 배지 색이 대시보드와 일치한다)
 
@@ -17,11 +17,12 @@
 ## Global Constraints
 
 - **색 SSOT 는 `app/core/status_colors.py` 의 `PALETTE`.** 새 hex 를 적지 않는다. Cycle 0 이 FG-002 를 `templates/` 까지 확장했으므로 템플릿의 새 hex 는 **게이트가 막는다.**
-- **상태 라벨·톤은 서버 주입만**(FG-003 · FG-006). 템플릿·TS 가 상태 키 맵이나 한국어 상태 라벨을 들지 않는다. 배지는 `app/web/frontend/components/status-badge` 를 쓴다.
+- **상태 라벨·톤은 서버 주입만**(FG-003 · FG-006). 템플릿·TS 가 상태 키 맵이나 한국어 상태 라벨을 들지 않는다. 배지는 `app/web/frontend/components/status-badge` 를 쓴다. **`counts` 에서 톤을 유도하는 코드를 프론트에 두지 않는다** — 그것이 FG-006 이 막는 매핑 복제다(Task 3a 가 서버에서 파생을 노출하는 이유).
 - **`/static/` 직접 참조 금지**(FG-005). 자산은 `_assets.html` 매크로 경유.
 - **엔트리·컴포넌트 파일 400줄 상한**(FG-004).
 - **넌스크롤 예산:** `body` 세로 스크롤 0. 내부 스크롤을 갖는 영역은 **우측 조건 열 하나뿐.**
-- **동작 불변:** `SPEC-UI-002` 의 AC-001(Suite preset 검증) · AC-002(depends_on)은 **서버측 규칙**이며 이 계획은 API 를 건드리지 않는다. 회귀 확인은 `tests/test_presets_http.py` · `tests/test_suite_aggregate.py` · `tests/test_suite_decider.py` 로 한다. 폼 `name` 속성과 `data-role` 값은 하나도 바꾸지 않는다 — `app.js` 가 그걸로 찾는다.
+- **API 변경은 추가만.** Task 3a 가 `/api/dashboard/daily` 응답에 `summary_badge` 를 **더한다.** 기존 키는 하나도 바꾸거나 지우지 않는다 — 대시보드 화면이 같은 응답을 쓰고 있다. 실행 화면 라우트(`routes_dashboard.py:56`)는 건드리지 않는다.
+- **동작 불변:** `SPEC-UI-002` 의 AC-001(Suite preset 검증) · AC-002(depends_on)은 **서버측 규칙**이며 이 계획은 그 규칙을 건드리지 않는다. 회귀 확인은 `tests/test_presets_http.py` · `tests/test_suite_aggregate.py` · `tests/test_suite_decider.py` 로 한다. 폼 `name` 속성과 `data-role` 값은 하나도 바꾸지 않는다 — `app.js` 가 그걸로 찾는다.
 - **좌측 항목 수는 1~7개로 변한다**(`current_user.allowed_system_codes` 필터 + SUITE 1개). 1개일 때도 레이아웃이 성립해야 한다.
 - **UI 문자열은 한국어**(AGENTS.md).
 - **PR 전 필수:** `python3 scripts/ci/run_all_gates.py --profile full`
@@ -34,10 +35,14 @@
 | `app/web/frontend/styles/base.css` | 전역 임포트 체인 | 수정(1줄) |
 | `app/web/templates/execute.html` | 화면 마크업 | 수정(대폭 — 아코디언 → 2열) |
 | `app/web/templates/execute/_system_list.html` | 좌측 선택 목록 | **신규**(포함 파일) |
-| `app/web/static/app.css` → `execute.css` | 모듈 그래프 스타일 이사(`app.css:427~570`) | 이동 |
+| `app/web/frontend/styles/app.css` → `execute.css` | 모듈 그래프 스타일 이사(`app.css:427~570`) | 이동 |
+| `app/contexts/insights/application/daily_dashboard.py` | 시스템 뷰에 `summary_badge` 파생 노출 | 수정(Task 3a, 1줄) |
+| `app/web/frontend/components/status-badge/index.ts` | 배지 컴포넌트 — 서버 라벨 주입구 | 수정(Task 3b, 1줄) |
+| `app/web/frontend/entries/execute-badges.ts` | 좌측 목록 배지 로더 | **신규**(Task 3c) |
+| `docs/E2E_ARCHITECTURE.md` §5.2 | API 응답 필드 문서 | 수정(Task 3a) |
 | `tests/test_execute_layout.py` | 템플릿 렌더 계약 | **신규** |
 | `tests/test_execute_viewport.py` | 넌스크롤 · 스크롤 소유권 Playwright | **신규** |
-| `docs/specs/dashboard/02-execute-page.md` | AC Spec | 수정(Task 6) |
+| `docs/specs/dashboard/02-execute-page.md` | AC Spec | 수정(Task 5) |
 
 ---
 
@@ -55,7 +60,7 @@
 - Consumes: `execute.html` 의 기존 컨텍스트 — `systems`(리스트), `systems_payload`(dict), `analyzer_status`, `email_status`, `current_user`. 라우트(`app/api/routes_dashboard.py:56`)는 **바꾸지 않는다.**
 - Produces: `.exec` 루트 요소, `x-data="{ selected: '<첫 항목 키>' }"` Alpine 스코프, 좌측 항목의 `data-exec-target="{key}"`, 우측 패널의 `data-exec-panel="{key}"`. `key` 는 `suite` 또는 `system.system_code`. Task 2·3 이 이 계약 위에 얹힌다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/test_execute_layout.py` 를 만든다. 기존 템플릿 렌더 테스트의 방식을 따른다 — `TestClient` 로 `/runs/execute` 를 받아 HTML 을 문자열로 단언한다. 인증 의존성 오버라이드 방식은 `tests/test_dashboard_fragments_http.py` 를 참고한다.
 
@@ -73,27 +78,47 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 
+from datetime import UTC, datetime
+
 from app.api.dependencies import get_run_service
 from app.api.routes_dashboard import router as dashboard_router
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
+from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import FakeRunService
 
 
+GEN_AT = datetime(2026, 8, 25, 5, 0, tzinfo=UTC)
+
+
+def _user(codes: list[str]) -> User:
+    """User 는 hashed_password·created_at 이 필수다(기본값 없음) — 빠뜨리면 ValidationError."""
+    return User(
+        user_id="exec_user",
+        email="operator@test.local",
+        name="점검자",
+        role="user",
+        hashed_password="x",
+        is_active=True,
+        allowed_system_codes=codes,
+        created_at=GEN_AT,
+    )
+
+
 @pytest.fixture()
-def client() -> TestClient:
+def registry() -> ModuleRegistry:
+    return ModuleRegistry()
+
+
+@pytest.fixture()
+def client(registry: ModuleRegistry) -> TestClient:
+    codes = [s.system_code for s in registry.list_systems()]
     app = FastAPI()
     app.include_router(dashboard_router)
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
-    user = User(
-        user_id="u1",
-        email="operator@example.com",
-        name="점검자",
-        role="user",
-        allowed_system_codes=["hom", "mhm", "fp", "hrp", "hwtc", "chbot"],
-    )
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_run_service] = lambda: FakeRunService()
+    app.dependency_overrides[get_current_user] = lambda: _user(codes)
+    # FakeRunService 는 registry 를 받는다 — 인자 없이 만들면 TypeError.
+    app.dependency_overrides[get_run_service] = lambda: FakeRunService(registry)
     return TestClient(app)
 
 
@@ -108,11 +133,27 @@ def test_root_carries_the_exec_shell_class(client) -> None:
     assert 'class="exec' in _html(client)
 
 
-def test_accordion_is_gone(client) -> None:
-    """<details> 가 남아 있으면 '펼치기 전에는 안 보이는' 문제가 그대로다."""
+def test_system_accordions_are_gone(client) -> None:
+    """시스템 카드가 <details> 로 남아 있으면 '펼치기 전에는 안 보이는' 문제가 그대로다.
+
+    **`<details>` 를 통째로 금지하지 않는다.** 초안은 그렇게 적었는데, 그러면
+    예약 등록 폼의 접이식까지 함께 죽어 설계 D7("접이식으로 유지", 사용자 결정)을
+    어긴다. 없애려는 것은 시스템 카드 6개의 아코디언이지 접이식 자체가 아니다.
+    """
     html = _html(client)
-    assert "<details" not in html
+    assert 'class="system-card' not in html
     assert "system-card--suite" not in html
+
+
+def test_schedule_form_stays_collapsible(client) -> None:
+    """D7: 예약 등록 폼은 접이식으로 유지한다.
+
+    cron 빌더는 세그먼트 컨트롤·요일 칩 7개·시각·주기·미리보기·이름·등록 버튼까지
+    약 80줄이다. 항상 펼쳐 두면 넌스크롤 예산에서 우측 열을 잡아먹어 실행 버튼을
+    아래로 밀어낸다 — 이 화면의 목표와 정면으로 어긋난다.
+    """
+    html = _html(client)
+    assert '<details class="sched' in html
 
 
 def test_every_system_has_a_left_target_and_a_right_panel(client) -> None:
@@ -149,29 +190,21 @@ def test_form_contract_survives(client) -> None:
 
 def test_single_system_user_still_gets_a_layout(client) -> None:
     """allowed_system_codes 가 1개인 사용자에게도 좌우 2열이 성립해야 한다."""
-    app = client.app
-    solo = User(
-        user_id="u2",
-        email="solo@example.com",
-        name="단일",
-        role="user",
-        allowed_system_codes=["hom"],
-    )
-    app.dependency_overrides[get_current_user] = lambda: solo
+    client.app.dependency_overrides[get_current_user] = lambda: _user(["hom"])
     html = client.get("/runs/execute").text
     assert 'data-exec-target="suite"' in html
     assert 'data-exec-target="hom"' in html
     assert 'data-exec-target="mhm"' not in html
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
-Expected: FAIL — `test_root_carries_the_exec_shell_class` · `test_accordion_is_gone` · `test_every_system_has_a_left_target_and_a_right_panel` · `test_suite_is_selected_first` 4건. `test_form_contract_survives` 는 PASS(현행 마크업이 이미 만족).
+Expected: FAIL — `test_root_carries_the_exec_shell_class` · `test_system_accordions_are_gone` · `test_every_system_has_a_left_target_and_a_right_panel` · `test_suite_is_selected_first` 4건. `test_form_contract_survives` 와 `test_schedule_form_stays_collapsible` 은 PASS(현행 마크업이 이미 만족).
 
 `FakeRunService` 시그니처가 맞지 않으면 `tests/test_dashboard_fragments_http.py` 의 정의를 보고 `list_systems()` 가 필요한 형태를 돌려주도록 픽스처를 맞춘다.
 
-- [ ] **Step 3: 셸 CSS 를 만든다**
+- [x] **Step 3: 셸 CSS 를 만든다**
 
 `app/web/frontend/styles/execute.css`:
 
@@ -339,7 +372,7 @@ body:has(.exec) main > div {
 .exec-panel[hidden] { display: none; }
 ```
 
-- [ ] **Step 4: base.css 에 임포트를 넣는다**
+- [x] **Step 4: base.css 에 임포트를 넣고 `[x-cloak]` 을 승격시킨다**
 
 `app/web/frontend/styles/base.css` 의 `@import "./dashboard.css";` 다음 줄:
 
@@ -347,7 +380,11 @@ body:has(.exec) main > div {
 @import "./execute.css";
 ```
 
-- [ ] **Step 5: 좌측 목록 포함 파일을 만든다**
+그리고 `[x-cloak] { display: none !important; }`(현재 `dashboard.css:255`)를 `base.css` 로 옮긴다. 이 규칙은 Alpine 이 초기화되기 전 `x-show` 요소가 번쩍이는 것을 막는 **전역 리셋**인데, 화면 하나의 스타일시트 안에 있다. 이 계획이 두 번째 소비자를 만드므로 승격 조건("두 번째 화면이 요구하면 올린다")이 충족됐다.
+
+`execute.css` 에 같은 규칙을 다시 쓰지 마라 — 그것이 중복이다. 옮긴 뒤 대시보드 드로어(`dashboard.html:59`)가 여전히 깜빡이지 않는지 확인한다.
+
+- [x] **Step 5: 좌측 목록 포함 파일을 만든다**
 
 `app/web/templates/execute/_system_list.html`:
 
@@ -396,7 +433,7 @@ body:has(.exec) main > div {
 </aside>
 ```
 
-- [ ] **Step 6: execute.html 을 2열로 바꾼다**
+- [x] **Step 6: execute.html 을 2열로 바꾼다**
 
 `{% block content %}` 의 구조를 바꾼다. **폼 내부는 손대지 않는다** — `<details>`/`<summary>` 껍데기만 벗기고 `<form>` 이하를 그대로 패널 안으로 옮긴다.
 
@@ -446,12 +483,12 @@ body:has(.exec) main > div {
 2. **`{% set tone_pill = ... %}`(`execute.html:6`)을 지운다.** 색명 키 맵이며 P3-4 가 P4 로 넘긴 부채다. 유일한 사용처가 상태 카드 3종인데 Step 5 에서 텍스트로 대체했다.
 3. **페이지 헤더(`execute.html:16~21`)를 지운다.** 넌스크롤 2열에서 헤더는 높이만 먹고, 좌측 열의 "무엇을 점검할까"가 그 역할을 한다. 사이드바가 이미 현재 위치를 표시한다.
 
-- [ ] **Step 7: 테스트가 통과하는지 확인한다**
+- [x] **Step 7: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
 Expected: PASS (6 passed)
 
-- [ ] **Step 8: 빌드하고 눈으로 확인한다**
+- [x] **Step 8: 빌드하고 눈으로 확인한다**
 
 Run: `npm run build`
 
@@ -461,7 +498,7 @@ Run: `npm run build`
 - 전체 순차 점검이 처음부터 선택돼 있다
 - 실행 버튼이 스크롤 없이 보인다(모듈 많은 시스템은 우측 열이 내부 스크롤)
 
-- [ ] **Step 9: 커밋**
+- [x] **Step 9: 커밋**
 
 ```bash
 git add app/web/frontend/styles/execute.css app/web/frontend/styles/base.css app/web/templates/execute.html app/web/templates/execute/_system_list.html tests/test_execute_layout.py
@@ -484,7 +521,7 @@ git commit -m "feat(execute): 아코디언 6개를 넌스크롤 마스터-디테
 - Consumes: Task 1 의 `.exec-panel`. `app.js:332` 의 `fitModuleGraphToViewport` 가 `[data-role="module-graph-canvas"]` 의 실측 크기로 노드 크기를 정하므로, 캔버스에 더 큰 영역을 주면 그래프가 자동으로 커진다
 - Produces: `.exec-graph` 래퍼. Cycle 1b 가 이 셀렉터를 그대로 이어받는다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/test_execute_layout.py` 에 추가한다.
 
@@ -504,14 +541,18 @@ def test_graph_has_its_own_wrapper(client) -> None:
 
 `name="auth_method"` 가 없는 시스템이면 `system.run_form` 의 첫 필드 `name` 으로 바꾼다 — `docs/specs/systems/hom.md` 에서 확인한다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -k graph -v`
 Expected: FAIL — `exec-graph` 없음, 그래프가 폼 필드 뒤
 
-- [ ] **Step 3: 그래프 스타일을 이사시킨다**
+- [x] **Step 3: 그래프 스타일을 이사시킨다**
 
-`app/web/frontend/styles/app.css` 의 `427~570` 구간(`.module-graph-viewport` 부터 `.module-graph-node.is-locked` 계열까지)을 **잘라내어** `execute.css` 끝으로 옮긴다. 선언은 한 줄도 바꾸지 않는다 — 이사만 한다.
+`app/web/frontend/styles/app.css` 의 모듈 그래프 절을 **잘라내어** `execute.css` 끝으로 옮긴다. 선언은 한 줄도 바꾸지 않는다 — 이사만 한다.
+
+경계는 줄 번호가 아니라 **선택자로 잡는다**(앞선 태스크가 줄 수를 바꿀 수 있다). 시작은 `.module-graph-viewport`(현재 `:427`), 끝은 `.module-graph-node.is-locked .module-graph-title` 블록의 닫는 중괄호(현재 `:576`)다. 그 사이 약 150줄이 전부 `.module-graph-*` 선택자인지 옮기기 전에 확인한다.
+
+Run: `grep -n "^\.[a-z]" app/web/frontend/styles/app.css | sed -n '/427/,/576/p'`
 
 옮긴 뒤 `execute.css` 에 크기 규칙을 덧붙인다:
 
@@ -537,7 +578,7 @@ Expected: FAIL — `exec-graph` 없음, 그래프가 폼 필드 뒤
 
 `app.css` 가 줄어 `FG004_ALLOWLIST`(400줄 상한) 에 한 걸음 가까워진다. 아직 비지는 않는다.
 
-- [ ] **Step 4: 템플릿에서 그래프를 폼 상단으로 올린다**
+- [x] **Step 4: 템플릿에서 그래프를 폼 상단으로 올린다**
 
 `execute.html` 의 시스템 폼 안에서, `data-role="module-selector"` 절(`execute.html:317~331`)을 **폼의 첫 자식**으로 옮기고 `.exec-graph` 로 감싼다. 프리셋 패널은 그 아래로 내린다.
 
@@ -565,26 +606,26 @@ Expected: FAIL — `exec-graph` 없음, 그래프가 폼 필드 뒤
         {# 프리셋 패널 · 인증 필드 · 실행 버튼은 기존 순서대로 이 아래에 온다 #}
 ```
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
 Expected: PASS (8 passed)
 
-- [ ] **Step 6: 게이트와 빌드**
+- [x] **Step 6: 게이트와 빌드**
 
 Run: `python3 scripts/check_frontend_gates.py && npm run build`
 Expected: 게이트 통과, 빌드 성공
 
 `app.css` 에서 잘라낸 hex 가 `execute.css` 로 그대로 옮겨 갔다면 **FG-002 가 잡는다**(`execute.css` 는 allowlist 에 없다). 그 경우 옮긴 선언의 hex 를 `var(--c-*)` 토큰으로 바꾼다 — `primitives.css` 에 이미 대응 값이 있다.
 
-- [ ] **Step 7: 눈으로 확인한다**
+- [x] **Step 7: 눈으로 확인한다**
 
 `/runs/execute` 에서 HOM(모듈 10개)을 선택한다. 확인 항목:
 - 그래프가 패널 상단을 차지하고 노드가 이전보다 크다
 - 엣지 곡선이 그려지고, 노드를 클릭하면 활성/비활성 색이 바뀐다
 - 노드가 캔버스를 넘치지 않는다(`fitModuleGraphToViewport` 가 맞춰야 한다)
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add app/web/frontend/styles/app.css app/web/frontend/styles/execute.css app/web/templates/execute.html tests/test_execute_layout.py
@@ -593,27 +634,231 @@ git commit -m "feat(execute): 모듈 의존성 그래프를 패널 상단 지배
 
 ---
 
+#### 2b. Task 1 이 만든 고아 CSS 를 치운다
+
+Task 1 이 `class="system-card"` 의 **마지막 소비자를 없앴다.** `app.css` 의 `.system-card*` 규칙은 이제 아무도 쓰지 않는다 — 실측 60곳, 약 250줄이다. 이 사이클이 만든 죽은 코드이므로 이 사이클이 치운다.
+
+`::-webkit-details-marker` 규칙은 `<details>` 전용이라 특히 무의미해졌다.
+
+- [x] **Step 1: 소비자가 정말 없는지 확인한다**
+
+Run: `grep -rn "system-card" app/web/templates/ app/web/frontend/ --include=*.html --include=*.jinja --include=*.ts --include=*.css | grep -v "styles/app.css"`
+
+Expected: `primitives.css` 의 주석 한 줄 외에 없음. `app/web/static/app.js:530` 의 `bindSystemCardExpand` 는 `details.system-card` 를 찾는데 그 요소가 사라져 아무것도 못 찾는다 — **죽은 경로이며 Cycle 1b 가 함수째 지운다.** CSS 를 먼저 지워도 무해하다.
+
+템플릿이나 컴포넌트에서 하나라도 나오면 **멈추고 보고해라.** 내가 놓친 소비자가 있다는 뜻이다.
+
+- [x] **Step 2: 실패하는 테스트를 쓴다**
+
+`tests/test_execute_layout.py` 에 추가한다.
+
+```python
+def test_orphaned_system_card_css_is_gone() -> None:
+    """Task 1 이 마지막 소비자를 없앴다 — 죽은 규칙을 남기면 app.css 가 계속 부풀어 있다.
+
+    app.css 는 FG-004 의 400줄 상한을 넘겨 allowlist 에 올라 있다. 그 목록을
+    비우는 것이 프로그램의 목표 중 하나이므로, 소비자가 사라진 규칙은 바로 지운다.
+    """
+    from pathlib import Path
+
+    css = Path("app/web/frontend/styles/app.css").read_text(encoding="utf-8")
+    assert "system-card" not in css
+```
+
+- [x] **Step 3: 실패를 확인한다**
+
+Run: `python3 -m pytest tests/test_execute_layout.py -k orphan -v`
+Expected: FAIL — 약 60곳이 남아 있다
+
+- [x] **Step 4: 지운다**
+
+`.system-card` 로 시작하는 규칙 전부를 지운다. **미디어쿼리 안에도 흩어져 있으므로**(예: `:354` 부근) 파일 전체를 훑어야 한다. 규칙만 지우고 그것을 감싼 미디어쿼리 블록이 비면 그 블록도 함께 지운다.
+
+`:116` 의 `/* 대시보드 시스템 카드 (Bento grid accordion ...) */` 주석도 함께 지운다 — 설명할 대상이 사라졌다.
+
+**다른 선택자는 건드리지 마라.** 같은 미디어쿼리 안에 `.status-metric-card` 등 살아 있는 규칙이 섞여 있을 수 있다.
+
+- [x] **Step 5: 확인한다**
+
+Run: `python3 -m pytest tests/test_execute_layout.py -v && python3 scripts/check_frontend_gates.py && npm run build`
+Expected: 전부 통과
+
+Run: `wc -l app/web/frontend/styles/app.css`
+
+그다음 `/runs/execute` 와 `/` 를 열어 **레이아웃이 무너지지 않았는지** 확인한다. 지운 규칙이 실제로 아무 요소에도 안 걸렸다면 화면은 변하지 않아야 한다 — 하나라도 달라 보이면 살아 있는 소비자를 지운 것이다.
+
+- [x] **Step 6: 커밋**
+
+```bash
+git add app/web/frontend/styles/app.css tests/test_execute_layout.py
+git commit -m "refactor(execute): 소비자가 사라진 시스템 카드 CSS 삭제"
+```
+
+---
+
 ### Task 3: 좌측 목록의 오늘 상태 배지
 
-`/api/dashboard/daily` 를 재사용한다(D6). 서버 변경 0.
+`/api/dashboard/daily` 를 재사용하되(D6), **응답에 톤·라벨이 없다는 실측**을 반영해 서버가 이미 가진 파생을 노출한다. 세 단계로 나누고 각각 커밋한다 — 리뷰어가 API 필드 추가는 반려하면서 컴포넌트 변경은 승인할 수 있어야 한다.
 
 **Files:**
-- Create: `app/web/frontend/entries/execute-badges.ts`
-- Create: `app/web/frontend/entries/execute-badges.test.ts`
-- Modify: `vite.config.ts`
-- Modify: `app/web/templates/execute.html` (스크립트 블록)
+- Modify: `app/contexts/insights/application/daily_dashboard.py` (시스템 뷰 반환 dict)
+- Modify: `app/web/frontend/components/status-badge/index.ts` · `index.test.ts`
+- Create: `app/web/frontend/entries/execute-badges.ts` · `execute-badges.test.ts`
+- Modify: `vite.config.ts`, `app/web/templates/execute.html`, `docs/E2E_ARCHITECTURE.md` §5.2
+- Test: `tests/test_daily_dashboard.py`
 
 **Interfaces:**
-- Consumes: `GET /api/dashboard/daily` 응답. `components/status-badge` 의 `renderStatusBadge(tone, label)` · `normalizeTone(value)`(`app/web/frontend/components/status-badge/index.ts`). 실제 시그니처를 열어 확인하고 그대로 쓴다
-- Produces: `applySystemBadges(root: ParentNode, systems: Array<{system_code: string, tone: string, label: string}>): void` — `[data-exec-badge="{code}"]` 에 배지를 렌더한다. 목록에 없는 코드는 비워 둔다
+- Consumes: `daily_dashboard.py:90` 의 **기존 공개 함수** `system_summary_badge(system_view: dict) -> dict[str, str]` — `{"label", "tone"}` 을 돌려준다. 새로 만들지 않는다
+- Produces:
+  - 응답의 각 시스템 항목에 `summary_badge: {"label": str, "tone": str}` 추가. 기존 키는 하나도 바뀌지 않는다
+  - `renderStatusBadge(status: string, options: { size?: "sm" | "md"; label?: string })` — `label` 이 새로 열리는 주입구
+  - `applySystemBadges(root: ParentNode, systems: SystemBadge[]): void`, `type SystemBadge = { system_code: string; summary_badge: { label: string; tone: string } }`
 
-- [ ] **Step 1: 응답 형태를 실측한다**
+#### 3a. 서버가 파생 배지를 응답에 싣는다
 
-Run: `python3 -m pytest tests/test_daily_dashboard.py -v`
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
-그리고 `app/contexts/insights/application/daily_dashboard.py` 를 열어 시스템별 항목의 **정확한 키 이름**(`system_code` · `tone` · `status_label` 등)을 확인한다. 아래 테스트의 픽스처를 그 키에 맞춘다. **추측하지 않는다** — 키 하나가 다르면 배지가 조용히 비어 버린다.
+`tests/test_daily_dashboard.py` 에 추가한다. 페이로드를 만드는 방식은 그 파일이 이미 쓰는 빌더 호출을 그대로 가져다 쓴다.
 
-- [ ] **Step 2: 실패하는 테스트를 쓴다**
+```python
+def test_each_system_carries_a_summary_badge() -> None:
+    """좌측 목록이 counts 에서 톤을 유도하면 FG-006 이 막는 매핑 복제가 된다.
+
+    서버가 이미 system_summary_badge() 로 파생을 갖고 있으므로 그것을 노출한다.
+    """
+    payload = _build()  # 이 파일이 이미 쓰는 빌더 호출을 그대로 사용
+    assert payload["systems"], "시스템이 비어 있으면 이 테스트가 의미 없다"
+    for system in payload["systems"]:
+        badge = system["summary_badge"]
+        assert set(badge) == {"label", "tone"}
+        assert badge["label"] and badge["tone"]
+
+
+def test_summary_badge_matches_the_shared_helper() -> None:
+    """규칙을 두 곳에 쓰지 않았는지 — 파생은 한 함수에서만 나와야 한다."""
+    from app.contexts.insights.application.daily_dashboard import system_summary_badge
+
+    payload = _build()
+    for system in payload["systems"]:
+        assert system["summary_badge"] == system_summary_badge(system)
+
+
+def test_existing_system_keys_are_untouched() -> None:
+    """대시보드 화면이 쓰는 키가 하나라도 사라지면 그 화면이 조용히 깨진다."""
+    payload = _build()
+    for system in payload["systems"]:
+        for key in (
+            "system_code",
+            "system_name",
+            "display_order",
+            "module_total",
+            "inspected",
+            "pass_rate",
+            "counts",
+        ):
+            assert key in system, key
+```
+
+- [x] **Step 2: 실패를 확인한다**
+
+Run: `python3 -m pytest tests/test_daily_dashboard.py -k summary_badge -v`
+Expected: FAIL — `KeyError: 'summary_badge'`
+
+- [x] **Step 3: 한 줄을 얹는다**
+
+`daily_dashboard.py` 의 시스템 뷰를 반환하는 dict(`:290` 부근, `"system_code"` 로 시작하는 리터럴)를 변수로 받고 그 뒤에 얹는다. `system_summary_badge` 는 완성된 뷰를 받으므로 순서가 중요하다.
+
+```python
+    view = {
+        "system_code": system.system_code,
+        ...
+        "latest_run_status": str(latest.status) if latest else None,
+    }
+    # 대시보드 화면이 그때그때 파생시키던 것을 응답에 싣는다 — 규칙은 여기 한 곳뿐이다.
+    view["summary_badge"] = system_summary_badge(view)
+    return view
+```
+
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
+
+Run: `python3 -m pytest tests/test_daily_dashboard.py tests/test_dashboard_fragments_http.py -v`
+Expected: PASS — 기존 대시보드 테스트도 함께 통과해야 한다(기존 키 불변)
+
+- [x] **Step 5: API 문서를 갱신한다**
+
+`docs/E2E_ARCHITECTURE.md` §5.2 의 `/api/dashboard/daily` 항목에 `systems[].summary_badge` 를 적는다. DOCS_GOVERNANCE 의 "API 변경 → §5.2 갱신" 항목이다.
+
+Run: `python3 scripts/check_docs_consistency.py`
+Expected: 통과
+
+- [x] **Step 6: 커밋**
+
+```bash
+git add app/contexts/insights/application/daily_dashboard.py tests/test_daily_dashboard.py docs/E2E_ARCHITECTURE.md
+git commit -m "feat(dashboard): 시스템별 파생 배지를 응답에 노출"
+```
+
+#### 3b. 배지 컴포넌트에 라벨 주입구를 연다
+
+- [x] **Step 1: 실패하는 테스트를 쓴다**
+
+`app/web/frontend/components/status-badge/index.test.ts` 에 추가한다.
+
+```typescript
+it("라벨을 주면 그것을 쓴다 — 서버가 합성 상태 이름을 줄 때 필요하다", () => {
+  const el = renderStatusBadge("not_inspected", { label: "미점검" });
+  expect(el.textContent).toBe("미점검");
+});
+
+it("라벨을 안 주면 기존 동작 그대로다", () => {
+  const el = renderStatusBadge("passed");
+  expect(el.textContent).toBe("정상");
+});
+
+it("합성 상태의 톤은 pending 으로 떨어진다 — 색은 회색이어야 한다", () => {
+  const el = renderStatusBadge("not_inspected", { label: "미점검" });
+  expect(el.dataset.tone).toBe("pending");
+});
+```
+
+- [x] **Step 2: 실패를 확인한다**
+
+Run: `npm run test -- status-badge`
+Expected: FAIL — 첫 테스트가 `"대기"` 를 받는다. `MODULE_STATUS_LABELS` 에 `not_inspected` 키가 없어 `pending` 라벨로 떨어지기 때문이다(설계 §4.5.1)
+
+- [x] **Step 3: 주입구를 연다**
+
+```typescript
+export function renderStatusBadge(
+  status: string,
+  options: { size?: "sm" | "md"; label?: string } = {},
+): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "status-badge";
+  el.dataset.tone = normalizeTone(status);
+  el.dataset.size = options.size ?? "md";
+  // 서버가 라벨을 주면 그것이 우선이다. not_inspected 처럼 enum 밖의 합성 상태는
+  // MODULE_STATUS_LABELS 에 없어 statusLabel() 이 "대기" 로 떨어뜨린다(설계 D11).
+  el.textContent = options.label ?? statusLabel(status);
+  return el;
+}
+```
+
+- [x] **Step 4: 테스트가 통과하는지 확인한다**
+
+Run: `npm run test && npm run typecheck && npm run lint`
+Expected: PASS — 기존 호출부는 `label` 을 넘기지 않으므로 동작이 바뀌지 않는다
+
+- [x] **Step 5: 커밋**
+
+```bash
+git add app/web/frontend/components/status-badge/
+git commit -m "feat(status-badge): 서버 라벨 주입구 추가"
+```
+
+#### 3c. 좌측 목록에 배지를 건다
+
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/entries/execute-badges.test.ts`:
 
@@ -627,78 +872,93 @@ function host(codes: string[]): HTMLElement {
   return root;
 }
 
+const HOM = { system_code: "hom", summary_badge: { label: "정상", tone: "passed" } };
+
 describe("applySystemBadges", () => {
   it("코드가 맞는 자리에 배지를 넣는다", () => {
     const root = host(["hom", "mhm"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
-    expect(root.querySelector('[data-exec-badge="hom"]')!.textContent).toContain("정상");
+    applySystemBadges(root, [HOM]);
+    const slot = root.querySelector('[data-exec-badge="hom"]')!;
+    expect(slot.textContent).toContain("정상");
+    expect(slot.querySelector(".status-badge")!.getAttribute("data-tone")).toBe("passed");
+  });
+
+  it("서버 라벨을 그대로 쓴다 — 미점검이 대기로 바뀌면 안 된다", () => {
+    const root = host(["hwtc"]);
+    applySystemBadges(root, [
+      { system_code: "hwtc", summary_badge: { label: "미점검", tone: "not_inspected" } },
+    ]);
+    expect(root.querySelector('[data-exec-badge="hwtc"]')!.textContent).toBe("미점검");
   });
 
   it("응답에 없는 시스템 자리는 비워 둔다", () => {
     const root = host(["hom", "mhm"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
+    applySystemBadges(root, [HOM]);
     expect(root.querySelector('[data-exec-badge="mhm"]')!.innerHTML).toBe("");
   });
 
   it("두 번 불러도 배지가 겹쳐 쌓이지 않는다", () => {
     const root = host(["hom"]);
-    const data = [{ system_code: "hom", tone: "passed", label: "정상" }];
-    applySystemBadges(root, data);
-    applySystemBadges(root, data);
+    applySystemBadges(root, [HOM]);
+    applySystemBadges(root, [HOM]);
     expect(root.querySelectorAll('[data-exec-badge="hom"] > *').length).toBe(1);
   });
 
   it("빈 배열이면 모든 자리를 비운다 — 조회 실패 시 화면은 살아야 한다", () => {
     const root = host(["hom"]);
-    applySystemBadges(root, [{ system_code: "hom", tone: "passed", label: "정상" }]);
+    applySystemBadges(root, [HOM]);
     applySystemBadges(root, []);
     expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
   });
 });
 ```
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `npm run test -- execute-badges`
 Expected: FAIL — `Cannot find module './execute-badges'`
 
-- [ ] **Step 4: 엔트리를 만든다**
-
-`app/web/frontend/entries/execute-badges.ts`. 상태 라벨을 **하드코딩하지 않는다**(FG-003) — 서버가 준 `label` 을 그대로 쓰고, 톤만 `normalizeTone` 으로 정규화한다.
+- [x] **Step 3: 엔트리를 만든다**
 
 ```typescript
-// 좌측 목록의 오늘 상태 배지. 서버 변경 없이 대시보드 API 를 재사용한다(설계 D6).
-// 이 호출이 실패해도 실행 기능은 살아야 하므로, 실패는 '배지 없음' 으로만 나타난다.
-import { normalizeTone, renderStatusBadge } from "../components/status-badge/index";
+// 좌측 목록의 오늘 상태 배지. 새 엔드포인트 없이 대시보드 API 를 재사용한다(설계 D6).
+// 톤·라벨은 서버가 파생해 summary_badge 로 내려준다 — 여기서 counts 를 해석하지 않는다.
+// 이 호출이 실패해도 실행 기능은 살아야 하므로, 실패는 배지 없음으로만 나타난다.
+import { renderStatusBadge } from "../components/status-badge/index";
 
-type SystemStatus = { system_code: string; tone: string; label: string };
+type SystemBadge = {
+  system_code: string;
+  summary_badge: { label: string; tone: string };
+};
 
-export function applySystemBadges(root: ParentNode, systems: SystemStatus[]): void {
+export function applySystemBadges(root: ParentNode, systems: SystemBadge[]): void {
   const byCode = new Map(systems.map((s) => [s.system_code, s]));
   for (const slot of root.querySelectorAll<HTMLElement>("[data-exec-badge]")) {
-    const code = slot.dataset.execBadge ?? "";
-    const status = byCode.get(code);
+    const system = byCode.get(slot.dataset.execBadge ?? "");
     slot.innerHTML = "";
-    if (!status) continue;
-    slot.append(renderStatusBadge(normalizeTone(status.tone), status.label));
+    if (!system) continue;
+    const { tone, label } = system.summary_badge;
+    slot.append(renderStatusBadge(tone, { label, size: "sm" }));
   }
 }
 
 export async function loadSystemBadges(root: ParentNode = document): Promise<void> {
   try {
-    const response = await fetch("/api/dashboard/daily", { headers: { Accept: "application/json" } });
+    const response = await fetch("/api/dashboard/daily", {
+      headers: { Accept: "application/json" },
+    });
     if (!response.ok) return;
-    const payload = await response.json();
-    applySystemBadges(root, extractSystems(payload));
+    const payload = (await response.json()) as { systems?: SystemBadge[] };
+    applySystemBadges(root, payload.systems ?? []);
   } catch {
     // 배지는 부가 정보다. 실패해도 화면의 주 기능은 건드리지 않는다.
   }
 }
+
+document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
 ```
 
-`extractSystems(payload)` 는 Step 1 에서 실측한 응답 구조에 맞춰 작성한다. `renderStatusBadge` 의 실제 반환 타입(Element 인지 문자열인지)도 `components/status-badge/index.ts` 를 열어 확인하고 `append` 여부를 맞춘다.
-
-- [ ] **Step 5: Vite 엔트리로 등록한다**
+- [x] **Step 4: Vite 엔트리로 등록한다**
 
 `vite.config.ts` 의 `rollupOptions.input` 에 추가한다.
 
@@ -715,31 +975,24 @@ export async function loadSystemBadges(root: ParentNode = document): Promise<voi
 {% endblock %}
 ```
 
-엔트리 하단에서 기동한다:
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
-```typescript
-document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
-```
-
-- [ ] **Step 6: 테스트가 통과하는지 확인한다**
-
-Run: `npm run test && npm run typecheck && npm run lint`
+Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 Expected: 전부 PASS
 
-- [ ] **Step 7: 눈으로 확인한다**
+- [ ] **Step 6: 눈으로 확인한다**
+  - 대시보드·실행 화면의 라벨과 빈 배지 슬롯은 수동 확인했으나, DevTools Network 차단 뒤 새로고침은 실제로 수행하지 못해 미완료다.
 
-`/runs/execute` 좌측 목록에 오늘 상태 배지가 뜨고, 색과 라벨이 `/` 대시보드와 **같은지** 확인한다. 다르면 Cycle 0 이 덜 끝났거나 `normalizeTone` 매핑이 어긋난 것이다.
+`/runs/execute` 좌측 목록의 배지가 같은 시각 `/` 대시보드와 **문자 단위로 같은지** 확인한다. 특히 미점검 시스템이 양쪽 다 "미점검" 이어야 한다 — 한쪽이 "대기" 면 3b 가 덜 된 것이다.
 
 개발자 도구 Network 에서 `/api/dashboard/daily` 를 차단해 두고 새로고침해 **실행 버튼이 여전히 동작하는지** 확인한다.
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add app/web/frontend/entries/execute-badges.ts app/web/frontend/entries/execute-badges.test.ts vite.config.ts app/web/templates/execute.html
 git commit -m "feat(execute): 좌측 목록에 오늘 상태 배지 — 대시보드 API 재사용"
 ```
-
----
 
 ### Task 4: 넌스크롤 회귀 테스트
 
@@ -752,9 +1005,19 @@ git commit -m "feat(execute): 좌측 목록에 오늘 상태 배지 — 대시�
 - Consumes: Task 1~3 의 완성된 화면
 - Produces: 없음(회귀 가드)
 
-- [ ] **Step 1: 테스트를 쓴다**
+- [x] **Step 1: 테스트를 쓴다**
 
-`tests/test_dashboard_viewport.py` 의 구조(uvicorn 스레드 + Playwright)를 그대로 따른다. 포트 확보 `_free_port()` · 앱 조립 · `pytest.importorskip("playwright")` 포함.
+`tests/test_dashboard_viewport.py` 의 구조를 따른다. **그 파일의 실제 이름을 쓴다** — 초안이 지어낸 `page_factory` · `BASE_URL` 은 존재하지 않는다. 실측한 재사용 자산은 이렇다.
+
+| 이름 | 종류 | 용도 |
+| --- | --- | --- |
+| `_free_port()` | 헬퍼 | 빈 포트 확보 |
+| `_wait_for_server(host, port)` | 헬퍼 | 기동 대기 |
+| `_assert_no_scroll(page, selector)` | 헬퍼 | **이미 있다** — 요소가 스크롤하지 않음을 단언 |
+| `browser` | 모듈 스코프 픽스처 | `sync_playwright()` 수명 관리 |
+| `live_server` | 모듈 스코프 픽스처 | uvicorn 스레드를 띄우고 `base_url` 문자열을 yield |
+
+주의: 그 파일의 `_build_dashboard_test_app()` 은 **daily 라우터만** 조립한다. `/runs/execute` 는 `routes_dashboard.py` 의 라우터가 서빙하므로 **이 파일용 앱 빌더를 따로 만든다.** Task 1 의 `client` 픽스처가 조립한 것과 같은 구성(dashboard 라우터 + `/static` 마운트 + `get_current_user`·`get_run_service` 오버라이드)을 uvicorn 으로 띄우면 된다.
 
 ```python
 """점검 실행 넌스크롤 Playwright 테스트.
@@ -765,10 +1028,19 @@ Chromium 미설치 시 ``python3 -m playwright install chromium`` 후 재실행.
 VIEWPORTS = [(1366, 768), (1920, 1080), (2560, 1440)]
 
 
+@pytest.fixture()
+def page(browser, live_server):
+    """뷰포트를 바꿔 가며 쓰므로 컨텍스트를 테스트마다 새로 연다."""
+    context = browser.new_context()
+    page = context.new_page()
+    yield page
+    context.close()
+
+
 @pytest.mark.parametrize("width,height", VIEWPORTS)
-def test_no_page_scroll(page_factory, width, height):
-    page = page_factory(width, height)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_no_page_scroll(page, live_server, width, height):
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector(".exec")
     overflow = page.evaluate(
         "() => document.documentElement.scrollHeight - document.documentElement.clientHeight"
@@ -777,17 +1049,25 @@ def test_no_page_scroll(page_factory, width, height):
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
-def test_start_button_is_visible_without_scrolling(page_factory, width, height):
-    page = page_factory(width, height)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_start_button_is_visible_without_scrolling(page, live_server, width, height):
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector("#suite-start-button")
     assert page.locator("#suite-start-button").is_visible()
 
 
-def test_exactly_one_internal_scroller(page_factory):
+def test_left_column_does_not_scroll(page, live_server):
+    """좌측 목록은 넌스크롤 예산에서 스크롤을 갖지 않는다 — 기존 헬퍼를 재사용한다."""
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
+    page.wait_for_selector(".exec")
+    _assert_no_scroll(page, ".exec-master")
+
+
+def test_exactly_one_internal_scroller(page, live_server):
     """스크롤 소유권은 우측 조건 열 하나뿐이다(설계 §4.2 규격 2번)."""
-    page = page_factory(1920, 1080)
-    page.goto(f"{BASE_URL}/runs/execute")
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector(".exec")
     scrollers = page.evaluate(
         """() => Array.from(document.querySelectorAll('.exec *'))
@@ -801,30 +1081,40 @@ def test_exactly_one_internal_scroller(page_factory):
     assert len(scrollers) <= 1, f"내부 스크롤러가 여럿: {scrollers}"
 
 
-def test_selecting_a_system_swaps_the_panel(page_factory):
-    page = page_factory(1920, 1080)
-    page.goto(f"{BASE_URL}/runs/execute")
+def test_selecting_a_system_swaps_the_panel(page, live_server):
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(f"{live_server}/runs/execute")
     page.wait_for_selector('[data-exec-target="hom"]')
     page.click('[data-exec-target="hom"]')
     assert page.locator('[data-exec-panel="hom"]').is_visible()
     assert not page.locator('[data-exec-panel="suite"]').is_visible()
 ```
 
-`page_factory` 픽스처와 `BASE_URL` 은 `tests/test_dashboard_viewport.py` 의 서버 기동 픽스처를 그대로 옮겨 쓴다. 그 파일이 픽스처를 모듈 안에 두고 있으면 공용 모듈로 뽑지 말고 **복사한다** — 두 번째 사용처가 생겼을 뿐이고, 세 번째가 생기면 그때 뽑는다.
+`browser` · `live_server` 픽스처와 `_free_port` · `_wait_for_server` · `_assert_no_scroll` 헬퍼는 `tests/test_dashboard_viewport.py` 에서 **복사한다.** 공용 모듈로 뽑지 마라 — 두 번째 사용처가 생겼을 뿐이고, 세 번째가 생기면 그때 뽑는다. 다만 `live_server` 가 조립하는 앱은 위 주의대로 dashboard 라우터판으로 바꿔야 한다.
 
-- [ ] **Step 2: 실행한다**
+- [x] **Step 2: 실행한다**
 
 Run: `python3 -m pytest tests/test_execute_viewport.py -v`
 Expected: PASS. 실패하면 어느 뷰포트에서 몇 px 넘쳤는지 메시지가 알려준다 — `.exec` 의 `padding` 이나 `.exec-env` 높이를 줄인다.
 
 Chromium 이 없으면 `python3 -m playwright install chromium` 후 재실행.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add tests/test_execute_viewport.py
 git commit -m "test(execute): 넌스크롤·스크롤 소유권·패널 전환 회귀 검증"
 ```
+
+- [x] **후속 결정: 상세 열 sticky 실행 액션 바**
+
+수트와 개별 시스템의 feedback·submit을 같은 `.exec-action-bar`로 묶고,
+`.exec-detail` 안에서 `position: sticky; bottom: 0`으로 고정한다. `fixed`는 상세 열
+문맥을 벗어나므로, 그래프 축소는 지배 요소 규격을 훼손하므로, 좌측 목록 이동은 실행
+폼과 feedback을 분리하므로 기각한다. `tests/test_execute_viewport.py`는 수트와 HOM
+선택 뒤 실행 버튼의 `bounding_box`가 1366 · 1920 · 2560 px 뷰포트 안에 있고 action
+bar 계산 위치가 `sticky`인지 검증한다. 임시 `position: static` 변이에서 수트 버튼
+하단이 `1224.25px`로 768px 뷰포트를 넘는 RED를 확인한 뒤 원복했다.
 
 ---
 
@@ -837,7 +1127,7 @@ git commit -m "test(execute): 넌스크롤·스크롤 소유권·패널 전환 �
 - Consumes: Task 1~4 의 결과
 - Produces: 없음(문서)
 
-- [ ] **Step 1: SPEC-UI-002 의 §2 구성을 갱신한다**
+- [x] **Step 1: SPEC-UI-002 의 §2 구성을 갱신한다**
 
 `docs/specs/dashboard/02-execute-page.md` 의 헤더 표에 대체 관계를 적고, §2 를 마스터-디테일 구조로 다시 쓴다. **AC-001 · AC-002 는 손대지 않는다** — 동작 규칙은 불변이다.
 
@@ -853,26 +1143,46 @@ git commit -m "test(execute): 넌스크롤·스크롤 소유권·패널 전환 �
 - 좌측: 점검 대상 선택 목록(SUITE + 허용 시스템). 각 항목에 오늘 상태 배지
 - 우측: 선택 대상의 실행 조건 패널. 모듈 의존성 그래프가 상단 지배 요소
 - 기본 선택은 SUITE
-- 모든 뷰포트에서 `body` 세로 스크롤 0. 내부 스크롤은 우측 패널 하나
 - `< 1024px` 에서 1열로 붕괴하고 좌측 목록은 가로 스크롤 칩 행이 된다
 ```
 
-- [ ] **Step 2: 문서 정합성 가드를 돌린다**
+§5 수용 기준에 **AC 를 신설한다.** 이 저장소는 `tests/test_spec_traceability.py` 가 `@pytest.mark.spec("SPEC-...", "AC-...")` 마커를 실제 AC 제목과 대조한다. FR 만 추가하면 새 테스트에 마커를 달 수 없다.
+
+```markdown
+### AC-003: 넌스크롤 마스터-디테일
+
+- **Given** 허용 시스템이 1~6개인 `operator`
+- **When** `GET /runs/execute` 를 1366 · 1920 · 2560 px 에서 연다
+- **Then** `body` 세로 스크롤이 0이고, 실행 버튼이 스크롤 없이 보이며,
+  내부 스크롤을 갖는 영역은 우측 조건 열 하나뿐이다
+- **And** 좌측 항목을 선택하면 해당 패널만 보이고 나머지는 감춰진다
+```
+
+그다음 Task 4 가 만든 `tests/test_execute_viewport.py` 의 넌스크롤·패널 전환 테스트에 마커를 단다.
+
+```python
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
+```
+
+Run: `python3 -m pytest tests/test_spec_traceability.py -v`
+Expected: PASS — 마커가 실재하는 AC 를 가리켜야 한다. 실패하면 AC 제목 형식(`### AC-003:`)이 어긋난 것이다.
+
+- [x] **Step 2: 문서 정합성 가드를 돌린다**
 
 Run: `python3 scripts/check_docs_consistency.py`
 Expected: 통과
 
-- [ ] **Step 3: 동작 불변을 확인한다**
+- [x] **Step 3: 동작 불변을 확인한다**
 
 Run: `python3 -m pytest tests/test_presets_http.py tests/test_suite_aggregate.py tests/test_suite_decider.py -v`
 Expected: PASS — 이 계획은 API 를 건드리지 않았으므로 한 건도 바뀌면 안 된다.
 
-- [ ] **Step 4: 전체 게이트를 돌린다**
+- [x] **Step 4: 전체 게이트를 돌린다**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Expected: 전 게이트 통과
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add docs/specs/dashboard/02-execute-page.md
@@ -883,14 +1193,21 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 
 ## 완료 확인
 
-- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] `npm run test && npm run typecheck && npm run lint` 통과
-- [ ] `execute.html` 에 `<details>` 0건
-- [ ] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
-- [ ] 내부 스크롤러 1개(우측 패널)
-- [ ] 좌측 배지 색·라벨이 `/` 대시보드와 일치
-- [ ] `/api/dashboard/daily` 차단 상태에서도 실행 동작
-- [ ] `app.css` 가 약 140줄 줄었다(모듈 그래프 절 이사)
+- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과
+- [x] `npm run test && npm run typecheck && npm run lint` 통과
+- [x] `execute.html` 에 `class="system-card` 0건, 예약 폼의 `<details class="sched` 는 **살아 있다**(D7)
+- [x] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
+- [x] `.exec-detail` 의 `overflow-y` 는 `auto` 이고 실제 내부 스크롤러가 있으면 모두 우측 상세 패널에 속한다
+- [x] 좌측 배지 톤·라벨이 `/` 대시보드와 **문자 단위로** 일치 — 미점검 시스템이 양쪽 다 "미점검"
+- [x] `/api/dashboard/daily` 응답에 `summary_badge` 추가, 기존 키 불변(대시보드 화면 무영향)
+- [x] `docs/E2E_ARCHITECTURE.md` §5.2 에 새 필드 반영
+- [x] `/api/dashboard/daily` 차단 상태에서도 실행 동작
+- [x] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
+- [x] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
+- [x] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
+- [x] `app.css` 가 약 400줄 줄었다(모듈 그래프 150줄 이사 + 고아 시스템 카드 250줄 삭제)
+  - Cycle 0 기준 `0f5523d` 1411줄→현재 991줄, diff 0추가·420삭제; 모듈 그래프 167줄 + 시스템 카드 253줄 = 420줄.
+- [x] `app.css` 에 `system-card` 0건(Task 2b)
 
 ## 이 계획이 남기는 것
 
@@ -898,6 +1215,6 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 | --- | --- |
 | `app.js` 약 1,400줄이 아직 이 화면을 구동한다 | Cycle 1b |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 (app.js 소멸 시) |
-| `app.css` 잔여(약 1,270줄, 400줄 상한 초과) | Cycle 1b~6 이 절씩 이사 |
+| `app.css` 잔여(991줄, 400줄 상한 초과) | Cycle 1b~6 이 절씩 이사 |
 | `body:has(.dash)` 와 `body:has(.exec)` 셸 중복 | 세 번째 화면이 같은 셸을 요구하면 공통으로 뽑는다 |
 | 예약 등록 폼(cron 빌더)이 SUITE 패널에 남아 있다 | Cycle 6 에서 중복 판단(설계 D7) |

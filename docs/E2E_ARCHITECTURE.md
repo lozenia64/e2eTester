@@ -429,7 +429,7 @@ e2eTester/
 - `POST /api/healing/patches/{patch_id}/approve`
 - `POST /api/healing/patches/{patch_id}/reject`
 - `GET /api/healing/patches/{patch_id}/download`
-- `GET /api/dashboard/daily`
+- `GET /api/dashboard/daily` — 각 시스템 항목에 `systems[].summary_badge` (`label`, `tone`) 포함
 - `GET /api/dashboard/daily/summary`
 - `GET /api/dashboard/daily/fragments/{zone}`
 - `GET /api/dashboard/daily/fragments/system/{system_code}/panel`

@@ -44,6 +44,54 @@ def _sysdef(code: str, module_ids: list[str], *, order: int = 100) -> SystemDefi
     )
 
 
+def _build() -> dict:
+    """시스템 뷰 계약을 검증할 실제 일간 대시보드 payload."""
+    return build_daily_dashboard_from_projection(
+        [_sysdef("hom", ["a"])],
+        [],
+        [],
+        generated_at=GEN_AT,
+        date_label="2026-07-08",
+        tz=ZoneInfo("Asia/Seoul"),
+    )
+
+
+def test_each_system_carries_a_summary_badge() -> None:
+    """좌측 목록이 counts 에서 톤을 유도하면 FG-006 이 막는 매핑 복제가 된다.
+
+    서버가 이미 system_summary_badge() 로 파생을 갖고 있으므로 그것을 노출한다.
+    """
+    payload = _build()
+    assert payload["systems"], "시스템이 비어 있으면 이 테스트가 의미 없다"
+    for system in payload["systems"]:
+        badge = system["summary_badge"]
+        assert set(badge) == {"label", "tone"}
+        assert badge["label"] and badge["tone"]
+
+
+def test_summary_badge_matches_the_shared_helper() -> None:
+    """규칙을 두 곳에 쓰지 않았는지 — 파생은 한 함수에서만 나와야 한다."""
+    payload = _build()
+    for system in payload["systems"]:
+        assert system["summary_badge"] == system_summary_badge(system)
+
+
+def test_existing_system_keys_are_untouched() -> None:
+    """대시보드 화면이 쓰는 키가 하나라도 사라지면 그 화면이 조용히 깨진다."""
+    payload = _build()
+    for system in payload["systems"]:
+        for key in (
+            "system_code",
+            "system_name",
+            "display_order",
+            "module_total",
+            "inspected",
+            "pass_rate",
+            "counts",
+        ):
+            assert key in system, key
+
+
 def test_only_one_dashboard_builder_exists():
     """레거시 빌더가 되살아나면 테스트가 프로덕션을 검증하지 못하게 된다."""
     import app.contexts.insights.application.daily_dashboard as mod

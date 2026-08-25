@@ -24,12 +24,13 @@ export function statusLabel(status: string): string {
 
 export function renderStatusBadge(
   status: string,
-  options: { size?: "sm" | "md" } = {},
+  options: { size?: "sm" | "md"; label?: string } = {},
 ): HTMLElement {
   const el = document.createElement("span");
   el.className = "status-badge";
   el.dataset.tone = normalizeTone(status);
   el.dataset.size = options.size ?? "md";
-  el.textContent = statusLabel(status);
+  // 서버가 라벨을 주면 그것이 우선이다. enum 밖의 합성 상태도 서버 이름을 유지한다.
+  el.textContent = options.label ?? statusLabel(status);
   return el;
 }

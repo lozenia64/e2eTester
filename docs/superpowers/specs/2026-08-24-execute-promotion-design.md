@@ -77,7 +77,7 @@
 
 | 사이클 | 화면 | 잘라낼 레거시 | 완료 신호 |
 | --- | --- | --- | --- |
-| **0** | (없음 — 팔레트 통일) | 템플릿 7벌의 로그 토큰 정의 · `admin-runs.js` 차트 색 4개 | `legacy-aliases.css` 신설 · FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
+| **0** ✅ | (없음 — 팔레트 통일) | 템플릿 7벌의 로그 토큰 정의 · `admin-runs.js` 차트 색 4개 | `legacy-aliases.css` 신설 · FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
 | **1** | 점검 실행 | `app.js` 약 1,400줄(모듈 그래프 620 + 프리셋 패널 540 + 폼 바인딩 약 240) · `app.css` 프리셋(846~1086) · 모듈그래프(427~570) 절 | `entries/execute.ts` 신설 |
 | **2** | 수트 상세 | `app.js` 약 700줄 | `entries/suite.ts` 신설 |
 | **3** | 런 상세 | `app.js` 약 700줄 | `entries/run.ts` 신설 |
@@ -119,10 +119,13 @@
 | 팔레트 단일화 | 템플릿 7개에 `--st-*` · `--ease-spring` 정의 0건. 7개 화면의 상태 색이 `tokens.generated.css` 값으로 해석됨. `admin-runs.js` 차트에 상태 hex 0건 |
 | 게이트 사각지대 폐쇄 | FG-002 가 `templates/` · `static/*.js` 를 스캔. 파일 allowlist 는 사이클마다 감소 |
 | 실행 버튼 상시 노출 | 1366 · 1920 · 2560 px 에서 스크롤 없이 실행 버튼이 보인다 |
+| 실행 액션 바 좌표 | 수트와 선택된 개별 시스템의 실행 버튼 `bounding_box`가 1366 · 1920 · 2560 px 뷰포트 경계 안에 있다 |
 | 스크롤 소유권 | `body` 세로 스크롤 0. 내부 스크롤을 갖는 영역이 정확히 하나(우측 조건 열) |
 | 그래프 승격 | 모듈 그래프 노드 크기가 현행 대비 확대되고, 시스템 선택 즉시 보인다(아코디언 펼침 불필요) |
 | 이관 | `entries/execute.ts` 존재. `app.js` 에서 점검 실행 몫 제거. Vitest 가 그래프 레이아웃 계산을 단언 |
-| 동작 불변 | `SPEC-UI-002` AC-001 · AC-002 기존 테스트 통과 |
+| 배지 일치 | 좌측 목록의 톤·라벨이 같은 시각 대시보드와 **문자 단위로 일치**한다. 특히 미점검 시스템이 양쪽 다 "미점검" 이다(§4.5.1) |
+| 기존 키 보존 | `/api/dashboard/daily` 응답에 `summary_badge` 가 추가되되 기존 키는 하나도 바뀌지 않아 대시보드 화면이 영향받지 않는다 |
+| 동작 불변 | `SPEC-UI-002` AC-001 · AC-002 는 서버측 규칙이며 이 사이클이 건드리지 않는다. `tests/test_presets_http.py` · `tests/test_suite_aggregate.py` · `tests/test_suite_decider.py` 통과 |
 
 ---
 
@@ -208,6 +211,16 @@
 | 4 추출 컴포넌트 | `module-graph` 를 `app.js`/`app.css` 에서 떼어 **화면 폴더**로. `status-badge` 는 재사용. `components/` 승격 없음(D4) |
 | 5 완료 신호 | `entries/execute.ts` · Vitest(그래프 레이아웃 계산) · Playwright 넌스크롤 회귀 |
 
+**후속 결정(2026-08-25).** 수트와 개별 시스템 폼의 feedback·submit을 각각
+`.exec-action-bar`로 함께 묶고, 이 바를 우측 `.exec-detail` 안에서
+`position: sticky; bottom: 0`으로 고정한다. 따라서 스크롤 소유자는 계속 우측 조건 열
+하나이며, 성공 기준의 버튼 상시 노출은 DOM 존재가 아니라 Playwright의
+`bounding_box` 좌표(`x`·`y`·`right`·`bottom`)로 1366 · 1920 · 2560 px에서 확인한다.
+
+`position: fixed`는 우측 조건 열의 문맥을 벗어나므로 기각한다. 모듈 그래프 축소는 지배
+정보를 크게 둔다는 1번 답과 충돌하고, 실행 버튼을 좌측 목록으로 옮기는 것은 “어떻게
+점검할까” 상세 열의 실행 문맥·폼 feedback을 분리하므로 기각한다.
+
 ### 4.4 왜 싼가 — 렌더 경로가 아니라 표시 규칙만 바뀐다
 
 `execute.html:256` 은 지금도 **6개 시스템 폼을 전부 서버 렌더해 DOM 에 넣는다.** `<details>` 가 접고 있을 뿐이고, 각 폼은 `system.run_form` 으로 필드를 렌더하며 `execute.html:286` 이 `systems_payload` 를 JSON 으로 심는다.
@@ -220,9 +233,54 @@
 
 `routes_dashboard.py:56` 의 `run_execute` 는 `systems` · `systems_payload` · `analyzer_status` · `email_status` 만 내려준다. 좌측 목록의 상태 배지에 필요한 오늘 상태는 없다.
 
-`daily_dashboard.py` 가 이미 시스템별 상태를 계산해 `/api/dashboard/daily` 로 내보내고 있으므로 **클라이언트가 그 엔드포인트를 재사용한다**(D6, 사용자 결정). 라우트 컨텍스트 · 뷰모델 · 새 read model 모두 변경 0이다.
+`daily_dashboard.py` 가 이미 시스템별 상태를 계산해 `/api/dashboard/daily` 로 내보내고 있으므로 **클라이언트가 그 엔드포인트를 재사용한다**(D6, 사용자 결정). 새 read model 도, 새 엔드포인트도 만들지 않는다.
 
-배지 렌더는 `components/status-badge` 를 쓴다 — 상태 라벨·톤이 서버 SSOT 를 거치므로 FG-003 · FG-006 을 자동으로 만족한다.
+> **정정(Cycle 1a 착수 전 실측, 2026-08-25):** 초안은 "라우트 컨텍스트 · 뷰모델 · 새 read model 모두 변경 0" 이라고 적었으나 **틀렸다.** 응답의 시스템별 항목(`daily_dashboard.py:290~300`)이 담는 것은 `system_code` · `system_name` · `display_order` · `module_total` · `inspected` · `pass_rate` · `counts` · `latest_run_*` 이고, **톤도 상태 라벨도 없다.** 대시보드 화면은 그것을 `system_summary_badge()` 로 그때그때 파생시킨다.
+>
+> 따라서 클라이언트가 배지를 그리려면 `counts` 에서 톤을 직접 유도해야 하는데, 그것은 상태→표현 매핑을 프론트에 복제하는 일이라 FG-006 이 막으려는 바로 그 병이다. Cycle 0 이 방금 없앤 문제를 다른 형태로 되살린다.
+
+**해법: 서버가 이미 가진 파생을 응답에 싣는다.** `daily_dashboard.py:90` 의 `system_summary_badge(system_view) -> {"label", "tone"}` 은 **이미 존재하는 공개 함수**다(attention 항목이 쓴다). 시스템 뷰를 만드는 자리에서 이 함수의 결과를 한 필드로 얹는다.
+
+```python
+# daily_dashboard.py — 시스템 뷰 반환 dict 에 한 줄
+"summary_badge": system_summary_badge(view),   # {"label": "정상", "tone": "passed"}
+```
+
+규칙을 새로 쓰지 않는다 — 이미 있는 SSOT 파생을 노출만 한다. 변경 표면은 함수 하나이고, 기존 키는 전부 유지되므로 대시보드 화면은 영향받지 않는다. API 응답에 필드가 느는 것이므로 `docs/E2E_ARCHITECTURE.md` §5.2 를 함께 갱신한다(DOCS_GOVERNANCE).
+
+### 4.5.1 배지 컴포넌트에 라벨 주입구가 필요하다
+
+`components/status-badge/index.ts:25` 의 실제 시그니처는 초안이 가정한 `renderStatusBadge(tone, label)` 이 아니다.
+
+```typescript
+export function renderStatusBadge(status: string, options: { size?: "sm" | "md" } = {}): HTMLElement
+// 내부에서 normalizeTone(status) 와 statusLabel(status) 를 스스로 부른다
+```
+
+라벨을 밖에서 넣을 구멍이 없다. 그런데 이 화면이 실제로 받는 톤 중 하나가 `not_inspected` 인데(`system_summary_badge` 가 미점검 시스템에 그 톤을 준다), 이것은 **`STATUS_TONES` 9종에 없는 합성 상태**다. 실측하면 이렇게 흐른다.
+
+| 단계 | 결과 |
+| --- | --- |
+| `normalizeTone("not_inspected")` | `"pending"` — 합성 상태를 pending 으로 떨어뜨린다(의도된 폴백) |
+| `statusLabel("not_inspected")` | `MODULE_STATUS_LABELS` 에 `not_inspected` 키가 **없어** `MODULE_STATUS_LABELS["pending"]` = **"대기"** |
+| 대시보드가 같은 시스템에 쓰는 라벨 | **"미점검"** |
+
+즉 그대로 두면 좌측 목록은 "대기", 대시보드는 "미점검" 이라고 말한다. **같은 상태를 화면마다 다르게 부르는 것** — Cycle 0 이 색에 대해 방금 없앤 문제를 라벨에서 재생산한다.
+
+**해법:** `renderStatusBadge` 에 라벨 주입구를 연다. 서버가 준 라벨을 그대로 쓰고, 없으면 기존 동작을 유지한다.
+
+```typescript
+export function renderStatusBadge(
+  status: string,
+  options: { size?: "sm" | "md"; label?: string } = {},
+): HTMLElement {
+  ...
+  el.textContent = options.label ?? statusLabel(status);
+```
+
+FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 서버가 준 값을 통과시킬 뿐이다. 기존 호출부는 `label` 을 넘기지 않으므로 동작이 바뀌지 않는다.
+
+대안으로 `MODULE_STATUS_LABELS` 에 `not_inspected` 를 추가하는 길도 있으나, 그 파일은 `status_labels.py` 에서 생성되는 자동 생성물이고 `not_inspected` 는 enum 상태가 아니라 대시보드 집계가 만든 합성 값이다. 생성물에 합성 값을 섞으면 SSOT 의 경계가 흐려진다(D11).
 
 **실패 처리:** 이 호출이 실패해도 화면의 주 기능(실행)은 살아야 한다. 배지 영역만 비우고 나머지는 정상 동작한다.
 
@@ -237,7 +295,8 @@
 | **D3** | Cycle 0 은 **팔레트 통일만.** 컴포넌트 추출은 화면별 | 로그 팔레트는 디자인 과제가 아니라 버그이고 화면 순서와 무관하다. 반면 컴포넌트 인터페이스는 화면 하나를 승격해보기 전에는 알 수 없다. **틀린 것만 먼저 고치고 모르는 것은 미룬다.** 사용자 결정 |
 | **D4** | 한 화면에서만 쓰는 것은 `components/` 로 올리지 않는다 | 사이클 1 이 추측으로 컴포넌트 라이브러리를 짓는 것을 막는다. 두 번째 화면이 요구할 때 승격 |
 | **D5** | 도착점은 **통일이 아니라 승격** — 모든 화면을 대시보드급 정보구조로 | 통일만으로는 "깨지지 않는" 데 그친다. 사용자 결정 |
-| **D6** | 좌측 상태 배지는 `/api/dashboard/daily` **재사용** | 새 read model·라우트 변경 0. 대안(execute 컨텍스트에 상태 주입)은 라우트·뷰모델·템플릿 3층을 동시에 바꾼다. 사용자 결정 |
+| **D6** | 좌측 상태 배지는 `/api/dashboard/daily` **재사용** | 새 read model·새 엔드포인트를 만들지 않는다. 대안(execute 컨텍스트에 상태 주입)은 라우트·뷰모델·템플릿 3층을 동시에 바꾼다. 사용자 결정.<br><br>**정정(2026-08-25 실측):** "서버 변경 0" 은 틀렸다. 응답의 시스템 항목에 톤·라벨이 없어(§4.5) 클라이언트가 `counts` 에서 톤을 유도해야 하는데, 그것은 FG-006 이 막는 상태→표현 매핑 복제다. 이미 있는 `system_summary_badge()` 의 결과를 응답에 한 필드로 싣는 것으로 바꾼다. D6 의 본질(새 read model 금지·엔드포인트 재사용)은 그대로다 |
+| **D11** | `not_inspected` 라벨 문제는 **`renderStatusBadge` 에 라벨 주입구**로 푼다. `status.generated.ts` 에 합성 상태를 추가하지 않는다 | `MODULE_STATUS_LABELS` 는 `status_labels.py` 에서 생성되는 자동 생성물이고 `not_inspected` 는 enum 상태가 아니라 대시보드 집계가 만든 합성 값이다. 생성물에 합성 값을 섞으면 "무엇이 도메인 상태인가" 의 경계가 흐려진다. 서버가 준 라벨을 통과시키는 쪽이 SSOT 방향과 일치한다 |
 | **D7** | 예약 등록 폼(`execute.html:165~245`)을 이번 사이클에서 **옮기지 않는다** | 성격상 예약 관리(Cycle 6)의 것이지만 "실행하면서 바로 예약"이 의도된 동선일 수 있다. 우측 열 하단 접이식으로 유지하고 Cycle 6 에서 중복 여부를 판단한다. 사용자 결정 |
 | **D8** | 마스터-디테일은 서버 렌더 폼 6개를 **유지한 채** 표시만 전환 | 렌더 경로를 바꾸지 않아 폼 바인딩·`data-role`·검증이 전부 산다(§4.4) |
 | **D9** | 짧은 별칭은 **신설 `legacy-aliases.css`** 에 두고 사용처 51곳은 건드리지 않는다 | 사용처를 `-solid` 로 일괄 치환하면 Cycle 0 이 51곳 수정으로 부풀고, 화면별 사이클이 어차피 그 CSS 를 컴포넌트로 옮기며 지운다. `primitives.css` 는 "상태색은 `tokens.generated.css` 담당"을 명시하므로 거처가 아니다. 파일이 **소멸 조건을 자기 안에 적어** allowlist 와 같은 방식으로 줄어든다 |
@@ -272,6 +331,19 @@
 ---
 
 ## 8. 이후 — 이 문서가 남기는 것
+
+### 8.1 Cycle 0 이 실제로 남긴 것 (2026-08-25 완료, PR #146)
+
+| 산출물 | 내용 |
+| --- | --- |
+| `app/web/frontend/styles/legacy-aliases.css` | 짧은 이름 → SSOT 토큰 별칭 10개. 소멸 조건을 파일 안에 적었다 |
+| `FG002_ALLOWLIST` | 템플릿 8개. 화면 승격 사이클마다 한 줄씩 줄고, 비면 FG-002 가 완성된다 |
+| `theme-color` 예외 | 파일 allowlist 가 아니라 **태그 단위 치환**으로 구현했다. 같은 줄의 다른 hex 는 계속 검출된다. `(?<![\w-])name=` 로 `data-name` · `aria-name` 우회도 막았다 |
+| 신규 테스트 | `test_legacy_aliases.py`(별칭이 실재 토큰을 가리키는지) · `test_status_palette_single_source.py`(사본이 없는지) |
+
+**Cycle 0 이 가르쳐준 것 — Cycle 1a 가 이어받는다.** 이 프로그램이 없애려는 병은 "덜 예쁘다" 가 아니라 **같은 상태를 화면마다 다르게 말하는 것**이다. Cycle 0 은 그것을 색에서 없앴다. §4.5.1 이 발견한 `not_inspected` 라벨 문제는 같은 병이 **라벨**에서 재발하려던 것이고, Cycle 1a 가 그것까지 막는다. 새 화면을 만들 때마다 "이 값은 어디서 오는가" 를 서버 SSOT 까지 따라가는 것이 이 프로그램의 기본 동작이다.
+
+### 8.2 남는 것
 
 | 항목 | 비고 |
 | --- | --- |
