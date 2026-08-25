@@ -38,7 +38,7 @@ describe("applyPresetToForm", () => {
     const form = document.createElement("form");
     form.innerHTML = `
       <input name="login_id">
-      <select name="auth_method"><option value="phone">휴대폰인증</option></select>
+      <select name="auth_method"><option value="phone">휴대폰인증</option><option value="kakao" selected>카카오인증</option></select>
       <div class="conditional-field is-hidden" data-show-when-key="auth_method" data-show-when-value="phone" data-required="true"><input name="phone_number"></div>
       <div data-role="module-selector">
         <p data-role="module-selection-summary"></p>
