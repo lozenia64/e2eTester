@@ -32,5 +32,3 @@ export async function loadSystemBadges(root: ParentNode = document): Promise<voi
     // 배지는 부가 정보다. 실패해도 화면의 주 기능은 건드리지 않는다.
   }
 }
-
-document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
