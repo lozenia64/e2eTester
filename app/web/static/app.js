@@ -228,26 +228,7 @@ function applyPresetToForm(form, preset) {
         }
     }
     syncConditionalFields(form);
-    applyModuleSelection(form, preset.selected_module_ids ?? null);
-}
-
-// Task 3가 프리셋 호출부를 모듈로 옮길 때까지 임시 보존한다. 이관 뒤 반드시 제거한다.
-function applyModuleSelection(form, moduleIds) {
-    const nodes = getModuleGraphNodes(form);
-    if (nodes.length === 0) {
-        return;
-    }
-    if (moduleIds == null) {
-        for (const node of nodes) {
-            node.dataset.selected = "true";
-        }
-    } else {
-        const selected = new Set(moduleIds);
-        for (const node of nodes) {
-            node.dataset.selected = selected.has(node.dataset.moduleId) ? "true" : "false";
-        }
-    }
-    updateModuleSelectorState(form);
+    window.__executeModuleGraph.applyModuleSelection(form, preset.selected_module_ids ?? null);
 }
 
 async function submitPresetSave(systemCode, form, nameInput, saveForm, feedback, confirmButton) {
@@ -257,7 +238,7 @@ async function submitPresetSave(systemCode, form, nameInput, saveForm, feedback,
         nameInput.focus();
         return;
     }
-    const selectedModuleIds = getSelectedModuleIds(form);
+    const selectedModuleIds = window.__executeModuleGraph.getSelectedModuleIds(form);
     confirmButton.disabled = true;
     try {
         const response = await fetch("/api/presets", {
@@ -490,7 +471,7 @@ async function startSystemRun(systemCode, button, form) {
         return;
     }
 
-    const selectedModuleIds = getSelectedModuleIds(form);
+    const selectedModuleIds = window.__executeModuleGraph.getSelectedModuleIds(form);
     if (selectedModuleIds.length === 0) {
         setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
         return;
@@ -1119,7 +1100,7 @@ async function registerSchedule(systemCode, form, button) {
         return;
     }
 
-    const selectedModuleIds = getSelectedModuleIds(form);
+    const selectedModuleIds = window.__executeModuleGraph.getSelectedModuleIds(form);
     if (selectedModuleIds.length === 0) {
         setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
         return;

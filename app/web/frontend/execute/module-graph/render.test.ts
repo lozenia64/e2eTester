@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "../../entries/execute";
 import { bindModuleSelectors } from "./render";
 
 const definition = {
@@ -36,5 +37,27 @@ describe("bindModuleSelectors", () => {
     expect(document.querySelectorAll('[data-role="module-graph-node"][data-selected="false"]')).toHaveLength(4);
     expect(document.querySelector('[data-role="module-selection-summary"]')!.textContent).toBe("0 / 4 선택 · 4개 제외");
     expect(document.querySelectorAll(".module-graph-edge.is-muted")).toHaveLength(3);
+  });
+
+  it("레거시 프리셋 호출은 임시 그래프 API로 실제 선택 상태를 적용한다", () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => callback(0));
+    document.body.innerHTML = `
+      <form class="system-form">
+        <script type="application/json" data-role="system-definition">${JSON.stringify(definition)}</script>
+        <section data-role="module-selector">
+          <p data-role="module-selection-summary"></p>
+          <div class="module-graph-viewport"><div data-role="module-graph-canvas"><svg data-role="module-graph-edges"></svg><div data-role="module-graph-grid"></div></div></div>
+          <div class="is-hidden" data-role="module-selection-warning"></div>
+        </section>
+      </form>`;
+    bindModuleSelectors(document);
+
+    const legacyGraph = (window as Window & { __executeModuleGraph?: { applyModuleSelection(form: HTMLFormElement, moduleIds: string[] | null): void; getSelectedModuleIds(form: HTMLFormElement): string[] } }).__executeModuleGraph!;
+    const form = document.querySelector<HTMLFormElement>(".system-form")!;
+    legacyGraph.applyModuleSelection(form, ["login", "pay"]);
+
+    expect(legacyGraph.getSelectedModuleIds(form)).toEqual(["login", "pay"]);
+    expect(document.querySelector('[data-role="module-selection-summary"]')!.textContent).toBe("2 / 4 선택 · 2개 제외");
   });
 });
