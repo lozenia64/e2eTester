@@ -199,16 +199,29 @@ def test_exactly_one_internal_scroller(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
     page.wait_for_selector(".exec")
-    scrollers = page.evaluate(
+    detail_overflow_y = page.evaluate(
+        "() => getComputedStyle(document.querySelector('.exec-detail')).overflowY"
+    )
+    assert detail_overflow_y == "auto", f".exec-detail overflowY: {detail_overflow_y}"
+    actual_scrollers = page.evaluate(
         """() => Array.from(document.querySelectorAll('.exec *'))
               .filter((el) => {
                   const style = getComputedStyle(el);
                   const scrollable = /auto|scroll/.test(style.overflowY);
                   return scrollable && el.scrollHeight > el.clientHeight + 1;
               })
-              .map((el) => el.className)"""
+              .map((el) => ({
+                  className: el.className,
+                  clientHeight: el.clientHeight,
+                  isExpectedOwner: el === document.querySelector('.exec-detail'),
+                  overflowY: getComputedStyle(el).overflowY,
+                  scrollHeight: el.scrollHeight,
+              }))"""
     )
-    assert len(scrollers) <= 1, f"내부 스크롤러가 여럿: {scrollers}"
+    assert all(owner["isExpectedOwner"] for owner in actual_scrollers), (
+        "실제 내부 스크롤러는 우측 상세 열만 허용됩니다: "
+        f"{actual_scrollers}"
+    )
 
 
 @pytest.mark.spec("SPEC-UI-002", "AC-003")
