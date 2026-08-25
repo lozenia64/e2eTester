@@ -1176,7 +1176,7 @@ Expected: 통과
 Run: `python3 -m pytest tests/test_presets_http.py tests/test_suite_aggregate.py tests/test_suite_decider.py -v`
 Expected: PASS — 이 계획은 API 를 건드리지 않았으므로 한 건도 바뀌면 안 된다.
 
-- [ ] **Step 4: 전체 게이트를 돌린다**
+- [x] **Step 4: 전체 게이트를 돌린다**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Expected: 전 게이트 통과
@@ -1192,7 +1192,7 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 
 ## 완료 확인
 
-- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
+- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과
 - [ ] `npm run test && npm run typecheck && npm run lint` 통과
 - [ ] `execute.html` 에 `class="system-card` 0건, 예약 폼의 `<details class="sched` 는 **살아 있다**(D7)
 - [ ] 1366 · 1920 · 2560 px 에서 세로 스크롤 0, 실행 버튼 가시
