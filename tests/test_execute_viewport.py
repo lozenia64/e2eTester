@@ -219,8 +219,7 @@ def test_exactly_one_internal_scroller(page, live_server: str) -> None:
               }))"""
     )
     assert all(owner["isExpectedOwner"] for owner in actual_scrollers), (
-        "실제 내부 스크롤러는 우측 상세 열만 허용됩니다: "
-        f"{actual_scrollers}"
+        f"실제 내부 스크롤러는 우측 상세 열만 허용됩니다: {actual_scrollers}"
     )
 
 
