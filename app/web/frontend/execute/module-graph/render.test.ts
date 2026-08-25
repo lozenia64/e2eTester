@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../../entries/execute";
-import { bindModuleSelectors } from "./render";
+import { applyModuleSelection, bindModuleSelectors } from "./render";
 
 const definition = {
   modules: [
@@ -39,7 +39,7 @@ describe("bindModuleSelectors", () => {
     expect(document.querySelectorAll(".module-graph-edge.is-muted")).toHaveLength(3);
   });
 
-  it("레거시 프리셋 호출은 임시 그래프 API로 실제 선택 상태를 적용한다", () => {
+  it("선택 적용은 실제 그래프 상태를 갱신한다", () => {
     vi.stubGlobal("ResizeObserver", class { observe() {} });
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => callback(0));
     document.body.innerHTML = `
@@ -53,11 +53,10 @@ describe("bindModuleSelectors", () => {
       </form>`;
     bindModuleSelectors(document);
 
-    const legacyGraph = (window as Window & { __executeModuleGraph?: { applyModuleSelection(form: HTMLFormElement, moduleIds: string[] | null): void; getSelectedModuleIds(form: HTMLFormElement): string[] } }).__executeModuleGraph!;
     const form = document.querySelector<HTMLFormElement>(".system-form")!;
-    legacyGraph.applyModuleSelection(form, ["login", "pay"]);
+    applyModuleSelection(form, ["login", "pay"]);
 
-    expect(legacyGraph.getSelectedModuleIds(form)).toEqual(["login", "pay"]);
+    expect([...document.querySelectorAll('[data-role="module-graph-node"][data-selected="true"]')].map((node) => node.getAttribute("data-module-id"))).toEqual(["login", "pay"]);
     expect(document.querySelector('[data-role="module-selection-summary"]')!.textContent).toBe("2 / 4 선택 · 2개 제외");
   });
 });
