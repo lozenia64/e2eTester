@@ -140,6 +140,7 @@ def page(browser, live_server):
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_no_page_scroll(page, live_server: str, width: int, height: int) -> None:
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
@@ -151,6 +152,7 @@ def test_no_page_scroll(page, live_server: str, width: int, height: int) -> None
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_start_button_is_visible_without_scrolling(
     page, live_server: str, width: int, height: int
 ) -> None:
@@ -166,6 +168,7 @@ def test_start_button_is_visible_without_scrolling(
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_system_start_button_is_sticky_and_visible_without_scrolling(
     page, live_server: str, width: int, height: int
 ) -> None:
@@ -183,6 +186,7 @@ def test_system_start_button_is_sticky_and_visible_without_scrolling(
     assert system_bar.evaluate("el => getComputedStyle(el).bottom") == "0px"
 
 
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_left_column_does_not_scroll(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
@@ -190,6 +194,7 @@ def test_left_column_does_not_scroll(page, live_server: str) -> None:
     _assert_no_scroll(page, ".exec-master")
 
 
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_exactly_one_internal_scroller(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
@@ -206,6 +211,7 @@ def test_exactly_one_internal_scroller(page, live_server: str) -> None:
     assert len(scrollers) <= 1, f"내부 스크롤러가 여럿: {scrollers}"
 
 
+@pytest.mark.spec("SPEC-UI-002", "AC-003")
 def test_selecting_a_system_swaps_the_panel(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
