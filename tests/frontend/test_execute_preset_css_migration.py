@@ -65,8 +65,7 @@ def _rule_blocks(css: str) -> list[tuple[list[str], str]]:
 
 def _assert_rule_declaration(css: str, selector: str, declaration: str) -> None:
     assert any(
-        selector in selectors and declaration in body
-        for selectors, body in _rule_blocks(css)
+        selector in selectors and declaration in body for selectors, body in _rule_blocks(css)
     ), f"{selector} 규칙에 {declaration} 선언이 없다"
 
 
@@ -83,17 +82,13 @@ def test_preset_css_is_owned_by_execute_stylesheet():
     for selector in PRESET_SELECTORS:
         assert selector not in app_css
         assert selector in preset
-    _assert_rule_declaration(
-        preset, ".preset-panel", "border: 1px solid var(--c-violet-125);"
-    )
+    _assert_rule_declaration(preset, ".preset-panel", "border: 1px solid var(--c-violet-125);")
     _assert_rule_declaration(
         preset,
         ".preset-chip--radio.is-active .preset-chip__check",
         "background: var(--c-violet-600);",
     )
-    _assert_rule_declaration(
-        preset, ".suite-preset-status--warn", "color: var(--st-anomaly-text);"
-    )
+    _assert_rule_declaration(preset, ".suite-preset-status--warn", "color: var(--st-anomaly-text);")
 
 
 GRAPH_SELECTORS = (
@@ -142,6 +137,4 @@ def test_module_graph_css_is_owned_by_graph_stylesheet():
     _assert_rule_declaration(
         graph_css, ".module-graph-edge.is-active", "stroke: var(--c-indigo-500);"
     )
-    _assert_rule_declaration(
-        graph_css, ".exec-graph .module-graph-viewport", "min-height: 40cqh;"
-    )
+    _assert_rule_declaration(graph_css, ".exec-graph .module-graph-viewport", "min-height: 40cqh;")
