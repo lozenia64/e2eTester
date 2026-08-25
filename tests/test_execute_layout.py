@@ -22,7 +22,6 @@ from app.contexts.identity.models import User
 from app.registry.loader import ModuleRegistry
 from tests.test_dashboard_fragments_http import FakeRunService
 
-
 GEN_AT = datetime(2026, 8, 25, 5, 0, tzinfo=UTC)
 
 
