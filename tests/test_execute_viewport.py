@@ -63,6 +63,16 @@ def _assert_no_scroll(page, selector: str) -> None:
     assert result["ok"], f"{selector}: {result}"
 
 
+def _assert_in_viewport(locator, width: int, height: int) -> None:
+    assert locator.is_visible()
+    box = locator.bounding_box()
+    assert box is not None
+    assert 0 <= box["x"]
+    assert 0 <= box["y"]
+    assert box["x"] + box["width"] <= width
+    assert box["y"] + box["height"] <= height
+
+
 def _build_execute_test_app(*, user: User, registry: ModuleRegistry) -> FastAPI:
     app = FastAPI()
     app.include_router(dashboard_router)
@@ -148,13 +158,27 @@ def test_start_button_is_visible_without_scrolling(
     page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
     page.wait_for_selector("#suite-start-button")
     button = page.locator("#suite-start-button")
-    assert button.is_visible()
-    box = button.bounding_box()
-    assert box is not None
-    assert 0 <= box["x"]
-    assert 0 <= box["y"]
-    assert box["x"] + box["width"] <= width
-    assert box["y"] + box["height"] <= height
+    _assert_in_viewport(button, width, height)
+    suite_bar = page.locator('[data-exec-panel="suite"] .exec-action-bar')
+    assert suite_bar.count() == 1
+    assert suite_bar.evaluate("el => getComputedStyle(el).position") == "sticky"
+
+
+@pytest.mark.parametrize("width,height", VIEWPORTS)
+def test_system_start_button_is_sticky_and_visible_without_scrolling(
+    page, live_server: str, width: int, height: int
+) -> None:
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/runs/execute", wait_until="networkidle")
+    page.wait_for_selector('[data-exec-target="hom"]')
+    page.click('[data-exec-target="hom"]')
+    selector = 'button[type="submit"][data-system-code="hom"]'
+    page.wait_for_selector(selector)
+    button = page.locator(selector)
+    _assert_in_viewport(button, width, height)
+    system_bar = page.locator('[data-exec-panel="hom"] .exec-action-bar')
+    assert system_bar.count() == 1
+    assert system_bar.evaluate("el => getComputedStyle(el).position") == "sticky"
 
 
 def test_left_column_does_not_scroll(page, live_server: str) -> None:
