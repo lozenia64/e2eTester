@@ -162,6 +162,7 @@ def test_start_button_is_visible_without_scrolling(
     suite_bar = page.locator('[data-exec-panel="suite"] .exec-action-bar')
     assert suite_bar.count() == 1
     assert suite_bar.evaluate("el => getComputedStyle(el).position") == "sticky"
+    assert suite_bar.evaluate("el => getComputedStyle(el).bottom") == "0px"
 
 
 @pytest.mark.parametrize("width,height", VIEWPORTS)
@@ -179,6 +180,7 @@ def test_system_start_button_is_sticky_and_visible_without_scrolling(
     system_bar = page.locator('[data-exec-panel="hom"] .exec-action-bar')
     assert system_bar.count() == 1
     assert system_bar.evaluate("el => getComputedStyle(el).position") == "sticky"
+    assert system_bar.evaluate("el => getComputedStyle(el).bottom") == "0px"
 
 
 def test_left_column_does_not_scroll(page, live_server: str) -> None:
