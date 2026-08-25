@@ -1,3 +1,7 @@
+// 좌측 목록의 오늘 상태 배지이며 새 엔드포인트 없이 대시보드 API를 재사용한다.
+// tone·label은 서버가 summary_badge로 파생해 내려주므로 여기서 counts를 해석하지 않는다.
+// 호출 실패는 배지 없음으로만 나타나 실행 기능은 살아야 한다.
+// 설계 §4.5·D6 및 FG-006의 매핑 복제 방지를 따른다.
 import { renderStatusBadge } from "../components/status-badge/index";
 
 type SystemBadge = {

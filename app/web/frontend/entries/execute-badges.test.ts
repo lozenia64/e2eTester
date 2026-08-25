@@ -54,20 +54,27 @@ describe("applySystemBadges", () => {
 describe("loadSystemBadges", () => {
   it("조회가 거부돼도 배지를 비워 두고 실행 제어를 바꾸지 않는다", async () => {
     const root = host(["hom"]);
-    const start = document.createElement("button");
-    start.disabled = false;
+    root.insertAdjacentHTML(
+      "beforeend",
+      '<button id="suite-start-button" type="submit">전체 점검 시작</button>',
+    );
+    const start = root.querySelector<HTMLButtonElement>("#suite-start-button")!;
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network blocked")));
 
     await expect(loadSystemBadges(root)).resolves.toBeUndefined();
 
-    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
+    expect(root.querySelector("#suite-start-button")).toBe(start);
     expect(start.disabled).toBe(false);
+    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
   });
 
   it("non-OK 응답도 배지를 비워 두고 실행 제어를 바꾸지 않는다", async () => {
     const root = host(["hom"]);
-    const start = document.createElement("button");
-    start.disabled = false;
+    root.insertAdjacentHTML(
+      "beforeend",
+      '<button id="suite-start-button" type="submit">전체 점검 시작</button>',
+    );
+    const start = root.querySelector<HTMLButtonElement>("#suite-start-button")!;
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, json: vi.fn().mockResolvedValue({ systems: [HOM] }) }),
@@ -75,7 +82,8 @@ describe("loadSystemBadges", () => {
 
     await expect(loadSystemBadges(root)).resolves.toBeUndefined();
 
-    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
+    expect(root.querySelector("#suite-start-button")).toBe(start);
     expect(start.disabled).toBe(false);
+    expect(root.querySelector('[data-exec-badge="hom"]')!.innerHTML).toBe("");
   });
 });
