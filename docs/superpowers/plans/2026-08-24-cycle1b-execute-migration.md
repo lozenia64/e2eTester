@@ -22,6 +22,7 @@
 - **옮긴 즉시 `app.js` 에서 지운다.** 두 벌 동시 바인딩 금지.
 - **공용 함수는 마지막까지 `app.js` 에 남긴다** — `readErrorMessage`(:550) · `statusBadgeClassName`(:559) · `setInlineFeedback`(:571) · `showToast`(:595) · `collectFormInput`(:612)는 다른 화면도 쓴다. Cycle 4 가 정리한다.
 - **UI 문자열은 한국어**(AGENTS.md).
+- **모든 단언은 "이것이 실패할 수 있는 실제 경우는 무엇인가" 에 답해야 한다**(설계 §8.2.1). Cycle 1a 에서 `is_visible()` · `"sticky" in css` · `len(scrollers) <= 1` 세 단언이 **통과하면서 아무것도 지키지 않았고**, 그중 하나는 실제 제품 결함을 은폐했다. 이관 테스트도 같다 — 옮긴 함수가 **틀린 값을 돌려주면 빨간불이 켜지는지** 확인해라. 함수가 존재한다는 단언은 이관을 지키지 못한다.
 - **PR 전 필수:** `python3 scripts/ci/run_all_gates.py --profile full`
 
 ## 이관 인벤토리 (`app/web/static/app.js`)
@@ -48,7 +49,7 @@
 | `app/web/frontend/execute/presets.ts` | 프리셋 조회·적용·저장·삭제 | ~330줄 |
 | `app/web/frontend/execute/run-form.ts` | 조건부 필드, OTP 패널, 개별 시스템 실행 | ~250줄 |
 | `app/web/frontend/execute/suite-form.ts` | SUITE 시스템 선택, 전체 실행 | ~220줄 |
-| `app/web/frontend/execute/styles.css` | `app.css` 프리셋 절 이사분 | ~250줄 |
+| `app/web/frontend/styles/execute.css` | `app.css` 프리셋 절 이사분을 **기존 파일에 덧붙인다**(1a 가 만들었고 `base.css:11` 이 이미 임포트한다) | +241줄 |
 | `app/web/frontend/entries/execute.ts` | 배선만. 위 모듈의 bind 를 호출한다 | ~60줄 |
 
 ---
@@ -274,7 +275,6 @@ git commit -m "refactor(execute): 모듈 그래프 좌표 계산을 타입·테�
 
 ```typescript
 // 점검 실행 화면 엔트리. 배선만 한다 — 로직은 execute/ 아래 모듈에 있다.
-import "../execute/styles.css";
 import { bindModuleSelectors } from "../execute/module-graph/render";
 import { loadSystemBadges } from "./execute-badges";
 
@@ -284,9 +284,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 ```
 
-`execute/styles.css` 는 Task 5 에서 채운다. 지금은 빈 파일로 만들어 둔다.
+**스타일시트를 새로 만들지 마라.** 1a 가 `app/web/frontend/styles/execute.css` 를 만들었고 `base.css:11` 이 이미 임포트한다. Task 5 의 프리셋 절은 그 파일에 덧붙인다. 엔트리에서 CSS 를 임포트하면 같은 스타일이 두 경로로 들어온다.
 
-Run: `printf '/* 점검 실행 화면 스타일. Task 5 에서 app.css 프리셋 절이 여기로 온다. */\n' > app/web/frontend/execute/styles.css`
 
 Cycle 1a 가 만든 `entries/execute-badges.ts` 는 이제 `execute.ts` 가 흡수하므로, `vite.config.ts` 에서 `execute-badges` 입력을 지우고 `execute` 를 넣는다.
 
@@ -548,7 +547,6 @@ Expected: FAIL — 모듈 없음
 
 ```typescript
 // 점검 실행 화면 엔트리. 배선만 한다 — 로직은 execute/ 아래 모듈에 있다.
-import "../execute/styles.css";
 import { bindModuleSelectors } from "../execute/module-graph/render";
 import { bindPresetPanels, loadPresets } from "../execute/presets";
 import { bindRunForms } from "../execute/run-form";
@@ -588,7 +586,7 @@ git commit -m "refactor(execute): 폼·실행·OTP 바인딩 이관 — app.js �
 
 **Files:**
 - Modify: `app/web/frontend/styles/app.css:846-1086` (잘라내기)
-- Modify: `app/web/frontend/execute/styles.css` (붙여넣기)
+- Modify: `app/web/frontend/styles/execute.css` (끝에 붙여넣기)
 - Modify: `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§8 갱신)
 
 **Interfaces:**
@@ -597,9 +595,13 @@ git commit -m "refactor(execute): 폼·실행·OTP 바인딩 이관 — app.js �
 
 - [ ] **Step 1: 프리셋 CSS 를 이사시킨다**
 
-`app/web/frontend/styles/app.css` 의 `846~1086` 구간(`/* ===== 인증 프리셋 (내 점검 세트) ===== */` 부터 다음 섹션 헤더 직전까지)을 잘라 `app/web/frontend/execute/styles.css` 로 옮긴다. `entries/execute.ts` 가 이미 이 파일을 임포트하므로 배선은 끝나 있다.
+`app/web/frontend/styles/app.css` 의 프리셋 절을 잘라 **기존 `app/web/frontend/styles/execute.css` 끝**으로 옮긴다. `base.css:11` 이 그 파일을 이미 임포트하므로 배선은 끝나 있다 — 새 파일도, 새 임포트도 만들지 마라.
 
-옮긴 뒤 남은 hex 가 있으면 `var(--c-*)` 로 바꾼다 — `execute/styles.css` 는 FG-002 allowlist 에 없다.
+경계는 줄 번호가 아니라 **선택자와 주석으로 잡는다.** 시작은 `/* ===== 인증 프리셋 (내 점검 세트) ===== */`(현재 `:426`), 끝은 다음 섹션 주석(`진행 중 / 최근 Run`) 직전(현재 `:666`)이다. 약 241줄이다.
+
+> **주의:** 이 계획의 초안은 `846~1086` 이라고 적었는데 그것은 **Cycle 1a 이전 좌표**다. 1a 가 `app.css` 에서 420줄을 덜어내 전부 앞으로 당겨졌다. 지금 `846~1086` 을 자르면 프리셋이 아니라 모바일 내비게이션 등 **살아 있는 CSS** 를 지운다. 자르기 전에 시작·끝 줄을 눈으로 확인해라.
+
+옮긴 뒤 남은 hex 가 있으면 `var(--c-*)` 로 바꾼다 — `styles/execute.css` 는 FG-002 allowlist 에 없다.
 
 Run: `python3 scripts/check_frontend_gates.py`
 Expected: 통과. FG-004 위반이 나오면 `styles.css` 가 400줄을 넘은 것이므로 프리셋 칩과 저장 폼으로 쪼갠다.
@@ -638,7 +640,7 @@ git commit -m "refactor(execute): 프리셋 CSS 이사 — app.css 축소"
 - [ ] `app/web/frontend/entries/execute.ts` 존재, 60줄 이하
 - [ ] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
 - [ ] `app.js` 약 1,850줄로 축소
-- [ ] `app.css` 약 1,030줄로 축소(모듈그래프 140 + 프리셋 240 이사)
+- [ ] `app.css` 약 750줄로 축소(991 − 프리셋 절 241). 모듈그래프 167줄은 **1a 가 이미 이사시켰다**
 - [ ] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
 - [ ] `/runs/execute` 에서 실제 Run 과 SUITE 가 끝까지 동작
 
