@@ -1126,7 +1126,7 @@ bar 계산 위치가 `sticky`인지 검증한다. 임시 `position: static` 변�
 - Consumes: Task 1~4 의 결과
 - Produces: 없음(문서)
 
-- [ ] **Step 1: SPEC-UI-002 의 §2 구성을 갱신한다**
+- [x] **Step 1: SPEC-UI-002 의 §2 구성을 갱신한다**
 
 `docs/specs/dashboard/02-execute-page.md` 의 헤더 표에 대체 관계를 적고, §2 를 마스터-디테일 구조로 다시 쓴다. **AC-001 · AC-002 는 손대지 않는다** — 동작 규칙은 불변이다.
 
@@ -1166,12 +1166,12 @@ bar 계산 위치가 `sticky`인지 검증한다. 임시 `position: static` 변�
 Run: `python3 -m pytest tests/test_spec_traceability.py -v`
 Expected: PASS — 마커가 실재하는 AC 를 가리켜야 한다. 실패하면 AC 제목 형식(`### AC-003:`)이 어긋난 것이다.
 
-- [ ] **Step 2: 문서 정합성 가드를 돌린다**
+- [x] **Step 2: 문서 정합성 가드를 돌린다**
 
 Run: `python3 scripts/check_docs_consistency.py`
 Expected: 통과
 
-- [ ] **Step 3: 동작 불변을 확인한다**
+- [x] **Step 3: 동작 불변을 확인한다**
 
 Run: `python3 -m pytest tests/test_presets_http.py tests/test_suite_aggregate.py tests/test_suite_decider.py -v`
 Expected: PASS — 이 계획은 API 를 건드리지 않았으므로 한 건도 바뀌면 안 된다.
@@ -1181,7 +1181,7 @@ Expected: PASS — 이 계획은 API 를 건드리지 않았으므로 한 건도
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Expected: 전 게이트 통과
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add docs/specs/dashboard/02-execute-page.md
