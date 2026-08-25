@@ -12,6 +12,7 @@ import Alpine from "alpinejs";
 import htmx from "htmx.org";
 import { normalizeTone, renderStatusBadge, statusLabel } from "../components/status-badge/index";
 import { bindKpiCards } from "../components/kpi-card/index";
+import { updateOtpPanel } from "../components/otp-panel";
 
 declare global {
   interface Window {
@@ -30,6 +31,9 @@ Alpine.start();
 
 // 레거시 app.js 가 참조하는 다리. P3 에서 app.js 가 소멸하면 함께 제거한다.
 window.__statusBadge = { renderStatusBadge, normalizeTone, statusLabel };
+
+// Run 상세 WebSocket의 app.js 호출부가 이관될 때 함께 제거한다.
+window.__executeOtpPanel = { updateOtpPanel };
 
 // htmx 가 KPI 프래그먼트를 갈아끼운 뒤에도 카운트업이 다시 걸려야 한다.
 document.addEventListener("DOMContentLoaded", () => bindKpiCards());

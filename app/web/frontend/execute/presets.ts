@@ -1,5 +1,6 @@
 import { applyModuleSelection } from "./module-graph/render";
 import { getSelectedModuleIds } from "./module-graph/selection";
+import { syncConditionalFields } from "./run-form";
 
 export type Preset = {
   preset_id: string;
@@ -13,25 +14,25 @@ export type Preset = {
   updated_at: string;
 };
 
-type PresetState = {
+export type PresetState = {
   presetsBySystem: Record<string, Preset[]>;
   suitePresetSelection: Map<string, string>;
 };
-
-declare global {
-  interface Window {
-    __executePresetState?: PresetState;
-  }
-}
 
 const presetState: PresetState = {
   presetsBySystem: {},
   suitePresetSelection: new Map(),
 };
 const boundPanels = new WeakSet<Element>();
+let presetStateListener: (() => void) | null = null;
 
-// Task 4가 레거시 실행·Suite 호출부를 이관하면 함께 제거한다.
-window.__executePresetState = presetState;
+export function getPresetState(): PresetState {
+  return presetState;
+}
+
+export function subscribePresetState(listener: () => void): void {
+  presetStateListener = listener;
+}
 
 const AUTH_METHOD_LABELS: Record<string, string> = {
   phone: "휴대폰인증",
@@ -64,14 +65,6 @@ function setInlineFeedback(element: Element | null, message: string, tone = "err
   element.textContent = message;
 }
 
-function notifyLegacySuiteUi(): void {
-  document.dispatchEvent(new Event("execute:presets-updated"));
-}
-
-function notifyLegacyToast(message: string): void {
-  document.dispatchEvent(new CustomEvent("execute:preset-toast", { detail: { message } }));
-}
-
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const payload = await response.json() as { detail?: string };
@@ -85,21 +78,6 @@ function collectFormInput(form: HTMLFormElement): Record<string, string> {
   const inputData: Record<string, string> = {};
   for (const [key, value] of new FormData(form).entries()) inputData[key] = String(value).trim();
   return inputData;
-}
-
-function syncConditionalFields(form: HTMLFormElement): void {
-  for (const field of form.querySelectorAll<HTMLElement>(".conditional-field")) {
-    const key = field.dataset.showWhenKey;
-    const expected = (field.dataset.showWhenValue ?? "").split(",").map((value) => value.trim()).filter(Boolean);
-    const input = field.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea");
-    const controller = key ? form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(`[name="${key}"]`) : null;
-    const visible = Boolean(controller && input && expected.includes(controller.value));
-    field.classList.toggle("is-hidden", !visible);
-    if (input) {
-      input.disabled = !visible;
-      input.required = visible && field.dataset.required === "true";
-    }
-  }
 }
 
 export function applyPresetToForm(form: HTMLFormElement, preset: Preset): void {
@@ -130,7 +108,7 @@ export async function loadPresets(): Promise<void> {
 function renderAllPresetUI(): void {
   renderIndividualPresetPanels();
   renderSuitePresetLists();
-  notifyLegacySuiteUi();
+  presetStateListener?.();
 }
 
 function renderIndividualPresetPanels(): void {
@@ -219,7 +197,7 @@ async function deletePresetById(presetId: string, form: HTMLFormElement): Promis
     renderAllPresetUI();
     setInlineFeedback(form.querySelector('[data-role="preset-feedback"]'), "프리셋을 삭제했습니다.", "success");
   } catch (error) {
-    notifyLegacyToast(error instanceof Error ? error.message : "프리셋 삭제에 실패했습니다.");
+    setInlineFeedback(form.querySelector('[data-role="preset-feedback"]'), error instanceof Error ? error.message : "프리셋 삭제에 실패했습니다.");
     console.error(error);
   }
 }
@@ -280,7 +258,7 @@ function buildSuitePresetChip(suiteForm: HTMLFormElement, systemCode: string, pr
     if (presetState.suitePresetSelection.get(systemCode) === preset.preset_id) presetState.suitePresetSelection.delete(systemCode);
     else presetState.suitePresetSelection.set(systemCode, preset.preset_id);
     renderSuitePresetLists();
-    notifyLegacySuiteUi();
+    presetStateListener?.();
     setInlineFeedback(suiteForm.querySelector('[data-role="suite-feedback"]'), "");
   });
   return chip;

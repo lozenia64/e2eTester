@@ -75,133 +75,6 @@ function showToast(message, tone = "error") {
     }, 4000);
 }
 
-function collectFormInput(form) {
-    const formData = new FormData(form);
-    const inputData = {};
-    for (const [key, value] of formData.entries()) {
-        inputData[key] = String(value).trim();
-    }
-    return inputData;
-}
-
-function syncConditionalFields(form) {
-    const conditionalFields = form.querySelectorAll(".conditional-field");
-    for (const field of conditionalFields) {
-        const controllingKey = field.dataset.showWhenKey;
-        const expectedRaw = field.dataset.showWhenValue || "";
-        const expectedValues = expectedRaw.split(",").map((s) => s.trim()).filter(Boolean);
-        const controllingInput = form.querySelector(`[name="${controllingKey}"]`);
-        const input = field.querySelector("input, select, textarea");
-        const isVisible =
-            controllingInput && input && expectedValues.includes(controllingInput.value);
-
-        field.classList.toggle("is-hidden", !isVisible);
-        if (!input) {
-            continue;
-        }
-
-        input.disabled = !isVisible;
-        input.required = isVisible && field.dataset.required === "true";
-    }
-}
-
-function bindConditionalFields(form) {
-    const controllingKeys = new Set(
-        Array.from(form.querySelectorAll(".conditional-field"))
-            .map((field) => field.dataset.showWhenKey)
-            .filter(Boolean),
-    );
-
-    for (const key of controllingKeys) {
-        const input = form.querySelector(`[name="${key}"]`);
-        if (!input) {
-            continue;
-        }
-        const sync = () => syncConditionalFields(form);
-        input.addEventListener("change", sync);
-        input.addEventListener("input", sync);
-    }
-
-    syncConditionalFields(form);
-}
-
-function updateOtpPanel(runOrMessage) {
-    const panel = document.getElementById("otp-panel");
-    if (!panel) {
-        return;
-    }
-
-    const awaitingModuleId = runOrMessage.awaiting_input_module_id ?? runOrMessage.payload?.awaiting_input_module_id ?? "";
-    const prompt = runOrMessage.awaiting_input_prompt ?? runOrMessage.payload?.awaiting_input_prompt ?? "인증문자 발송 후 OTP 입력이 필요하면 이 영역이 활성화됩니다.";
-    panel.dataset.awaitingModuleId = awaitingModuleId;
-    document.getElementById("otp-prompt").textContent = prompt;
-    panel.classList.toggle("is-hidden", !awaitingModuleId);
-
-    if (awaitingModuleId) {
-        const startedAt =
-            moduleStartedAtFromRun(runOrMessage, awaitingModuleId) ??
-            moduleStartedAtFromRun(runOrMessage.payload, awaitingModuleId);
-        startOtpCountdown(startedAt);
-    } else {
-        stopOtpCountdown();
-    }
-}
-
-async function startSystemRun(systemCode, button, form) {
-    const feedback = form.querySelector('[data-role="form-feedback"]');
-    setInlineFeedback(feedback, "");
-
-    const authMethod = form.querySelector('[name="auth_method"]')?.value;
-    if (
-        (systemCode === "hom" || systemCode === "mhm")
-        && authMethod
-        && authMethod !== "phone"
-        && authMethod !== "kakao"
-    ) {
-        const systemLabel = systemCode.toUpperCase();
-        setInlineFeedback(
-            feedback,
-            `${systemLabel}에서는 휴대폰인증·카카오인증만 실행할 수 있습니다. 선택한 인증수단은 아직 준비 중입니다.`,
-        );
-        return;
-    }
-
-    const selectedModuleIds = window.__executeModuleGraph.getSelectedModuleIds(form);
-    if (selectedModuleIds.length === 0) {
-        setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
-        return;
-    }
-
-    button.disabled = true;
-    button.textContent = "시작 중...";
-
-    try {
-        const response = await fetch(`/api/runs/systems/${systemCode}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                input_data: collectFormInput(form),
-                selected_module_ids: selectedModuleIds,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorBody = await readErrorMessage(response);
-            throw new Error(errorBody || `Run 생성에 실패했습니다. (${response.status})`);
-        }
-
-        const run = await response.json();
-        window.location.href = `/runs/${run.run_id}`;
-    } catch (error) {
-        button.disabled = false;
-        button.textContent = "점검 시작";
-        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "Run 생성에 실패했습니다.");
-        console.error(error);
-    }
-}
-
 const ACTIVE_RUN_STATUSES = new Set(["pending", "running", "waiting_input"]);
 const RUN_LIST_LIMIT = 8;
 const RUN_LIST_POLL_MS = 5000;
@@ -771,67 +644,6 @@ function bindScheduleBuilder(form) {
     updateSchedulePreview(form);
 }
 
-async function registerSchedule(systemCode, form, button) {
-    const feedback = form.querySelector('[data-role="schedule-feedback"]');
-    setInlineFeedback(feedback, "");
-
-    const nameInput = form.querySelector('[data-role="schedule-name"]');
-    const name = (nameInput?.value ?? "").trim();
-    const built = buildScheduleCron(form);
-    if (built.error) {
-        setInlineFeedback(feedback, built.error);
-        return;
-    }
-    const cron = built.cron;
-
-    const authMethod = form.querySelector('[name="auth_method"]')?.value;
-    if (
-        (systemCode === "hom" || systemCode === "mhm")
-        && authMethod
-        && authMethod !== "phone"
-        && authMethod !== "kakao"
-    ) {
-        setInlineFeedback(feedback, `${systemCode.toUpperCase()}에서는 휴대폰인증·카카오인증만 예약할 수 있습니다.`);
-        return;
-    }
-
-    const selectedModuleIds = window.__executeModuleGraph.getSelectedModuleIds(form);
-    if (selectedModuleIds.length === 0) {
-        setInlineFeedback(feedback, "최소 1개 이상의 모듈을 선택해야 합니다.");
-        return;
-    }
-
-    button.disabled = true;
-    button.textContent = "등록 중...";
-    try {
-        const response = await fetch(`/api/schedules/systems/${systemCode}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                cron,
-                name,
-                input_data: collectFormInput(form),
-                selected_module_ids: selectedModuleIds,
-            }),
-        });
-        if (!response.ok) {
-            const errorBody = await readErrorMessage(response);
-            throw new Error(errorBody || `예약 등록에 실패했습니다. (${response.status})`);
-        }
-        setInlineFeedback(feedback, "예약이 등록되었습니다.", "success");
-        if (nameInput) {
-            nameInput.value = "";
-        }
-        refreshScheduleList();
-    } catch (error) {
-        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "예약 등록에 실패했습니다.");
-        console.error(error);
-    } finally {
-        button.disabled = false;
-        button.textContent = "예약 등록";
-    }
-}
-
 function createScheduleActionButton(label, action, scheduleId, extraClasses) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1367,24 +1179,17 @@ function moduleStartedAtFromRun(runPayload, moduleId) {
     return module?.started_at ?? null;
 }
 
-function bindSystemButtons() {
-    const forms = document.querySelectorAll(".system-form");
-    for (const form of forms) {
-        bindConditionalFields(form);
-        form.addEventListener("submit", (event) => {
-            event.preventDefault();
-            const button = form.querySelector("button[type='submit']");
-            startSystemRun(form.dataset.systemCode, button, form);
-        });
-        const scheduleButton = form.querySelector('[data-role="schedule-register"]');
-        if (scheduleButton) {
-            bindScheduleBuilder(form);
-            scheduleButton.addEventListener("click", () => {
-                registerSchedule(form.dataset.systemCode, form, scheduleButton);
-            });
-        }
-    }
-}
+// Cycle 4까지 남는 공용 일정·피드백·OTP 보조 함수의 TypeScript 실행 화면 경계.
+window.__executeLegacy = {
+    setInlineFeedback,
+    readErrorMessage,
+    bindScheduleBuilder,
+    buildScheduleCron,
+    refreshScheduleList,
+    startOtpCountdown,
+    stopOtpCountdown,
+    moduleStartedAtFromRun,
+};
 
 function otpFeedbackNode() {
     return document.querySelector('[data-role="otp-feedback"]');
@@ -1495,262 +1300,6 @@ async function rerunRun(button) {
         showToast(`재실행에 실패했습니다: ${error.message}`);
         console.error(error);
     }
-}
-
-function readSelectedSuiteSystemCodes(form) {
-    const codes = [];
-    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
-        if (checkbox.checked) {
-            codes.push(String(checkbox.dataset.systemCode ?? checkbox.value ?? "").trim());
-        }
-    }
-    return codes.filter(Boolean);
-}
-
-function readSuiteScopeSystemCodes(form) {
-    const codes = [];
-    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
-        const code = String(checkbox.dataset.systemCode ?? checkbox.value ?? "").trim();
-        if (code) {
-            codes.push(code);
-        }
-    }
-    return codes;
-}
-
-function suiteSystemCheckbox(form, systemCode) {
-    return form.querySelector(
-        `[data-role="suite-system-checkbox"][data-system-code="${systemCode}"]`,
-    );
-}
-
-function suiteSystemNeedsAuth(form, systemCode) {
-    return suiteSystemCheckbox(form, systemCode)?.dataset.authRequired === "true";
-}
-
-// 전체 점검에서 "선택됐으나 아직 적용할 프리셋이 없는" 인증 필요 시스템 목록.
-// (프리셋 자체가 없거나, 저장된 프리셋을 하나도 고르지 않은 경우)
-function suiteMissingPresetSystems(form) {
-    const missing = [];
-    for (const systemCode of readSelectedSuiteSystemCodes(form)) {
-        if (!suiteSystemNeedsAuth(form, systemCode)) {
-            continue;
-        }
-        const chosen = window.__executePresetState.suitePresetSelection.get(systemCode);
-        const presets = window.__executePresetState.presetsBySystem[systemCode] ?? [];
-        if (!chosen || !presets.some((preset) => preset.preset_id === chosen)) {
-            missing.push(systemCode);
-        }
-    }
-    return missing;
-}
-
-function updateSuiteSystemSelectorState(form) {
-    const summary = form.querySelector('[data-role="suite-system-selection-summary"]');
-    const checkboxes = [...form.querySelectorAll('[data-role="suite-system-checkbox"]')];
-    const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
-    const totalCount = checkboxes.length;
-    if (summary) {
-        summary.textContent = `${selectedCount} / ${totalCount} 선택 · ${totalCount - selectedCount}개 제외`;
-    }
-
-    const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
-    for (const panel of form.querySelectorAll("[data-suite-auth-for]")) {
-        const systemCode = panel.dataset.suiteAuthFor;
-        const isSelected = selectedCodes.has(systemCode);
-        panel.classList.toggle("is-hidden", !isSelected);
-
-        const status = panel.querySelector('[data-role="suite-preset-status"]');
-        if (!status) {
-            continue;
-        }
-        const presets = window.__executePresetState.presetsBySystem[systemCode] ?? [];
-        const chosen = window.__executePresetState.suitePresetSelection.get(systemCode);
-        if (presets.length === 0) {
-            status.textContent = "프리셋 없음";
-            status.className = "suite-preset-status suite-preset-status--warn";
-        } else if (chosen && presets.some((preset) => preset.preset_id === chosen)) {
-            status.textContent = "선택됨";
-            status.className = "suite-preset-status suite-preset-status--ok";
-        } else {
-            status.textContent = "미선택";
-            status.className = "suite-preset-status suite-preset-status--pending";
-        }
-    }
-}
-
-function collectSuiteRequest(form) {
-    const browserMode = String(form.querySelector('[name="browser_mode"]')?.value ?? "headed").trim();
-    const systems = {};
-    const selectedCodes = new Set(readSelectedSuiteSystemCodes(form));
-    for (const systemCode of selectedCodes) {
-        if (!suiteSystemNeedsAuth(form, systemCode)) {
-            systems[systemCode] = {};
-            continue;
-        }
-        const chosen = window.__executePresetState.suitePresetSelection.get(systemCode);
-        const preset = (window.__executePresetState.presetsBySystem[systemCode] ?? []).find(
-            (item) => item.preset_id === chosen,
-        );
-        if (preset) {
-            systems[systemCode] = { ...preset.input_data };
-            // 브라우저 모드는 Suite 폼의 공통 선택값만 따른다(프리셋 저장 시 포함된 값 무시).
-            delete systems[systemCode].browser_mode;
-        }
-    }
-    return {
-        browser_mode: browserMode,
-        systems,
-        selected_system_codes: [...selectedCodes],
-        scope_system_codes: readSuiteScopeSystemCodes(form),
-    };
-}
-
-async function startSuiteRun(button, form) {
-    const feedback = form.querySelector('[data-role="suite-feedback"]');
-    setInlineFeedback(feedback, "");
-
-    const selectedCodes = readSelectedSuiteSystemCodes(form);
-    if (selectedCodes.length === 0) {
-        setInlineFeedback(feedback, "최소 1개 시스템을 선택해야 합니다.");
-        return;
-    }
-
-    const missing = suiteMissingPresetSystems(form);
-    if (missing.length > 0) {
-        setInlineFeedback(
-            feedback,
-            `프리셋을 선택해야 하는 시스템: ${missing.map((code) => code.toUpperCase()).join(", ")}. `
-            + "프리셋이 없으면 개별 점검 화면에서 먼저 저장하거나, 해당 시스템의 선택을 해제하세요.",
-        );
-        return;
-    }
-
-    button.disabled = true;
-    button.textContent = "시작 중...";
-
-    try {
-        const response = await fetch("/api/suites", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(collectSuiteRequest(form)),
-        });
-
-        if (!response.ok) {
-            const errorBody = await readErrorMessage(response);
-            throw new Error(errorBody || `전체 점검 생성에 실패했습니다. (${response.status})`);
-        }
-
-        const suite = await response.json();
-        window.location.href = `/suites/${suite.suite_id}`;
-    } catch (error) {
-        button.disabled = false;
-        button.textContent = "전체 점검 시작";
-        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "전체 점검 생성에 실패했습니다.");
-        console.error(error);
-    }
-}
-
-async function registerSuiteSchedule(form, button) {
-    const feedback = form.querySelector('[data-role="suite-schedule-feedback"]');
-    setInlineFeedback(feedback, "");
-
-    const selectedCodes = readSelectedSuiteSystemCodes(form);
-    if (selectedCodes.length === 0) {
-        setInlineFeedback(feedback, "최소 1개 시스템을 선택해야 합니다.");
-        return;
-    }
-
-    const name = (form.querySelector('[data-role="schedule-name"]')?.value ?? "").trim();
-    const built = buildScheduleCron(form);
-    if (built.error) {
-        setInlineFeedback(feedback, built.error);
-        return;
-    }
-
-    const missing = suiteMissingPresetSystems(form);
-    if (missing.length > 0) {
-        setInlineFeedback(
-            feedback,
-            `프리셋을 선택해야 하는 시스템: ${missing.map((code) => code.toUpperCase()).join(", ")}.`,
-        );
-        return;
-    }
-
-    button.disabled = true;
-    button.textContent = "등록 중...";
-    try {
-        const response = await fetch("/api/schedules/suites", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                cron: built.cron,
-                name,
-                ...collectSuiteRequest(form),
-            }),
-        });
-        if (!response.ok) {
-            const errorBody = await readErrorMessage(response);
-            throw new Error(errorBody || `예약 등록에 실패했습니다. (${response.status})`);
-        }
-        setInlineFeedback(feedback, "전체 점검 예약이 등록되었습니다.", "success");
-        const nameInput = form.querySelector('[data-role="schedule-name"]');
-        if (nameInput) {
-            nameInput.value = "";
-        }
-        refreshScheduleList();
-    } catch (error) {
-        setInlineFeedback(feedback, error.message.replace(/^Error:\s*/, "") || "예약 등록에 실패했습니다.");
-        console.error(error);
-    } finally {
-        button.disabled = false;
-        button.textContent = "예약 등록";
-    }
-}
-
-function bindSuiteForm() {
-    const form = document.getElementById("suite-form");
-    if (!form) {
-        return;
-    }
-    for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
-        checkbox.addEventListener("change", () => {
-            updateSuiteSystemSelectorState(form);
-        });
-    }
-    const selectAllButton = form.querySelector('[data-role="suite-system-select-all"]');
-    if (selectAllButton) {
-        selectAllButton.addEventListener("click", () => {
-            for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
-                checkbox.checked = true;
-            }
-            updateSuiteSystemSelectorState(form);
-        });
-    }
-    const deselectAllButton = form.querySelector('[data-role="suite-system-deselect-all"]');
-    if (deselectAllButton) {
-        deselectAllButton.addEventListener("click", () => {
-            for (const checkbox of form.querySelectorAll('[data-role="suite-system-checkbox"]')) {
-                checkbox.checked = false;
-            }
-            updateSuiteSystemSelectorState(form);
-        });
-    }
-    updateSuiteSystemSelectorState(form);
-    bindScheduleBuilder(form);
-    const scheduleButton = form.querySelector('[data-role="suite-schedule-register"]');
-    if (scheduleButton) {
-        scheduleButton.addEventListener("click", () => {
-            registerSuiteSchedule(form, scheduleButton);
-        });
-    }
-    form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const button = document.getElementById("suite-start-button");
-        startSuiteRun(button, form);
-    });
 }
 
 const SUITE_ACTIVE_STATUSES = new Set(["pending", "running", "waiting_input"]);
@@ -2295,7 +1844,7 @@ function bindRunSocket() {
             snapshotStatusNode.dataset.tone = window.__statusBadge.normalizeTone(message.payload.status);
             snapshotStatusNode.dataset.status = message.payload.status;
             updateRunActions(message.payload.status);
-            updateOtpPanel(message.payload);
+            window.__executeOtpPanel?.updateOtpPanel(message.payload);
             updateComparisonPanel(message.payload);
             loadLogEntriesFromRun(message.payload);
             for (const module of message.payload.modules) {
@@ -2323,14 +1872,14 @@ function bindRunSocket() {
         }
 
         if (message.event_type === "module_waiting_input" && message.payload?.module) {
-            updateOtpPanel({
+            window.__executeOtpPanel?.updateOtpPanel({
                 awaiting_input_module_id: message.payload.module.module_id,
                 awaiting_input_prompt: "휴대폰으로 받은 OTP를 입력하세요.",
             });
         }
 
         if (message.event_type === "run_waiting_input" || message.event_type === "run_resumed" || message.event_type === "run_finished") {
-            updateOtpPanel(message.payload);
+            window.__executeOtpPanel?.updateOtpPanel(message.payload);
         }
 
         if (message.event_type === "run_finished") {
@@ -2385,22 +1934,7 @@ function updateComparisonPanel(runPayload) {
     }
 }
 
-// Task 4가 Suite 실행 코드를 이관할 때 프리셋 상태/알림 이벤트와 함께 제거한다.
-// 프리셋 모듈은 상태만 바꾸고, Suite UI 갱신과 토스트 표현의 소유권은 이 레거시 호출부에 둔다.
-document.addEventListener("execute:presets-updated", () => {
-    const suiteForm = document.getElementById("suite-form");
-    if (suiteForm) {
-        updateSuiteSystemSelectorState(suiteForm);
-    }
-});
-
-document.addEventListener("execute:preset-toast", (event) => {
-    showToast(event.detail?.message || "프리셋 삭제에 실패했습니다.");
-});
-
 document.addEventListener("DOMContentLoaded", () => {
-    bindSystemButtons();
-    bindSuiteForm();
     bindRunsOverview();
     bindRunsHistory();
     bindSchedulesOverview();
