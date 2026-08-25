@@ -521,7 +521,7 @@ git commit -m "feat(execute): 아코디언 6개를 넌스크롤 마스터-디테
 - Consumes: Task 1 의 `.exec-panel`. `app.js:332` 의 `fitModuleGraphToViewport` 가 `[data-role="module-graph-canvas"]` 의 실측 크기로 노드 크기를 정하므로, 캔버스에 더 큰 영역을 주면 그래프가 자동으로 커진다
 - Produces: `.exec-graph` 래퍼. Cycle 1b 가 이 셀렉터를 그대로 이어받는다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `tests/test_execute_layout.py` 에 추가한다.
 
@@ -541,12 +541,12 @@ def test_graph_has_its_own_wrapper(client) -> None:
 
 `name="auth_method"` 가 없는 시스템이면 `system.run_form` 의 첫 필드 `name` 으로 바꾼다 — `docs/specs/systems/hom.md` 에서 확인한다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -k graph -v`
 Expected: FAIL — `exec-graph` 없음, 그래프가 폼 필드 뒤
 
-- [ ] **Step 3: 그래프 스타일을 이사시킨다**
+- [x] **Step 3: 그래프 스타일을 이사시킨다**
 
 `app/web/frontend/styles/app.css` 의 모듈 그래프 절을 **잘라내어** `execute.css` 끝으로 옮긴다. 선언은 한 줄도 바꾸지 않는다 — 이사만 한다.
 
@@ -578,7 +578,7 @@ Run: `grep -n "^\.[a-z]" app/web/frontend/styles/app.css | sed -n '/427/,/576/p'
 
 `app.css` 가 줄어 `FG004_ALLOWLIST`(400줄 상한) 에 한 걸음 가까워진다. 아직 비지는 않는다.
 
-- [ ] **Step 4: 템플릿에서 그래프를 폼 상단으로 올린다**
+- [x] **Step 4: 템플릿에서 그래프를 폼 상단으로 올린다**
 
 `execute.html` 의 시스템 폼 안에서, `data-role="module-selector"` 절(`execute.html:317~331`)을 **폼의 첫 자식**으로 옮기고 `.exec-graph` 로 감싼다. 프리셋 패널은 그 아래로 내린다.
 
@@ -606,26 +606,26 @@ Run: `grep -n "^\.[a-z]" app/web/frontend/styles/app.css | sed -n '/427/,/576/p'
         {# 프리셋 패널 · 인증 필드 · 실행 버튼은 기존 순서대로 이 아래에 온다 #}
 ```
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m pytest tests/test_execute_layout.py -v`
 Expected: PASS (8 passed)
 
-- [ ] **Step 6: 게이트와 빌드**
+- [x] **Step 6: 게이트와 빌드**
 
 Run: `python3 scripts/check_frontend_gates.py && npm run build`
 Expected: 게이트 통과, 빌드 성공
 
 `app.css` 에서 잘라낸 hex 가 `execute.css` 로 그대로 옮겨 갔다면 **FG-002 가 잡는다**(`execute.css` 는 allowlist 에 없다). 그 경우 옮긴 선언의 hex 를 `var(--c-*)` 토큰으로 바꾼다 — `primitives.css` 에 이미 대응 값이 있다.
 
-- [ ] **Step 7: 눈으로 확인한다**
+- [x] **Step 7: 눈으로 확인한다**
 
 `/runs/execute` 에서 HOM(모듈 10개)을 선택한다. 확인 항목:
 - 그래프가 패널 상단을 차지하고 노드가 이전보다 크다
 - 엣지 곡선이 그려지고, 노드를 클릭하면 활성/비활성 색이 바뀐다
 - 노드가 캔버스를 넘치지 않는다(`fitModuleGraphToViewport` 가 맞춰야 한다)
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add app/web/frontend/styles/app.css app/web/frontend/styles/execute.css app/web/templates/execute.html tests/test_execute_layout.py
@@ -858,7 +858,7 @@ git commit -m "feat(status-badge): 서버 라벨 주입구 추가"
 
 #### 3c. 좌측 목록에 배지를 건다
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/entries/execute-badges.test.ts`:
 
@@ -913,12 +913,12 @@ describe("applySystemBadges", () => {
 });
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `npm run test -- execute-badges`
 Expected: FAIL — `Cannot find module './execute-badges'`
 
-- [ ] **Step 3: 엔트리를 만든다**
+- [x] **Step 3: 엔트리를 만든다**
 
 ```typescript
 // 좌측 목록의 오늘 상태 배지. 새 엔드포인트 없이 대시보드 API 를 재사용한다(설계 D6).
@@ -958,7 +958,7 @@ export async function loadSystemBadges(root: ParentNode = document): Promise<voi
 document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
 ```
 
-- [ ] **Step 4: Vite 엔트리로 등록한다**
+- [x] **Step 4: Vite 엔트리로 등록한다**
 
 `vite.config.ts` 의 `rollupOptions.input` 에 추가한다.
 
@@ -975,18 +975,19 @@ document.addEventListener("DOMContentLoaded", () => void loadSystemBadges());
 {% endblock %}
 ```
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 Expected: 전부 PASS
 
 - [ ] **Step 6: 눈으로 확인한다**
+  - 대시보드·실행 화면의 라벨과 빈 배지 슬롯은 수동 확인했으나, DevTools Network 차단 뒤 새로고침은 실제로 수행하지 못해 미완료다.
 
 `/runs/execute` 좌측 목록의 배지가 같은 시각 `/` 대시보드와 **문자 단위로 같은지** 확인한다. 특히 미점검 시스템이 양쪽 다 "미점검" 이어야 한다 — 한쪽이 "대기" 면 3b 가 덜 된 것이다.
 
 개발자 도구 Network 에서 `/api/dashboard/daily` 를 차단해 두고 새로고침해 **실행 버튼이 여전히 동작하는지** 확인한다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add app/web/frontend/entries/execute-badges.ts app/web/frontend/entries/execute-badges.test.ts vite.config.ts app/web/templates/execute.html
@@ -1214,6 +1215,6 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 | --- | --- |
 | `app.js` 약 1,400줄이 아직 이 화면을 구동한다 | Cycle 1b |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 (app.js 소멸 시) |
-| `app.css` 잔여(약 1,270줄, 400줄 상한 초과) | Cycle 1b~6 이 절씩 이사 |
+| `app.css` 잔여(991줄, 400줄 상한 초과) | Cycle 1b~6 이 절씩 이사 |
 | `body:has(.dash)` 와 `body:has(.exec)` 셸 중복 | 세 번째 화면이 같은 셸을 요구하면 공통으로 뽑는다 |
 | 예약 등록 폼(cron 빌더)이 SUITE 패널에 남아 있다 | Cycle 6 에서 중복 판단(설계 D7) |

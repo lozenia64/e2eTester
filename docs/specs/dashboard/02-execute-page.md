@@ -74,4 +74,6 @@ Then 400 from API
 
 ## 6. 스크립트
 
-`app/web/static/app.js`
+- `app/web/static/app.js` — 기존 실행 폼의 `data-role` 훅과 submit 동작
+- `app/web/frontend/entries/execute-badges.ts` — `_assets.html` 매크로로 로드하는 Vite 엔트리.
+  좌측 목록 배지를 위해 `/api/dashboard/daily`의 서버 파생 `summary_badge`를 재사용한다.
