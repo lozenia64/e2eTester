@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 점검 실행 화면을 구동하는 `app.js` 약 1,400줄을 타입과 테스트를 갖춘 `entries/execute.ts` 로 옮기고, `app.css` 의 프리셋 절을 화면 폴더로 이사시킨다.
+**Goal:** 점검 실행 화면을 구동하는 `app.js` 약 1,400줄을 타입과 테스트를 갖춘 `entries/execute.ts` 로 옮기고, `app.css` 의 프리셋·그래프 CSS를 책임 단위 stylesheet로 이사시킨다.
 
 **Architecture:** 기계적 `.js` → `.ts` 변환이 아니라 **책임 분리 + 타입 + Vitest** 로 한다(P3-4 §7 사용자 결정). `app.js` 의 점검 실행 몫은 세 덩어리다 — 모듈 그래프(순수 계산 + DOM 렌더), 프리셋 패널, 폼·실행·OTP 바인딩. 순수 계산부터 옮기면 Vitest 로 바로 잠글 수 있고, DOM 계층은 그 위에 얹는다. 이관 중에도 화면은 계속 동작해야 하므로 **함수 단위가 아니라 덩어리 단위로 옮기고, 옮긴 즉시 `app.js` 에서 지운다** — 두 벌이 동시에 바인딩되면 이벤트가 두 번 걸린다.
 
@@ -49,7 +49,9 @@
 | `app/web/frontend/execute/presets.ts` | 프리셋 조회·적용·저장·삭제 | ~330줄 |
 | `app/web/frontend/execute/run-form.ts` | 조건부 필드, OTP 패널, 개별 시스템 실행 | ~250줄 |
 | `app/web/frontend/execute/suite-form.ts` | SUITE 시스템 선택, 전체 실행 | ~220줄 |
-| `app/web/frontend/styles/execute.css` | `app.css` 프리셋 절 이사분을 **기존 파일에 덧붙인다**(1a 가 만들었고 `base.css:11` 이 이미 임포트한다) | +241줄 |
+| `app/web/frontend/styles/execute.css` | 실행 셸·2열 그리드·좌측 목록·우측 패널·sticky 액션 바 | 95줄 |
+| `app/web/frontend/styles/execute-graph.css` | Cycle 1a 모듈 그래프 전용 규칙 | 184줄 |
+| `app/web/frontend/styles/execute-presets.css` | Cycle 1b 인증 프리셋 전용 규칙 | 240줄 |
 | `app/web/frontend/entries/execute.ts` | 배선만. 위 모듈의 bind 를 호출한다 | ~60줄 |
 
 ---
@@ -593,9 +595,9 @@ git commit -m "refactor(execute): 폼·실행·OTP 바인딩 이관 — app.js �
 - Consumes: Task 1~4 의 결과
 - Produces: 없음
 
-- [ ] **Step 1: 프리셋 CSS 를 이사시킨다**
+- [x] **Step 1: 프리셋 CSS 를 이사시킨다**
 
-`app/web/frontend/styles/app.css` 의 프리셋 절을 잘라 **기존 `app/web/frontend/styles/execute.css` 끝**으로 옮긴다. `base.css:11` 이 그 파일을 이미 임포트하므로 배선은 끝나 있다 — 새 파일도, 새 임포트도 만들지 마라.
+`app/web/frontend/styles/app.css` 의 프리셋 절을 잘라 `execute-presets.css`의 명시적 시작 주석 아래로 옮기고, Cycle 1a 그래프 규칙은 `execute-graph.css`로 분리했다. 실행 셸은 `execute.css`에 남겼다. 세 stylesheet는 `base.css:11~13`에서 각각 한 번씩 임포트한다.
 
 경계는 줄 번호가 아니라 **선택자와 주석으로 잡는다.** 시작은 `/* ===== 인증 프리셋 (내 점검 세트) ===== */`(현재 `:426`), 끝은 다음 섹션 주석(`진행 중 / 최근 Run`) 직전(현재 `:666`)이다. 약 241줄이다.
 
@@ -604,27 +606,29 @@ git commit -m "refactor(execute): 폼·실행·OTP 바인딩 이관 — app.js �
 옮긴 뒤 남은 hex 가 있으면 `var(--c-*)` 로 바꾼다 — `styles/execute.css` 는 FG-002 allowlist 에 없다.
 
 Run: `python3 scripts/check_frontend_gates.py`
-Expected: 통과. FG-004 위반이 나오면 `styles.css` 가 400줄을 넘은 것이므로 프리셋 칩과 저장 폼으로 쪼갠다.
+Expected: 통과. 세 stylesheet는 각각 400줄 미만이다.
 
-- [ ] **Step 2: app.js 잔여를 확인한다**
+- [x] **Step 2: app.js 잔여를 확인한다**
 
 Run: `wc -l app/web/static/app.js`
 Expected: 약 1,850줄(3,263 − 약 1,400). 남은 것은 Run 이력 · Run 상세 · Suite 상세 · 예약 오버뷰 · 공용이며 Cycle 2~4 의 몫이다.
 
 Run: `grep -c "function " app/web/static/app.js`
 
-- [ ] **Step 3: 전체 검증**
+실측: `app.js` 1,949줄, `function ` 86개. 계획의 약 1,850줄과 달라 잔여 목표는 미충족으로 기록한다.
+
+- [x] **Step 3: 전체 검증**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
 Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 Run: `python3 -m pytest tests/test_execute_layout.py tests/test_execute_viewport.py -v`
 Expected: 전부 통과
 
-- [ ] **Step 4: 설계 문서의 §8 을 갱신한다**
+- [x] **Step 4: 설계 문서의 §8 을 갱신한다**
 
 `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` §8 표에서 Cycle 1 이 끝냈다고 표시하고, `app.css` 잔여 줄 수를 실측값으로 고친다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add app/web/frontend docs/superpowers/specs/2026-08-24-execute-promotion-design.md
@@ -635,20 +639,22 @@ git commit -m "refactor(execute): 프리셋 CSS 이사 — app.css 축소"
 
 ## 완료 확인
 
-- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] `npm run test && npm run typecheck && npm run lint && npm run build` 통과
-- [ ] `app/web/frontend/entries/execute.ts` 존재, 60줄 이하
-- [ ] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
+- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과 (16개 gate)
+- [x] `npm run test && npm run typecheck && npm run lint && npm run build` 통과
+- [x] `app/web/frontend/entries/execute.ts` 존재, 15줄
+- [x] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
 - [ ] `app.js` 약 1,850줄로 축소
-- [ ] `app.css` 약 750줄로 축소(991 − 프리셋 절 241). 모듈그래프 167줄은 **1a 가 이미 이사시켰다**
-- [ ] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
+- [x] `app.css` 750줄로 축소(991 − 프리셋 절 241). 모듈그래프 167줄은 **1a 가 이미 이사시켰다**
+- [x] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
 - [ ] `/runs/execute` 에서 실제 Run 과 SUITE 가 끝까지 동작
+
+미검증 항목: `app.js`는 실측 1,949줄로 계획의 약 1,850줄과 다르며, 실제 Run/SUITE 종단 동작은 이번 검증 범위에서 실행하지 않았다.
 
 ## 이 계획이 남기는 것
 
 | 항목 | 다음 단계 |
 | --- | --- |
-| `app.js` 잔여 약 1,850줄 | Cycle 2(수트) → 3(런) → 4(Run 이력, 여기서 소멸) |
+| `app.js` 잔여 1,949줄 | Cycle 2(수트) → 3(런) → 4(Run 이력, 여기서 소멸) |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 |
 | `FG004_ALLOWLIST` 의 `app.css` | Cycle 2~6 이 절씩 이사 |
 | `execute/legacy-bridge.ts` | Cycle 4 에서 `app.js` 와 함께 소멸 |
