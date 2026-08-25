@@ -1204,8 +1204,8 @@ git commit -m "docs(execute): SPEC-UI-002 에 마스터-디테일 레이아웃 �
 - [x] 프론트엔드 어디에도 `counts` 에서 톤을 유도하는 코드가 없다(FG-006 정신)
 - [x] `SPEC-UI-002` 에 `AC-003` 신설, `test_execute_viewport.py` 에 마커, `test_spec_traceability.py` 통과
 - [x] `[x-cloak]` 이 `base.css` 로 승격되고 `dashboard.css`·`execute.css` 에 중복 정의 0건
-- [ ] `app.css` 가 약 400줄 줄었다(모듈 그래프 150줄 이사 + 고아 시스템 카드 250줄 삭제)
-  - 기준 커밋 대비 216줄 감소(1067→851)만 직접 확인되어 약 400줄 감소는 미확인이다.
+- [x] `app.css` 가 약 400줄 줄었다(모듈 그래프 150줄 이사 + 고아 시스템 카드 250줄 삭제)
+  - Cycle 0 기준 `0f5523d` 1411줄→현재 991줄, diff 0추가·420삭제; 모듈 그래프 167줄 + 시스템 카드 253줄 = 420줄.
 - [x] `app.css` 에 `system-card` 0건(Task 2b)
 
 ## 이 계획이 남기는 것
