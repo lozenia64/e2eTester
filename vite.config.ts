@@ -20,6 +20,7 @@ export default defineConfig({
         // 별 엔트리로 둔다 — 일반 페이지 번들에 상황판 CSS 를 얹지 않기 위함.
         wall: resolve(__dirname, "app/web/frontend/entries/wall.ts"),
         dashboard: resolve(__dirname, "app/web/frontend/entries/dashboard.ts"),
+        "execute-badges": resolve(__dirname, "app/web/frontend/entries/execute-badges.ts"),
         // 차트 라이브러리 self-host(P3-4 §3.1). 레거시 페이지 스크립트가
         // 전역으로 쓰므로 브리지 엔트리로 얹는다 — 해당 화면이 P4 에서
         // 이관되는 시점에 이 세 줄과 엔트리 파일을 함께 지운다.
