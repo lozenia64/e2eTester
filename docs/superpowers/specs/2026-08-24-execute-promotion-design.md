@@ -42,7 +42,9 @@
 
 ### 1.2 네 화면이 레거시 모놀리스 하나에 얹혀 있다
 
-`execute.html` · `run.html` · `suite.html` · `runs_history.html` 은 `{% block scripts %}` 가 **비어 있다.** 전부 `base.html` 이 싣는 `app.js`(3,263줄)와 `app.css`(1,411줄) 하나에 의존한다. 이 둘이 `FG004_ALLOWLIST` · `FG005_ALLOWLIST` 에 남은 가장 큰 항목이다.
+`execute.html` · `run.html` · `suite.html` · `runs_history.html` 은 `{% block scripts %}` 가 **비어 있다.** 전부 `base.html` 이 싣는 `app.js`(3,263줄)와 `app.css`(작성 시점 1,411줄) 하나에 의존한다. 이 둘이 `FG004_ALLOWLIST` · `FG005_ALLOWLIST` 에 남은 가장 큰 항목이다.
+
+> **현재 상태(2026-08-25):** `app.js` 는 **3,263줄 그대로**다 — Cycle 1a 는 레이아웃만 바꿨고 스크립트를 건드리지 않았다. `app.css` 는 1a 가 420줄을 덜어 **991줄**이다. `execute.html` 은 `entries/execute-badges.ts` 를 로드하므로 더 이상 `{% block scripts %}` 가 비어 있지 않다 — Cycle 1b 가 그 엔트리를 `entries/execute.ts` 로 흡수한다.
 
 `app.js:3245` 의 `DOMContentLoaded` bind 목록이 그 내부 경계를 그대로 드러낸다.
 
@@ -61,11 +63,13 @@
 
 ### 1.3 이 화면의 지배 요소는 이미 만들어져 있고, 숨겨져 있다
 
-`app.js:23~520` 에 모듈 의존성 DAG 렌더러가 있다. `computeModuleDepth` 가 열을, `computeModuleSubtreeHeight` 가 행을 계산하고, `drawModuleGraph:363` 이 베지에 곡선 SVG 엣지를 그린다. 엣지는 양끝 노드의 선택 상태에 따라 `is-active` / `is-muted` 로 갈린다. 스타일은 `app.css:427~570` 에 140줄 — 호버 · 잠금 · 포커스 링 · compact 티어까지 있다.
+`app.js:23~520` 에 모듈 의존성 DAG 렌더러가 있다. `computeModuleDepth` 가 열을, `computeModuleSubtreeHeight` 가 행을 계산하고, `drawModuleGraph:363` 이 베지에 곡선 SVG 엣지를 그린다. 엣지는 양끝 노드의 선택 상태에 따라 `is-active` / `is-muted` 로 갈린다. 스타일은 작성 시점에 `app.css:427~570` 에 140줄이었다 — 호버 · 잠금 · 포커스 링 · compact 티어까지 있다.
 
-이것이 놓인 자리는 `execute.html:317` — `<details>` 아코디언 안, 2열 카드 그리드의 한 칸 안, `sm:col-span-2` 폭이다. **펼치기 전에는 존재 자체가 보이지 않는다.**
+이것이 놓여 있던 자리는 `execute.html` 의 `<details>` 아코디언 안, 2열 카드 그리드의 한 칸 안, `sm:col-span-2` 폭이었다. **펼치기 전에는 존재 자체가 보이지 않았다.**
 
 승격의 본체는 새로 만드는 것이 아니라 이것을 꺼내 주인공 자리에 놓는 것이다.
+
+> **현재 상태(Cycle 1a 완료, PR #147):** 이 절의 문제는 **해결됐다.** 그래프는 우측 패널 상단의 지배 요소가 됐고, 스타일 167줄은 `app.css` 에서 `execute.css` 로 이사했다. 위 `app.css:427~570` 좌표는 **더 이상 유효하지 않다** — 그 절은 이제 `app.css` 에 없다. `app.js` 쪽 좌표(`23~520` · `drawModuleGraph:363`)는 그대로이며, **Cycle 1b 가 이관할 대상이 정확히 그것이다.**
 
 ### 1.4 화면 구조가 "다 보이네"의 반대다
 
@@ -78,7 +82,8 @@
 | 사이클 | 화면 | 잘라낼 레거시 | 완료 신호 |
 | --- | --- | --- | --- |
 | **0** ✅ | (없음 — 팔레트 통일) | 템플릿 7벌의 로그 토큰 정의 · `admin-runs.js` 차트 색 4개 | `legacy-aliases.css` 신설 · FG-002 스캔 범위에 `templates/` · `static/*.js` 포함 |
-| **1** | 점검 실행 | `app.js` 약 1,400줄(모듈 그래프 620 + 프리셋 패널 540 + 폼 바인딩 약 240) · `app.css` 프리셋(846~1086) · 모듈그래프(427~570) 절 | `entries/execute.ts` 신설 |
+| **1a** ✅ | 점검 실행 — 레이아웃 | `app.css` 모듈그래프 절 167줄 이사 · 고아 `.system-card*` 253줄 삭제 | 넌스크롤 마스터-디테일 · sticky 액션 바 · `AC-003` |
+| **1b** ✅ | 점검 실행 — 이관 | `app.js` 점검 실행 몫 이관 · `app.css` 프리셋 절(**경계 `:426`~`:666`**) 제거 | `entries/execute.ts` 신설 · `execute.css`·`execute-graph.css`·`execute-presets.css` 책임 분리 |
 | **2** | 수트 상세 | `app.js` 약 700줄 | `entries/suite.ts` 신설 |
 | **3** | 런 상세 | `app.js` 약 700줄 | `entries/run.ts` 신설 |
 | **4** | Run 이력 | `app.js` 약 640줄 | `app.js` **삭제** · `FG005_ALLOWLIST` 에서 제거 · `main.ts:32` 의 `window.__statusBadge` 다리 제거 |
@@ -107,7 +112,7 @@
 - **컴포넌트 라이브러리 선(先)구축** — 화면 하나를 승격해보기 전에 인터페이스를 정하지 않는다(D4).
 - **SPA · React/Vue** — `2026-08-19` §3.1 유지.
 - **모션 · 차트 라이브러리 신규 도입** — 이 화면에 차트가 없고, 모션은 네이티브 CSS 로 된다.
-- **예약 등록 폼 이전** — `execute.html:165~245` 의 cron 빌더는 이번 사이클에서 옮기지 않는다(D7).
+- **예약 등록 폼 이전** — `execute.html` 의 cron 빌더(`<details class="sched">` 2벌 — 수트용·시스템용)는 이번 사이클에서 옮기지 않는다(D7).
 - **`/admin/*` 6개 화면 승격** — 임원·사용자는 `user` 역할이라 `/admin` 을 보지 않는다(사용자 확인). Cycle 0 의 팔레트 통일만 적용받는다.
 - **`SPEC-UI-002` 의 동작 규칙 변경** — 정보구조만 바꾼다.
 - **레거시 JS 전면 이관** — 사이클 1 은 점검 실행 몫만 떼어낸다.
@@ -297,7 +302,7 @@ FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 �
 | **D5** | 도착점은 **통일이 아니라 승격** — 모든 화면을 대시보드급 정보구조로 | 통일만으로는 "깨지지 않는" 데 그친다. 사용자 결정 |
 | **D6** | 좌측 상태 배지는 `/api/dashboard/daily` **재사용** | 새 read model·새 엔드포인트를 만들지 않는다. 대안(execute 컨텍스트에 상태 주입)은 라우트·뷰모델·템플릿 3층을 동시에 바꾼다. 사용자 결정.<br><br>**정정(2026-08-25 실측):** "서버 변경 0" 은 틀렸다. 응답의 시스템 항목에 톤·라벨이 없어(§4.5) 클라이언트가 `counts` 에서 톤을 유도해야 하는데, 그것은 FG-006 이 막는 상태→표현 매핑 복제다. 이미 있는 `system_summary_badge()` 의 결과를 응답에 한 필드로 싣는 것으로 바꾼다. D6 의 본질(새 read model 금지·엔드포인트 재사용)은 그대로다 |
 | **D11** | `not_inspected` 라벨 문제는 **`renderStatusBadge` 에 라벨 주입구**로 푼다. `status.generated.ts` 에 합성 상태를 추가하지 않는다 | `MODULE_STATUS_LABELS` 는 `status_labels.py` 에서 생성되는 자동 생성물이고 `not_inspected` 는 enum 상태가 아니라 대시보드 집계가 만든 합성 값이다. 생성물에 합성 값을 섞으면 "무엇이 도메인 상태인가" 의 경계가 흐려진다. 서버가 준 라벨을 통과시키는 쪽이 SSOT 방향과 일치한다 |
-| **D7** | 예약 등록 폼(`execute.html:165~245`)을 이번 사이클에서 **옮기지 않는다** | 성격상 예약 관리(Cycle 6)의 것이지만 "실행하면서 바로 예약"이 의도된 동선일 수 있다. 우측 열 하단 접이식으로 유지하고 Cycle 6 에서 중복 여부를 판단한다. 사용자 결정 |
+| **D7** | 예약 등록 폼(`execute.html` 의 `<details class="sched">` 2벌)을 이번 사이클에서 **옮기지 않는다** | 성격상 예약 관리(Cycle 6)의 것이지만 "실행하면서 바로 예약"이 의도된 동선일 수 있다. 우측 열 하단 접이식으로 유지하고 Cycle 6 에서 중복 여부를 판단한다. 사용자 결정 |
 | **D8** | 마스터-디테일은 서버 렌더 폼 6개를 **유지한 채** 표시만 전환 | 렌더 경로를 바꾸지 않아 폼 바인딩·`data-role`·검증이 전부 산다(§4.4) |
 | **D9** | 짧은 별칭은 **신설 `legacy-aliases.css`** 에 두고 사용처 51곳은 건드리지 않는다 | 사용처를 `-solid` 로 일괄 치환하면 Cycle 0 이 51곳 수정으로 부풀고, 화면별 사이클이 어차피 그 CSS 를 컴포넌트로 옮기며 지운다. `primitives.css` 는 "상태색은 `tokens.generated.css` 담당"을 명시하므로 거처가 아니다. 파일이 **소멸 조건을 자기 안에 적어** allowlist 와 같은 방식으로 줄어든다 |
 | **D10** | `--st-idle` → `--st-pending-solid`, `--st-track` → `--c-gray-200`, `--st-active` → `--c-indigo-600` | `STATUS_TONES` 에 `idle` 은 없다. 의미상 "아직 점검 안 함" = `pending` 이다. `track`·`active` 는 애초에 상태색이 아니므로 `--st-` 이름을 떠나 중립 primitive 로 간다. 색이 미세하게 이동한다(`#b6b4ad` → `#a1a1aa`) — §4.1 의 "SSOT 로 수렴"과 같은 성격 |
@@ -343,7 +348,60 @@ FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 �
 
 **Cycle 0 이 가르쳐준 것 — Cycle 1a 가 이어받는다.** 이 프로그램이 없애려는 병은 "덜 예쁘다" 가 아니라 **같은 상태를 화면마다 다르게 말하는 것**이다. Cycle 0 은 그것을 색에서 없앴다. §4.5.1 이 발견한 `not_inspected` 라벨 문제는 같은 병이 **라벨**에서 재발하려던 것이고, Cycle 1a 가 그것까지 막는다. 새 화면을 만들 때마다 "이 값은 어디서 오는가" 를 서버 SSOT 까지 따라가는 것이 이 프로그램의 기본 동작이다.
 
-### 8.2 남는 것
+### 8.2 Cycle 1a 가 실제로 남긴 것 (2026-08-25 완료, PR #147)
+
+| 산출물 | 내용 |
+| --- | --- |
+| 마스터-디테일 2열 | `<details>` 아코디언 6개 제거. 좌측 선택 목록 + 우측 조건 패널. 폼 마크업·`data-role`·`name` 은 하나도 바뀌지 않았다 |
+| 그래프 승격 | `app.css` 모듈그래프 절 167줄을 `execute-graph.css` 로 이사. 우측 패널 상단 지배 요소 |
+| **sticky 액션 바** | 실행 버튼이 1366×768 에서 **1,188px 아래**에 있던 실제 결함을 고쳤다(§8.2.1) |
+| 서버 파생 배지 | `/api/dashboard/daily` 에 `summary_badge` 추가. `renderStatusBadge` 에 라벨 주입구(D11) |
+| 고아 CSS 정리 | `.system-card*` 253줄 삭제 — 이 사이클이 마지막 소비자를 없앴다 |
+| `[x-cloak]` 승격 | `dashboard.css` → `base.css`. 두 번째 소비자가 생겨 승격 조건 충족 |
+| `AC-003` 신설 | 넌스크롤 마스터-디테일. 뷰포트 테스트에 `@pytest.mark.spec` 마커 |
+
+#### 8.2.1 검증 방식이 결함을 숨기고 있었다 — Cycle 1b 가 이어받을 교훈
+
+레이아웃을 세운 뒤 **실행 버튼이 화면 밖에 있었다.** 계획서가 `is_visible()` 로 단언했는데 Playwright 의 그것은 `display`·`visibility`·크기만 본다 — **뷰포트 밖 요소도 `true` 를 돌려준다.** `bounding_box()` 좌표 계약을 세우자 즉시 드러났다.
+
+같은 종류의 헐거운 단언이 이 사이클에서 셋 더 나왔다.
+
+| 단언 | 왜 아무것도 증명하지 않았나 |
+| --- | --- |
+| `is_visible()` | 뷰포트 밖 요소를 통과시킨다 |
+| `"sticky" in css` | `bottom: 0` 이 삭제돼도 통과한다 — 기준점 없는 sticky 는 static 과 같다 |
+| `len(scrollers) <= 1` | 0개도, **엉뚱한 열 하나도** 통과한다 |
+| 격리 테스트의 버튼이 `root` 밖 | 애초에 찾지 못하니 안 바뀌는 게 당연하다 |
+
+**Cycle 1b 의 검증도 같은 질문을 통과해야 한다 — "이 단언이 실패할 수 있는 실제 경우는 무엇인가."** 답하지 못하면 그 테스트는 통과 여부와 무관하게 아무것도 지키지 않는다.
+
+### 8.2.2 Cycle 1b 실제로 남긴 것 — 실측 (2026-08-26)
+
+| 산출물 | 실측 결과 |
+| --- | --- |
+| 프리셋 CSS 소유권 | `/* ===== 인증 프리셋 (내 점검 세트) ===== */` 경계의 241줄을 `execute-presets.css`로 이사. 테스트 검증 인벤토리의 **선택자 출현 33회(고유 선택자 이름 32개)**는 `app.css` 0개 / `execute-presets.css`에 모두 존재 |
+| 그래프 CSS 소유권 | 모듈 그래프 선택자는 `app.css`·`execute.css`에 0개, `execute-graph.css`에만 존재. 핵심 border/stroke/viewport 선언을 회귀 테스트가 단언 |
+| 스타일 줄 수 | `app.css` **750줄**, `execute.css` **95줄**, `execute-graph.css` **184줄**, `execute-presets.css` **240줄**. 모두 FG-004 상한 400줄 미만 |
+| CSS 배선·팔레트 | `base.css:11~13`에서 세 stylesheet를 각각 1회 임포트. 세 파일 hex 0건 |
+| 회귀·전체 검증 | 사용자 제공 최종 검증 커밋 `b514fdb`: `passed=true`, `profile=full`, `gate_count=16`, `ruff_format` 548개 파일 통과. 이후 커밋은 docs-only라 code rerun이 아니다 |
+| 자바스크립트 잔여 | `app.js` **1,949줄**, `function ` **86개**. 모듈 그래프·프리셋·실행 폼 바인딩 0개 |
+| 프로세스 확인 | full gate 직전 `vite build --watch` 및 vite node 프로세스 없음 |
+
+### 8.3 Cycle 1b가 실제로 남긴 것
+
+| 산출물 | 내용 |
+| --- | --- |
+| DOMContentLoaded 경계 | `app.js`의 execute 관련 호출은 **0개**. 남은 11개 호출은 Run 이력·Run 상세·Suite 상세·예약 오버뷰로 Cycle 2~6의 몫이다 |
+| 임시 경계 제거 | `__executeModuleGraph`, `execute:presets-updated`, `execute:preset-toast`는 `app.js`와 `entries/execute.ts` 양쪽에서 모두 0개다 |
+| 이관 대상 함수 | 계획의 그래프·프리셋·실행 폼 이관 대상 함수가 `app.js`에 0개 남았다 |
+| 레거시 축소 | `app.js` **3,263 → 1,949줄(-40%)**, `app.css` **1,411 → 750줄(-47%)** |
+| FG-004 | `FG004_ALLOWLIST`는 `app/web/frontend/styles/app.css` 한 줄만 유지한다 |
+| 신규 모듈 | 이 사이클이 남긴 `execute/` 모듈 13개는 모두 **265줄 이하**다 |
+| CSS 책임 원칙 | 새 사이클의 CSS는 레거시 FG-004 allowlist에 추가하지 않고 책임 단위로 분할했다. 생성한 사이클이 자신의 oversize 결과를 정리한 것은 Cycle 1a Task 2b의 고아 CSS 정리 원칙을 잇는다 |
+| 임시 경계의 수명 | 이관 중 경계를 위해 둔 임시 네임스페이스·이벤트는 약속한 시점(실행 소유권이 `entries/execute.ts`로 넘어간 시점)에 제거했다. 호환 다리를 다음 사이클로 넘기지 않는 carry-forward 원칙이다 |
+| E2E 범위 | 실제 Run/SUITE 종단 동작은 이 기록에서 검증하지 않았다. 최종 full gate 통과를 이를 검증했다고 과장하지 않는다 |
+
+### 8.4 남는 것
 
 | 항목 | 비고 |
 | --- | --- |
@@ -353,7 +411,7 @@ FG-003 은 만족한다 — 라벨 리터럴을 TS 에 적는 것이 아니라 �
 | 타입 스케일(`--fs-*`) | `2026-08-23-dashboard-mission-control-design.md` §3.7 (2단계) |
 | 차트 통합(plotly 2종 제거, −5.5MB) | 같은 문서 §3.8 (3단계). `/insights` 승격과 함께 가는 것이 자연스럽다 |
 | View Transitions | 페이지 전환 모핑. 네이티브 CSS + htmx `transition:true`, 신규 의존성 0 |
-| `app.css` 1,411줄 분할 완료 | Cycle 1~6 이 절씩 떼어내면 `FG004_ALLOWLIST` 가 빈다 |
+| `app.css` 분할 실측 | 1,411 → 991줄(1a) → **750줄**(1b). `execute.css` 계열 세 파일은 모두 400줄 미만이며 FG-004 allowlist 예외가 없다 |
 
 ---
 

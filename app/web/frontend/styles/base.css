@@ -9,6 +9,8 @@
 @import "./app.css";
 @import "./dashboard.css";
 @import "./execute.css";
+@import "./execute-graph.css";
+@import "./execute-presets.css";
 
 [x-cloak] {
   display: none !important;

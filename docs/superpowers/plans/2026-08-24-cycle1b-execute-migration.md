@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 점검 실행 화면을 구동하는 `app.js` 약 1,400줄을 타입과 테스트를 갖춘 `entries/execute.ts` 로 옮기고, `app.css` 의 프리셋 절을 화면 폴더로 이사시킨다.
+**Goal:** 점검 실행 화면을 구동하는 `app.js` 약 1,400줄을 타입과 테스트를 갖춘 `entries/execute.ts` 로 옮기고, `app.css` 의 프리셋·그래프 CSS를 책임 단위 stylesheet로 이사시킨다.
+
+**체크 진행:** 이전 기록 9/36에서 출발했으며, Task 1~4·5의 증거와 사용자 제공 최종 HEAD full-gate를 반영해 현재 **33/36**이다. 미체크 3개는 Task 4 Step 4, `app.js` 약 1,850줄 목표(실측 1,949줄), 실제 Run/SUITE E2E completion이다.
 
 **Architecture:** 기계적 `.js` → `.ts` 변환이 아니라 **책임 분리 + 타입 + Vitest** 로 한다(P3-4 §7 사용자 결정). `app.js` 의 점검 실행 몫은 세 덩어리다 — 모듈 그래프(순수 계산 + DOM 렌더), 프리셋 패널, 폼·실행·OTP 바인딩. 순수 계산부터 옮기면 Vitest 로 바로 잠글 수 있고, DOM 계층은 그 위에 얹는다. 이관 중에도 화면은 계속 동작해야 하므로 **함수 단위가 아니라 덩어리 단위로 옮기고, 옮긴 즉시 `app.js` 에서 지운다** — 두 벌이 동시에 바인딩되면 이벤트가 두 번 걸린다.
 
@@ -22,6 +24,7 @@
 - **옮긴 즉시 `app.js` 에서 지운다.** 두 벌 동시 바인딩 금지.
 - **공용 함수는 마지막까지 `app.js` 에 남긴다** — `readErrorMessage`(:550) · `statusBadgeClassName`(:559) · `setInlineFeedback`(:571) · `showToast`(:595) · `collectFormInput`(:612)는 다른 화면도 쓴다. Cycle 4 가 정리한다.
 - **UI 문자열은 한국어**(AGENTS.md).
+- **모든 단언은 "이것이 실패할 수 있는 실제 경우는 무엇인가" 에 답해야 한다**(설계 §8.2.1). Cycle 1a 에서 `is_visible()` · `"sticky" in css` · `len(scrollers) <= 1` 세 단언이 **통과하면서 아무것도 지키지 않았고**, 그중 하나는 실제 제품 결함을 은폐했다. 이관 테스트도 같다 — 옮긴 함수가 **틀린 값을 돌려주면 빨간불이 켜지는지** 확인해라. 함수가 존재한다는 단언은 이관을 지키지 못한다.
 - **PR 전 필수:** `python3 scripts/ci/run_all_gates.py --profile full`
 
 ## 이관 인벤토리 (`app/web/static/app.js`)
@@ -48,7 +51,9 @@
 | `app/web/frontend/execute/presets.ts` | 프리셋 조회·적용·저장·삭제 | ~330줄 |
 | `app/web/frontend/execute/run-form.ts` | 조건부 필드, OTP 패널, 개별 시스템 실행 | ~250줄 |
 | `app/web/frontend/execute/suite-form.ts` | SUITE 시스템 선택, 전체 실행 | ~220줄 |
-| `app/web/frontend/execute/styles.css` | `app.css` 프리셋 절 이사분 | ~250줄 |
+| `app/web/frontend/styles/execute.css` | 실행 셸·2열 그리드·좌측 목록·우측 패널·sticky 액션 바 | 95줄 |
+| `app/web/frontend/styles/execute-graph.css` | Cycle 1a 모듈 그래프 전용 규칙 | 184줄 |
+| `app/web/frontend/styles/execute-presets.css` | Cycle 1b 인증 프리셋 전용 규칙 | 240줄 |
 | `app/web/frontend/entries/execute.ts` | 배선만. 위 모듈의 bind 를 호출한다 | ~60줄 |
 
 ---
@@ -76,13 +81,13 @@ DOM 을 모르는 계산부터 옮긴다. 여기가 이 화면에서 가장 테�
   - `collectDescendantModuleIds(moduleId: string, childrenById: Map<string, string[]>, collected?: Set<string>): Set<string>`
   - Task 2 가 전부 소비한다
 
-- [ ] **Step 1: 원본을 읽고 상수를 확인한다**
+- [x] **Step 1: 원본을 읽고 상수를 확인한다**
 
 `app/web/static/app.js` 상단의 `MODULE_GRAPH_MAX_GAP` · `MODULE_GRAPH_MIN_GAP` · `MODULE_GRAPH_MAX_ROW_HEIGHT` · `MODULE_GRAPH_MIN_ROW_HEIGHT` 실제 값을 확인한다. 이 값들이 바뀌면 아래 테스트의 기대값이 달라진다 — **추측하지 말고 파일에서 읽는다.**
 
 Run: `grep -n "MODULE_GRAPH_" app/web/static/app.js | head`
 
-- [ ] **Step 2: 실패하는 테스트를 쓴다**
+- [x] **Step 2: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/execute/module-graph/layout.test.ts`:
 
@@ -215,12 +220,12 @@ describe("sortModulesByOrder", () => {
 });
 ```
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `npm run test -- layout`
 Expected: FAIL — `Cannot find module './layout'`
 
-- [ ] **Step 4: layout.ts 를 만든다**
+- [x] **Step 4: layout.ts 를 만든다**
 
 `app/web/static/app.js` 의 해당 함수 본문을 **로직 변경 없이** 옮기고 타입만 얹는다. 기대값을 맞추려고 계산을 바꾸지 않는다 — 테스트가 현행 동작을 기록한 것이므로, 어긋나면 **테스트의 기대값이 틀린 것**이니 원본을 다시 읽고 고친다.
 
@@ -233,12 +238,12 @@ Expected: FAIL — `Cannot find module './layout'`
 
 `parseSystemDefinition` 은 DOM(`<script type="application/json">`)을 읽으므로 여기가 아니라 Task 2 의 `render.ts` 로 간다.
 
-- [ ] **Step 5: 테스트가 통과하는지 확인한다**
+- [x] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `npm run test -- layout && npm run typecheck && npm run lint`
 Expected: PASS
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/web/frontend/execute/module-graph/
@@ -262,19 +267,18 @@ git commit -m "refactor(execute): 모듈 그래프 좌표 계산을 타입·테�
 - Consumes: Task 1 의 `layout.ts` 전부
 - Produces: `bindModuleSelectors(root?: ParentNode): void` — `[data-role="module-selector"]` 를 가진 폼을 찾아 그래프를 렌더하고 클릭·리사이즈를 건다. `entries/execute.ts` 가 호출한다
 
-- [ ] **Step 1: render.ts 를 만든다**
+- [x] **Step 1: render.ts 를 만든다**
 
 인벤토리의 **그래프 DOM** 13개 함수와 `parseSystemDefinition`(:78)을 옮긴다. 내부 계산은 `./layout` 에서 임포트한다.
 
 400줄을 넘으면(FG-004) `selection.ts`(선택 상태 · 경고)와 `draw.ts`(노드 · 엣지 · 리사이즈)로 쪼갠다.
 
-- [ ] **Step 2: 엔트리를 만든다**
+- [x] **Step 2: 엔트리를 만든다**
 
 `app/web/frontend/entries/execute.ts`:
 
 ```typescript
 // 점검 실행 화면 엔트리. 배선만 한다 — 로직은 execute/ 아래 모듈에 있다.
-import "../execute/styles.css";
 import { bindModuleSelectors } from "../execute/module-graph/render";
 import { loadSystemBadges } from "./execute-badges";
 
@@ -284,9 +288,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 ```
 
-`execute/styles.css` 는 Task 5 에서 채운다. 지금은 빈 파일로 만들어 둔다.
+**스타일시트를 새로 만들지 마라.** 1a 가 `app/web/frontend/styles/execute.css` 를 만들었고 `base.css:11` 이 이미 임포트한다. Task 5 의 프리셋 절은 그 파일에 덧붙인다. 엔트리에서 CSS 를 임포트하면 같은 스타일이 두 경로로 들어온다.
 
-Run: `printf '/* 점검 실행 화면 스타일. Task 5 에서 app.css 프리셋 절이 여기로 온다. */\n' > app/web/frontend/execute/styles.css`
 
 Cycle 1a 가 만든 `entries/execute-badges.ts` 는 이제 `execute.ts` 가 흡수하므로, `vite.config.ts` 에서 `execute-badges` 입력을 지우고 `execute` 를 넣는다.
 
@@ -305,7 +308,7 @@ Cycle 1a 가 만든 `entries/execute-badges.ts` 는 이제 `execute.ts` 가 흡�
 
 `execute-badges.ts` 하단의 `DOMContentLoaded` 기동 줄은 지운다 — 이제 `execute.ts` 가 부른다. 두 번 걸리면 배지가 두 번 렌더된다.
 
-- [ ] **Step 3: app.js 에서 원본을 지운다**
+- [x] **Step 3: app.js 에서 원본을 지운다**
 
 `app/web/static/app.js` 에서 다음을 삭제한다:
 - 인벤토리의 **그래프 순수 계산** 10개 + **그래프 DOM** 13개
@@ -319,7 +322,7 @@ Run: `grep -n "applyModuleSelection\|readSelectedModuleIdSet\|renderModuleSelect
 
 프리셋 코드(Task 3 대상)가 `applyModuleSelection` 을 부른다면, Task 3 까지는 그 함수만 `app.js` 에 남기고 주석으로 이유를 적는다.
 
-- [ ] **Step 4: 빌드하고 눈으로 확인한다**
+- [x] **Step 4: 빌드하고 눈으로 확인한다**
 
 Run: `npm run build && npm run typecheck && npm run lint`
 
@@ -332,12 +335,12 @@ Run: `npm run build && npm run typecheck && npm run lint`
 
 콘솔에 `ReferenceError` 가 없어야 한다 — 있으면 Step 3 에서 아직 참조 중인 함수를 지운 것이다.
 
-- [ ] **Step 5: 회귀 테스트**
+- [x] **Step 5: 회귀 테스트**
 
 Run: `python3 -m pytest tests/test_execute_layout.py tests/test_execute_viewport.py -v`
 Expected: PASS
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/web/frontend app/web/static/app.js app/web/templates/execute.html vite.config.ts
@@ -358,13 +361,13 @@ git commit -m "refactor(execute): 그래프 DOM 렌더 이관 — app.js 에서 
 - Consumes: `execute/module-graph/render.ts` 의 선택 적용 함수(`applyModuleSelection` 이 그래프 선택을 바꾼다 — Task 2 에서 어디에 뒀는지 확인하고 그것을 임포트한다)
 - Produces: `bindPresetPanels(root?: ParentNode): void`, `loadPresets(): Promise<void>`
 
-- [ ] **Step 1: API 계약을 실측한다**
+- [x] **Step 1: API 계약을 실측한다**
 
 Run: `python3 -m pytest tests/test_presets_http.py -v`
 
 `app/api/routes_presets.py` 를 열어 프리셋 조회·저장·삭제의 **경로와 응답 필드**를 확인한다. `app.js:652` 의 `loadPresets` 가 쓰는 것과 대조한다.
 
-- [ ] **Step 2: 실패하는 테스트를 쓴다**
+- [x] **Step 2: 실패하는 테스트를 쓴다**
 
 `app/web/frontend/execute/presets.test.ts`. 순수한 부분만 단언한다 — 네트워크는 모킹하지 않고, 요약 문자열 생성과 폼 적용처럼 DOM/데이터만 쓰는 함수를 본다.
 
@@ -428,12 +431,12 @@ describe("applyPresetToForm", () => {
 
 `Preset` 타입의 실제 필드명은 Step 1 에서 실측한 API 응답에 맞춘다. 위 필드명은 예시이므로 **반드시 확인 후 고친다.**
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `npm run test -- presets`
 Expected: FAIL — 모듈 없음
 
-- [ ] **Step 4: presets.ts 를 만들고 app.js 에서 지운다**
+- [x] **Step 4: presets.ts 를 만들고 app.js 에서 지운다**
 
 인벤토리의 **프리셋** 13개 함수(`app.js:636~943`)를 옮긴다. `authMethodLabel`(:636)이 인증 수단 라벨을 하드코딩하고 있다면 그대로 옮긴다 — FG-003 은 **상태** 라벨만 본다. 인증 수단은 상태가 아니다.
 
@@ -448,7 +451,7 @@ import { bindPresetPanels, loadPresets } from "../execute/presets";
   void loadPresets();
 ```
 
-- [ ] **Step 5: 확인한다**
+- [x] **Step 5: 확인한다**
 
 Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 
@@ -458,7 +461,7 @@ Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 - 저장·삭제가 동작한다
 - SUITE 패널의 시스템별 프리셋 목록도 동작한다
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add app/web/frontend app/web/static/app.js
@@ -480,7 +483,7 @@ git commit -m "refactor(execute): 프리셋 패널 이관 — app.js 에서 절�
 - Consumes: `app.js` 에 남아 있는 공용 함수 — Cycle 4 까지 살아 있으므로 `window` 전역이 아니라 **작은 다리 모듈**로 임포트한다. `app/web/frontend/execute/legacy-bridge.ts` 를 만들어 `declare global` 로 타입만 붙이고, 다리 파일에 소멸 조건을 적는다(`main.ts:32` 의 `window.__statusBadge` 와 같은 방식)
 - Produces: `bindRunForms(root?: ParentNode): void`, `bindSuiteForm(root?: ParentNode): void`
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 `syncConditionalFields`(:944)가 이 덩어리에서 가장 순수하고 가장 잘 깨지는 부분이다 — 인증 수단에 따라 필드를 보였다 감추는 로직이며, `data-show-when-key` / `data-show-when-value` 계약을 읽는다(`execute.html:333~340`).
 
@@ -532,12 +535,12 @@ describe("syncConditionalFields", () => {
 
 `is-hidden` 클래스명과 `required` 처리 방식은 `app.js:944~984` 의 실제 구현을 읽고 맞춘다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `npm run test -- run-form`
 Expected: FAIL — 모듈 없음
 
-- [ ] **Step 3: 두 파일로 나눠 옮긴다**
+- [x] **Step 3: 두 파일로 나눠 옮긴다**
 
 `run-form.ts` — `syncConditionalFields`(:944) · `bindConditionalFields`(:965) · `updateOtpPanel`(:985) · `startSystemRun`(:1007) · `bindSystemButtons`(:2227)
 `suite-form.ts` — `updateSuiteSystemSelectorState`(:2405) · `bindSuiteForm`(:2570)
@@ -548,7 +551,6 @@ Expected: FAIL — 모듈 없음
 
 ```typescript
 // 점검 실행 화면 엔트리. 배선만 한다 — 로직은 execute/ 아래 모듈에 있다.
-import "../execute/styles.css";
 import { bindModuleSelectors } from "../execute/module-graph/render";
 import { bindPresetPanels, loadPresets } from "../execute/presets";
 import { bindRunForms } from "../execute/run-form";
@@ -575,7 +577,7 @@ Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 - SUITE 실행 → 시스템 선택 검증(AC-001)이 동작한다
 - OTP 구간이 있으면 `WAITING_INPUT` 패널이 뜬다
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add app/web/frontend app/web/static/app.js
@@ -588,41 +590,48 @@ git commit -m "refactor(execute): 폼·실행·OTP 바인딩 이관 — app.js �
 
 **Files:**
 - Modify: `app/web/frontend/styles/app.css:846-1086` (잘라내기)
-- Modify: `app/web/frontend/execute/styles.css` (붙여넣기)
+- Modify: `app/web/frontend/styles/execute.css` (끝에 붙여넣기)
 - Modify: `docs/superpowers/specs/2026-08-24-execute-promotion-design.md` (§8 갱신)
 
 **Interfaces:**
 - Consumes: Task 1~4 의 결과
 - Produces: 없음
 
-- [ ] **Step 1: 프리셋 CSS 를 이사시킨다**
+- [x] **Step 1: 프리셋 CSS 를 이사시킨다**
 
-`app/web/frontend/styles/app.css` 의 `846~1086` 구간(`/* ===== 인증 프리셋 (내 점검 세트) ===== */` 부터 다음 섹션 헤더 직전까지)을 잘라 `app/web/frontend/execute/styles.css` 로 옮긴다. `entries/execute.ts` 가 이미 이 파일을 임포트하므로 배선은 끝나 있다.
+`app/web/frontend/styles/app.css` 의 프리셋 절을 잘라 `execute-presets.css`의 명시적 시작 주석 아래로 옮기고, Cycle 1a 그래프 규칙은 `execute-graph.css`로 분리했다. 실행 셸은 `execute.css`에 남겼다. 세 stylesheet는 `base.css:11~13`에서 각각 한 번씩 임포트한다.
 
-옮긴 뒤 남은 hex 가 있으면 `var(--c-*)` 로 바꾼다 — `execute/styles.css` 는 FG-002 allowlist 에 없다.
+경계는 줄 번호가 아니라 **선택자와 주석으로 잡는다.** 시작은 `/* ===== 인증 프리셋 (내 점검 세트) ===== */`(현재 `:426`), 끝은 다음 섹션 주석(`진행 중 / 최근 Run`) 직전(현재 `:666`)이다. 약 241줄이다.
+
+> **주의:** 이 계획의 초안은 `846~1086` 이라고 적었는데 그것은 **Cycle 1a 이전 좌표**다. 1a 가 `app.css` 에서 420줄을 덜어내 전부 앞으로 당겨졌다. 지금 `846~1086` 을 자르면 프리셋이 아니라 모바일 내비게이션 등 **살아 있는 CSS** 를 지운다. 자르기 전에 시작·끝 줄을 눈으로 확인해라.
+
+옮긴 뒤 남은 hex 가 있으면 `var(--c-*)` 로 바꾼다 — `styles/execute.css` 는 FG-002 allowlist 에 없다.
 
 Run: `python3 scripts/check_frontend_gates.py`
-Expected: 통과. FG-004 위반이 나오면 `styles.css` 가 400줄을 넘은 것이므로 프리셋 칩과 저장 폼으로 쪼갠다.
+Expected: 통과. 세 stylesheet는 각각 400줄 미만이다.
 
-- [ ] **Step 2: app.js 잔여를 확인한다**
+- [x] **Step 2: app.js 잔여를 확인한다**
 
 Run: `wc -l app/web/static/app.js`
 Expected: 약 1,850줄(3,263 − 약 1,400). 남은 것은 Run 이력 · Run 상세 · Suite 상세 · 예약 오버뷰 · 공용이며 Cycle 2~4 의 몫이다.
 
 Run: `grep -c "function " app/web/static/app.js`
 
-- [ ] **Step 3: 전체 검증**
+실측: `app.js` 1,949줄, `function ` 86개. 계획의 약 1,850줄과 달라 잔여 목표는 미충족으로 기록한다.
+
+- [x] **Step 3: 전체 검증**
 
 Run: `python3 scripts/ci/run_all_gates.py --profile full`
+최종 검증 증거: 커밋 `b514fdb`에서 사용자 제공 결과 `passed=true`, `profile=full`, `gate_count=16`, `ruff_format` 548개 파일 통과. 이후 문서 커밋은 code rerun이 아니다.
 Run: `npm run test && npm run typecheck && npm run lint && npm run build`
 Run: `python3 -m pytest tests/test_execute_layout.py tests/test_execute_viewport.py -v`
 Expected: 전부 통과
 
-- [ ] **Step 4: 설계 문서의 §8 을 갱신한다**
+- [x] **Step 4: 설계 문서의 §8 을 갱신한다**
 
-`docs/superpowers/specs/2026-08-24-execute-promotion-design.md` §8 표에서 Cycle 1 이 끝냈다고 표시하고, `app.css` 잔여 줄 수를 실측값으로 고친다.
+`docs/superpowers/specs/2026-08-24-execute-promotion-design.md` §8에 Cycle 1b 구현 실측과 사용자 제공 최종 gate 통과를 기록하고, `app.css` 잔여 줄 수를 실측값으로 고친다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add app/web/frontend docs/superpowers/specs/2026-08-24-execute-promotion-design.md
@@ -633,20 +642,22 @@ git commit -m "refactor(execute): 프리셋 CSS 이사 — app.css 축소"
 
 ## 완료 확인
 
-- [ ] `python3 scripts/ci/run_all_gates.py --profile full` 통과
-- [ ] `npm run test && npm run typecheck && npm run lint && npm run build` 통과
-- [ ] `app/web/frontend/entries/execute.ts` 존재, 60줄 이하
-- [ ] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
+- [x] `python3 scripts/ci/run_all_gates.py --profile full` 통과 (사용자 제공 최종 검증 커밋 `b514fdb`: `passed=true`, `profile=full`, `gate_count=16`, `ruff_format` 548개 파일)
+- [x] `npm run test && npm run typecheck && npm run lint && npm run build` 통과
+- [x] `app/web/frontend/entries/execute.ts` 존재, 15줄
+- [x] `app.js` 에 모듈 그래프 · 프리셋 · 실행 폼 함수 0개
 - [ ] `app.js` 약 1,850줄로 축소
-- [ ] `app.css` 약 1,030줄로 축소(모듈그래프 140 + 프리셋 240 이사)
-- [ ] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
+- [x] `app.css` 750줄로 축소(991 − 프리셋 절 241). 모듈그래프 167줄은 **1a 가 이미 이사시켰다**
+- [x] Vitest 가 그래프 좌표 계산 · 조건부 필드 · 프리셋 적용을 단언
 - [ ] `/runs/execute` 에서 실제 Run 과 SUITE 가 끝까지 동작
+
+미검증 항목: Task 4 Step 4의 실제 Run/SUITE·OTP 종단 동작, `app.js` 약 1,850줄 목표(실측 1,949줄), 실제 Run/SUITE 종단 동작 completion은 증거가 없어 체크하지 않았다.
 
 ## 이 계획이 남기는 것
 
 | 항목 | 다음 단계 |
 | --- | --- |
-| `app.js` 잔여 약 1,850줄 | Cycle 2(수트) → 3(런) → 4(Run 이력, 여기서 소멸) |
+| `app.js` 잔여 1,949줄 | Cycle 2(수트) → 3(런) → 4(Run 이력, 여기서 소멸) |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 |
 | `FG004_ALLOWLIST` 의 `app.css` | Cycle 2~6 이 절씩 이사 |
 | `execute/legacy-bridge.ts` | Cycle 4 에서 `app.js` 와 함께 소멸 |
