@@ -42,9 +42,30 @@ def _suite() -> SuiteRun:
         suite_id="suite_demo",
         status=SuiteStatus.RUNNING,
         steps=[
-            SuiteStep(system_code="hom", system_name="대표홈", order=0, run_id="r0", status=SuiteStatus.PASSED, module_total=10),
-            SuiteStep(system_code="mhm", system_name="모바일대표홈", order=1, run_id="r1", status=SuiteStatus.RUNNING, module_total=8),
-            SuiteStep(system_code="fp", system_name="위촉서류", order=2, run_id=None, status=SuiteStatus.PENDING, module_total=3),
+            SuiteStep(
+                system_code="hom",
+                system_name="대표홈",
+                order=0,
+                run_id="r0",
+                status=SuiteStatus.PASSED,
+                module_total=10,
+            ),
+            SuiteStep(
+                system_code="mhm",
+                system_name="모바일대표홈",
+                order=1,
+                run_id="r1",
+                status=SuiteStatus.RUNNING,
+                module_total=8,
+            ),
+            SuiteStep(
+                system_code="fp",
+                system_name="위촉서류",
+                order=2,
+                run_id=None,
+                status=SuiteStatus.PENDING,
+                module_total=3,
+            ),
         ],
         current_step_index=1,
         requested_at=GEN_AT,
@@ -129,7 +150,9 @@ def test_js_hooks_survive(client) -> None:
 def test_no_tailwind_color_utilities(client) -> None:
     """외형은 컴포넌트 CSS 가 갖는다(설계 §1.3) — 이 화면의 마크업에 색 유틸리티가 없다."""
     content = _content(client)
-    assert not re.findall(r'class="[^"]*\b(?:bg|text|border)-(?:gray|amber|red|emerald|indigo)-\d{2,3}', content)
+    assert not re.findall(
+        r'class="[^"]*\b(?:bg|text|border)-(?:gray|amber|red|emerald|indigo)-\d{2,3}', content
+    )
 
 
 def test_dead_hook_classes_are_gone(client) -> None:

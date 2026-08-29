@@ -125,4 +125,7 @@ async def test_sqlite_and_memory_agree(sqlite_query, memory_query) -> None:
     ]
     await memory_query.seed(rows)
     await sqlite_query.seed(rows)
-    assert await sqlite_query.avg_duration_ms_by_system() == await memory_query.avg_duration_ms_by_system()
+    assert (
+        await sqlite_query.avg_duration_ms_by_system()
+        == await memory_query.avg_duration_ms_by_system()
+    )

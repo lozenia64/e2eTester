@@ -295,14 +295,40 @@ GROUP BY system_code
 
 | 항목 | 비고 |
 | --- | --- |
-| `app.js` 잔여 약 1,381줄 | Cycle 3(런 상세) → 4(Run 이력, 여기서 소멸) |
+| `app.js` 잔여 **1,384줄**(실측, 아래 §7.1) | Cycle 3(런 상세) → 4(Run 이력, 여기서 소멸) |
 | `__executeOtpPanel` 다리 | Cycle 3 에서 런 소켓이 TS 로 가면 소멸 |
-| `__executeLegacy` 잔여 5키 | Cycle 4 |
+| `__executeLegacy` 잔여 **5키**(실측) | Cycle 4 |
 | `FG004_ALLOWLIST` 의 `app.css` | Cycle 3~6 이 절씩 이사 |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 |
 | 공통 넌스크롤 셸 | D7 로 이번에 추출. Cycle 3 이 네 번째 소비자가 된다 |
 | `SuiteStep` 시각 필드 · 간트 타임라인 | 사후 분석 요구가 생기면 별도 사이클. 도메인·wire·스냅샷·프로젝션 4층 변경 |
 | ETA 정확도 개선 | 시스템별이 아니라 **모듈별** baseline 을 쓰면 정밀해진다. `insights_breakdown.py:119` 에 재료가 있다. 현재 정확도로 부족하다고 확인되면 후속 |
+
+### 7.1 Cycle 2 실측 (구현 완료 시점)
+
+추정이 아니라 브랜치 `feat/suite-promotion` 의 실제 값이다.
+
+| 항목 | 예상 | 실측 |
+| --- | --- | --- |
+| `app.js` 줄 수 | 1,949 → 약 1,381 | 1,949 → **1,384** (−565) |
+| `__executeLegacy` 키 | 8 → 5 | 8 → **5** (`setInlineFeedback` · `readErrorMessage` · `bindScheduleBuilder` · `buildScheduleCron` · `refreshScheduleList`) |
+| 수트 `window.__execute*` 다리 | 0 신설 | **0** — `app/web/frontend/suite/` 에 `__execute` 참조 없음(grep 확인) |
+
+**`app/web/frontend/suite/` 파일별 줄 수** — 전부 FG-004(400줄) 미만:
+
+| 파일 | 줄 |
+| --- | --- |
+| `progress.ts` | 116 |
+| `progress.test.ts` | 47 |
+| `eta.ts` | 52 |
+| `eta.test.ts` | 52 |
+| `steps.ts` | 114 |
+| `render.ts` | 219 |
+| `socket.ts` | 147 |
+| `actions.ts` | 199 |
+| `styles.css` | 339 |
+
+**공유 승격:** `app/web/frontend/lib/otp-countdown.ts` 67줄 · `app/web/frontend/entries/suite.ts` 12줄(배선만).
 
 ---
 
