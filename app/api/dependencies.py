@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.contexts.insights.application.stats_service import StatsService
     from app.contexts.preset.application.service import PresetService
     from app.contexts.run.application.service import RunService
+    from app.contexts.run.contracts.ports import RunSummaryQueryPort
     from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
     from app.contexts.scheduling.scheduler import SchedulerService
     from app.contexts.suite.application.service import SuiteService
@@ -41,6 +42,11 @@ def get_run_service(connection: HTTPConnection) -> RunService:
 def get_run_queries(connection: HTTPConnection) -> RunQueries:
     """Run 목록/상세 질의 핸들러(읽기 전용 — CQRS query side)."""
     return connection.app.state.run_queries
+
+
+def get_run_summary_query(connection: HTTPConnection) -> RunSummaryQueryPort:
+    """Run 요약 집계 질의 포트(읽기 전용 — run_history_index 프로젝션)."""
+    return connection.app.state.run_summary_query
 
 
 def get_daily_queries(connection: HTTPConnection) -> DailyDashboardQueries:

@@ -11,11 +11,12 @@ from app.api.dependencies import (
     get_healing_service,
     get_run_queries,
     get_run_service,
+    get_run_summary_query,
     get_suite_service,
 )
 from app.contexts.identity.dependencies import get_current_user, require_admin
 from app.contexts.identity.models import User
-from app.contexts.suite.views.view import filter_suite_for_user
+from app.contexts.suite.views.view import SuiteView, filter_suite_for_user
 from app.core.status_view import status_badge_view, status_options, tone_glyph
 from app.notifications.run_completion_email import RunCompletionEmailNotifier
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
@@ -23,6 +24,7 @@ from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
 if TYPE_CHECKING:
     from app.contexts.healing.service import HealingService
     from app.contexts.run.application.service import RunService
+    from app.contexts.run.contracts.ports import RunSummaryQueryPort
     from app.contexts.suite.application.service import SuiteService
     from app.orchestrator.queries import RunQueries
 
@@ -155,6 +157,7 @@ async def suite_dashboard(
     suite_id: str,
     current_user: User = Depends(get_current_user),
     suite_service: SuiteService = Depends(get_suite_service),
+    run_summary_query: RunSummaryQueryPort = Depends(get_run_summary_query),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
@@ -163,12 +166,20 @@ async def suite_dashboard(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Suite not found") from exc
     suite = filter_suite_for_user(suite, current_user)
+    try:
+        # ETA baseline. 실행 중 변하지 않으므로 1회만 주입한다(설계 §3.3).
+        step_baselines = await run_summary_query.avg_duration_ms_by_system()
+    except Exception:  # noqa: BLE001 — baseline 조회가 실패해도 화면은 떠야 한다(ETA 만 사라짐)
+        step_baselines = {}
+    # 최초 렌더도 SuiteView 를 거친다 — expanded_step_order 등 파생 필드를 WS 페이로드와
+    # 같은 출처에서 보게 하기 위함(설계 D8).
     return templates.TemplateResponse(
         request,
         "suite.html",
         {
-            "suite": suite,
+            "suite": SuiteView.from_suite(suite),
             "current_user": current_user,
+            "step_baselines": step_baselines,
         },
     )
 

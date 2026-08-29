@@ -2,84 +2,108 @@
 
 {% block title %}전체 점검{% endblock %}
 
+{% block head_extra %}
+{% import "_assets.html" as suite_assets %}
+{{ suite_assets.asset_styles("entries/suite.ts") }}
+{% endblock %}
+
 {% block content %}
 {% import "components/status-badge/macro.jinja" as sb %}
 {% set active_statuses = ['pending', 'running', 'waiting_input'] %}
 
-<div class="flex flex-wrap items-start justify-between gap-4">
-    <div>
-        <nav class="flex items-center gap-1.5 text-xs text-gray-400">
-            <a href="/" class="hover:text-indigo-600">대시보드</a>
-            <span>/</span>
-            <span class="font-medium text-gray-500">전체 점검</span>
-        </nav>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">전체 시스템 순차 점검</h1>
-        <p class="mt-1 font-mono text-xs text-gray-400">{{ suite.suite_id }}</p>
-    </div>
-    <div class="flex items-center gap-3">
-        {% set sv = status_badge_view(suite.status) %}
-        {{ sb.status_badge(sv.tone, sv.label, size="md", elem_id="suite-status", status_value=suite.status.value) }}
-        <button type="button" id="suite-cancel" class="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60{% if suite.status|lower not in active_statuses %} hidden{% endif %}">전체 점검 취소</button>
-    </div>
-</div>
+<div class="suite" id="suite-root"
+     data-suite-id="{{ suite.suite_id }}"
+     data-step-baselines='{{ step_baselines | tojson }}'>
 
-<section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" id="suite-progress">
-    <div class="flex items-center justify-between gap-3">
-        <h2 class="text-sm font-bold text-gray-900">진행률</h2>
-        <span class="text-xs font-semibold text-gray-600" id="suite-progress-label">통과 0/{{ suite.steps|length }}</span>
+  <header class="suite-head">
+    <div class="suite-head__id">
+      <nav class="suite-crumb">
+        <a href="/">대시보드</a>
+        <span aria-hidden="true">/</span>
+        <span class="suite-crumb__here">전체 점검</span>
+      </nav>
+      <h1 class="suite-title">전체 시스템 순차 점검</h1>
+      <p class="suite-subid">{{ suite.suite_id }}</p>
     </div>
-    <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-        <div class="progress-bar-fill h-full rounded-full bg-emerald-500" id="suite-progress-bar" style="width: 0%"></div>
+    <div class="suite-head__actions">
+      {% set sv = status_badge_view(suite.status) %}
+      {{ sb.status_badge(sv.tone, sv.label, size="md", elem_id="suite-status", status_value=suite.status.value) }}
+      <button type="button" id="suite-cancel" class="suite-cancel"
+              {% if suite.status | lower not in active_statuses %}hidden{% endif %}>전체 점검 취소</button>
     </div>
-    <p class="mt-2 text-xs text-gray-500" id="suite-progress-detail"></p>
-</section>
+  </header>
 
-<section class="otp-panel rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm{% if not suite.awaiting_input_run_id %} is-hidden{% endif %}" id="suite-otp-panel" data-suite-id="{{ suite.suite_id }}" data-run-id="{{ suite.awaiting_input_run_id or '' }}">
-    <div class="flex items-start gap-3">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
-            <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+  <section class="suite-otp" id="suite-otp-panel"
+           data-run-id="{{ suite.awaiting_input_run_id or '' }}"
+           {% if not suite.awaiting_input_run_id %}hidden{% endif %}>
+    <div class="suite-otp__body">
+      <h2 class="suite-otp__title">OTP 입력</h2>
+      <p id="suite-otp-prompt" class="suite-otp__prompt">{{ suite.awaiting_input_prompt or '현재 시스템 로그인에서 OTP 입력이 필요합니다.' }}</p>
+      <p id="suite-otp-countdown" class="suite-otp__countdown" hidden></p>
+      <form id="suite-otp-form" class="suite-otp__form">
+        <label class="suite-otp__field">
+          <span>OTP 코드</span>
+          <input type="password" name="otp_code" placeholder="SMS 인증번호" inputmode="numeric" autocomplete="one-time-code">
+        </label>
+        <button type="submit">OTP 제출</button>
+      </form>
+      <p class="suite-otp__feedback" data-role="suite-otp-feedback" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <section class="suite-sum">
+    <div class="suite-sum__head">
+      <span class="suite-sum__label" id="suite-progress-label">통과 0/{{ suite.steps | length }}</span>
+      <span class="suite-sum__elapsed" id="suite-progress-elapsed">00:00</span>
+    </div>
+    <div class="suite-sum__track">
+      <div class="suite-sum__fill" id="suite-progress-bar" style="width: 0%"></div>
+    </div>
+    <div class="suite-sum__foot">
+      <span id="suite-progress-eta"></span>
+      <span id="suite-progress-detail"></span>
+    </div>
+  </section>
+
+  <ol class="suite-steps" id="suite-step-list">
+    {% for step in suite.steps | sort(attribute='order') %}
+    {% set base_ms = step_baselines.get(step.system_code) %}
+    <li class="suite-step"
+        data-step-order="{{ step.order }}"
+        data-system-code="{{ step.system_code }}"
+        data-status="{{ step.status | lower }}"
+        data-run-id="{{ step.run_id or '' }}"
+        {% if suite.expanded_step_order is not none and suite.expanded_step_order == step.order %}data-expanded="true"{% endif %}>
+      <span class="suite-step__index">{{ loop.index }}</span>
+      <div class="suite-step__body">
+        <p class="suite-step__name">{{ step.system_name }}</p>
+        <p class="suite-step__meta">{{ step.system_code | upper }} · 모듈 {{ step.module_total }}개</p>
+        <p class="suite-step__module" data-role="step-module-progress" hidden></p>
+        <p class="suite-step__link" data-role="step-run-link">
+          {% if step.run_id %}
+          <a href="/runs/{{ step.run_id }}">{{ step.run_id }}</a>
+          {% else %}
+          <span class="suite-step__waiting">대기 중</span>
+          {% endif %}
+        </p>
+      </div>
+      <div class="suite-step__aside">
+        {% set stv = status_badge_view(step.status) %}
+        {{ sb.status_badge(stv.tone, stv.label, size="sm", role="step-status", status_value=step.status.value) }}
+        <span class="suite-step__baseline">
+          {%- if base_ms and base_ms >= 60000 -%}평균 {{ base_ms // 60000 }}분
+          {%- elif base_ms -%}평균 {{ base_ms // 1000 }}초
+          {%- else -%}평균 —
+          {%- endif -%}
         </span>
-        <div class="min-w-0 flex-1">
-            <h2 class="text-base font-bold text-gray-900">OTP 입력</h2>
-            <p id="suite-otp-prompt" class="mt-0.5 text-sm text-gray-600">{{ suite.awaiting_input_prompt or '현재 시스템 로그인에서 OTP 입력이 필요합니다.' }}</p>
-            <p id="suite-otp-countdown" class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 is-hidden"></p>
-            <form id="suite-otp-form" class="mt-4 flex flex-wrap items-end gap-3">
-                <label class="form-field flex flex-col gap-1.5">
-                    <span class="text-sm font-medium text-gray-700">OTP 코드</span>
-                    <input type="password" name="otp_code" placeholder="SMS 인증번호" inputmode="numeric" class="block w-48 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200">
-                </label>
-                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 focus:outline-none focus:ring-4 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-60">OTP 제출</button>
-            </form>
-            <p class="is-hidden mt-3 text-sm font-medium text-red-600" data-role="suite-otp-feedback" role="alert"></p>
-        </div>
-    </div>
-</section>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endblock %}
 
-<section class="space-y-4">
-    <div>
-        <h2 class="text-lg font-bold tracking-tight text-gray-900">시스템 단계</h2>
-        <p class="text-sm text-gray-500">각 시스템의 Run 상세 화면으로 이동해 모듈별 로그를 확인할 수 있습니다.</p>
-    </div>
-    <div class="grid gap-4 md:grid-cols-2" id="suite-step-grid" data-suite-id="{{ suite.suite_id }}">
-        {% for step in suite.steps|sort(attribute='order') %}
-        <article class="suite-step-card rounded-2xl border border-gray-200 bg-white p-5 shadow-sm status-{{ step.status|lower }}" data-step-index="{{ step.order }}" data-system-code="{{ step.system_code }}">
-            <div class="flex items-center justify-between gap-2">
-                <span class="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{{ loop.index }}</span>
-                {% set stv = status_badge_view(step.status) %}
-                {{ sb.status_badge(stv.tone, stv.label, size="sm", role="step-status", status_value=step.status.value) }}
-            </div>
-            <h3 class="mt-3 text-sm font-bold text-gray-900">{{ step.system_name }}</h3>
-            <p class="mt-0.5 font-mono text-xs text-gray-400">{{ step.system_code|upper }} · 모듈 {{ step.module_total }}개</p>
-            <p class="mt-1 text-xs font-semibold text-indigo-600 is-hidden" data-role="step-module-progress"></p>
-            <p class="mt-2 text-sm text-gray-600" data-role="step-run-link">
-                {% if step.run_id %}
-                <a href="/runs/{{ step.run_id }}" class="font-medium text-indigo-600 hover:underline">{{ step.run_id }}</a>
-                {% else %}
-                <span class="text-gray-400">대기 중</span>
-                {% endif %}
-            </p>
-        </article>
-        {% endfor %}
-    </div>
-</section>
+{% block scripts %}
+{% import "_assets.html" as suite_assets %}
+{{ suite_assets.asset_script("entries/suite.ts") }}
 {% endblock %}
