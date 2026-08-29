@@ -98,21 +98,25 @@ def _row(system_code: str, status: RunStatus, *, started_min: int, duration_min:
 
 async def test_averages_only_passed_runs(memory_query) -> None:
     """실패 Run 이 평균을 끌어내리면 안 된다."""
-    await memory_query.seed([
-        _row("hom", RunStatus.PASSED, started_min=0, duration_min=4),
-        _row("hom", RunStatus.PASSED, started_min=60, duration_min=6),
-        _row("hom", RunStatus.ERROR, started_min=120, duration_min=1),
-    ])
+    await memory_query.seed(
+        [
+            _row("hom", RunStatus.PASSED, started_min=0, duration_min=4),
+            _row("hom", RunStatus.PASSED, started_min=60, duration_min=6),
+            _row("hom", RunStatus.ERROR, started_min=120, duration_min=1),
+        ]
+    )
     result = await memory_query.avg_duration_ms_by_system()
     assert result["hom"] == 5 * 60 * 1000
 
 
 async def test_unfinished_runs_are_excluded(memory_query) -> None:
     """진행 중인 Run 은 ended_at 이 없어 표본이 아니다."""
-    await memory_query.seed([
-        _row("mhm", RunStatus.PASSED, started_min=0, duration_min=2),
-        _row("mhm", RunStatus.RUNNING, started_min=10, duration_min=None),
-    ])
+    await memory_query.seed(
+        [
+            _row("mhm", RunStatus.PASSED, started_min=0, duration_min=2),
+            _row("mhm", RunStatus.RUNNING, started_min=10, duration_min=None),
+        ]
+    )
     assert (await memory_query.avg_duration_ms_by_system())["mhm"] == 2 * 60 * 1000
 
 
