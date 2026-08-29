@@ -6,6 +6,7 @@
 @import "./primitives.css";
 @import "./tokens.generated.css";
 @import "./legacy-aliases.css";
+@import "./shell.css";
 @import "./app.css";
 @import "./dashboard.css";
 @import "./execute.css";

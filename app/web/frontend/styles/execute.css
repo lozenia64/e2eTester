@@ -1,35 +1,5 @@
 /* 점검 실행 — 마스터-디테일 관제탑(설계 §4.3). */
-body:has(.exec) {
-  overflow: hidden;
-  height: 100dvh;
-  max-height: 100dvh;
-  min-height: 0;
-}
-
-body:has(.exec) main,
-body:has(.exec) main > div {
-  max-width: none;
-  padding-top: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-  height: 100dvh;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-@media (min-width: 768px) {
-  body:has(.exec) main { padding-left: 16rem; width: 100%; }
-  body:has(.exec) main > div { padding-left: 0; width: 100%; max-width: none; }
-}
-
-@media (max-width: 767px) {
-  body:has(.exec) { display: flex; flex-direction: column; }
-  body:has(.exec) > header { flex-shrink: 0; }
-  body:has(.exec) main { flex: 1 1 auto; min-height: 0; height: auto; overflow: hidden; }
-  body:has(.exec) main > div { height: 100%; overflow: hidden; }
-  body:has(.exec) main,
-  body:has(.exec) main > div { padding-left: 0; width: 100%; }
-}
+/* 넌스크롤 셸(.exec 뷰포트 규칙)은 shell.css 로 옮겼다(설계 D7). */
 
 .exec {
   display: grid;
