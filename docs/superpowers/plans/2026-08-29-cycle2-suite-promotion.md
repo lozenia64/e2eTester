@@ -98,25 +98,21 @@ def _row(system_code: str, status: RunStatus, *, started_min: int, duration_min:
 
 async def test_averages_only_passed_runs(memory_query) -> None:
     """실패 Run 이 평균을 끌어내리면 안 된다."""
-    await memory_query.seed(
-        [
-            _row("hom", RunStatus.PASSED, started_min=0, duration_min=4),
-            _row("hom", RunStatus.PASSED, started_min=60, duration_min=6),
-            _row("hom", RunStatus.ERROR, started_min=120, duration_min=1),
-        ]
-    )
+    await memory_query.seed([
+        _row("hom", RunStatus.PASSED, started_min=0, duration_min=4),
+        _row("hom", RunStatus.PASSED, started_min=60, duration_min=6),
+        _row("hom", RunStatus.ERROR, started_min=120, duration_min=1),
+    ])
     result = await memory_query.avg_duration_ms_by_system()
     assert result["hom"] == 5 * 60 * 1000
 
 
 async def test_unfinished_runs_are_excluded(memory_query) -> None:
     """진행 중인 Run 은 ended_at 이 없어 표본이 아니다."""
-    await memory_query.seed(
-        [
-            _row("mhm", RunStatus.PASSED, started_min=0, duration_min=2),
-            _row("mhm", RunStatus.RUNNING, started_min=10, duration_min=None),
-        ]
-    )
+    await memory_query.seed([
+        _row("mhm", RunStatus.PASSED, started_min=0, duration_min=2),
+        _row("mhm", RunStatus.RUNNING, started_min=10, duration_min=None),
+    ])
     assert (await memory_query.avg_duration_ms_by_system())["mhm"] == 2 * 60 * 1000
 
 
@@ -144,7 +140,10 @@ async def test_sqlite_and_memory_agree(sqlite_query, memory_query) -> None:
     ]
     await memory_query.seed(rows)
     await sqlite_query.seed(rows)
-    assert await sqlite_query.avg_duration_ms_by_system() == await memory_query.avg_duration_ms_by_system()
+    assert (
+        await sqlite_query.avg_duration_ms_by_system()
+        == await memory_query.avg_duration_ms_by_system()
+    )
 ```
 
 `memory_query` · `sqlite_query` 픽스처와 `seed(...)` 헬퍼는 이 파일 안에 만든다. sqlite 쪽은 `run_history_index` 에 직접 INSERT 하는 것이 가장 짧다 — 이 테스트가 검증하는 것은 프로젝션이 아니라 집계 SQL 이다. `ensure_schema` 로 스키마를 만든 뒤 `INSERT INTO run_history_index (run_id, system_code, status, requested_at, started_at, ended_at) VALUES (...)` 로 채우고, 나머지 NOT NULL 컬럼(`status`·`requested_at`)만 맞춘다.
@@ -452,12 +451,17 @@ def compute_expanded_step_order(
     expanded_step_order: int | None = None
 ```
 
-`from_suite` 의 `cls(...)` 호출에 추가한다.
+`from_suite` 의 `cls(...)` 호출에 `expanded_step_order` kwarg 를 더한다(기존 필드는 그대로).
 
 ```python
+    @classmethod
+    def from_suite(cls, suite: SuiteRun) -> SuiteView:
+        return cls(
+            # ... 기존 필드 ...
             expanded_step_order=compute_expanded_step_order(
                 suite.status, suite.steps, suite.current_step_index, suite.awaiting_input_run_id
             ),
+        )
 ```
 
 `dump_from_summary` 에서도 같은 값을 계산해 넣는다. 이 경로는 `summary` dict 로 `SuiteStep` 리스트를 재구성하므로, 재구성이 끝난 뒤 같은 함수를 부른다.
@@ -1082,7 +1086,9 @@ def test_no_tailwind_color_utilities(client) -> None:
     import re
 
     html = _html(client)
-    assert not re.findall(r'class="[^"]*\b(?:bg|text|border)-(?:gray|amber|red|emerald|indigo)-\d{2,3}', html)
+    assert not re.findall(
+        r'class="[^"]*\b(?:bg|text|border)-(?:gray|amber|red|emerald|indigo)-\d{2,3}', html
+    )
 
 
 def test_dead_hook_classes_are_gone(client) -> None:
