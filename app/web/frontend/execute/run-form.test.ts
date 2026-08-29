@@ -1,8 +1,17 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { syncConditionalFields, updateOtpPanel } from "./run-form";
+import { startOtpCountdown } from "../lib/otp-countdown";
+
+vi.mock("../lib/otp-countdown", () => ({
+  startOtpCountdown: vi.fn(),
+  stopOtpCountdown: vi.fn(),
+  moduleStartedAtFromRun: (_run: unknown, moduleId: string) =>
+    (moduleId === "auth" ? "2026-08-26T00:00:00Z" : null),
+}));
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  vi.clearAllMocks();
 });
 
 function formWith(authMethod: string): HTMLFormElement {
@@ -48,20 +57,10 @@ describe("syncConditionalFields", () => {
 });
 
 describe("updateOtpPanel", () => {
-  it("app.js 다리가 모듈 로드 뒤 설치돼도 WAITING_INPUT 패널을 갱신한다", () => {
-    let countdownStartedAt: string | null | undefined;
-    window.__executeLegacy = {
-      setInlineFeedback: () => undefined,
-      readErrorMessage: async () => "",
-      bindScheduleBuilder: () => undefined,
-      buildScheduleCron: () => ({}),
-      refreshScheduleList: async () => undefined,
-      startOtpCountdown: (startedAt) => { countdownStartedAt = startedAt; },
-      stopOtpCountdown: () => undefined,
-      moduleStartedAtFromRun: (_run, moduleId) => moduleId === "auth" ? "2026-08-26T00:00:00Z" : null,
-    };
+  it("WAITING_INPUT 패널을 갱신하고 해당 모듈의 started_at 으로 카운트다운을 건다", () => {
     document.body.innerHTML = `
-      <section id="otp-panel" class="is-hidden"><p id="otp-prompt"></p></section>`;
+      <section id="otp-panel" class="is-hidden"><p id="otp-prompt"></p></section>
+      <p id="otp-countdown" class="is-hidden"></p>`;
 
     updateOtpPanel({
       awaiting_input_module_id: "auth",
@@ -72,6 +71,9 @@ describe("updateOtpPanel", () => {
     expect(panel.classList.contains("is-hidden")).toBe(false);
     expect(panel.dataset.awaitingModuleId).toBe("auth");
     expect(document.getElementById("otp-prompt")!.textContent).toBe("휴대폰으로 받은 OTP를 입력하세요.");
-    expect(countdownStartedAt).toBe("2026-08-26T00:00:00Z");
+    expect(startOtpCountdown).toHaveBeenCalledWith(
+      "2026-08-26T00:00:00Z",
+      document.getElementById("otp-countdown"),
+    );
   });
 });

@@ -1128,67 +1128,14 @@ function startRuntimeTicker() {
     window.setInterval(tickRunningElapsed, 1000);
 }
 
-const OTP_VALIDITY_SECONDS = 180;
-let otpCountdownTimer = null;
-
-function clearOtpCountdownTimer() {
-    if (otpCountdownTimer) {
-        window.clearInterval(otpCountdownTimer);
-        otpCountdownTimer = null;
-    }
-}
-
-function stopOtpCountdown() {
-    clearOtpCountdownTimer();
-    const node = document.getElementById("otp-countdown");
-    if (node) {
-        node.classList.add("is-hidden");
-        node.textContent = "";
-    }
-}
-
-function startOtpCountdown(startedAtIso) {
-    const node = document.getElementById("otp-countdown");
-    if (!node) {
-        return;
-    }
-    clearOtpCountdownTimer();
-    const startedMs = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
-    const baselineMs = Number.isNaN(startedMs) ? Date.now() : startedMs;
-    node.classList.remove("is-hidden");
-
-    const tick = () => {
-        const remaining = OTP_VALIDITY_SECONDS - Math.floor((Date.now() - baselineMs) / 1000);
-        if (remaining > 0) {
-            node.textContent = `⏳ 인증 유효시간 ${formatClock(remaining * 1000)} 남음`;
-            node.classList.remove("bg-red-100", "text-red-700");
-            node.classList.add("bg-amber-100", "text-amber-700");
-        } else {
-            node.textContent = "⚠ 인증 유효시간이 지났을 수 있습니다. 인증을 다시 시도하세요.";
-            node.classList.remove("bg-amber-100", "text-amber-700");
-            node.classList.add("bg-red-100", "text-red-700");
-            clearOtpCountdownTimer();
-        }
-    };
-    tick();
-    otpCountdownTimer = window.setInterval(tick, 1000);
-}
-
-function moduleStartedAtFromRun(runPayload, moduleId) {
-    const module = (runPayload?.modules ?? []).find((item) => item.module_id === moduleId);
-    return module?.started_at ?? null;
-}
-
-// Cycle 4까지 남는 공용 일정·피드백·OTP 보조 함수의 TypeScript 실행 화면 경계.
+// Cycle 4까지 남는 공용 일정·피드백 보조 함수의 TypeScript 실행 화면 경계.
+// OTP 카운트다운은 app/web/frontend/lib/otp-countdown.ts 로 승격됨.
 window.__executeLegacy = {
     setInlineFeedback,
     readErrorMessage,
     bindScheduleBuilder,
     buildScheduleCron,
     refreshScheduleList,
-    startOtpCountdown,
-    stopOtpCountdown,
-    moduleStartedAtFromRun,
 };
 
 function otpFeedbackNode() {
