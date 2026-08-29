@@ -11,6 +11,51 @@ from app.core.status_labels import suite_status_label
 from app.core.suite_models import SuiteEvent, SuiteRun, SuiteStep
 from app.domain.snapshots import SuiteSnapshot
 
+_SUITE_ACTIVE_VIEW_STATUSES = {
+    SuiteStatus.PENDING,
+    SuiteStatus.RUNNING,
+    SuiteStatus.WAITING_INPUT,
+}
+_TERMINAL_EXPAND_ORDER = (SuiteStatus.ERROR, SuiteStatus.ANOMALY)
+
+
+def compute_expanded_step_order(
+    status: SuiteStatus,
+    steps: list[SuiteStep],
+    current_step_index: int,
+    awaiting_input_run_id: str | None,
+) -> int | None:
+    """자동으로 펼칠 스텝의 order — 수트 상태의 순수 함수(설계 D4·D8).
+
+    진행 중: 입력 대기 스텝이 있으면 그것, 없으면 현재 스텝.
+    종료됨: 첫 error → 없으면 첫 anomaly → 없으면 없음(전부 접힘).
+
+    클라이언트가 같은 규칙을 다시 구현하면 서버 렌더와 WS 갱신이 어긋난다.
+    """
+    if not steps:
+        return None
+
+    if awaiting_input_run_id:
+        for step in steps:
+            if step.run_id == awaiting_input_run_id:
+                return step.order
+
+    for step in steps:
+        if step.status == SuiteStatus.WAITING_INPUT:
+            return step.order
+
+    if status in _SUITE_ACTIVE_VIEW_STATUSES:
+        for step in steps:
+            if step.order == current_step_index:
+                return step.order
+        return None
+
+    for wanted in _TERMINAL_EXPAND_ORDER:
+        for step in steps:
+            if step.status == wanted:
+                return step.order
+    return None
+
 
 class SuiteView(BaseModel):
     """Suite 의 **읽기 모델(프레젠테이션 프로젝션)** — ``RunView`` 의 Suite 짝.
@@ -44,6 +89,7 @@ class SuiteView(BaseModel):
     created_by_user_name: str | None = None
     triggered_by: str = "manual"
     schedule_id: str | None = None
+    expanded_step_order: int | None = None
 
     @classmethod
     def from_snapshot(cls, snapshot: SuiteSnapshot) -> SuiteView:
@@ -69,6 +115,9 @@ class SuiteView(BaseModel):
             created_by_user_name=suite.created_by_user_name,
             triggered_by=suite.triggered_by,
             schedule_id=suite.schedule_id,
+            expanded_step_order=compute_expanded_step_order(
+                suite.status, suite.steps, suite.current_step_index, suite.awaiting_input_run_id
+            ),
         )
 
     @classmethod
@@ -86,17 +135,20 @@ class SuiteView(BaseModel):
         는 유효한 ``SuiteStep`` dict 여야 한다(요약이 그 형태를 그대로 싣는다).
         """
         status = SuiteStatus(summary["status"])
+        steps = [SuiteStep(**step) for step in summary.get("steps", [])]
+        current_step_index = summary.get("current_step_index", 0)
+        awaiting_input_run_id = summary.get("awaiting_input_run_id")
         return cls(
             suite_id=suite_id,
             status=status,
             status_label=suite_status_label(status),
-            steps=[SuiteStep(**step) for step in summary.get("steps", [])],
-            current_step_index=summary.get("current_step_index", 0),
+            steps=steps,
+            current_step_index=current_step_index,
             requested_at=summary["requested_at"],
             started_at=summary.get("started_at"),
             ended_at=summary.get("ended_at"),
             active_run_id=summary.get("active_run_id"),
-            awaiting_input_run_id=summary.get("awaiting_input_run_id"),
+            awaiting_input_run_id=awaiting_input_run_id,
             awaiting_input_prompt=summary.get("awaiting_input_prompt"),
             browser_mode=summary.get("browser_mode") or "headed",
             selected_system_codes=summary.get("selected_system_codes", []),
@@ -104,6 +156,9 @@ class SuiteView(BaseModel):
             created_by_user_name=summary.get("created_by_user_name"),
             triggered_by=summary.get("triggered_by", "manual"),
             schedule_id=summary.get("schedule_id"),
+            expanded_step_order=compute_expanded_step_order(
+                status, steps, current_step_index, awaiting_input_run_id
+            ),
         ).model_dump(mode="json")
 
 
