@@ -11,7 +11,7 @@ pytest>=9.1.1,<10.0
 # async def 테스트 네이티브 지원 (asyncio_mode="auto" — 수동 asyncio.run 래핑 제거)
 pytest-asyncio>=0.24,<2.0
 # 커버리지 래칫 게이트(coverage) — 임계값은 pyproject [tool.coverage.report] fail_under 가 SSOT
-pytest-cov>=7.0,<8.0
+pytest-cov>=7.1.0,<8.0
 
 # 아키텍처 경계 계약 강제(CI 게이트 lint-imports — pyproject [tool.importlinter])
 import-linter>=2.0,<3.0
