@@ -21,6 +21,7 @@ export type SuiteLike = {
   status?: unknown;
   steps?: SuiteStepLike[];
   current_step_index?: number;
+  started_at?: string | null;
   active_run_id?: string | null;
   awaiting_input_run_id?: string | null;
   awaiting_input_prompt?: string | null;
@@ -143,20 +144,25 @@ export function updateSuiteProgress(suite: SuiteLike): void {
   updateSuiteEtaBlock(suite, steps, currentStep);
 }
 
-// (가) 경과·ETA. 경과는 진행 소켓이 이미 들고 있는 현재 하위 Run 의 started_at 에서 얻는다 —
-// 없으면 0 으로 본다. baseline 이 비어도 computeSuiteEta 가 partial/null 로 알아서 떨어뜨린다.
+// (가) 경과·ETA.
+// 화면에 보이는 "경과" 는 수트 전체 경과다 — suite.started_at 에서 잰다(스냅샷 페이로드에
+// 바로 있으므로 첫 페인트부터 정확하다). ETA 계산에 들어가는 "현재 스텝 경과" 는 별개로,
+// 진행 소켓이 들고 있는 현재 하위 Run 의 started_at 에서 잰다(설계 §3.3). 없으면 0 으로 본다.
 function updateSuiteEtaBlock(
   suite: SuiteLike,
   steps: SuiteStepLike[],
   currentStep: SuiteStepLike | undefined,
 ): void {
+  const suiteStartedMs = suite.started_at ? Date.parse(String(suite.started_at)) : Number.NaN;
+  const suiteElapsedMs = Number.isNaN(suiteStartedMs) ? 0 : Math.max(0, Date.now() - suiteStartedMs);
+
   const run = activeRunPayload() as { started_at?: string | null } | null;
-  const startedMs = run?.started_at ? Date.parse(run.started_at) : Number.NaN;
-  const elapsedMs = Number.isNaN(startedMs) ? 0 : Math.max(0, Date.now() - startedMs);
+  const stepStartedMs = run?.started_at ? Date.parse(run.started_at) : Number.NaN;
+  const stepElapsedMs = Number.isNaN(stepStartedMs) ? 0 : Math.max(0, Date.now() - stepStartedMs);
 
   const elapsedNode = document.getElementById("suite-progress-elapsed");
   if (elapsedNode) {
-    elapsedNode.textContent = formatClock(elapsedMs);
+    elapsedNode.textContent = formatClock(suiteElapsedMs);
   }
 
   const etaNode = document.getElementById("suite-progress-eta");
@@ -171,7 +177,7 @@ function updateSuiteEtaBlock(
     })),
     baselines: suiteStepBaselines(),
     currentStepOrder: currentStep?.order ?? null,
-    currentStepElapsedMs: elapsedMs,
+    currentStepElapsedMs: stepElapsedMs,
     suiteStatus: String(suite.status ?? ""),
   });
   const parts: string[] = [];

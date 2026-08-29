@@ -79,23 +79,40 @@ export function updateSuiteOtpPanel(suite: SuiteLike): void {
   }
   panel.hidden = !awaitingRunId;
 
-  // (다) OTP 카운트다운. 공유 타이머는 대상 노드를 하나만 기억하므로, 새 노드에서 시작하기 전에
-  // 반드시 먼저 멈춘다 — 안 그러면 이전 노드의 텍스트가 멈춘 값으로 남는다.
-  const countdownNode = document.getElementById("suite-otp-countdown");
-  stopOtpCountdown();
+  // (다) OTP 카운트다운.
   if (!awaitingRunId) {
+    stopOtpCountdown();
+    const countdownNode = document.getElementById("suite-otp-countdown");
     if (countdownNode) {
       countdownNode.hidden = true;
     }
     return;
   }
-  // 진행 소켓이 이미 받아 둔 현재 하위 Run 페이로드에서 대기 모듈의 시작 시각을 얻는다.
+  refreshSuiteOtpCountdown();
+}
+
+// 대기 중일 때만, 실제 started_at 을 알게 된 순간 카운트다운을 다시 건다.
+// 진행 소켓의 Run 페이로드는 fetch 가 비동기라 첫 스냅샷보다 늦게 도착한다 — 그래서
+// socket.ts 의 noteRunPayload 가 페이로드를 캐시할 때마다 이것을 다시 부른다.
+// started_at 을 모르는 동안에는 아예 걸지 않는다: Date.now() 폴백으로 시작하면
+// OTP 창 중간에 페이지를 연 사용자에게 남은 시간이 실제보다 길게 보인다.
+export function refreshSuiteOtpCountdown(): void {
+  const panel = document.getElementById("suite-otp-panel");
+  if (!panel || panel.hidden) {
+    return;
+  }
   const run = activeRunPayload() as { awaiting_input_module_id?: string | null } | null;
   const startedAt = moduleStartedAtFromRun(run, run?.awaiting_input_module_id ?? "");
+  if (!startedAt) {
+    return;
+  }
+  const countdownNode = document.getElementById("suite-otp-countdown");
   if (countdownNode) {
     // 공유 타이머는 is-hidden 클래스만 다룬다 — 네이티브 hidden 은 여기서 연다.
     countdownNode.hidden = false;
   }
+  // 공유 타이머는 대상 노드를 하나만 기억한다 — 새로 걸기 전에 반드시 먼저 멈춘다.
+  stopOtpCountdown();
   startOtpCountdown(startedAt, countdownNode);
 }
 

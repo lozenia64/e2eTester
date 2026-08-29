@@ -1,5 +1,6 @@
 // app.js 의 수트 소켓 묶음(수트 WS + 현재 하위 Run 진행 WS)을 로직 변경 없이 옮겼다.
 // 한 번에 하나의 하위 Run 만 구독한다 — 활성 Run 이 바뀌면 이전 소켓을 닫고 새로 연다.
+import { refreshSuiteOtpCountdown } from "./actions";
 import { renderSuiteSnapshot, renderSuiteStatusBadge, updateSuiteActions, type SuiteLike } from "./render";
 import { updateSuiteStepModuleProgress } from "./steps";
 
@@ -33,6 +34,9 @@ function noteRunPayload(run: unknown): void {
   const runId = (run as { run_id?: string } | null | undefined)?.run_id;
   if (runId && runId === suiteRunProgressRunId) {
     suiteRunProgressPayload = run;
+    // 페이로드가 이제야 도착했다 — 대기 중이면 카운트다운을 실제 started_at 으로 교정한다.
+    // 수트 WS 는 OTP 대기 중 아무 이벤트도 내지 않으므로 여기서 몰지 않으면 영영 못 고친다.
+    refreshSuiteOtpCountdown();
   }
 }
 
