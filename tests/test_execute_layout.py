@@ -157,10 +157,16 @@ def test_x_cloak_is_global_for_execute_and_dashboard_consumers(client) -> None:
 
 
 def test_exec_shell_assigns_overflow_to_the_detail_owner() -> None:
-    """뷰포트 셸은 잠그고, 실제 콘텐츠 오버플로는 우측 detail만 소유한다."""
+    """뷰포트 셸은 잠그고, 실제 콘텐츠 오버플로는 우측 detail만 소유한다.
+
+    넌스크롤 셸 규칙은 D7 로 shell.css(.dash·.exec·.suite 공통)로 이관됐다 —
+    셸의 overflow 잠금은 거기서, detail 스크롤 소유는 execute.css 에서 확인한다.
+    """
+    shell_css = Path("app/web/frontend/styles/shell.css").read_text(encoding="utf-8")
     execute_css = Path("app/web/frontend/styles/execute.css").read_text(encoding="utf-8")
 
-    shell_rule = execute_css.split("body:has(.exec) {", 1)[1].split("}", 1)[0]
+    assert "body:has(.exec)" in shell_css
+    shell_rule = shell_css.split("{", 1)[1].split("}", 1)[0]
     detail_rule = execute_css.split(".exec-detail {", 1)[1].split("}", 1)[0]
     assert "overflow: hidden;" in shell_rule
     assert "overflow-y: auto;" in detail_rule
