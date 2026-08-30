@@ -1,0 +1,95 @@
+/* 넌스크롤 셸 — 관제탑 화면 공통(설계 D7).
+
+   .dash(일간 대시보드) · .exec(점검 실행) · .suite(수트 상세)가 같은 규칙을
+   쓴다. 세 번째 소비자가 생긴 시점에 dashboard.css·execute.css 의 복제를
+   여기로 합쳤다. 네 번째(런 상세, Cycle 3)도 셀렉터만 추가하면 된다. */
+
+body:has(.dash),
+body:has(.exec),
+body:has(.suite) {
+  overflow: hidden;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+}
+
+body:has(.dash) main,
+body:has(.dash) main > div,
+body:has(.exec) main,
+body:has(.exec) main > div,
+body:has(.suite) main,
+body:has(.suite) main > div {
+  max-width: none;
+  padding-top: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  height: 100dvh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* .dash 고유 — 셸이 아니라 대시보드의 컨테이너 컨텍스트다. 테스트가
+   dashboard.css 에서 body:has( 를 금지해 여기에만 둔다(.exec·.suite 는 제외). */
+body:has(.dash) main > div {
+  container-type: inline-size;
+  container-name: dash-shell;
+}
+
+@media (min-width: 768px) {
+  body:has(.dash) main,
+  body:has(.exec) main,
+  body:has(.suite) main {
+    padding-left: 16rem;
+    width: 100%;
+  }
+
+  body:has(.dash) main > div,
+  body:has(.exec) main > div,
+  body:has(.suite) main > div {
+    padding-left: 0;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 767px) {
+  body:has(.dash),
+  body:has(.exec),
+  body:has(.suite) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  body:has(.dash) > header,
+  body:has(.exec) > header,
+  body:has(.suite) > header {
+    flex-shrink: 0;
+  }
+
+  body:has(.dash) main,
+  body:has(.exec) main,
+  body:has(.suite) main {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
+  body:has(.dash) main > div,
+  body:has(.exec) main > div,
+  body:has(.suite) main > div {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body:has(.dash) main,
+  body:has(.dash) main > div,
+  body:has(.exec) main,
+  body:has(.exec) main > div,
+  body:has(.suite) main,
+  body:has(.suite) main > div {
+    padding-left: 0;
+    width: 100%;
+  }
+
+}

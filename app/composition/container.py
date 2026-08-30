@@ -321,6 +321,7 @@ class AppContainer:
         app.state.preset_service = self.preset.preset_service
         app.state.run_service = self.run.services.run_service
         app.state.run_queries = self.run.run_queries
+        app.state.run_summary_query = self.run.repos.run_summary_query
         app.state.daily_queries = self.insights.daily_queries
         app.state.daily_summary_queries = self.insights.daily_summary_queries
         app.state.admin_dashboard_queries = self.insights.admin_dashboard_queries

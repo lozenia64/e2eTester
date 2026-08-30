@@ -1,4 +1,4 @@
-import { getLegacy } from "../../execute/legacy-bridge";
+import { moduleStartedAtFromRun, startOtpCountdown, stopOtpCountdown } from "../../lib/otp-countdown";
 
 type OtpRunPayload = {
   awaiting_input_module_id?: string;
@@ -23,12 +23,11 @@ export function updateOtpPanel(runOrMessage: unknown): void {
   if (promptNode) promptNode.textContent = prompt;
   panel.classList.toggle("is-hidden", !moduleId);
 
-  const legacy = getLegacy();
   if (moduleId) {
-    const startedAt = legacy.moduleStartedAtFromRun(run, moduleId)
-      ?? legacy.moduleStartedAtFromRun(run.payload, moduleId);
-    legacy.startOtpCountdown(startedAt);
+    const startedAt = moduleStartedAtFromRun(run, moduleId)
+      ?? moduleStartedAtFromRun(run.payload, moduleId);
+    startOtpCountdown(startedAt, document.getElementById("otp-countdown"));
   } else {
-    legacy.stopOtpCountdown();
+    stopOtpCountdown();
   }
 }

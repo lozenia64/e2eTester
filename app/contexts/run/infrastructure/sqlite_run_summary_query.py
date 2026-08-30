@@ -6,7 +6,7 @@ blob(``runs``) 테이블을 절대 만지지 않는다. 필터·정렬·페이�
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.contexts.run.contracts.query_rows import (
@@ -237,6 +237,35 @@ class SqliteRunSummaryQuery:
             moment = _parse_dt(row["last_finished_at"])
             if moment is not None:
                 result[row["system_code"]] = moment
+        return result
+
+    async def avg_duration_ms_by_system(self, *, days: int = 30) -> dict[str, int]:
+        """시스템별 평균 Run 소요시간(ms) — ETA baseline(설계 §3.3).
+
+        PASSED 만 센다. 중간에 끊긴 Run 의 소요시간은 '정상 실행이 얼마나 걸리는가'
+        의 표본이 아니며, 섞으면 평균이 짧아져 ETA 가 낙관적으로 빗나간다.
+        run_history_index 에 duration 컬럼이 없어 시각 차로 계산한다.
+        """
+        since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        rows = await self._db.fetchall(
+            """
+            SELECT system_code,
+                   AVG((julianday(ended_at) - julianday(started_at)) * 86400000.0) AS avg_ms
+            FROM run_history_index
+            WHERE ended_at IS NOT NULL
+              AND started_at IS NOT NULL
+              AND status = ?
+              AND requested_at >= ?
+            GROUP BY system_code
+            """,
+            (RunStatus.PASSED.value, since),
+        )
+        result: dict[str, int] = {}
+        for row in rows:
+            value = row["avg_ms"]
+            if value is None:
+                continue
+            result[row["system_code"]] = round(value)
         return result
 
     async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:

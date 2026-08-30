@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -167,6 +167,21 @@ class InMemoryRunSummaryQuery:
             if row.system_code not in result or moment > result[row.system_code]:
                 result[row.system_code] = moment
         return result
+
+    async def avg_duration_ms_by_system(self, *, days: int = 30) -> dict[str, int]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        buckets: dict[str, list[float]] = {}
+        for row in await self._all_rows():
+            if row.status != RunStatus.PASSED:
+                continue
+            if row.started_at is None or row.ended_at is None:
+                continue
+            if row.requested_at < cutoff:
+                continue
+            buckets.setdefault(row.system_code, []).append(
+                (row.ended_at - row.started_at).total_seconds() * 1000.0
+            )
+        return {code: round(sum(v) / len(v)) for code, v in buckets.items() if v}
 
     async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:
         last_map = await self.last_finished_at_by_system()
