@@ -85,6 +85,7 @@ function appendLogEntry(entry: LogEntry): void {
   if (expandedVisible.at(-1) !== entry) {
     return;
   }
+  if (logDisplayLimit > 2000) logDisplayLimit += 1;
   const nearBottom = isNearBottom(consoleNode);
   renderLogConsole({ followBottom: nearBottom });
 }

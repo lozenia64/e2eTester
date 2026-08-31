@@ -202,6 +202,20 @@ describe("run socket", () => {
     expect(document.querySelector("#log-show-older")).toBeNull();
   });
 
+  it("4,000줄까지 확장한 로그도 실시간 추가 시 기존 시작 줄을 유지한다", () => {
+    const live = socket();
+    live.emit(snapshot(Array.from({ length: 4_500 }, (_, index) => `line-${index}`)));
+    document.querySelector<HTMLButtonElement>("#log-show-older")?.click();
+
+    expect(document.querySelector("#log-console .log-line")?.textContent).toBe("[b] line-500");
+    live.emit({ event_type: "module_log", payload: { module_id: "b", message: "line-4500" } });
+
+    expect(document.querySelectorAll("#log-console .log-line")).toHaveLength(4_001);
+    expect(document.querySelector("#log-console .log-line")?.textContent).toBe("[b] line-500");
+    expect(document.querySelector("#log-console .log-line:last-child")?.textContent).toBe("[b] line-4500");
+    expect(document.querySelector("#log-show-older")?.textContent).toContain("이전 500줄 더 보기");
+  });
+
   it("필터 밖 로그와 초점이 그대로인 모듈 이벤트는 조사 중 스크롤을 건드리지 않는다", () => {
     const live = socket();
     live.emit(snapshot());
