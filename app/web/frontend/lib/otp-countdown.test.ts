@@ -19,12 +19,15 @@ describe("startOtpCountdown", () => {
     vi.setSystemTime(new Date("2026-08-29T09:00:10Z"));
     const el = document.createElement("p");
     el.hidden = true;
+    el.classList.add("is-hidden");
 
     startOtpCountdown("2026-08-29T09:00:00Z", el);
     expect(el.hidden).toBe(false);
+    expect(el.classList.contains("is-hidden")).toBe(false);
 
     stopOtpCountdown();
     expect(el.hidden).toBe(true);
+    expect(el.classList.contains("is-hidden")).toBe(false);
   });
 
   it("1초마다 갱신한다", () => {

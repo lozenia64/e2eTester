@@ -24,7 +24,7 @@ function clearOtpCountdownTimer(): void {
 export function stopOtpCountdown(): void {
   clearOtpCountdownTimer();
   if (currentTarget) {
-    currentTarget.classList.add("is-hidden");
+    currentTarget.classList.remove("is-hidden");
     currentTarget.hidden = true;
     currentTarget.textContent = "";
     currentTarget = null;
