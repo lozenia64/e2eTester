@@ -222,8 +222,10 @@ DOM 에 유지하는 줄 수를 **2,000** 으로 제한한다. 그 위는 접고
 
 | 항목 | 다음 |
 | --- | --- |
-| `app.js` 잔여 약 853줄 | Cycle 4(Run 이력, 여기서 소멸) · Cycle 6(예약) |
-| `__executeLegacy` 5키 | Cycle 4(execute 잔여 정리)·Cycle 6(예약) |
+| `app.js` 잔여 866줄(2026-09-01 `Get-Content` 실측), 런 상세 함수 0개 | Cycle 4(Run 이력, 여기서 소멸) · Cycle 6(예약) |
+| `frontend/run/` 실측 | `actions.ts` 159줄, `focus.ts` 28줄, `log.ts` 60줄, `modules.ts` 132줄, `progress.ts` 26줄, `socket.ts` 294줄, `styles.css` 234줄; 테스트는 각각 57·109·143·44·235줄, `entries/run.ts` 15줄 — 모두 400줄 미만 |
+| 남은 `__executeLegacy` 5키 | `setInlineFeedback`, `readErrorMessage`, `bindScheduleBuilder`, `buildScheduleCron`, `refreshScheduleList` — Cycle 4(execute 잔여 정리)·Cycle 6(예약) |
+| 소멸·격리 확인 | `__executeOtpPanel`은 `entries/main.ts`·`execute/legacy-bridge.ts`·`app.js`에 0건이고, `run/`·`entries/run.ts`는 `window.__execute*`를 참조하지 않는다 |
 | `FG004_ALLOWLIST` 의 `app.css` | Cycle 4~6 |
 | `FG005_ALLOWLIST` 의 `/static/app.js` | Cycle 4 |
 | 공통 셸 | 네 화면이 쓴다. 다섯 번째부터는 셀렉터만 추가 |

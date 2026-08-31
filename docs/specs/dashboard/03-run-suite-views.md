@@ -10,10 +10,16 @@
 
 | Path | 설명 |
 | --- | --- |
-| `/runs/{run_id}` | Run 상세, 모듈 노드, 로그, OTP 패널, WS |
+| `/runs/{run_id}` | 넌스크롤 2열 Run 상세 — 모듈 관제, 실패 분석, 로그, OTP 패널, WS |
 | `/suites/{suite_id}` | 넌스크롤 수직 파이프라인 — 진행 중 스텝만 자동 전개, 상단 진도 블록(경과·ETA), 스텝별 실측/평균 소요시간, 하위 Run 링크, OTP 패널 |
 
-**WS:** Run 상세는 `app.js`. 수트 상세는 `app/web/frontend/suite/` (엔트리 `entries/suite.ts`) — 수트 이벤트 WS + 현재 하위 Run 진행 WS 두 개.
+**WS:** Run 상세는 `app/web/frontend/run/` (엔트리 `entries/run.ts`). 수트 상세는 `app/web/frontend/suite/` (엔트리 `entries/suite.ts`) — 수트 이벤트 WS + 현재 하위 Run 진행 WS 두 개.
+
+**Run 상세 구조(Cycle 3):**
+- 셸: `body:has(.run)` 넌스크롤(공통 `shell.css`). 좌우 열이 각각 모듈 목록과 로그의 세로 스크롤 하나를 소유한다.
+- 자동 초점: `error` → `anomaly` → `running`/`waiting_input` 순으로 첫 모듈을 초점 처리하고, 실패 분석을 펼친다.
+- 로그 필터: 초점 모듈을 자동으로 따른다. 사용자가 필터를 바꾸면 페이지를 떠날 때까지 자동 추종을 멈춘다.
+- 도메인 모델·이벤트 wire 불변.
 
 **수트 상세 구조(Cycle 2):**
 - 셸: `body:has(.suite)` 넌스크롤(공통 `shell.css`). 내부 스크롤은 스텝 목록 하나뿐.
@@ -84,8 +90,28 @@ Then body 세로 스크롤이 0 이다
 And 펼쳐진 스텝의 모듈 진행이 뷰포트 안에 있다
 ```
 
+### AC-005: 런 상세 2열과 초점 전환
+
+```gherkin
+Given 모듈이 실패한 run
+When 상세 화면을 연다
+Then 그 모듈에 data-focus="true" 가 있고 AI 분석이 뷰포트 안에 있다
+And 로그 필터가 그 모듈로 맞춰져 있다
+And 사용자가 필터를 바꾸면 이후 자동 추종이 멈춘다
+```
+
+### AC-006: 런 상세 스크롤 소유권
+
+```gherkin
+Given 모듈 10개짜리 run
+When 1366x768 에서 렌더한다
+Then body 세로 스크롤이 0 이다
+And 내부 스크롤러가 좌우 열에 하나씩 정확히 2개다
+```
+
 ## 6. 스크립트
 
-- `app.js` — run 상세·Run 이력·예약 오버뷰 (수트 몫은 Cycle 2 에서 이관)
+- `entries/run.ts` + `app/web/frontend/run/` — Run 상세
+- `app.js` — Run 이력·예약 오버뷰·공용 피드백 보조 함수
 - `entries/suite.ts` + `app/web/frontend/suite/` — 수트 상세
 - `admin-dashboard.js`, `admin-runs.js`, `admin-ops.js`, `admin-stats.js`
