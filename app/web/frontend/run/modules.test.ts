@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { applyFocus, moduleRuntimeState, updateModuleCard } from "./modules";
 
 function host(...specs: Array<[string, string]>) {
-  document.body.innerHTML = specs
+  const cards = specs
     .map(
       ([id, status], order) =>
         `<li class="run-mod" data-module-id="${id}" data-order="${order}" data-status="${status}"></li>`,
     )
     .join("");
+  document.body.innerHTML = `<ol id="run-module-list">${cards}</ol>`;
   return document.body;
 }
 
@@ -28,7 +29,7 @@ function moduleCard(id: string, status: string, order: number) {
 }
 
 function moduleHost(...specs: Array<[string, string]>) {
-  document.body.innerHTML = specs.map(([id, status], order) => moduleCard(id, status, order)).join("");
+  document.body.innerHTML = `<ol id="run-module-list">${specs.map(([id, status], order) => moduleCard(id, status, order)).join("")}</ol>`;
 }
 
 function update(module_id: string, status: string, failure_analysis: unknown = null) {

@@ -32,7 +32,15 @@ function setText(root: ParentNode, selector: string, value: unknown): void {
 }
 
 function moduleCards(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>("[data-module-id]"));
+  // 기본 문서 경로는 Run 목록만 모듈로 본다. 로그·보조 패널이 같은 data 속성을
+  // 써도 초점과 카드 갱신에 섞이지 않는다. 명시 root는 작은 DOM fixture도 지원한다.
+  if (root === document) {
+    return Array.from(document.querySelectorAll<HTMLElement>("#run-module-list [data-module-id]"));
+  }
+  const list = root instanceof HTMLElement && root.id === "run-module-list"
+    ? root
+    : root.querySelector<HTMLElement>("#run-module-list");
+  return Array.from((list ?? root).querySelectorAll<HTMLElement>("[data-module-id]"));
 }
 
 export function rememberModuleState(module: unknown): void {

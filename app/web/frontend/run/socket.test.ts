@@ -88,6 +88,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("run socket", () => {
+  it("목록 밖 data-module-id는 초점·진행률·카드 갱신에 섞이지 않는다", () => {
+    const stray = document.createElement("div");
+    stray.dataset.moduleId = "stray";
+    stray.dataset.status = "error";
+    stray.dataset.order = "-1";
+    document.body.appendChild(stray);
+    const live = socket();
+    live.emit(snapshot());
+
+    expect(document.querySelector('[data-focus="true"]')?.getAttribute("data-module-id")).toBe("b");
+    expect(document.getElementById("run-progress-label")?.textContent).toBe("통과 1/2");
+    expect(stray.dataset.focus).toBeUndefined();
+
+    live.emit({
+      event_type: "module_started",
+      payload: { module: { module_id: "stray", status: "passed", artifacts: [] } },
+    });
+    expect(stray.dataset.status).toBe("error");
+  });
+
   it("로그 행을 모듈 카드·초점·진행률 입력에서 분리한다", () => {
     socket().emit(snapshot());
 
