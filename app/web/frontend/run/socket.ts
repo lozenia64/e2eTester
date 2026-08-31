@@ -29,8 +29,7 @@ function record(value: unknown): RecordValue | null {
 }
 
 function currentRunId(): string {
-  return document.getElementById("node-grid")?.dataset.runId
-    ?? document.getElementById("run-root")?.dataset.runId
+  return document.getElementById("run-root")?.dataset.runId
     ?? "run";
 }
 
@@ -193,8 +192,7 @@ export function renderProgress(): void {
   const label = document.getElementById("run-progress-label");
   if (bar) {
     bar.style.width = `${summary.percent}%`;
-    bar.classList.toggle("bg-red-500", summary.failed > 0);
-    bar.classList.toggle("bg-emerald-500", summary.failed === 0);
+    bar.dataset.tone = summary.failed > 0 ? "error" : "passed";
   }
   if (label) label.textContent = `통과 ${summary.passed}/${summary.total}`;
   const detail = document.getElementById("run-progress-detail");
@@ -213,10 +211,8 @@ function tickRunningElapsed(): void {
     const startedMs = state.startedAt ? new Date(state.startedAt).getTime() : Number.NaN;
     if (isLive && !Number.isNaN(startedMs)) {
       elapsedNode.textContent = `⏱ ${formatClock(now - startedMs)}`;
-      elapsedNode.classList.remove("hidden");
       elapsedNode.hidden = false;
     } else {
-      elapsedNode.classList.add("hidden");
       elapsedNode.hidden = true;
       elapsedNode.textContent = "";
     }
@@ -229,42 +225,16 @@ export function startRuntimeTicker(): void {
 }
 
 function updateComparisonPanel(runPayload: unknown): void {
-  const panel = document.getElementById("comparison-panel");
-  if (!panel) return;
+  const chip = document.querySelector<HTMLAnchorElement>('[data-role="comparison-chip"]');
+  if (!chip) return;
   const comparison = record(runPayload)?.comparison;
   const data = record(comparison);
   const hasBaseline = Boolean(data?.has_baseline);
-  panel.classList.toggle("is-hidden", !hasBaseline);
-  panel.hidden = !hasBaseline;
+  chip.hidden = !hasBaseline;
   if (!hasBaseline || !data) return;
-  const link = document.getElementById("comparison-baseline-link") as HTMLAnchorElement | null;
-  if (link && data.baseline_run_id) {
-    link.href = `/runs/${data.baseline_run_id}`;
-    link.textContent = `기준 Run: ${data.baseline_run_id}`;
-  }
-  const body = document.getElementById("comparison-body");
-  if (!body) return;
-  const groups = [
-    { label: "새 이상징후", names: data.newly_failed, cls: "bg-amber-100 text-amber-800" },
-    { label: "복구됨", names: data.recovered, cls: "bg-emerald-100 text-emerald-700" },
-    { label: "지속 이상징후", names: data.still_failing, cls: "bg-orange-100 text-orange-700" },
-  ];
-  const chips: HTMLElement[] = [];
-  for (const group of groups) {
-    for (const name of Array.isArray(group.names) ? group.names : []) {
-      const chip = document.createElement("span");
-      chip.className = `inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium ${group.cls}`;
-      chip.textContent = `${group.label}: ${String(name)}`;
-      chips.push(chip);
-    }
-  }
-  if (!chips.length) {
-    const note = document.createElement("span");
-    note.className = "text-gray-500";
-    note.textContent = "직전 실행과 비교해 모듈 상태 변화가 없습니다.";
-    chips.push(note);
-  }
-  body.replaceChildren(...chips);
+  if (data.baseline_run_id) chip.href = `/runs/${String(data.baseline_run_id)}`;
+  const count = (value: unknown): number => Array.isArray(value) ? value.length : 0;
+  chip.textContent = `직전 대비 · 새 이상 ${count(data.newly_failed)} · 복구 ${count(data.recovered)} · 지속 ${count(data.still_failing)}`;
 }
 
 export function bindRunSocket(): void {

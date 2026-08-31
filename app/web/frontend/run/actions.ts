@@ -1,19 +1,7 @@
 // Run 상세의 OTP·취소·재실행 액션. app.js 전역 다리 없이 이 화면 안에서 끝낸다.
-const FEEDBACK_TONE_CLASSES = {
-  error: "text-red-600",
-  success: "text-emerald-600",
-  info: "text-gray-500",
-} as const;
-
-const TOAST_TONE_CLASSES = {
-  error: "border-red-200 bg-red-50 text-red-700",
-  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  info: "border-gray-200 bg-white text-gray-700",
-} as const;
-
 const RUN_ACTIVE_STATUSES = new Set(["pending", "running", "waiting_input"]);
 
-type Tone = keyof typeof FEEDBACK_TONE_CLASSES;
+type Tone = "error" | "success" | "info";
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {
@@ -26,18 +14,14 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 function setInlineFeedback(element: HTMLElement | null, message: string, tone: Tone = "error"): void {
   if (!element) return;
-  for (const toneClass of Object.values(FEEDBACK_TONE_CLASSES)) {
-    element.classList.remove(toneClass);
-  }
   if (!message) {
-    element.classList.add("is-hidden");
     element.hidden = true;
     element.textContent = "";
+    delete element.dataset.tone;
     return;
   }
-  element.classList.add(FEEDBACK_TONE_CLASSES[tone]);
-  element.classList.remove("is-hidden");
   element.hidden = false;
+  element.dataset.tone = tone;
   element.textContent = message;
 }
 
@@ -48,19 +32,19 @@ function showToast(message: string, tone: Tone = "error"): void {
     return;
   }
   const toast = document.createElement("div");
-  toast.className = `pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm font-medium shadow-lg transition-opacity duration-300 ${TOAST_TONE_CLASSES[tone]}`;
+  toast.className = "run-toast";
+  toast.dataset.tone = tone;
   toast.setAttribute("role", "alert");
   toast.textContent = message;
   container.appendChild(toast);
   window.setTimeout(() => {
-    toast.classList.add("opacity-0");
+    toast.classList.add("run-toast--leaving");
     window.setTimeout(() => toast.remove(), 300);
   }, 4000);
 }
 
 function currentRunId(): string {
-  return document.getElementById("node-grid")?.dataset.runId
-    ?? document.getElementById("run-root")?.dataset.runId
+  return document.getElementById("run-root")?.dataset.runId
     ?? "run";
 }
 
@@ -124,7 +108,6 @@ export function updateRunActions(status: unknown): void {
   const cancelButton = document.getElementById("run-cancel") as HTMLButtonElement | null;
   const rerunButton = document.getElementById("run-rerun") as HTMLButtonElement | null;
   if (cancelButton) {
-    cancelButton.classList.toggle("hidden", !isActive);
     cancelButton.hidden = !isActive;
     if (!isActive) {
       cancelButton.disabled = false;
@@ -132,7 +115,6 @@ export function updateRunActions(status: unknown): void {
     }
   }
   if (rerunButton) {
-    rerunButton.classList.toggle("hidden", isActive);
     rerunButton.hidden = isActive;
   }
 }

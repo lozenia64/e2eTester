@@ -18,7 +18,7 @@ function moduleCard(id: string, status: string, order: number) {
     <p data-role="module-message"></p>
     <span data-role="module-duration"></span>
     <span data-role="module-artifacts"></span>
-    <section class="analysis-panel is-hidden" data-role="failure-analysis" hidden>
+    <section class="analysis-panel" data-role="failure-analysis" hidden>
       <span data-role="analysis-category"></span>
       <p data-role="analysis-summary"></p>
       <p data-role="analysis-action"></p>
@@ -88,7 +88,7 @@ describe("updateModuleCard", () => {
     });
   });
 
-  it("새 실패 분석이 오면 레거시 숨김 클래스를 제거해 패널을 보인다", () => {
+  it("새 실패 분석이 오면 native hidden 속성으로 패널을 보인다", () => {
     moduleHost(["a", "error"]);
 
     update("a", "error", {
@@ -99,9 +99,18 @@ describe("updateModuleCard", () => {
     });
 
     const panel = document.querySelector<HTMLElement>('[data-role="failure-analysis"]')!;
-    expect(panel.classList.contains("is-hidden")).toBe(false);
     expect(panel.hidden).toBe(false);
     expect(panel.querySelector('[data-role="analysis-summary"]')!.textContent).toBe("버튼을 찾지 못했습니다.");
+  });
+
+  it("분석이 없으면 레거시 숨김 클래스 없이 native hidden 속성으로 감춘다", () => {
+    moduleHost(["a", "running"]);
+
+    update("a", "passed");
+
+    const panel = document.querySelector<HTMLElement>('[data-role="failure-analysis"]')!;
+    expect(panel.hidden).toBe(true);
+    expect(panel.classList.contains("is-hidden")).toBe(false);
   });
 
   it("상태가 바뀌면 이전 status 클래스를 새 상태 클래스로 교체한다", () => {

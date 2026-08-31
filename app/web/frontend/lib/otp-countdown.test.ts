@@ -15,6 +15,18 @@ describe("startOtpCountdown", () => {
     expect(el.textContent).not.toBe("");
   });
 
+  it("native hidden만 쓰는 카운트다운을 열고 stop에서 다시 감춘다", () => {
+    vi.setSystemTime(new Date("2026-08-29T09:00:10Z"));
+    const el = document.createElement("p");
+    el.hidden = true;
+
+    startOtpCountdown("2026-08-29T09:00:00Z", el);
+    expect(el.hidden).toBe(false);
+
+    stopOtpCountdown();
+    expect(el.hidden).toBe(true);
+  });
+
   it("1초마다 갱신한다", () => {
     vi.setSystemTime(new Date("2026-08-29T09:00:10Z"));
     const el = document.createElement("p");

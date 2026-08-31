@@ -11,8 +11,6 @@ declare global {
       buildScheduleCron(form: HTMLFormElement): ScheduleBuildResult;
       refreshScheduleList(): Promise<void>;
     };
-    // Run 상세 WebSocket 호출부가 TypeScript로 이관되면 공용 OTP 모듈과 함께 재검토·제거한다.
-    __executeOtpPanel?: { updateOtpPanel(runOrMessage: unknown): void };
   }
 }
 

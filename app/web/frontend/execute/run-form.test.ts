@@ -76,4 +76,14 @@ describe("updateOtpPanel", () => {
       document.getElementById("otp-countdown"),
     );
   });
+
+  it("native hidden만 쓰는 Run 패널도 WAITING_INPUT에서 연다", () => {
+    document.body.innerHTML = `
+      <section id="otp-panel" hidden><p id="otp-prompt"></p></section>
+      <p id="otp-countdown" hidden></p>`;
+
+    updateOtpPanel({ awaiting_input_module_id: "auth" });
+
+    expect(document.getElementById("otp-panel")!.hidden).toBe(false);
+  });
 });

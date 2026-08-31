@@ -25,6 +25,7 @@ export function stopOtpCountdown(): void {
   clearOtpCountdownTimer();
   if (currentTarget) {
     currentTarget.classList.add("is-hidden");
+    currentTarget.hidden = true;
     currentTarget.textContent = "";
     currentTarget = null;
   }
@@ -39,6 +40,7 @@ export function startOtpCountdown(startedAtIso: string | null, target: HTMLEleme
   const startedMs = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
   const baselineMs = Number.isNaN(startedMs) ? Date.now() : startedMs;
   target.classList.remove("is-hidden");
+  target.hidden = false;
 
   const tick = (): void => {
     const remaining = OTP_VALIDITY_SECONDS - Math.floor((Date.now() - baselineMs) / 1000);

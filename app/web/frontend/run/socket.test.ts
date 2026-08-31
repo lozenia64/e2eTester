@@ -41,6 +41,7 @@ function renderPage(): void {
   document.body.innerHTML = `<main id="run-root" data-run-id="run-1">
     <span id="run-status"></span>
     <button id="run-cancel"></button><button id="run-rerun"></button>
+    <a data-role="comparison-chip" hidden></a>
     <div id="run-progress-bar"></div><span id="run-progress-label"></span>
     <ol id="run-module-list">${moduleCard("a", "pending", 0)}${moduleCard("b", "pending", 1)}</ol>
     <select id="log-filter"><option value=""></option><option value="a"></option><option value="b"></option></select>
@@ -115,6 +116,51 @@ describe("run socket", () => {
     expect(document.querySelectorAll('[data-focus="true"]')).toHaveLength(1);
     expect(document.querySelector('[data-focus="true"]')?.getAttribute("data-module-id")).toBe("b");
     expect(document.getElementById("run-progress-label")?.textContent).toBe("통과 1/2");
+  });
+
+  it("snapshot과 완료 이벤트가 헤더 비교 칩의 요약과 기준 Run 링크를 갱신한다", () => {
+    const live = socket();
+    const initial = snapshot() as { event_type: string; payload: Record<string, unknown> };
+    live.emit({
+      ...initial,
+      payload: {
+        ...initial.payload,
+        comparison: {
+          has_baseline: true,
+          baseline_run_id: "run-0",
+          newly_failed: ["결제"],
+          recovered: ["로그인"],
+          still_failing: [],
+        },
+      },
+    });
+
+    const chip = document.querySelector<HTMLAnchorElement>('[data-role="comparison-chip"]')!;
+    expect(chip.hidden).toBe(false);
+    expect(chip.href).toContain("/runs/run-0");
+    expect(chip.textContent).toBe("직전 대비 · 새 이상 1 · 복구 1 · 지속 0");
+
+    live.emit({
+      event_type: "run_finished",
+      payload: {
+        comparison: {
+          has_baseline: true,
+          baseline_run_id: "run-0",
+          newly_failed: [],
+          recovered: [],
+          still_failing: ["결제"],
+        },
+      },
+    });
+    expect(chip.textContent).toBe("직전 대비 · 새 이상 0 · 복구 0 · 지속 1");
+  });
+
+  it("진행률 색은 Tailwind 상태색 대신 semantic tone 계약으로 전달한다", () => {
+    socket().emit(snapshot());
+
+    const bar = document.getElementById("run-progress-bar")!;
+    expect(bar.dataset.tone).toBe("error");
+    expect(bar.className).not.toMatch(/\bbg-(?:red|emerald)-\d{2,3}\b/);
   });
 
   it("실시간 로그도 화면에는 최근 2,000줄만 남기고 저장소 내보내기는 자르지 않는다", () => {

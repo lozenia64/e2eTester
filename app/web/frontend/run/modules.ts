@@ -105,7 +105,6 @@ export function updateModuleCard(module: unknown): void {
   const analysis = record(payload.failure_analysis);
   const analysisPanel = card.querySelector<HTMLElement>('[data-role="failure-analysis"]');
   if (analysisPanel) {
-    analysisPanel.classList.toggle("is-hidden", !analysis);
     analysisPanel.hidden = !analysis;
     setText(card, '[data-role="analysis-category"]', analysis?.category);
     setText(card, '[data-role="analysis-summary"]', analysis?.user_summary);
@@ -123,7 +122,7 @@ export function updateModuleCard(module: unknown): void {
       link.href = artifact;
       link.target = "_blank";
       link.rel = "noreferrer";
-      link.className = "truncate font-medium text-indigo-600 hover:underline";
+      link.className = "run-mod__artifact";
       link.textContent = artifact.split("/").pop() ?? artifact;
       artifactList.appendChild(link);
     }
