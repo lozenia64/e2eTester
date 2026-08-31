@@ -3,6 +3,24 @@ import { normalizeTone, statusLabel } from "../components/status-badge/index";
 import { computeFocusModuleId, type FocusModule } from "./focus";
 
 type ModuleCardPayload = Record<string, unknown>;
+type ModuleRuntimeState = { status: string; startedAt: string | null };
+
+const MODULE_STATUSES = [
+  "pending",
+  "queued",
+  "running",
+  "waiting_input",
+  "passed",
+  "anomaly",
+  "error",
+  "failed",
+  "blocked",
+  "skipped",
+  "cancelled",
+];
+
+// Task 6의 진행률·경과 타이머가 소비한다. 카드가 아직 DOM에 없더라도 소켓 상태는 남긴다.
+export const moduleRuntimeState = new Map<string, ModuleRuntimeState>();
 
 function record(value: unknown): ModuleCardPayload | null {
   return value !== null && typeof value === "object" ? (value as ModuleCardPayload) : null;
@@ -15,6 +33,16 @@ function setText(root: ParentNode, selector: string, value: unknown): void {
 
 function moduleCards(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("[data-module-id]"));
+}
+
+export function rememberModuleState(module: unknown): void {
+  const payload = record(module);
+  const moduleId = String(payload?.module_id ?? "");
+  if (!payload || !moduleId) return;
+  moduleRuntimeState.set(moduleId, {
+    status: String(payload.status ?? "").toLowerCase(),
+    startedAt: typeof payload.started_at === "string" ? payload.started_at : null,
+  });
 }
 
 export function applyFocus(root: ParentNode = document): string | null {
@@ -41,11 +69,17 @@ export function updateModuleCard(module: unknown): void {
   const moduleId = String(payload?.module_id ?? "");
   if (!moduleId) return;
 
+  rememberModuleState(payload);
+
   const card = moduleCards(document).find((candidate) => candidate.dataset.moduleId === moduleId);
   if (!card || !payload) return;
 
   const status = String(payload.status ?? "").toLowerCase();
   card.dataset.status = status;
+  for (const previousStatus of MODULE_STATUSES) {
+    card.classList.remove(`status-${previousStatus}`);
+  }
+  card.classList.add(`status-${normalizeTone(status)}`);
 
   const statusNode = card.querySelector<HTMLElement>('[data-role="module-status"]');
   if (statusNode) {
@@ -63,6 +97,7 @@ export function updateModuleCard(module: unknown): void {
   const analysis = record(payload.failure_analysis);
   const analysisPanel = card.querySelector<HTMLElement>('[data-role="failure-analysis"]');
   if (analysisPanel) {
+    analysisPanel.classList.toggle("is-hidden", !analysis);
     analysisPanel.hidden = !analysis;
     setText(card, '[data-role="analysis-category"]', analysis?.category);
     setText(card, '[data-role="analysis-summary"]', analysis?.user_summary);
