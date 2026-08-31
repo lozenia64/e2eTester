@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import threading
 import time
@@ -24,6 +25,7 @@ pytest.importorskip("playwright")
 
 GEN_AT = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
 RUN_ID_FAILED = "run_viewport_failed"
+RUN_ID_FOCUS_CHANGE = "run_viewport_focus_change"
 VIEWPORTS = [(1366, 768), (1920, 1080), (2560, 1440)]
 
 
@@ -55,7 +57,7 @@ def _failure_analysis() -> FailureAnalysis:
     )
 
 
-def _failed_run() -> RunView:
+def _failed_run(*, run_id: str = RUN_ID_FAILED) -> RunView:
     modules = [
         RunModule(
             module_id=f"module_{order}",
@@ -71,7 +73,7 @@ def _failed_run() -> RunView:
         for order in range(1, 11)
     ]
     return RunView(
-        run_id=RUN_ID_FAILED,
+        run_id=run_id,
         system_code="hom",
         system_name="대표홈",
         status=RunStatus.ERROR,
@@ -81,11 +83,26 @@ def _failed_run() -> RunView:
     )
 
 
+def _run_after_focus_moves(*, run_id: str) -> RunView:
+    """초점이 module_4에서 module_5로 옮겨가는 다음 snapshot."""
+    run = _failed_run(run_id=run_id)
+    for module in run.modules:
+        if module.module_id == "module_4":
+            module.status = ModuleStatus.PASSED
+            module.failure_analysis = None
+            module.message = "점검을 마쳤습니다."
+        if module.module_id == "module_5":
+            module.status = ModuleStatus.ERROR
+            module.failure_analysis = _failure_analysis()
+            module.message = "로그인 버튼을 찾지 못했습니다."
+    return run
+
+
 class _FakeRunQueries:
     async def get_run_detail(self, run_id: str) -> RunView:
-        if run_id != RUN_ID_FAILED:
+        if run_id not in {RUN_ID_FAILED, RUN_ID_FOCUS_CHANGE}:
             raise KeyError(run_id)
-        return _failed_run()
+        return _failed_run(run_id=run_id)
 
 
 class _NoHealing:
@@ -108,19 +125,37 @@ def _user() -> User:
 
 def _build_app() -> FastAPI:
     app = FastAPI()
+    focus_change_events: asyncio.Queue[dict] = asyncio.Queue()
     app.include_router(dashboard_router)
     app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
     app.dependency_overrides[get_current_user] = _user
     app.dependency_overrides[get_run_queries] = _FakeRunQueries
     app.dependency_overrides[get_healing_service] = _NoHealing
 
+    @app.post("/__test/focus-change")
+    async def enqueue_focus_change() -> dict[str, bool]:
+        await focus_change_events.put(
+            {
+                "event_type": "snapshot",
+                "payload": _run_after_focus_moves(run_id=RUN_ID_FOCUS_CHANGE).model_dump(
+                    mode="json"
+                ),
+            }
+        )
+        return {"queued": True}
+
     @app.websocket("/ws/runs/{run_id}")
     async def run_snapshot(websocket: WebSocket, run_id: str) -> None:
         await websocket.accept()
-        if run_id == RUN_ID_FAILED:
+        if run_id in {RUN_ID_FAILED, RUN_ID_FOCUS_CHANGE}:
             await websocket.send_json(
-                {"event_type": "snapshot", "payload": _failed_run().model_dump(mode="json")}
+                {
+                    "event_type": "snapshot",
+                    "payload": _failed_run(run_id=run_id).model_dump(mode="json"),
+                }
             )
+            if run_id == RUN_ID_FOCUS_CHANGE:
+                await websocket.send_json(await focus_change_events.get())
         await websocket.close()
 
     return app
@@ -158,11 +193,12 @@ def browser():
 def page_factory(browser, live_server: str):
     contexts = []
 
-    def create(width: int, height: int):
+    def create(width: int, height: int, *, focus_change: bool = False):
         context = browser.new_context(viewport={"width": width, "height": height})
         contexts.append(context)
         page = context.new_page()
-        page.goto(f"{live_server}/runs/{RUN_ID_FAILED}", wait_until="networkidle")
+        run_id = RUN_ID_FOCUS_CHANGE if focus_change else RUN_ID_FAILED
+        page.goto(f"{live_server}/runs/{run_id}", wait_until="networkidle")
         page.wait_for_selector('[data-focus="true"]')
         page.wait_for_function(
             """() => {
@@ -192,16 +228,24 @@ def test_exactly_two_internal_scrollers_one_per_column(page_factory) -> None:
     """설계 D2 — 좌우 열에 하나씩. 세로로 쌓인 영역은 0."""
     page = page_factory(1920, 1080)
     page.wait_for_selector(".run-split")
-    ids = page.evaluate(
-        """() => Array.from(document.querySelectorAll('.run *'))
-              .filter((el) => {
-                  const style = getComputedStyle(el);
-                  return /auto|scroll/.test(style.overflowY)
-                      && el.scrollHeight > el.clientHeight + 1;
-              })
-              .map((el) => el.id || el.className)"""
+    scrollers = page.evaluate(
+        """() => Object.fromEntries([
+              ['modules', '.run-col--modules'],
+              ['log', '.run-col--log'],
+          ].map(([name, selector]) => [
+              name,
+              Array.from(document.querySelector(selector).querySelectorAll('*'))
+                  .filter((el) => {
+                      const style = getComputedStyle(el);
+                      return /auto|scroll/.test(style.overflowY)
+                          && el.scrollHeight > el.clientHeight + 1;
+                  })
+                  .map((el) => el.id || el.className),
+          ]))"""
     )
-    assert len(ids) == 2, f"내부 스크롤러가 2개가 아니다: {ids}"
+    assert len(scrollers["modules"]) == 1, f"좌측 열 스크롤러: {scrollers['modules']}"
+    assert len(scrollers["log"]) == 1, f"우측 열 스크롤러: {scrollers['log']}"
+    assert len(scrollers["modules"]) + len(scrollers["log"]) == 2
 
 
 def test_focused_module_analysis_is_inside_the_viewport(page_factory) -> None:
@@ -216,9 +260,16 @@ def test_focused_module_analysis_is_inside_the_viewport(page_factory) -> None:
 
 def test_log_filter_follows_focus_until_user_touches_it(page_factory) -> None:
     """설계 D7 — 자동 추종은 사용자가 손대면 꺼진다."""
-    page = page_factory(1920, 1080)
+    page = page_factory(1920, 1080, focus_change=True)
     page.wait_for_selector('[data-focus="true"]')
     focused = page.locator('[data-focus="true"]').get_attribute("data-module-id")
     assert page.locator("#log-filter").input_value() == focused
     page.select_option("#log-filter", "")
+    assert page.locator("#log-filter").input_value() == ""
+    assert page.evaluate(
+        """async () => (await fetch('/__test/focus-change', { method: 'POST' })).ok"""
+    )
+    page.wait_for_function(
+        """() => document.querySelector('[data-focus="true"]')?.dataset.moduleId === 'module_5'"""
+    )
     assert page.locator("#log-filter").input_value() == ""
