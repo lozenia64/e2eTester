@@ -189,6 +189,19 @@ describe("run socket", () => {
     expect(document.querySelector("#log-show-older")).toBeNull();
   });
 
+  it("확장한 로그에 실시간 줄이 추가되어도 이전 줄을 계속 조사할 수 있다", () => {
+    const live = socket();
+    live.emit(snapshot(Array.from({ length: 2_500 }, (_, index) => `line-${index}`)));
+    document.querySelector<HTMLButtonElement>("#log-show-older")?.click();
+
+    live.emit({ event_type: "module_log", payload: { module_id: "b", message: "line-2500" } });
+
+    expect(document.querySelectorAll("#log-console .log-line")).toHaveLength(2_501);
+    expect(document.querySelector("#log-console .log-line")?.textContent).toBe("[b] line-0");
+    expect(document.querySelector("#log-console .log-line:last-child")?.textContent).toBe("[b] line-2500");
+    expect(document.querySelector("#log-show-older")).toBeNull();
+  });
+
   it("필터 밖 로그와 초점이 그대로인 모듈 이벤트는 조사 중 스크롤을 건드리지 않는다", () => {
     const live = socket();
     live.emit(snapshot());

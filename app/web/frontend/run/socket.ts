@@ -81,18 +81,12 @@ function appendLogEntry(entry: LogEntry): void {
   hasLogEntries = true;
   const consoleNode = document.getElementById("log-console");
   if (!consoleNode) return;
-  const visible = visibleEntries();
-  if (visible.at(-1) !== entry) {
+  const expandedVisible = visibleEntries(logDisplayLimit);
+  if (expandedVisible.at(-1) !== entry) {
     return;
   }
-  const empty = consoleNode.querySelector(".log-empty");
-  if (empty) empty.remove();
   const nearBottom = isNearBottom(consoleNode);
-  while (consoleNode.querySelectorAll(".log-line").length >= visible.length) {
-    consoleNode.querySelector(".log-line")?.remove();
-  }
-  consoleNode.appendChild(createLogLineNode(entry));
-  if (nearBottom) consoleNode.scrollTop = consoleNode.scrollHeight;
+  renderLogConsole({ followBottom: nearBottom });
 }
 
 function resetLogFromRun(runPayload: unknown): void {
