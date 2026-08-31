@@ -22,7 +22,7 @@ let runtimeTicker: number | null = null;
 let logControlsBound = false;
 let hasLogEntries = false;
 
-const MODULE_CARD_SELECTOR = "#node-grid [data-module-id], #run-module-list [data-module-id]";
+const MODULE_CARD_SELECTOR = "#run-module-list [data-module-id]";
 
 function record(value: unknown): RecordValue | null {
   return value !== null && typeof value === "object" ? (value as RecordValue) : null;
@@ -268,7 +268,7 @@ function updateComparisonPanel(runPayload: unknown): void {
 }
 
 export function bindRunSocket(): void {
-  const grid = document.getElementById("node-grid") ?? document.getElementById("run-module-list");
+  const grid = document.getElementById("run-module-list");
   if (!grid) return;
   bindLogControls();
   const runId = grid.dataset.runId ?? document.getElementById("run-root")?.dataset.runId;
