@@ -22,6 +22,8 @@ let runtimeTicker: number | null = null;
 let logControlsBound = false;
 let hasLogEntries = false;
 
+const MODULE_CARD_SELECTOR = "#node-grid [data-module-id], #run-module-list [data-module-id]";
+
 function record(value: unknown): RecordValue | null {
   return value !== null && typeof value === "object" ? (value as RecordValue) : null;
 }
@@ -35,12 +37,16 @@ function currentRunId(): string {
 function createLogLineNode(entry: LogEntry): HTMLDivElement {
   const line = document.createElement("div");
   line.className = "log-line";
-  line.dataset.moduleId = entry.moduleId;
+  line.dataset.logModuleId = entry.moduleId;
   line.textContent = entry.moduleId ? `[${entry.moduleId}] ${entry.message}` : entry.message;
   return line;
 }
 
-function renderLogConsole(): void {
+function isNearBottom(node: HTMLElement): boolean {
+  return node.scrollHeight - node.scrollTop - node.clientHeight < 48;
+}
+
+function renderLogConsole({ followBottom = true }: { followBottom?: boolean } = {}): void {
   const consoleNode = document.getElementById("log-console");
   if (!consoleNode) return;
   const entries = visibleEntries();
@@ -51,7 +57,7 @@ function renderLogConsole(): void {
     empty.textContent = hasLogEntries ? "조건에 맞는 로그가 없습니다." : "아직 출력된 로그가 없습니다.";
     consoleNode.appendChild(empty);
   }
-  consoleNode.scrollTop = consoleNode.scrollHeight;
+  if (followBottom) consoleNode.scrollTop = consoleNode.scrollHeight;
 }
 
 function appendLogEntry(entry: LogEntry): void {
@@ -61,12 +67,14 @@ function appendLogEntry(entry: LogEntry): void {
   if (!consoleNode) return;
   const visible = visibleEntries();
   if (visible.at(-1) !== entry) {
-    renderLogConsole();
     return;
   }
   const empty = consoleNode.querySelector(".log-empty");
   if (empty) empty.remove();
-  const nearBottom = consoleNode.scrollHeight - consoleNode.scrollTop - consoleNode.clientHeight < 48;
+  const nearBottom = isNearBottom(consoleNode);
+  while (consoleNode.querySelectorAll(".log-line").length >= visible.length) {
+    consoleNode.querySelector(".log-line")?.remove();
+  }
   consoleNode.appendChild(createLogLineNode(entry));
   if (nearBottom) consoleNode.scrollTop = consoleNode.scrollHeight;
 }
@@ -85,7 +93,7 @@ function resetLogFromRun(runPayload: unknown): void {
   }
   resetLog(entries);
   hasLogEntries = entries.length > 0;
-  renderLogConsole();
+  renderLogConsole({ followBottom: true });
 }
 
 function bindLogControls(): void {
@@ -158,19 +166,26 @@ function renderRunStatus(status: unknown): void {
 
 function refreshFocusFilterAndProgress(): void {
   const focusedModuleId = applyFocus();
+  let filterChanged = false;
   if (focusedModuleId) {
     setModuleFilter(focusedModuleId);
     if (!isFilterManual()) {
       const filter = document.getElementById("log-filter") as HTMLSelectElement | null;
-      if (filter) filter.value = focusedModuleId;
+      if (filter && filter.value !== focusedModuleId) {
+        filter.value = focusedModuleId;
+        filterChanged = true;
+      }
     }
   }
   renderProgress();
-  renderLogConsole();
+  if (filterChanged) {
+    const consoleNode = document.getElementById("log-console");
+    renderLogConsole({ followBottom: consoleNode ? isNearBottom(consoleNode) : true });
+  }
 }
 
 export function renderProgress(): void {
-  const modules = Array.from(document.querySelectorAll<HTMLElement>("[data-module-id]")).map((card) => ({
+  const modules = Array.from(document.querySelectorAll<HTMLElement>(MODULE_CARD_SELECTOR)).map((card) => ({
     status: card.dataset.status ?? "",
   }));
   const summary = summarizeModules(modules);
@@ -189,7 +204,7 @@ export function renderProgress(): void {
 function tickRunningElapsed(): void {
   const now = Date.now();
   for (const [moduleId, state] of moduleRuntimeState.entries()) {
-    const card = Array.from(document.querySelectorAll<HTMLElement>("[data-module-id]")).find(
+    const card = Array.from(document.querySelectorAll<HTMLElement>(MODULE_CARD_SELECTOR)).find(
       (candidate) => candidate.dataset.moduleId === moduleId,
     );
     const elapsedNode = card?.querySelector<HTMLElement>('[data-role="module-elapsed"]');
@@ -209,7 +224,7 @@ function tickRunningElapsed(): void {
 }
 
 export function startRuntimeTicker(): void {
-  if (!document.querySelector("[data-module-id]") || runtimeTicker !== null) return;
+  if (!document.querySelector(MODULE_CARD_SELECTOR) || runtimeTicker !== null) return;
   runtimeTicker = window.setInterval(tickRunningElapsed, 1000);
 }
 
