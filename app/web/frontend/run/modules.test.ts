@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyFocus, moduleRuntimeState, updateModuleCard } from "./modules";
 
 function host(...specs: Array<[string, string]>) {
@@ -75,6 +75,19 @@ describe("applyFocus", () => {
 
   it("모듈이 없어도 던지지 않는다", () => {
     expect(applyFocus()).toBeNull();
+  });
+
+  it("초점이 다음 실패 모듈로 이동하면 해당 행을 보이도록 스크롤한다", () => {
+    host(["a", "running"], ["b", "pending"]);
+    const target = document.querySelector<HTMLElement>("[data-module-id='b']")!;
+    target.scrollIntoView = vi.fn();
+    applyFocus();
+
+    document.querySelector<HTMLElement>("[data-module-id='a']")!.dataset.status = "passed";
+    target.dataset.status = "error";
+    applyFocus();
+
+    expect(target.scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
   });
 });
 

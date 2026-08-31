@@ -21,6 +21,7 @@ const MODULE_STATUSES = [
 
 // Task 6의 진행률·경과 타이머가 소비한다. 카드가 아직 DOM에 없더라도 소켓 상태는 남긴다.
 export const moduleRuntimeState = new Map<string, ModuleRuntimeState>();
+let previousFocusedModuleId: string | null = null;
 
 function record(value: unknown): ModuleCardPayload | null {
   return value !== null && typeof value === "object" ? (value as ModuleCardPayload) : null;
@@ -69,6 +70,13 @@ export function applyFocus(root: ParentNode = document): string | null {
       delete card.dataset.focus;
     }
   }
+  if (focusedId && previousFocusedModuleId && focusedId !== previousFocusedModuleId) {
+    const focusedCard = cards.find((card) => card.dataset.moduleId === focusedId);
+    if (focusedCard && typeof focusedCard.scrollIntoView === "function") {
+      focusedCard.scrollIntoView({ block: "nearest" });
+    }
+  }
+  previousFocusedModuleId = focusedId;
   return focusedId;
 }
 

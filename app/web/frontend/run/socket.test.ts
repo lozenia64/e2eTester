@@ -193,10 +193,12 @@ describe("run socket", () => {
     const live = socket();
     live.emit(snapshot(Array.from({ length: 2_500 }, (_, index) => `line-${index}`)));
     document.querySelector<HTMLButtonElement>("#log-show-older")?.click();
+    const firstLine = document.querySelector("#log-console .log-line");
 
     live.emit({ event_type: "module_log", payload: { module_id: "b", message: "line-2500" } });
 
     expect(document.querySelectorAll("#log-console .log-line")).toHaveLength(2_501);
+    expect(document.querySelector("#log-console .log-line")).toBe(firstLine);
     expect(document.querySelector("#log-console .log-line")?.textContent).toBe("[b] line-0");
     expect(document.querySelector("#log-console .log-line:last-child")?.textContent).toBe("[b] line-2500");
     expect(document.querySelector("#log-show-older")).toBeNull();

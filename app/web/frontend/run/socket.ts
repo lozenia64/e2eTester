@@ -47,26 +47,35 @@ function isNearBottom(node: HTMLElement): boolean {
   return node.scrollHeight - node.scrollTop - node.clientHeight < 48;
 }
 
-function renderLogConsole({ followBottom = true }: { followBottom?: boolean } = {}): void {
-  const consoleNode = document.getElementById("log-console");
-  if (!consoleNode) return;
-  const entries = visibleEntries(logDisplayLimit);
+function syncOlderLogButton(consoleNode: HTMLElement): void {
   const olderCount = Math.max(0, hiddenCount() - (logDisplayLimit - 2000));
-  const children: Node[] = [];
-  if (olderCount > 0) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.id = "log-show-older";
-    more.className = "log-show-older";
-    more.textContent = `이전 ${olderCount}줄 더 보기`;
+  const existing = consoleNode.querySelector<HTMLButtonElement>("#log-show-older");
+  if (olderCount <= 0) {
+    existing?.remove();
+    return;
+  }
+  const more = existing ?? document.createElement("button");
+  more.type = "button";
+  more.id = "log-show-older";
+  more.className = "log-show-older";
+  more.textContent = `이전 ${olderCount}줄 더 보기`;
+  if (!existing) {
     more.addEventListener("click", () => {
       logDisplayLimit += 2000;
       renderLogConsole({ followBottom: false });
     });
-    children.push(more);
+    consoleNode.prepend(more);
   }
+}
+
+function renderLogConsole({ followBottom = true }: { followBottom?: boolean } = {}): void {
+  const consoleNode = document.getElementById("log-console");
+  if (!consoleNode) return;
+  const entries = visibleEntries(logDisplayLimit);
+  const children: Node[] = [];
   children.push(...entries.map(createLogLineNode));
   consoleNode.replaceChildren(...children);
+  syncOlderLogButton(consoleNode);
   if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "log-empty";
@@ -87,7 +96,14 @@ function appendLogEntry(entry: LogEntry): void {
   }
   if (logDisplayLimit > 2000) logDisplayLimit += 1;
   const nearBottom = isNearBottom(consoleNode);
-  renderLogConsole({ followBottom: nearBottom });
+  const empty = consoleNode.querySelector(".log-empty");
+  if (empty) empty.remove();
+  if (consoleNode.querySelectorAll(".log-line").length >= logDisplayLimit) {
+    consoleNode.querySelector(".log-line")?.remove();
+  }
+  consoleNode.appendChild(createLogLineNode(entry));
+  syncOlderLogButton(consoleNode);
+  if (nearBottom) consoleNode.scrollTop = consoleNode.scrollHeight;
 }
 
 function resetLogFromRun(runPayload: unknown): void {
