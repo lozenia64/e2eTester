@@ -23,8 +23,11 @@ def test_shell_file_exists() -> None:
     assert SHELL.exists()
 
 
-@pytest.mark.parametrize("selector", ["body:has(.dash)", "body:has(.exec)", "body:has(.suite)"])
-def test_shell_owns_all_three_screens(selector: str) -> None:
+@pytest.mark.parametrize(
+    "selector",
+    ["body:has(.dash)", "body:has(.exec)", "body:has(.suite)", "body:has(.run)"],
+)
+def test_shell_owns_all_screens(selector: str) -> None:
     assert selector in _text("shell.css")
 
 
