@@ -93,6 +93,7 @@
             </div>
             <div class="run-mod__state">
               <span class="run-mod__elapsed" data-role="module-elapsed" hidden></span>
+              <span class="run-mod__duration" data-role="module-duration">{{ module.duration_ms or 0 }} ms</span>
               {% set mb = status_badge_view(module.status) %}
               {{ sb.status_badge(mb.tone, mb.label, size="sm", role="module-status", status_value=module.status.value) }}
             </div>
@@ -129,7 +130,6 @@
               </details>
             </section>
             <dl class="run-mod__metrics">
-              <div><dt>소요시간</dt><dd data-role="module-duration">{{ module.duration_ms or 0 }} ms</dd></div>
               <div><dt>아티팩트</dt><dd><span data-role="module-artifacts">{{ module.artifact_count }}</span>개</dd></div>
             </dl>
             <div class="run-mod__artifacts" data-role="module-artifacts-list">

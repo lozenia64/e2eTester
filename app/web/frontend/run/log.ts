@@ -47,8 +47,8 @@ export function isFilterManual(): boolean {
   return filterManual;
 }
 
-export function visibleEntries(): LogEntry[] {
-  return filteredEntries().slice(-DISPLAY_CAP);
+export function visibleEntries(limit = DISPLAY_CAP): LogEntry[] {
+  return filteredEntries().slice(-limit);
 }
 
 export function hiddenCount(): number {

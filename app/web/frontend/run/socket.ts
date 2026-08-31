@@ -3,6 +3,7 @@ import { normalizeTone, statusLabel } from "../components/status-badge/index";
 import { updateOtpPanel } from "../components/otp-panel/index";
 import {
   exportText,
+  hiddenCount,
   isFilterManual,
   pushLog,
   resetLog,
@@ -21,6 +22,7 @@ type SocketMessage = { event_type?: string; payload?: unknown; run_status?: unkn
 let runtimeTicker: number | null = null;
 let logControlsBound = false;
 let hasLogEntries = false;
+let logDisplayLimit = 2000;
 
 const MODULE_CARD_SELECTOR = "#run-module-list [data-module-id]";
 
@@ -48,8 +50,23 @@ function isNearBottom(node: HTMLElement): boolean {
 function renderLogConsole({ followBottom = true }: { followBottom?: boolean } = {}): void {
   const consoleNode = document.getElementById("log-console");
   if (!consoleNode) return;
-  const entries = visibleEntries();
-  consoleNode.replaceChildren(...entries.map(createLogLineNode));
+  const entries = visibleEntries(logDisplayLimit);
+  const olderCount = Math.max(0, hiddenCount() - (logDisplayLimit - 2000));
+  const children: Node[] = [];
+  if (olderCount > 0) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.id = "log-show-older";
+    more.className = "log-show-older";
+    more.textContent = `이전 ${olderCount}줄 더 보기`;
+    more.addEventListener("click", () => {
+      logDisplayLimit += 2000;
+      renderLogConsole({ followBottom: false });
+    });
+    children.push(more);
+  }
+  children.push(...entries.map(createLogLineNode));
+  consoleNode.replaceChildren(...children);
   if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "log-empty";
@@ -91,6 +108,7 @@ function resetLogFromRun(runPayload: unknown): void {
     }
   }
   resetLog(entries);
+  logDisplayLimit = 2000;
   hasLogEntries = entries.length > 0;
   renderLogConsole({ followBottom: true });
 }
@@ -105,12 +123,14 @@ function bindLogControls(): void {
   if (filter) {
     filter.addEventListener("change", () => {
       setModuleFilter(filter.value, { manual: true });
+      logDisplayLimit = 2000;
       renderLogConsole();
     });
   }
   if (search) {
     search.addEventListener("input", () => {
       setSearch(search.value);
+      logDisplayLimit = 2000;
       renderLogConsole();
     });
   }

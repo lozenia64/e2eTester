@@ -90,6 +90,8 @@
 .run-otp__title, .run-prog h2, .run-col__head h2 { margin: 0; font-size: 0.875rem; font-weight: 700; }
 .run-otp__prompt { margin: 0.1875rem 0 0; font-size: 0.75rem; color: var(--pl-text-muted); }
 .run-otp__countdown { margin: 0.375rem 0 0; font-size: 0.75rem; font-weight: 600; color: var(--st-waiting_input-text); }
+.run-otp__countdown[data-tone="active"] { color: var(--st-anomaly-text); }
+.run-otp__countdown[data-tone="error"] { color: var(--st-error-text); }
 .run-otp__form { display: flex; align-items: flex-end; gap: 0.5rem; }
 .run-otp__field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; font-weight: 500; color: var(--pl-text-muted); }
 
@@ -167,6 +169,7 @@
 }
 
 .run-mod__state { flex-shrink: 0; gap: 0.375rem; }
+.run-mod__duration { font-size: 0.6875rem; color: var(--pl-text-muted); }
 .run-mod__elapsed { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.6875rem; color: var(--st-running-text); }
 .run-mod__details { display: none; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--pl-border); }
 .run-mod[data-focus="true"] .run-mod__details { display: block; }
@@ -213,6 +216,7 @@
 }
 
 .log-empty { color: var(--c-ink-400); }
+.log-show-older { margin-bottom: 0.5rem; border: 1px solid var(--c-ink-600); border-radius: 0.375rem; background: var(--c-ink-900); padding: 0.375rem 0.5rem; color: var(--c-ink-200); cursor: pointer; }
 .run-toast { max-width: 28rem; border: 1px solid var(--pl-border); border-radius: 0.75rem; background: var(--pl-surface); padding: 0.75rem 1rem; font-size: 0.875rem; font-weight: 600; color: var(--pl-text-muted); box-shadow: var(--pl-shadow-md); transition: opacity 0.3s ease; }
 .run-toast[data-tone="error"] { border-color: var(--st-error-border); color: var(--st-error-text); }
 .run-toast[data-tone="success"] { border-color: var(--st-passed-border); color: var(--st-passed-text); }

@@ -16,7 +16,7 @@ function moduleCard(id: string, status: string, order: number) {
   return `<li class="run-mod status-${status}" data-module-id="${id}" data-order="${order}" data-status="${status}">
     <span class="status-badge" data-role="module-status"></span>
     <p data-role="module-message"></p>
-    <span data-role="module-duration"></span>
+    <div class="run-mod__state"><span data-role="module-duration"></span></div>
     <span data-role="module-artifacts"></span>
     <section class="analysis-panel" data-role="failure-analysis" hidden>
       <span data-role="analysis-category"></span>
@@ -130,5 +130,14 @@ describe("updateModuleCard", () => {
     update("b", "passed");
 
     expect(document.querySelector('[data-focus="true"]')!.getAttribute("data-module-id")).toBe("a");
+  });
+
+  it("접힌 모듈 행에도 소요시간을 표시한다", () => {
+    moduleHost(["a", "passed"]);
+    update("a", "passed");
+
+    const card = document.querySelector<HTMLElement>("[data-module-id='a']")!;
+    expect(card.querySelector(".run-mod__state [data-role='module-duration']")?.textContent).toBe("123 ms");
+    expect(card.querySelector(".run-mod__details [data-role='module-duration']")).toBeNull();
   });
 });

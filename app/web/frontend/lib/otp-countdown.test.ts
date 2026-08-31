@@ -24,10 +24,13 @@ describe("startOtpCountdown", () => {
     startOtpCountdown("2026-08-29T09:00:00Z", el);
     expect(el.hidden).toBe(false);
     expect(el.classList.contains("is-hidden")).toBe(false);
+    expect(el.dataset.tone).toBe("active");
+    expect(el.className).not.toMatch(/\b(?:bg|text)-(?:amber|red)-\d{2,3}\b/);
 
     stopOtpCountdown();
     expect(el.hidden).toBe(true);
     expect(el.classList.contains("is-hidden")).toBe(false);
+    expect(el.dataset.tone).toBeUndefined();
   });
 
   it("1초마다 갱신한다", () => {

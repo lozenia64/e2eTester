@@ -174,6 +174,21 @@ describe("run socket", () => {
     expect(exportText().split("\n")).toHaveLength(2_001);
   });
 
+  it("2,000줄을 넘으면 이전 로그를 더 볼 수 있는 접근 가능한 조작을 제공한다", () => {
+    const live = socket();
+    live.emit(snapshot(Array.from({ length: 2_500 }, (_, index) => `line-${index}`)));
+
+    const more = document.querySelector<HTMLButtonElement>("#log-show-older");
+    expect(more).not.toBeNull();
+    expect(more?.textContent).toContain("이전 500줄 더 보기");
+
+    more?.click();
+
+    expect(document.querySelectorAll("#log-console .log-line")).toHaveLength(2_500);
+    expect(document.querySelector("#log-console .log-line")?.textContent).toBe("[b] line-0");
+    expect(document.querySelector("#log-show-older")).toBeNull();
+  });
+
   it("필터 밖 로그와 초점이 그대로인 모듈 이벤트는 조사 중 스크롤을 건드리지 않는다", () => {
     const live = socket();
     live.emit(snapshot());
