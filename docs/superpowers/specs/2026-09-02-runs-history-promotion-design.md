@@ -58,6 +58,8 @@
 
 `formatRunTimestamp` 는 예약 코드가 계속 쓰므로 옮기지 못한다 — Cycle 2·3 선례대로 **지역 복제**한다(21줄, 중복 1건, Cycle 6 에서 소멸).
 
+**`app.js` 자체의 참조는 이 사이클에서 끊기지 않는다.** `base.html:136` 이 `<script src="/static/app.js">` 를 **모든 페이지에 전역 로드**하기 때문이다. 이 화면이 `app.js` 의 함수를 하나도 실행하지 않게 만드는 것이 이번 목표이고, 태그 자체와 `FG005_ALLOWLIST` 정리는 마지막 소비자가 사라지는 Cycle 6 에서 끝난다.
+
 **남는 사실 하나:** Cycle 1 이 점검 실행 화면을 승격했지만 그 화면의 Run 목록 구획은 여전히 `app.js` 가 그린다. 이것을 `execute/` 폴더로 옮기는 일은 Cycle 6 의 몫으로 남긴다(§7).
 
 ### 1.4 상위 설계의 오류 — `app.js` 는 여기서 죽지 않는다
@@ -110,7 +112,7 @@
 | 권한 격리 | `allowed_system_codes` 밖 시스템이 사용자 응답에 없다. `/api/admin/dashboard` 는 여전히 `require_admin` |
 | 삭제 | `app.js` 에 `bindRunsHistory` 0개 · `DOMContentLoaded` 에서 호출 제거 · 약 826줄 |
 | 공유 코드 보존 | `app.js` 에 `renderExecutionGroups` · `createRunListItem` **유지**. `execute.html` 의 "진행 중 / 최근 Run" 이 회귀 없이 동작 |
-| 이관 | `entries/runs-history.ts` 존재 · `runs_history.html` 이 `/static/app.js` 를 참조하지 않음 |
+| 이관 | `entries/runs-history.ts` 존재 · `app.js` 에 `bindRunsHistory` 0개 · `runs_history.html` 에 `runs-history-list` 훅 0개 |
 | 유틸리티 소거 | `runs_history.html` 에 Tailwind 색 유틸리티 0개 |
 | 관리자 화면 불변 | `/admin` 커버리지 히트맵의 응답이 바뀌지 않는다 |
 
@@ -160,7 +162,7 @@
 | 2 스크롤 소유권 | 드릴다운 패널 하나. 격자는 고정 |
 | 3 살아있음 | 없음(조회 전용). 오늘 열은 로드 시점 상태 |
 | 4 추출 컴포넌트 | **신규 승격 0.** `status-badge` 재사용, 격자는 이 화면 전용 |
-| 5 완료 신호 | `entries/runs-history.ts` 존재 · `app.js` 약 826줄 · `runs_history.html` 이 `app.js` 를 안 씀 |
+| 5 완료 신호 | `entries/runs-history.ts` 존재 · `app.js` 약 826줄 · 이 화면이 `app.js` 의 어떤 함수도 실행하지 않음 |
 
 ### 3.2 데이터 경로 — 권한은 데이터 계층에서 건다
 
