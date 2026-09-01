@@ -337,3 +337,5 @@
 [data-role="step-module-progress"][data-tone="error"]   { color: var(--st-error-text); }
 [data-role="step-module-progress"][data-tone="passed"]  { color: var(--st-passed-text); }
 [data-role="step-module-progress"][data-tone="muted"]   { color: var(--pl-text-subtle); }
+.suite-otp__countdown[data-tone="active"] { color: var(--st-anomaly-text); }
+.suite-otp__countdown[data-tone="error"] { color: var(--st-error-text); }

@@ -21,7 +21,8 @@ export function updateOtpPanel(runOrMessage: unknown): void {
   panel.dataset.awaitingModuleId = moduleId;
   const promptNode = document.getElementById("otp-prompt");
   if (promptNode) promptNode.textContent = prompt;
-  panel.classList.toggle("is-hidden", !moduleId);
+  panel.classList.remove("is-hidden");
+  panel.hidden = !moduleId;
 
   if (moduleId) {
     const startedAt = moduleStartedAtFromRun(run, moduleId)

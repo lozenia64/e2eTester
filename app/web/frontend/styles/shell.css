@@ -6,7 +6,8 @@
 
 body:has(.dash),
 body:has(.exec),
-body:has(.suite) {
+body:has(.suite),
+body:has(.run) {
   overflow: hidden;
   height: 100dvh;
   max-height: 100dvh;
@@ -18,7 +19,9 @@ body:has(.dash) main > div,
 body:has(.exec) main,
 body:has(.exec) main > div,
 body:has(.suite) main,
-body:has(.suite) main > div {
+body:has(.suite) main > div,
+body:has(.run) main,
+body:has(.run) main > div {
   max-width: none;
   padding-top: 0;
   padding-right: 0;
@@ -38,14 +41,16 @@ body:has(.dash) main > div {
 @media (min-width: 768px) {
   body:has(.dash) main,
   body:has(.exec) main,
-  body:has(.suite) main {
+  body:has(.suite) main,
+  body:has(.run) main {
     padding-left: 16rem;
     width: 100%;
   }
 
   body:has(.dash) main > div,
   body:has(.exec) main > div,
-  body:has(.suite) main > div {
+  body:has(.suite) main > div,
+  body:has(.run) main > div {
     padding-left: 0;
     width: 100%;
     max-width: none;
@@ -55,20 +60,23 @@ body:has(.dash) main > div {
 @media (max-width: 767px) {
   body:has(.dash),
   body:has(.exec),
-  body:has(.suite) {
+  body:has(.suite),
+  body:has(.run) {
     display: flex;
     flex-direction: column;
   }
 
   body:has(.dash) > header,
   body:has(.exec) > header,
-  body:has(.suite) > header {
+  body:has(.suite) > header,
+  body:has(.run) > header {
     flex-shrink: 0;
   }
 
   body:has(.dash) main,
   body:has(.exec) main,
-  body:has(.suite) main {
+  body:has(.suite) main,
+  body:has(.run) main {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
@@ -77,7 +85,8 @@ body:has(.dash) main > div {
 
   body:has(.dash) main > div,
   body:has(.exec) main > div,
-  body:has(.suite) main > div {
+  body:has(.suite) main > div,
+  body:has(.run) main > div {
     height: 100%;
     overflow: hidden;
   }
@@ -87,7 +96,9 @@ body:has(.dash) main > div {
   body:has(.exec) main,
   body:has(.exec) main > div,
   body:has(.suite) main,
-  body:has(.suite) main > div {
+  body:has(.suite) main > div,
+  body:has(.run) main,
+  body:has(.run) main > div {
     padding-left: 0;
     width: 100%;
   }

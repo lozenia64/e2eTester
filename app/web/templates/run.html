@@ -1,167 +1,173 @@
 {% extends "base.html" %}
 
-{% block title %}Run Dashboard{% endblock %}
+{% block title %}{{ run.system_name }} 실행 상세{% endblock %}
+
+{% block head_extra %}
+{% import "_assets.html" as run_assets %}
+{{ run_assets.asset_styles("entries/run.ts") }}
+{% endblock %}
 
 {% block content %}
 {% import "components/status-badge/macro.jinja" as sb %}
 {% set active_statuses = ['pending', 'running', 'waiting_input'] %}
+{% set comparison = run.comparison %}
 
-<!-- 페이지 헤더 -->
-<div class="flex flex-wrap items-start justify-between gap-4">
-    <div>
-        <nav class="flex items-center gap-1.5 text-xs text-gray-400">
-            <a href="/" class="hover:text-indigo-600">대시보드</a>
-            <span>/</span>
-            <span class="font-medium text-gray-500">Run</span>
-        </nav>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">{{ run.system_name }}</h1>
-        <p class="mt-1 font-mono text-xs text-gray-400">{{ run.run_id }}</p>
+<div class="run" id="run-root" data-run-id="{{ run.run_id }}">
+  <header class="run-head">
+    <div class="run-head__id">
+      <nav class="run-crumb">
+        <a href="/">대시보드</a>
+        <span aria-hidden="true">/</span>
+        <span class="run-crumb__here">실행 상세</span>
+      </nav>
+      <div class="run-title-row">
+        <h1 class="run-title">{{ run.system_name }}</h1>
+        <span class="run-code">{{ run.system_code | upper }}</span>
+      </div>
+      <p class="run-subid">{{ run.run_id }}</p>
     </div>
-    <div class="flex items-center gap-3">
-        <span class="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">{{ run.system_code|upper }}</span>
-        {% set rb = status_badge_view(run.status) %}
-        {{ sb.status_badge(rb.tone, rb.label, size="md", elem_id="run-status", status_value=run.status.value) }}
-        <button type="button" id="run-cancel" class="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60{% if run.status|lower not in active_statuses %} hidden{% endif %}">실행 취소</button>
-        <button type="button" id="run-rerun" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60{% if run.status|lower in active_statuses %} hidden{% endif %}">동일 조건으로 재실행</button>
+    <div class="run-head__actions">
+      <a class="run-compare" data-role="comparison-chip"
+         href="{% if comparison and comparison.baseline_run_id %}/runs/{{ comparison.baseline_run_id }}{% else %}#{% endif %}"
+         {% if not (comparison and comparison.has_baseline) %}hidden{% endif %}>
+        직전 대비 · 새 이상 {{ comparison.newly_failed | length if comparison else 0 }} · 복구 {{ comparison.recovered | length if comparison else 0 }} · 지속 {{ comparison.still_failing | length if comparison else 0 }}
+      </a>
+      {% set rb = status_badge_view(run.status) %}
+      {{ sb.status_badge(rb.tone, rb.label, size="md", elem_id="run-status", status_value=run.status.value) }}
+      <button type="button" id="run-cancel" class="run-action run-action--cancel"
+              {% if run.status | lower not in active_statuses %}hidden{% endif %}>실행 취소</button>
+      <button type="button" id="run-rerun" class="run-action run-action--rerun"
+              {% if run.status | lower in active_statuses %}hidden{% endif %}>동일 조건으로 재실행</button>
     </div>
-</div>
+  </header>
 
-<!-- 진행률 -->
-<section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" id="run-progress">
-    <div class="flex items-center justify-between gap-3">
-        <h2 class="text-sm font-bold text-gray-900">진행률</h2>
-        <span class="text-xs font-semibold text-gray-600" id="run-progress-label">통과 0/0</span>
+  <section class="run-otp" id="otp-panel" data-run-id="{{ run.run_id }}"
+           data-awaiting-module-id="{{ run.awaiting_input_module_id or '' }}"
+           {% if not run.awaiting_input_module_id %}hidden{% endif %}>
+    <div class="run-otp__copy">
+      <h2 class="run-otp__title">OTP 입력</h2>
+      <p class="run-otp__prompt" id="otp-prompt">{{ run.awaiting_input_prompt or '현재 로그인 단계에서 OTP 입력이 필요합니다.' }}</p>
+      <p class="run-otp__countdown" id="otp-countdown" hidden></p>
     </div>
-    <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-        <div class="progress-bar-fill h-full rounded-full bg-emerald-500" id="run-progress-bar" style="width: 0%"></div>
-    </div>
-    <p class="mt-2 text-xs text-gray-500" id="run-progress-detail"></p>
-</section>
+    <form class="run-otp__form" id="otp-form">
+      <label class="run-otp__field">
+        <span>OTP 코드</span>
+        <input type="password" name="otp_code" placeholder="SMS 인증번호" inputmode="numeric" autocomplete="one-time-code">
+      </label>
+      <button type="submit">OTP 제출</button>
+    </form>
+    <p class="run-otp__feedback" data-role="otp-feedback" role="alert" hidden></p>
+  </section>
 
-<!-- 직전 실행 대비 변화 -->
-<section class="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 shadow-sm{% if not (run.comparison and run.comparison.has_baseline) %} is-hidden{% endif %}" id="comparison-panel">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-sm font-bold text-gray-900">직전 실행 대비 변화</h2>
-        <a id="comparison-baseline-link" class="text-xs font-medium text-indigo-600 hover:underline"
-           href="{% if run.comparison and run.comparison.baseline_run_id %}/runs/{{ run.comparison.baseline_run_id }}{% else %}#{% endif %}">{% if run.comparison and run.comparison.baseline_run_id %}기준 Run: {{ run.comparison.baseline_run_id }}{% endif %}</a>
+  <section class="run-prog" id="run-progress">
+    <div class="run-prog__head">
+      <div class="run-prog__copy">
+        <h2>모듈 진행</h2>
+        <span id="run-progress-label">통과 0/{{ run.modules | length }}</span>
+        <span id="run-progress-detail"></span>
+      </div>
+      <span class="run-prog__elapsed">실시간 진행</span>
     </div>
-    <div id="comparison-body" class="mt-3 flex flex-wrap gap-2 text-xs"></div>
-</section>
+    <div class="run-prog__track">
+      <div class="run-prog__fill" id="run-progress-bar" data-tone="passed" style="width: 0%"></div>
+    </div>
+  </section>
 
-<!-- OTP 입력 -->
-<section class="otp-panel rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm{% if not run.awaiting_input_module_id %} is-hidden{% endif %}" id="otp-panel" data-run-id="{{ run.run_id }}" data-awaiting-module-id="{{ run.awaiting_input_module_id or '' }}">
-    <div class="flex items-start gap-3">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
-            <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-        </span>
-        <div class="min-w-0 flex-1">
-            <h2 class="text-base font-bold text-gray-900">OTP 입력</h2>
-            <p id="otp-prompt" class="mt-0.5 text-sm text-gray-600">{{ run.awaiting_input_prompt or '인증문자 발송 후 OTP 입력이 필요하면 이 영역이 활성화됩니다.' }}</p>
-            <p id="otp-countdown" class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 is-hidden"></p>
-            <form id="otp-form" class="mt-4 flex flex-wrap items-end gap-3">
-                <label class="form-field flex flex-col gap-1.5">
-                    <span class="text-sm font-medium text-gray-700">OTP 코드</span>
-                    <input type="password" name="otp_code" placeholder="SMS 인증번호" inputmode="numeric" class="block w-48 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200">
-                </label>
-                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 focus:outline-none focus:ring-4 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-60">OTP 제출</button>
-            </form>
-            <p class="is-hidden mt-3 text-sm font-medium text-red-600" data-role="otp-feedback" role="alert"></p>
-        </div>
-    </div>
-</section>
-
-<!-- 모듈 노드 -->
-<section class="space-y-4">
-    <div>
-        <h2 class="text-lg font-bold tracking-tight text-gray-900">모듈 노드</h2>
-        <p class="text-sm text-gray-500">전체 {{ run.modules|length }}개 모듈 중 {{ run.selected_module_ids|length }}개가 선택되었습니다. 선택되지 않은 모듈은 SKIPPED 상태로 유지됩니다.</p>
-    </div>
-    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" id="node-grid" data-run-id="{{ run.run_id }}">
-        {% for module in run.modules|sort(attribute='order') %}
-        <article class="node-card rounded-2xl border border-gray-200 bg-white p-5 shadow-sm status-{{ module.status|lower }}" data-module-id="{{ module.module_id }}">
-            <div class="flex items-center justify-between gap-2">
-                <span class="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">{{ loop.index }}</span>
-                <div class="flex items-center gap-2">
-                    <span class="hidden font-mono text-xs font-medium text-blue-600" data-role="module-elapsed"></span>
-                    {% set mb = status_badge_view(module.status) %}
-                    {{ sb.status_badge(mb.tone, mb.label, size="sm", role="module-status", status_value=module.status.value) }}
-                </div>
+  <div class="run-split">
+    <section class="run-col run-col--modules" aria-labelledby="run-modules-title">
+      <div class="run-col__head">
+        <h2 id="run-modules-title">모듈</h2>
+        <span>{{ run.modules | length }}개</span>
+      </div>
+      <ol id="run-module-list" data-run-id="{{ run.run_id }}">
+        {% for module in run.modules | sort(attribute='order') %}
+        <li class="run-mod status-{{ module.status | lower }}"
+            data-module-id="{{ module.module_id }}"
+            data-order="{{ module.order }}"
+            data-status="{{ module.status | lower }}">
+          <div class="run-mod__head">
+            <span class="run-mod__index">{{ loop.index }}</span>
+            <div class="run-mod__identity">
+              <h3>{{ module.name }}</h3>
+              <p>{{ module.module_id }} · {{ module.group }}</p>
             </div>
-            <h3 class="mt-3 text-sm font-bold text-gray-900">{{ module.name }}</h3>
-            <p class="mt-0.5 font-mono text-xs text-gray-400">{{ module.module_id }} · {{ module.group }}</p>
-            <p class="mt-2 text-sm leading-relaxed text-gray-600" data-role="module-message">{{ module.message }}</p>
+            <div class="run-mod__state">
+              <span class="run-mod__elapsed" data-role="module-elapsed" hidden></span>
+              <span class="run-mod__duration" data-role="module-duration">{{ module.duration_ms or 0 }} ms</span>
+              {% set mb = status_badge_view(module.status) %}
+              {{ sb.status_badge(mb.tone, mb.label, size="sm", role="module-status", status_value=module.status.value) }}
+            </div>
+          </div>
+
+          <div class="run-mod__details">
+            <p class="run-mod__message" data-role="module-message">{{ module.message }}</p>
             {% if module.recovered %}
-            <span class="badge badge--recovered mt-2"
+            <span class="badge badge--recovered"
                   title="재시도 {{ module.retry_count }}회 후 통과 (복구 등급 {{ module.recovery_tiers | join(' → ') }})">
               자동 복구됨 ({{ module.retry_count }}회 재시도)
             </span>
             {% endif %}
             {% set heals = healing_by_module.get(module.module_id, []) %}
             {% if heals %}
-            <p class="mt-2 text-xs text-violet-700">
-              🔧 셀렉터 {{ heals|length }}건
+            <p class="run-mod__healing">
+              셀렉터 {{ heals | length }}건
               {%- if heals[0].action == 'AUTO_HEALED' %} 자동 복구{% else %} 제안됨{% endif %} ·
-              <code class="font-mono">{{ heals[0].broken_selector }}</code> →
-              <code class="font-mono">{{ heals[0].healed_selector }}</code> ·
-              <a href="/self-healing#patches" class="font-medium underline">상세</a>
+              <code>{{ heals[0].broken_selector }}</code> → <code>{{ heals[0].healed_selector }}</code> ·
+              <a href="/self-healing#patches">상세</a>
             </p>
             {% endif %}
-            <section class="analysis-panel mt-3 space-y-1.5 rounded-xl bg-gray-50 p-3 ring-1 ring-inset ring-gray-200{% if not module.failure_analysis %} is-hidden{% endif %}" data-role="failure-analysis">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-violet-600">
-                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-                        AI 분석
-                    </span>
-                    <span class="text-xs font-medium text-gray-500" data-role="analysis-category">{{ module.failure_analysis.category if module.failure_analysis else '' }}</span>
-                </div>
-                <p class="text-xs font-semibold text-gray-800" data-role="analysis-summary">{{ module.failure_analysis.user_summary if module.failure_analysis else '' }}</p>
-                <p class="text-xs leading-relaxed text-gray-500" data-role="analysis-action">{{ module.failure_analysis.recommended_action if module.failure_analysis else '' }}</p>
-                <details class="text-xs">
-                    <summary class="cursor-pointer text-gray-400 hover:text-gray-600">개발자용 상세</summary>
-                    <p class="pt-1 leading-relaxed text-gray-500" data-role="analysis-details">{{ module.failure_analysis.developer_details if module.failure_analysis else '' }}</p>
-                </details>
+            <section class="run-analysis" data-role="failure-analysis"
+                     {% if not module.failure_analysis %}hidden{% endif %}>
+              <div class="run-analysis__head">
+                <strong>AI 분석</strong>
+                <span data-role="analysis-category">{{ module.failure_analysis.category if module.failure_analysis else '' }}</span>
+              </div>
+              <p class="run-analysis__summary" data-role="analysis-summary">{{ module.failure_analysis.user_summary if module.failure_analysis else '' }}</p>
+              <p data-role="analysis-action">{{ module.failure_analysis.recommended_action if module.failure_analysis else '' }}</p>
+              <details>
+                <summary>개발자용 상세</summary>
+                <p data-role="analysis-details">{{ module.failure_analysis.developer_details if module.failure_analysis else '' }}</p>
+              </details>
             </section>
-            <dl class="mt-4 flex gap-6 border-t border-gray-100 pt-3 text-xs">
-                <div class="flex items-center gap-1.5">
-                    <svg class="h-3.5 w-3.5 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <dt class="sr-only">Duration</dt>
-                    <dd class="font-semibold text-gray-600" data-role="module-duration">{{ module.duration_ms or 0 }} ms</dd>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <svg class="h-3.5 w-3.5 text-gray-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                    <dt class="sr-only">Artifacts</dt>
-                    <dd class="font-semibold text-gray-600"><span data-role="module-artifacts">{{ module.artifact_count }}</span> artifacts</dd>
-                </div>
+            <dl class="run-mod__metrics">
+              <div><dt>아티팩트</dt><dd><span data-role="module-artifacts">{{ module.artifact_count }}</span>개</dd></div>
             </dl>
-            <div class="mt-2 flex flex-col gap-1 text-xs" data-role="module-artifacts-list">
-                {% for artifact in module.artifacts %}
-                <a href="{{ artifact }}" target="_blank" rel="noreferrer" class="truncate font-medium text-indigo-600 hover:underline">{{ artifact.split('/')[-1] }}</a>
-                {% endfor %}
+            <div class="run-mod__artifacts" data-role="module-artifacts-list">
+              {% for artifact in module.artifacts %}
+              <a href="{{ artifact }}" target="_blank" rel="noreferrer" class="run-mod__artifact">{{ artifact.split('/')[-1] }}</a>
+              {% endfor %}
             </div>
-        </article>
+          </div>
+        </li>
         {% endfor %}
-    </div>
-</section>
+      </ol>
+    </section>
 
-<!-- 실행 로그 -->
-<section class="space-y-4">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-            <h2 class="text-lg font-bold tracking-tight text-gray-900">실행 로그</h2>
-            <p class="text-sm text-gray-500">실시간 subprocess 출력</p>
+    <section class="run-col run-col--log" aria-labelledby="run-log-title">
+      <div class="run-logbar">
+        <div class="run-col__head run-col__head--log">
+          <h2 id="run-log-title">실행 로그</h2>
+          <span>실시간 출력</span>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <select id="log-filter" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
-                <option value="">전체 모듈</option>
-                {% for module in run.modules|sort(attribute='order') %}
-                <option value="{{ module.module_id }}">{{ loop.index }}. {{ module.name }}</option>
-                {% endfor %}
-            </select>
-            <input id="log-search" type="search" placeholder="로그 검색" class="w-40 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
-            <button type="button" id="log-copy" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">복사</button>
-            <button type="button" id="log-download" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">다운로드</button>
+        <div class="run-logbar__controls">
+          <select id="log-filter" aria-label="로그 모듈 필터">
+            <option value="">전체 모듈</option>
+            {% for module in run.modules | sort(attribute='order') %}
+            <option value="{{ module.module_id }}">{{ loop.index }}. {{ module.name }}</option>
+            {% endfor %}
+          </select>
+          <input id="log-search" type="search" placeholder="로그 검색" aria-label="로그 검색">
+          <button type="button" id="log-copy">복사</button>
+          <button type="button" id="log-download">다운로드</button>
         </div>
-    </div>
-    <div class="log-console h-72 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-gray-900 p-5 font-mono text-xs leading-relaxed text-gray-200 shadow-sm" id="log-console"></div>
-</section>
+      </div>
+      <div id="log-console" role="log" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% import "_assets.html" as run_assets %}
+{{ run_assets.asset_script("entries/run.ts") }}
 {% endblock %}

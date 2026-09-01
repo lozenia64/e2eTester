@@ -15,6 +15,24 @@ describe("startOtpCountdown", () => {
     expect(el.textContent).not.toBe("");
   });
 
+  it("native hidden만 쓰는 카운트다운을 열고 stop에서 다시 감춘다", () => {
+    vi.setSystemTime(new Date("2026-08-29T09:00:10Z"));
+    const el = document.createElement("p");
+    el.hidden = true;
+    el.classList.add("is-hidden");
+
+    startOtpCountdown("2026-08-29T09:00:00Z", el);
+    expect(el.hidden).toBe(false);
+    expect(el.classList.contains("is-hidden")).toBe(false);
+    expect(el.dataset.tone).toBe("active");
+    expect(el.className).not.toMatch(/\b(?:bg|text)-(?:amber|red)-\d{2,3}\b/);
+
+    stopOtpCountdown();
+    expect(el.hidden).toBe(true);
+    expect(el.classList.contains("is-hidden")).toBe(false);
+    expect(el.dataset.tone).toBeUndefined();
+  });
+
   it("1초마다 갱신한다", () => {
     vi.setSystemTime(new Date("2026-08-29T09:00:10Z"));
     const el = document.createElement("p");

@@ -24,7 +24,9 @@ function clearOtpCountdownTimer(): void {
 export function stopOtpCountdown(): void {
   clearOtpCountdownTimer();
   if (currentTarget) {
-    currentTarget.classList.add("is-hidden");
+    currentTarget.classList.remove("is-hidden");
+    currentTarget.hidden = true;
+    delete currentTarget.dataset.tone;
     currentTarget.textContent = "";
     currentTarget = null;
   }
@@ -39,17 +41,16 @@ export function startOtpCountdown(startedAtIso: string | null, target: HTMLEleme
   const startedMs = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
   const baselineMs = Number.isNaN(startedMs) ? Date.now() : startedMs;
   target.classList.remove("is-hidden");
+  target.hidden = false;
 
   const tick = (): void => {
     const remaining = OTP_VALIDITY_SECONDS - Math.floor((Date.now() - baselineMs) / 1000);
     if (remaining > 0) {
       target.textContent = `⏳ 인증 유효시간 ${formatClock(remaining * 1000)} 남음`;
-      target.classList.remove("bg-red-100", "text-red-700");
-      target.classList.add("bg-amber-100", "text-amber-700");
+      target.dataset.tone = "active";
     } else {
       target.textContent = "⚠ 인증 유효시간이 지났을 수 있습니다. 인증을 다시 시도하세요.";
-      target.classList.remove("bg-amber-100", "text-amber-700");
-      target.classList.add("bg-red-100", "text-red-700");
+      target.dataset.tone = "error";
       clearOtpCountdownTimer();
     }
   };

@@ -76,4 +76,25 @@ describe("updateOtpPanel", () => {
       document.getElementById("otp-countdown"),
     );
   });
+
+  it("native hidden만 쓰는 Run 패널도 WAITING_INPUT에서 연다", () => {
+    document.body.innerHTML = `
+      <section id="otp-panel" hidden><p id="otp-prompt"></p></section>
+      <p id="otp-countdown" hidden></p>`;
+
+    updateOtpPanel({ awaiting_input_module_id: "auth" });
+
+    expect(document.getElementById("otp-panel")!.hidden).toBe(false);
+  });
+
+  it("Run 패널을 닫을 때 레거시 is-hidden 클래스를 다시 쓰지 않는다", () => {
+    document.body.innerHTML = `
+      <section id="otp-panel" class="is-hidden"><p id="otp-prompt"></p></section>`;
+
+    updateOtpPanel({ awaiting_input_module_id: "" });
+
+    const panel = document.getElementById("otp-panel")!;
+    expect(panel.hidden).toBe(true);
+    expect(panel.classList.contains("is-hidden")).toBe(false);
+  });
 });
