@@ -58,7 +58,9 @@ class AdminDashboardQueries:
             offset += _PAGE_SIZE
         return rows
 
-    async def get_coverage_dashboard(self) -> dict[str, Any]:
+    async def get_coverage_dashboard(
+        self, *, system_codes: frozenset[str] | None = None
+    ) -> dict[str, Any]:
         tz = _schedule_tz()
         now = datetime.now(UTC)
         since = coverage_window_start_utc(now, tz)
@@ -71,6 +73,11 @@ class AdminDashboardQueries:
                 requested_at=row.requested_at,
             )
             for row in rows
+            if system_codes is None or row.system_code in system_codes
         ]
-        systems = self._registry.list_systems()
+        systems = [
+            system
+            for system in self._registry.list_systems()
+            if system_codes is None or system.system_code in system_codes
+        ]
         return build_admin_coverage_dashboard(systems, run_rows, now=now, tz=tz)

@@ -13,8 +13,10 @@ from app.contexts.insights.application.admin_coverage_dashboard import (
     build_admin_coverage_dashboard,
     coverage_window_start_utc,
 )
+from app.contexts.run.contracts.query_rows import Page
 from app.core.enums import RunStatus
 from app.core.system_models import SystemDefinition
+from app.orchestrator.queries.admin_dashboard_queries import AdminDashboardQueries
 
 KST = ZoneInfo("Asia/Seoul")
 GEN_AT = datetime(2026, 7, 14, 15, 0, tzinfo=UTC)  # KST 2026-07-15 00:00
@@ -24,16 +26,28 @@ def _dt_kst(year: int, month: int, day: int, hour: int, minute: int = 0) -> date
     return datetime(year, month, day, hour, minute, tzinfo=KST).astimezone(UTC)
 
 
-def _system(code: str, name: str) -> SystemDefinition:
+def _system(code: str, name: str, display_order: int = 0) -> SystemDefinition:
     return SystemDefinition(
         system_code=code,
         name=name,
         description="",
-        display_order=0,
+        display_order=display_order,
         modules=[],
         run_form=[],
         supported_auth_methods=[],
     )
+
+
+def _build_queries(*, systems: list[SystemDefinition], rows: list[object]) -> AdminDashboardQueries:
+    class _Registry:
+        def list_systems(self) -> list[SystemDefinition]:
+            return systems
+
+    class _SummaryQuery:
+        async def list_summaries(self, _filter: object, _page: Page) -> list[object]:
+            return rows
+
+    return AdminDashboardQueries(_Registry(), _SummaryQuery())
 
 
 @pytest.mark.parametrize(
@@ -126,3 +140,28 @@ def test_coverage_window_start_is_first_day_06_kst() -> None:
     start = coverage_window_start_utc(GEN_AT, KST)
     # GEN_AT = KST 2026-07-15 00:00 → 7-day window starts 2026-07-09 06:00 KST
     assert start == datetime(2026, 7, 8, 21, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_coverage_dashboard_filters_by_system_codes():
+    queries = _build_queries(
+        systems=[_system("hom", "HOM", 1), _system("mhm", "MHM", 2)],
+        rows=[],
+    )
+
+    scoped = await queries.get_coverage_dashboard(system_codes=frozenset({"hom"}))
+
+    assert [s["system_code"] for s in scoped["systems"]] == ["hom"]
+    assert scoped["totals"]["systems"] == 1
+
+
+@pytest.mark.asyncio
+async def test_coverage_dashboard_without_filter_keeps_all_systems():
+    queries = _build_queries(
+        systems=[_system("hom", "HOM", 1), _system("mhm", "MHM", 2)],
+        rows=[],
+    )
+
+    everything = await queries.get_coverage_dashboard()
+
+    assert [s["system_code"] for s in everything["systems"]] == ["hom", "mhm"]
