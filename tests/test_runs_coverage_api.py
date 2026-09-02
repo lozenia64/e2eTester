@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -111,3 +112,33 @@ async def test_day_filters_by_system_not_requester():
 
     assert run_queries.kwargs["system_code"] == "hom"
     assert run_queries.kwargs.get("user_id") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("day", "expected_since", "expected_before"),
+    [
+        (
+            "2026-03-08",
+            datetime(2026, 3, 8, 5, 0, tzinfo=UTC),
+            datetime(2026, 3, 9, 4, 0, tzinfo=UTC),
+        ),
+        (
+            "2026-11-01",
+            datetime(2026, 11, 1, 4, 0, tzinfo=UTC),
+            datetime(2026, 11, 2, 5, 0, tzinfo=UTC),
+        ),
+    ],
+)
+async def test_day_uses_schedule_timezone_local_day_boundaries_across_dst(
+    monkeypatch, day, expected_since, expected_before
+):
+    monkeypatch.setattr("app.api.routes_runs._schedule_tz", lambda: ZoneInfo("America/New_York"))
+    run_queries = _StubRunQueries()
+
+    async with _client(_StubAdminQueries(), run_queries) as client:
+        response = await client.get("/api/runs/day", params={"system_code": "hom", "day": day})
+
+    assert response.status_code == 200
+    assert run_queries.kwargs["requested_since"] == expected_since
+    assert run_queries.kwargs["requested_before"] == expected_before

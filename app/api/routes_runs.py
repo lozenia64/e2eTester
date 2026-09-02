@@ -79,7 +79,7 @@ async def runs_of_day(
         raise HTTPException(status_code=400, detail="day는 YYYY-MM-DD 형식이어야 합니다.") from exc
     tz = _schedule_tz()
     since = day_start_local.replace(tzinfo=tz).astimezone(UTC)
-    before = since + timedelta(days=1)
+    before = (day_start_local + timedelta(days=1)).replace(tzinfo=tz).astimezone(UTC)
     page = await run_queries.list_run_summaries_page(
         limit=200,
         system_code=system_code,
