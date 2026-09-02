@@ -419,48 +419,6 @@ async function refreshRunList() {
     }
 }
 
-const RUN_HISTORY_LIMIT = 100;
-
-async function bindRunsHistory() {
-    const list = document.getElementById("runs-history-list");
-    if (!list) {
-        return;
-    }
-    const statusEl = document.getElementById("runs-history-status");
-    try {
-        const [runsResult, suitesResult] = await Promise.allSettled([
-            fetch(`/api/runs?scope=before_today&limit=${RUN_HISTORY_LIMIT}`),
-            fetch(`/api/suites?scope=before_today&limit=${RUN_HISTORY_LIMIT}`),
-        ]);
-        if (runsResult.status !== "fulfilled" || !runsResult.value.ok) {
-            if (statusEl) {
-                statusEl.textContent = "Run 목록을 불러오지 못했습니다.";
-            }
-            return;
-        }
-        const runs = await runsResult.value.json();
-        let suites = [];
-        if (suitesResult.status === "fulfilled" && suitesResult.value.ok) {
-            suites = await suitesResult.value.json();
-        }
-        const count = renderExecutionGroups(list, runs, suites);
-        if (count === 0) {
-            if (statusEl) {
-                statusEl.textContent = "이전 Run 이력이 없습니다.";
-            }
-            return;
-        }
-        if (statusEl) {
-            statusEl.classList.add("is-hidden");
-        }
-    } catch (error) {
-        console.error("Run 이력 로드 실패", error);
-        if (statusEl) {
-            statusEl.textContent = "Run 목록을 불러오지 못했습니다.";
-        }
-    }
-}
-
 function bindRunsOverview() {
     if (!document.getElementById("runs-list")) {
         return;
@@ -861,6 +819,5 @@ window.__executeLegacy = {
 
 document.addEventListener("DOMContentLoaded", () => {
     bindRunsOverview();
-    bindRunsHistory();
     bindSchedulesOverview();
 });

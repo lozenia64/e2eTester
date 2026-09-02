@@ -6,6 +6,7 @@ dashboard.css 와 execute.css 가 같은 body:has(...) 블록을 한 벌씩 갖�
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -23,12 +24,20 @@ def test_shell_file_exists() -> None:
     assert SHELL.exists()
 
 
-@pytest.mark.parametrize(
-    "selector",
-    ["body:has(.dash)", "body:has(.exec)", "body:has(.suite)", "body:has(.run)"],
-)
-def test_shell_owns_all_screens(selector: str) -> None:
-    assert selector in _text("shell.css")
+def _shell_screen_selectors() -> str:
+    """shell.css 가 body:has(...) 로 거는 화면 클래스 전부.
+
+    소비자가 다섯이 되면서 블록마다 나열하던 것을 :has() 셀렉터 목록으로
+    접었다(Cycle 4). 계약은 "셸이 모든 화면을 소유한다"이지 철자가 아니므로,
+    리터럴 대신 셀렉터 안에 클래스가 있는지로 단언한다.
+    """
+    css = re.sub(r"/\*.*?\*/", "", _text("shell.css"), flags=re.S)
+    return " ".join(re.findall(r"body:has\(([^)]*)\)", css))
+
+
+@pytest.mark.parametrize("screen", [".dash", ".exec", ".suite", ".run", ".rhist"])
+def test_shell_owns_all_screens(screen: str) -> None:
+    assert screen in _shell_screen_selectors()
 
 
 @pytest.mark.parametrize("name", ["dashboard.css", "execute.css"])
@@ -45,6 +54,4 @@ def test_base_css_imports_shell_before_screen_sheets() -> None:
 
 
 def test_shell_has_no_hex() -> None:
-    import re
-
     assert not re.findall(r"#[0-9a-fA-F]{3,8}\b", _text("shell.css"))

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -165,8 +166,11 @@ def test_exec_shell_assigns_overflow_to_the_detail_owner() -> None:
     shell_css = Path("app/web/frontend/styles/shell.css").read_text(encoding="utf-8")
     execute_css = Path("app/web/frontend/styles/execute.css").read_text(encoding="utf-8")
 
-    assert "body:has(.exec)" in shell_css
-    shell_rule = shell_css.split("{", 1)[1].split("}", 1)[0]
+    # 셸은 소비자를 :has() 셀렉터 목록으로 건다(Cycle 4) — 철자가 아니라
+    # .exec 가 셸 셀렉터에 들어 있는지를 본다.
+    shell_body = re.sub(r"/\*.*?\*/", "", shell_css, flags=re.S)
+    assert ".exec" in " ".join(re.findall(r"body:has\(([^)]*)\)", shell_body))
+    shell_rule = shell_body.split("{", 1)[1].split("}", 1)[0]
     detail_rule = execute_css.split(".exec-detail {", 1)[1].split("}", 1)[0]
     assert "overflow: hidden;" in shell_rule
     assert "overflow-y: auto;" in detail_rule
