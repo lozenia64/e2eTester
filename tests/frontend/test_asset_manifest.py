@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -51,6 +52,8 @@ def test_manifest_is_reloaded_when_file_changes(manifest_path):
     assert manifest.js_url("entries/main.ts").endswith("main-a1b2c3d4.js")
     changed = {"entries/main.ts": {"file": "assets/main-99999999.js", "isEntry": True}}
     manifest_path.write_text(json.dumps(changed), encoding="utf-8")
+    stamp = manifest_path.stat().st_mtime + 1
+    os.utime(manifest_path, (stamp, stamp))
     assert manifest.js_url("entries/main.ts").endswith("main-99999999.js")
 
 
