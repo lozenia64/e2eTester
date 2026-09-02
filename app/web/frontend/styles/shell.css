@@ -1,27 +1,19 @@
 /* 넌스크롤 셸 — 관제탑 화면 공통(설계 D7).
 
-   .dash(일간 대시보드) · .exec(점검 실행) · .suite(수트 상세)가 같은 규칙을
-   쓴다. 세 번째 소비자가 생긴 시점에 dashboard.css·execute.css 의 복제를
-   여기로 합쳤다. 네 번째(런 상세, Cycle 3)도 셀렉터만 추가하면 된다. */
+   .dash(일간 대시보드) · .exec(점검 실행) · .suite(수트 상세) · .run(런 상세) ·
+   .rhist(Run 이력)가 같은 규칙을 쓴다. 소비자가 다섯이 되면서 블록마다
+   나열하던 것을 :has() 셀렉터 목록으로 접었다 — 여섯 번째는 목록에만
+   추가하면 된다. */
 
-body:has(.dash),
-body:has(.exec),
-body:has(.suite),
-body:has(.run) {
+body:has(.dash, .exec, .suite, .run, .rhist) {
   overflow: hidden;
   height: 100dvh;
   max-height: 100dvh;
   min-height: 0;
 }
 
-body:has(.dash) main,
-body:has(.dash) main > div,
-body:has(.exec) main,
-body:has(.exec) main > div,
-body:has(.suite) main,
-body:has(.suite) main > div,
-body:has(.run) main,
-body:has(.run) main > div {
+body:has(.dash, .exec, .suite, .run, .rhist) main,
+body:has(.dash, .exec, .suite, .run, .rhist) main > div {
   max-width: none;
   padding-top: 0;
   padding-right: 0;
@@ -32,25 +24,19 @@ body:has(.run) main > div {
 }
 
 /* .dash 고유 — 셸이 아니라 대시보드의 컨테이너 컨텍스트다. 테스트가
-   dashboard.css 에서 body:has( 를 금지해 여기에만 둔다(.exec·.suite 는 제외). */
+   dashboard.css 에서 body:has( 를 금지해 여기에만 둔다. */
 body:has(.dash) main > div {
   container-type: inline-size;
   container-name: dash-shell;
 }
 
 @media (min-width: 768px) {
-  body:has(.dash) main,
-  body:has(.exec) main,
-  body:has(.suite) main,
-  body:has(.run) main {
+  body:has(.dash, .exec, .suite, .run, .rhist) main {
     padding-left: 16rem;
     width: 100%;
   }
 
-  body:has(.dash) main > div,
-  body:has(.exec) main > div,
-  body:has(.suite) main > div,
-  body:has(.run) main > div {
+  body:has(.dash, .exec, .suite, .run, .rhist) main > div {
     padding-left: 0;
     width: 100%;
     max-width: none;
@@ -58,49 +44,30 @@ body:has(.dash) main > div {
 }
 
 @media (max-width: 767px) {
-  body:has(.dash),
-  body:has(.exec),
-  body:has(.suite),
-  body:has(.run) {
+  body:has(.dash, .exec, .suite, .run, .rhist) {
     display: flex;
     flex-direction: column;
   }
 
-  body:has(.dash) > header,
-  body:has(.exec) > header,
-  body:has(.suite) > header,
-  body:has(.run) > header {
+  body:has(.dash, .exec, .suite, .run, .rhist) > header {
     flex-shrink: 0;
   }
 
-  body:has(.dash) main,
-  body:has(.exec) main,
-  body:has(.suite) main,
-  body:has(.run) main {
+  body:has(.dash, .exec, .suite, .run, .rhist) main {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
     overflow: hidden;
   }
 
-  body:has(.dash) main > div,
-  body:has(.exec) main > div,
-  body:has(.suite) main > div,
-  body:has(.run) main > div {
+  body:has(.dash, .exec, .suite, .run, .rhist) main > div {
     height: 100%;
     overflow: hidden;
   }
 
-  body:has(.dash) main,
-  body:has(.dash) main > div,
-  body:has(.exec) main,
-  body:has(.exec) main > div,
-  body:has(.suite) main,
-  body:has(.suite) main > div,
-  body:has(.run) main,
-  body:has(.run) main > div {
+  body:has(.dash, .exec, .suite, .run, .rhist) main,
+  body:has(.dash, .exec, .suite, .run, .rhist) main > div {
     padding-left: 0;
     width: 100%;
   }
-
 }

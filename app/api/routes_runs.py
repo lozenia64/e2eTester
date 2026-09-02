@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.dependencies import get_run_queries, get_run_service
+from app.api.dependencies import get_admin_dashboard_queries, get_run_queries, get_run_service
 from app.contexts.identity.dependencies import get_current_user
 from app.contexts.identity.models import User
 from app.contexts.run.views.view import RunView
 from app.core.requests import StartRunRequest, SubmitOtpRequest
+from app.orchestrator.queries.admin_dashboard_queries import (
+    AdminDashboardQueries,
+    _schedule_tz,
+)
 
 if TYPE_CHECKING:
     from app.contexts.run.application.service import RunService
@@ -31,6 +36,60 @@ async def list_runs(
         user_id=user_id_filter,
         scope=scope,
     )
+
+
+_ACTOR_FIELDS = ("created_by_user_id", "created_by_user_name")
+
+
+def _permitted_codes(user: User) -> frozenset[str] | None:
+    """admin은 전 시스템, 그 외는 허용 목록. None은 '필터 없음'."""
+    if user.role == "admin":
+        return None
+    return frozenset(user.allowed_system_codes)
+
+
+@router.get("/coverage")
+async def runs_coverage(
+    current_user: User = Depends(get_current_user),
+    admin_queries: AdminDashboardQueries = Depends(get_admin_dashboard_queries),
+):
+    """시스템 x 7일 점검 커버리지(사용자 권한 범위, PII 없음)."""
+    return await admin_queries.get_coverage_dashboard(system_codes=_permitted_codes(current_user))
+
+
+@router.get("/day")
+async def runs_of_day(
+    system_code: str,
+    day: str,
+    current_user: User = Depends(get_current_user),
+    run_queries: RunQueries = Depends(get_run_queries),
+):
+    """격자 셀 드릴다운 — 그 날 그 시스템의 Run 전량.
+
+    셀에 실린 대표 run_id를 쓰지 않는 이유는 서버가 슬롯당 한 건으로 접기
+    때문이다(설계 D4). 권한 축은 격자와 같은 시스템 축이고(D8), 실행자
+    필드는 싣지 않는다(D9).
+    """
+    permitted = _permitted_codes(current_user)
+    if permitted is not None and system_code not in permitted:
+        raise HTTPException(status_code=403, detail="해당 시스템에 대한 접근 권한이 없습니다.")
+    try:
+        day_start_local = datetime.fromisoformat(day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="day는 YYYY-MM-DD 형식이어야 합니다.") from exc
+    tz = _schedule_tz()
+    since = day_start_local.replace(tzinfo=tz).astimezone(UTC)
+    before = (day_start_local + timedelta(days=1)).replace(tzinfo=tz).astimezone(UTC)
+    page = await run_queries.list_run_summaries_page(
+        limit=200,
+        system_code=system_code,
+        requested_since=since,
+        requested_before=before,
+    )
+    return [
+        {key: value for key, value in item.items() if key not in _ACTOR_FIELDS}
+        for item in page["items"]
+    ]
 
 
 @router.post("/systems/{system_code}")

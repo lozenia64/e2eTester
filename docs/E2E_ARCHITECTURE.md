@@ -434,6 +434,8 @@ e2eTester/
 - `GET /api/dashboard/daily/fragments/{zone}`
 - `GET /api/dashboard/daily/fragments/system/{system_code}/panel`
 - `GET /api/runs`
+- `GET /api/runs/coverage` — 시스템 × 7일 점검 커버리지(사용자 권한 범위). 관리자 전용 `/api/admin/dashboard` 와 같은 read model 을 쿼리 계층 시스템 필터로 재사용한다
+- `GET /api/runs/day` — 격자 셀 드릴다운. 그 날 그 시스템의 Run 전량(실행자 필드 제외)
 - `POST /api/runs/systems/{system_code}`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/nodes`
