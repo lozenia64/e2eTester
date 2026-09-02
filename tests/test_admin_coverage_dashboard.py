@@ -13,7 +13,7 @@ from app.contexts.insights.application.admin_coverage_dashboard import (
     build_admin_coverage_dashboard,
     coverage_window_start_utc,
 )
-from app.contexts.run.contracts.query_rows import Page
+from app.contexts.run.contracts.query_rows import Page, RunSummaryRow
 from app.core.enums import RunStatus
 from app.core.system_models import SystemDefinition
 from app.orchestrator.queries.admin_dashboard_queries import AdminDashboardQueries
@@ -144,15 +144,65 @@ def test_coverage_window_start_is_first_day_06_kst() -> None:
 
 @pytest.mark.asyncio
 async def test_coverage_dashboard_filters_by_system_codes():
+    requested_at = datetime.now(UTC)
     queries = _build_queries(
         systems=[_system("hom", "HOM", 1), _system("mhm", "MHM", 2)],
-        rows=[],
+        rows=[
+            RunSummaryRow(
+                run_id="hom-run",
+                system_code="hom",
+                system_name="HOM",
+                status=RunStatus.PASSED,
+                requested_at=requested_at,
+                started_at=None,
+                ended_at=None,
+                schedule_id=None,
+                suite_id=None,
+                created_by_user_id=None,
+                created_by_user_name=None,
+                triggered_by="tester",
+                awaiting_input_module_id=None,
+                awaiting_input_prompt=None,
+                module_total=0,
+                module_defined_total=0,
+                module_skipped=0,
+                module_passed=0,
+                current_module_name=None,
+                failed_module_name=None,
+            ),
+            RunSummaryRow(
+                run_id="mhm-run",
+                system_code="mhm",
+                system_name="MHM",
+                status=RunStatus.PASSED,
+                requested_at=requested_at,
+                started_at=None,
+                ended_at=None,
+                schedule_id=None,
+                suite_id=None,
+                created_by_user_id=None,
+                created_by_user_name=None,
+                triggered_by="tester",
+                awaiting_input_module_id=None,
+                awaiting_input_prompt=None,
+                module_total=0,
+                module_defined_total=0,
+                module_skipped=0,
+                module_passed=0,
+                current_module_name=None,
+                failed_module_name=None,
+            ),
+        ],
     )
 
     scoped = await queries.get_coverage_dashboard(system_codes=frozenset({"hom"}))
 
     assert [s["system_code"] for s in scoped["systems"]] == ["hom"]
     assert scoped["totals"]["systems"] == 1
+    assert scoped["totals"]["checked"] == 1
+    hom_cell = next(cell for cell in scoped["systems"][0]["cells"] if cell["run_id"])
+    assert hom_cell["status"] == str(RunStatus.PASSED)
+    assert hom_cell["run_id"] == "hom-run"
 
 
 @pytest.mark.asyncio
