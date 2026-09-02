@@ -24,8 +24,8 @@ describe("buildGrid", () => {
       cell("2026-09-01", "evening", "not_checked", "not_checked"),
     ]));
 
-    expect(rows[0].days[0].tone).toBe("not_checked");
-    expect(rows[0].days[0].ran).toBe(0);
+    expect(rows[0]!.days[0]!.tone).toBe("not_checked");
+    expect(rows[0]!.days[0]!.ran).toBe(0);
   });
 
   it("한 슬롯만 돌고 둘이 비면 그 슬롯의 톤을 따른다", () => {
@@ -35,8 +35,8 @@ describe("buildGrid", () => {
       cell("2026-09-01", "evening", "not_checked", "not_checked"),
     ]));
 
-    expect(rows[0].days[0].tone).toBe("passed");
-    expect(rows[0].days[0].ran).toBe(1);
+    expect(rows[0]!.days[0]!.tone).toBe("passed");
+    expect(rows[0]!.days[0]!.ran).toBe(1);
   });
 
   it("돌아간 것들 중 최악을 고른다", () => {
@@ -46,7 +46,7 @@ describe("buildGrid", () => {
       cell("2026-09-01", "evening", "anomaly", "anomaly"),
     ]));
 
-    expect(rows[0].days[0].tone).toBe("error");
+    expect(rows[0]!.days[0]!.tone).toBe("error");
   });
 
   it("anomaly 는 passed 를 이긴다", () => {
@@ -55,7 +55,7 @@ describe("buildGrid", () => {
       cell("2026-09-01", "afternoon", "anomaly", "anomaly"),
     ]));
 
-    expect(rows[0].days[0].tone).toBe("anomaly");
+    expect(rows[0]!.days[0]!.tone).toBe("anomaly");
   });
 
   it("running 은 passed 보다 앞선다", () => {
@@ -64,14 +64,14 @@ describe("buildGrid", () => {
       cell("2026-09-02", "afternoon", "running", "running"),
     ]));
 
-    expect(rows[0].days[1].tone).toBe("running");
+    expect(rows[0]!.days[1]!.tone).toBe("running");
   });
 
   it("응답에 없는 날도 열을 만든다", () => {
     const rows = buildGrid(payload([cell("2026-09-01", "morning", "passed", "passed")]));
 
-    expect(rows[0].days.map((d) => d.day_key)).toEqual(["2026-09-01", "2026-09-02"]);
-    expect(rows[0].days[1].tone).toBe("not_checked");
+    expect(rows[0]!.days.map((d) => d.day_key)).toEqual(["2026-09-01", "2026-09-02"]);
+    expect(rows[0]!.days[1]!.tone).toBe("not_checked");
   });
 
   it("슬롯 톤을 순서대로 보존한다", () => {
@@ -80,7 +80,7 @@ describe("buildGrid", () => {
       cell("2026-09-01", "afternoon", "error", "error"),
     ]));
 
-    expect(rows[0].days[0].slots).toEqual(["passed", "error"]);
+    expect(rows[0]!.days[0]!.slots).toEqual(["passed", "error"]);
   });
 });
 

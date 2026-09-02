@@ -77,7 +77,7 @@ describe("bindDrilldown", () => {
     root.querySelector<HTMLElement>(".rhist-cell")!.click();
     await vi.waitFor(() => expect(panel.querySelectorAll(".rhist-drill__row").length).toBe(1));
 
-    const url = String(fetchMock.mock.calls[0][0]);
+    const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("system_code=hom");
     expect(url).toContain("day=2026-09-01");
   });

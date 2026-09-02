@@ -23,6 +23,7 @@ export default defineConfig({
         execute: resolve(__dirname, "app/web/frontend/entries/execute.ts"),
         suite: resolve(__dirname, "app/web/frontend/entries/suite.ts"),
         run: resolve(__dirname, "app/web/frontend/entries/run.ts"),
+        "runs-history": resolve(__dirname, "app/web/frontend/entries/runs-history.ts"),
         // 차트 라이브러리 self-host(P3-4 §3.1). 레거시 페이지 스크립트가
         // 전역으로 쓰므로 브리지 엔트리로 얹는다 — 해당 화면이 P4 에서
         // 이관되는 시점에 이 세 줄과 엔트리 파일을 함께 지운다.
