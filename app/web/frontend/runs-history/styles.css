@@ -1,0 +1,184 @@
+/* Run 이력 — 시스템 x 7일 격자 + 드릴다운(설계 §3.1).
+   격자는 고정, 스크롤은 드릴다운 하나만 갖는다(스크롤 소유권). */
+
+.rhist {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+  padding: 1.25rem 1.5rem;
+  box-sizing: border-box;
+}
+
+.rhist-crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--st-pending-text);
+}
+
+.rhist-crumb a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rhist-crumb a:hover {
+  color: var(--st-running-text);
+}
+
+.rhist-head__title {
+  margin: 0.25rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.rhist-head__sub {
+  margin: 0.375rem 0 0;
+  font-size: 0.875rem;
+  color: var(--st-pending-text);
+}
+
+.rhist-grid {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) repeat(var(--rhist-days, 7), minmax(0, 1fr));
+  gap: 0.375rem;
+  align-items: stretch;
+}
+
+.rhist-grid__day,
+.rhist-grid__system {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--st-pending-text);
+}
+
+.rhist-grid__day {
+  justify-content: center;
+}
+
+.rhist-cell {
+  display: flex;
+  gap: 2px;
+  min-height: 2.75rem;
+  padding: 3px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--st-pending-border);
+  background: var(--st-pending-surface);
+  cursor: pointer;
+}
+
+/* 미실행은 이 화면의 주인공이다 — 파선으로 "비어 있음"을 말한다. */
+.rhist-cell[data-tone="not_checked"] {
+  border-style: dashed;
+}
+
+.rhist-cell[data-selected="true"] {
+  outline: 2px solid var(--st-running-solid);
+  outline-offset: 1px;
+}
+
+.rhist-cell__slot,
+.rhist-legend__swatch {
+  border-radius: 0.25rem;
+  background: var(--st-pending-surface);
+}
+
+.rhist-cell__slot {
+  flex: 1 1 0;
+}
+
+.rhist-cell__slot[data-tone="passed"],
+.rhist-legend__swatch[data-tone="passed"] {
+  background: var(--st-passed-solid);
+}
+
+.rhist-cell__slot[data-tone="anomaly"],
+.rhist-legend__swatch[data-tone="anomaly"] {
+  background: var(--st-anomaly-solid);
+}
+
+.rhist-cell__slot[data-tone="error"],
+.rhist-legend__swatch[data-tone="error"] {
+  background: var(--st-error-solid);
+}
+
+.rhist-cell__slot[data-tone="running"],
+.rhist-legend__swatch[data-tone="running"] {
+  background: var(--st-running-solid);
+}
+
+.rhist-cell__slot[data-tone="waiting_input"] {
+  background: var(--st-waiting_input-solid);
+}
+
+.rhist-cell__slot[data-tone="blocked"] {
+  background: var(--st-blocked-solid);
+}
+
+.rhist-cell__slot[data-tone="skipped"] {
+  background: var(--st-skipped-solid);
+}
+
+.rhist-cell__slot[data-tone="cancelled"] {
+  background: var(--st-cancelled-solid);
+}
+
+.rhist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
+  color: var(--st-pending-text);
+}
+
+.rhist-legend__swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.25rem;
+  vertical-align: -1px;
+}
+
+.rhist-legend__swatch[data-tone="not_checked"] {
+  border: 1px dashed var(--st-pending-border);
+}
+
+.rhist-drill {
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--st-pending-border);
+  padding-top: 0.75rem;
+}
+
+.rhist-drill__head {
+  margin: 0 0 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.rhist-drill__row {
+  display: grid;
+  grid-template-columns: 5rem 6rem 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.rhist-drill__row a {
+  color: var(--st-running-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.rhist-drill__empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--st-pending-text);
+}
