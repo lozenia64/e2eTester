@@ -28,4 +28,4 @@ redis>=8.1.0,<9.0
 # Run/Suite 입력값 at-rest 암호화(AES-GCM).
 # 하한 50.0: PYSEC-2026-3552/3553/3554 수정본. 상한 <49.0 이 이 수정본을 막아 주간
 # security 게이트(pip_audit)가 실패하고 있었다. 사용 API 는 AESGCM 하나뿐이라 상향 안전.
-cryptography>=50.0,<51.0
+cryptography>=50.0.1,<51.0
