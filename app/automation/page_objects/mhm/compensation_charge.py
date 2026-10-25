@@ -76,6 +76,7 @@ CLAIM_DETAIL_OTHER_DIAGNOSIS_INPUT_SELECTOR = "#selectionCh2_A010204"
 MEDICAL_BENEFIT_NONE_LABEL_SELECTOR = '.btn_radio label[for="radio10"]'
 MEDICAL_BENEFIT_NONE_INPUT_SELECTOR = "#radio10"
 CONSENT_FULL_AGREE_FOR = "[필수] 전체동의"
+CONSENT_ALL_CHECK_ID = "allCheck"
 CONSENT_GUIDE_PATTERN = re.compile(r"동의\s*안내|보험금청구를\s*위한\s*동의")
 CONSENT_SUMMARY_PATTERN = re.compile(r"요약\s*동의서|보험금청구를\s*위한")
 CONSENT_MODAL_SELECTOR = ".ui_dialog, [role='dialog'], .dialog.full.show, .dialog.modal.show, .dialog.bottom.show, .dialog.show"
@@ -1132,6 +1133,17 @@ def _maybe_click_consent_action(
     return True
 
 
+def _ensure_consent_all_checked(modal) -> None:
+    checkbox = modal.locator(f'input[id="{CONSENT_ALL_CHECK_ID}"]')
+    if checkbox.is_checked():
+        return
+    # 실클릭 1회: JS 이중 클릭 헬퍼는 체크박스 토글이 상쇄될 수 있어 사용하지 않는다.
+    modal.locator(f'label[for="{CONSENT_ALL_CHECK_ID}"]').first.click()
+    if not checkbox.is_checked():
+        raise RuntimeError("동의 안내: 전체 동의 체크를 확인하지 못했습니다.")
+    log("[click] 동의 안내: 전체 동의")
+
+
 def _handle_consent_flow(page, timeout_ms: int) -> bool:
     if _existing_claim_history_popup_open(page):
         return _dismiss_duplicate_accident_date_type_popup(page, timeout_ms)
@@ -1139,6 +1151,14 @@ def _handle_consent_flow(page, timeout_ms: int) -> bool:
     consent_modal = _find_consent_modal(page, CONSENT_GUIDE_PATTERN)
     if consent_modal is None:
         return False
+
+    if consent_modal.locator(f'input[id="{CONSENT_ALL_CHECK_ID}"]').count() > 0:
+        _ensure_consent_all_checked(consent_modal)
+        return _click_button_in_modal(
+            consent_modal,
+            names=["다음", re.compile(r"^다음$")],
+            description="동의 안내: 다음",
+        )
 
     if _click_label_in_modal(
         consent_modal,
