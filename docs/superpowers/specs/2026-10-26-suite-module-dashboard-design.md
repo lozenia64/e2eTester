@@ -88,7 +88,7 @@
             ✓ 11 통과  ✕ 1 실패  남음 11 · 05:00 경과 · 약 4분 남음
 ```
 
-- **링**: 전체 모듈 기준 완료율. 분자 = 끝난 모듈 수(passed + failed/error + anomaly + cancelled),
+- **링**: 전체 모듈 기준 완료율. 분자 = 끝난 모듈 수(passed + failed/error + anomaly + blocked + cancelled — blocked 포함은 사용자 결정),
   분모 = 선택된(skipped 아닌) 스텝들의 모듈 수 합. 링 색은 초록 한 색, 가운데 `%` 숫자.
   값이 바뀌면 링이 부드럽게 차오르고(transition) 숫자는 짧게 카운트업.
   기존 `components/status-hero` 의 `passRateToDegrees` + conic-gradient 방식을 재사용한다(새 SVG/차트 라이브러리 없음).
