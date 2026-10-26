@@ -78,7 +78,7 @@
       <div class="suite-step__body">
         <p class="suite-step__name">{{ step.system_name }}</p>
         <p class="suite-step__meta">{{ step.system_code | upper }} · 모듈 {{ step.module_total }}개</p>
-        <p class="suite-step__module" data-role="step-module-progress" hidden></p>
+        <ul class="suite-chips" data-role="step-module-progress" hidden></ul>
         <p class="suite-step__link" data-role="step-run-link">
           {% if step.run_id %}
           <a href="/runs/{{ step.run_id }}">{{ step.run_id }}</a>

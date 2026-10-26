@@ -297,10 +297,70 @@
   color: var(--pl-text-subtle);
 }
 
-.suite-step__module {
-  margin: 0.25rem 0 0;
+/* ── 모듈 칩 — 모듈마다 알약 하나, 실행 순서대로(설계 §2.1) ── */
+.suite-chips {
+  margin: 0.375rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.suite-chip a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.1875rem 0.5625rem;
+  border: 1px solid var(--pl-border);
+  border-radius: 9999px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--pl-text-subtle);
+  text-decoration: none;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.suite-chip__icon:empty { display: none; }
+.suite-chip__icon { font-weight: 700; }
+
+.suite-chip[data-tone="passed"] a        { background: var(--st-passed-surface);        border-color: var(--st-passed-border);        color: var(--st-passed-text); }
+.suite-chip[data-tone="error"] a         { background: var(--st-error-surface);         border-color: var(--st-error-border);         color: var(--st-error-text); }
+.suite-chip[data-tone="anomaly"] a       { background: var(--st-anomaly-surface);       border-color: var(--st-anomaly-border);       color: var(--st-anomaly-text); }
+.suite-chip[data-tone="running"] a       { background: var(--st-running-surface);       border-color: var(--st-running-border);       color: var(--st-running-text); animation: suite-pulse 1.6s ease-out infinite; }
+.suite-chip[data-tone="waiting_input"] a { background: var(--st-waiting_input-surface); border-color: var(--st-waiting_input-border); color: var(--st-waiting_input-text); }
+.suite-chip[data-tone="blocked"] a       { border-style: dashed; }
+.suite-chip[data-tone="cancelled"] a     { text-decoration: line-through; }
+
+.suite-chip__spin {
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 2px solid var(--st-running-border);
+  border-top-color: var(--st-running-text);
+  border-radius: 50%;
+  animation: suite-spin 0.8s linear infinite;
+}
+
+.suite-chip[data-pop] a { animation: suite-pop 0.25s var(--ease-out); }
+
+@keyframes suite-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-running-solid) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes suite-spin { to { transform: rotate(360deg); } }
+
+@keyframes suite-pop {
+  from { transform: scale(0.85); }
+  to   { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suite-chip a,
+  .suite-chip__spin,
+  .suite-chip[data-pop] a,
+  .suite-chip[data-tone="running"] a { animation: none; transition: none; }
 }
 
 .suite-step__link {
@@ -330,12 +390,5 @@
   color: var(--pl-text-subtle);
 }
 
-/* ── 모듈 진행 칩의 톤 — moduleProgressClassName 의 하드코딩 색을 대체(설계 §3.5) ── */
-[data-role="step-module-progress"][data-tone="active"]  { color: var(--st-running-text); }
-[data-role="step-module-progress"][data-tone="waiting"] { color: var(--st-waiting_input-text); }
-[data-role="step-module-progress"][data-tone="anomaly"] { color: var(--st-anomaly-text); }
-[data-role="step-module-progress"][data-tone="error"]   { color: var(--st-error-text); }
-[data-role="step-module-progress"][data-tone="passed"]  { color: var(--st-passed-text); }
-[data-role="step-module-progress"][data-tone="muted"]   { color: var(--pl-text-subtle); }
 .suite-otp__countdown[data-tone="active"] { color: var(--st-anomaly-text); }
 .suite-otp__countdown[data-tone="error"] { color: var(--st-error-text); }

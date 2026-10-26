@@ -4,6 +4,7 @@
 //   moduleProgressClassName           → data-tone (설계 §3.5 — 톤 클래스를 되살리지 않는다)
 //   is-hidden 클래스                  → 네이티브 hidden 속성
 import { normalizeTone, statusLabel } from "../components/status-badge/index";
+import { buildModuleChips, type ModuleChip } from "./modules";
 import { computeRunModuleProgress, type ModuleProgress } from "./progress";
 import { type SuiteLike, type SuiteStepLike, updateSuiteProgressDetailWithModule } from "./render";
 import { activeRunProgressRunId, refreshSuiteRunProgress } from "./socket";
@@ -31,6 +32,47 @@ export function formatStepModuleProgressText(progress: ModuleProgress, stepStatu
   return `모듈 ${progress.label} 실행 중${progress.moduleName ? ` · ${progress.moduleName}` : ""}`;
 }
 
+// run_id → 최신 run 페이로드. 칩과 상단 요약이 같은 데이터에서 계산하도록 모든 run 페이로드를 여기 모은다.
+export const suiteRunCache = new Map<string, unknown>();
+
+const CHIP_ICONS: Partial<Record<string, string>> = {
+  passed: "✓",
+  error: "✕",
+  anomaly: "!",
+  blocked: "⊘",
+  waiting_input: "OTP",
+};
+
+// 끝난 run 은 수트 WS 이벤트마다 다시 fetch 된다 — 직전 톤과 비교해 실제로 바뀐 칩만 pop 한다.
+export function renderModuleChips(list: HTMLElement, chips: ModuleChip[], runId: string): void {
+  const previous = new Map(
+    [...list.querySelectorAll<HTMLElement>("li[data-module-id]")].map((li) => [li.dataset.moduleId, li.dataset.tone]),
+  );
+  const items = chips.map((chip) => {
+    const li = document.createElement("li");
+    li.className = "suite-chip";
+    li.dataset.moduleId = chip.moduleId;
+    li.dataset.tone = chip.tone;
+    const before = previous.get(chip.moduleId);
+    if (before !== undefined && before !== chip.tone) {
+      li.dataset.pop = "";
+      li.addEventListener("animationend", () => delete li.dataset.pop, { once: true });
+    }
+    const link = document.createElement("a");
+    link.href = `/runs/${runId}`;
+    const icon = document.createElement("span");
+    icon.className = chip.tone === "running" ? "suite-chip__spin" : "suite-chip__icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = CHIP_ICONS[chip.tone] ?? "";
+    const name = document.createElement("span");
+    name.textContent = chip.tone === "blocked" ? `${chip.name} 차단` : chip.name;
+    link.append(icon, name);
+    li.append(link);
+    return li;
+  });
+  list.replaceChildren(...items);
+}
+
 export function findSuiteStepCardByRunId(runId: string | null | undefined): HTMLElement | null {
   if (!runId) {
     return null;
@@ -40,6 +82,9 @@ export function findSuiteStepCardByRunId(runId: string | null | undefined): HTML
 
 export function updateSuiteStepModuleProgress(run: unknown): void {
   const runId = (run as { run_id?: string } | null | undefined)?.run_id;
+  if (runId) {
+    suiteRunCache.set(runId, run);
+  }
   const card = findSuiteStepCardByRunId(runId);
   if (!card) {
     return;
@@ -51,11 +96,11 @@ export function updateSuiteStepModuleProgress(run: unknown): void {
   // 원본은 배지의 textContent 를 읽었다. 새 계약에서 배지는 한국어 라벨을 담으므로
   // 상태 자체를 들고 있는 행의 data-status 를 읽는다 — 넘어가는 값은 원본과 같다.
   const stepStatus = card.dataset.status ?? "";
-  const progress = computeRunModuleProgress(run);
-  const text = formatStepModuleProgressText(progress, stepStatus);
-  progressNode.textContent = text;
-  progressNode.dataset.tone = text ? progress.tone : "muted";
-  progressNode.hidden = !text;
+  const chips = buildModuleChips(run);
+  renderModuleChips(progressNode, chips, runId ?? "");
+  // 칩이 시각 정보를 대신하고, 기존 한 줄 요약은 스크린리더용 라벨로 남긴다.
+  progressNode.setAttribute("aria-label", formatStepModuleProgressText(computeRunModuleProgress(run), stepStatus));
+  progressNode.hidden = chips.length === 0 || stepStatus === "pending";
 
   if (runId === activeRunProgressRunId()) {
     updateSuiteProgressDetailWithModule(run);
@@ -94,8 +139,7 @@ export function updateSuiteStepCard(step: SuiteStepLike): void {
   if (!step.run_id) {
     const progressNode = card.querySelector<HTMLElement>('[data-role="step-module-progress"]');
     if (progressNode) {
-      progressNode.textContent = "";
-      progressNode.dataset.tone = "muted";
+      progressNode.replaceChildren();
       progressNode.hidden = true;
     }
   }
