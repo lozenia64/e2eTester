@@ -11,13 +11,14 @@
 
 ## 실행·검증
 
-`docs/INSTALL.md`. PR 전 `python3 scripts/ci/run_all_gates.py --profile full`.
+`docs/INSTALL.md`. PR 전 `python3 scripts/ci/run_all_gates.py --profile full` (장시간 → 백그라운드). 새 워크트리는 `npm ci` 먼저.
 
 ## 에이전트 스킬
 
 - 프로젝트 스킬: `.agents/skills/` (Codex·Copilot CLI 등 크로스 런타임 공유)
 - **수동 E2E / UI 검증** 요청 시 `.agents/skills/e2e-browser/SKILL.md`를 먼저 읽고 따른다.
   브라우저 우선순위: Orca 내장 브라우저(열림 확인 → 없으면 탭 생성) → 실패 시 Playwright MCP.
+- 대표홈페이지(hom/mhm) 실사이트 재현은 위 브라우저 대신 `RepHomepageExecutor.build_runtime` 기동 순서로. 사용자 로그인된 브라우저는 재시작 금지.
 
 ## 제약
 

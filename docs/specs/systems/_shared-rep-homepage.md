@@ -83,3 +83,8 @@
 - 미선택 → `SKIPPED`
 - `depends_on` 미충족 선택 → API `400`
 - 선행 모듈 실패(PASSED 아님) → 후속 `BLOCKED`
+
+## 8. 셀렉터 규칙 (page object)
+
+- 사이트에 중복 id·숨김 사본이 있다 → `.first` 대신 `:visible`
+- 체크박스에 JS 이중클릭 헬퍼(`_click_label_in_modal` 등) 금지 — 토글 상쇄. Playwright 실클릭 후 `is_checked()` 검증
