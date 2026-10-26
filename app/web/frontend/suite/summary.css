@@ -1,0 +1,150 @@
+/* 수트 상세 상단 요약 — 진행 링 + "지금 실행 중" 카드 + 집계 줄(설계 §2.2). styles.css 400줄 상한(FG-004)으로 분리. */
+
+@property --ring-deg {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.suite-sum {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  border: 1px solid var(--pl-border);
+  border-radius: 0.875rem;
+  background: var(--pl-surface);
+  padding: 0.875rem 1rem;
+  box-shadow: var(--pl-shadow-sm);
+}
+
+/* status-hero 링과 같은 기법: conic-gradient 한 겹 + ::before 로 도넛. --ring-deg 는 @property 라 transition 된다. */
+.suite-ring {
+  position: relative;
+  display: grid;
+  width: 6.5rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--st-passed-solid) var(--ring-deg), var(--pl-border) var(--ring-deg));
+  transition: --ring-deg 0.8s var(--ease-out);
+}
+
+.suite-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0.625rem;
+  border-radius: 50%;
+  background: var(--pl-surface);
+}
+
+.suite-ring__figure {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.suite-ring__value {
+  font-size: 1.625rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.suite-ring__unit {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--pl-text-muted);
+}
+
+.suite-now {
+  min-width: 0;
+  border: 1px solid var(--st-running-border);
+  border-radius: 0.75rem;
+  background: var(--st-running-surface);
+  padding: 0.625rem 0.875rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.suite-now p { margin: 0; }
+
+.suite-now__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--st-running-text);
+}
+
+/* 라이브 점 — 실행·대기 중에만 */
+.suite-now__eyebrow::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--st-running-solid);
+  animation: suite-live 1.6s ease-out infinite;
+}
+
+.suite-now__title {
+  margin-top: 0.125rem !important;
+  font-size: 1rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suite-now__meta {
+  font-size: 0.75rem;
+  color: var(--pl-text-muted);
+}
+
+.suite-now[data-kind="waiting"] { border-color: var(--st-waiting_input-border); background: var(--st-waiting_input-surface); }
+.suite-now[data-kind="waiting"] .suite-now__eyebrow { color: var(--st-waiting_input-text); }
+.suite-now[data-kind="waiting"] .suite-now__eyebrow::before { background: var(--st-waiting_input-solid); animation: none; }
+
+.suite-now[data-kind="finished"],
+.suite-now[data-kind="idle"] { border-color: var(--pl-border); background: var(--pl-bg); }
+.suite-now[data-kind="finished"] .suite-now__eyebrow,
+.suite-now[data-kind="idle"] .suite-now__eyebrow { color: var(--pl-text-muted); }
+.suite-now[data-kind="finished"] .suite-now__eyebrow::before,
+.suite-now[data-kind="idle"] .suite-now__eyebrow::before { display: none; }
+
+.suite-counts {
+  grid-column: 1 / -1;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pl-text-muted);
+}
+
+.suite-counts > span:not(:first-child):not(:empty)::before {
+  content: "·";
+  margin-right: 0.5rem;
+  color: var(--pl-text-subtle);
+}
+
+.suite-counts__passed { color: var(--st-passed-text); font-weight: 600; }
+.suite-counts__failed { color: var(--st-error-text); font-weight: 600; }
+.suite-counts__clock { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+@keyframes suite-live {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-running-solid) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suite-ring,
+  .suite-now { transition: none; }
+  .suite-now__eyebrow::before { animation: none; }
+}
+

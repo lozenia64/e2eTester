@@ -52,17 +52,25 @@
   </section>
 
   <section class="suite-sum">
-    <div class="suite-sum__head">
-      <span class="suite-sum__label" id="suite-progress-label">통과 0/{{ suite.steps | length }}</span>
-      <span class="suite-sum__elapsed" id="suite-progress-elapsed">00:00</span>
+    <div class="suite-ring" id="suite-ring" role="img" aria-label="전체 모듈 진행률">
+      <div class="suite-ring__figure">
+        <span class="suite-ring__value" id="suite-ring-value">0</span>
+        <span class="suite-ring__unit">% 완료</span>
+      </div>
     </div>
-    <div class="suite-sum__track">
-      <div class="suite-sum__fill" id="suite-progress-bar" style="width: 0%"></div>
+    <div class="suite-now" id="suite-now" data-kind="idle">
+      <p class="suite-now__eyebrow" id="suite-now-eyebrow">시작 대기 중</p>
+      <p class="suite-now__title" id="suite-now-title" aria-live="polite">—</p>
+      <p class="suite-now__meta" id="suite-now-meta"></p>
     </div>
-    <div class="suite-sum__foot">
+    <p class="suite-counts" id="suite-counts">
+      <span class="suite-counts__passed" id="suite-count-passed"></span>
+      <span class="suite-counts__failed" id="suite-count-failed"></span>
+      <span class="suite-counts__blocked" id="suite-count-blocked" hidden></span>
+      <span id="suite-count-remaining"></span>
+      <span class="suite-counts__clock" id="suite-progress-elapsed">00:00</span>
       <span id="suite-progress-eta"></span>
-      <span id="suite-progress-detail"></span>
-    </div>
+    </p>
   </section>
 
   <ol class="suite-steps" id="suite-step-list">
@@ -78,7 +86,7 @@
       <div class="suite-step__body">
         <p class="suite-step__name">{{ step.system_name }}</p>
         <p class="suite-step__meta">{{ step.system_code | upper }} · 모듈 {{ step.module_total }}개</p>
-        <p class="suite-step__module" data-role="step-module-progress" hidden></p>
+        <ul class="suite-chips" data-role="step-module-progress" hidden></ul>
         <p class="suite-step__link" data-role="step-run-link">
           {% if step.run_id %}
           <a href="/runs/{{ step.run_id }}">{{ step.run_id }}</a>
