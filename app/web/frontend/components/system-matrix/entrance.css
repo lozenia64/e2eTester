@@ -19,7 +19,7 @@
 .dash-sys-row[data-accent-tone="anomaly"] { --alert-color: var(--st-anomaly-solid); }
 .dash-sys-row[data-accent-tone="error"] { --alert-color: var(--st-error-solid); }
 
-.dash__systems[data-first-paint="true"] .dash-sys-row:is([data-accent-tone="anomaly"], [data-accent-tone="error"]) {
+.dash__systems[data-first-paint="true"] .dash-sys-row:where([data-accent-tone="anomaly"], [data-accent-tone="error"]) {
   outline: 2px solid transparent;
   outline-offset: -2px;
   animation:

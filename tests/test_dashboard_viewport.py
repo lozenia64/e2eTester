@@ -265,6 +265,21 @@ def page(browser):
     context.close()
 
 
+@pytest.mark.parametrize("tone", ["passed", "anomaly", "error"])
+def test_dashboard_first_paint_respects_reduced_motion(page, live_server: str, tone: str) -> None:
+    """모션 감소 설정에서는 문제 행도 첫 진입·깜빡임 연출을 생략한다."""
+    page.emulate_media(reduced_motion="reduce")
+    page.goto(f"{live_server}/")
+    row = page.locator(f'.dash-sys-row[data-accent-tone="{tone}"]').first
+    row.wait_for()
+    assert page.locator(".dash__systems").get_attribute("data-first-paint") == "true"
+    assert row.evaluate("el => getComputedStyle(el).animationName") == "none"
+    assert (
+        row.locator(".dash-cell").first.evaluate("el => getComputedStyle(el).animationName")
+        == "none"
+    )
+
+
 def _load_dashboard_and_assert_no_scroll(page, base_url: str, width: int, height: int) -> None:
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{base_url}/")

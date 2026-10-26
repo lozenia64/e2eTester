@@ -281,6 +281,7 @@ error > anomaly > running > other > not_inspected(미점검 모듈 존재) > pas
 2. 탭 visibility 복귀 시 즉시 refresh
 3. 수동 새로고침 버튼 — Zone A 우측, 컴팩트 pill
 4. API 오류 시 `#dash-error` 배너 (기존)
+5. 통과 수·정상률 카운트업은 노드당 첫 진입에만 실행한다. 진행 도중 새 목표값을 수신하면 이전 애니메이션을 취소하고 최신 값을 즉시 표시한다.
 
 ### FR-006: 시스템 드로어 (기존 유지)
 
