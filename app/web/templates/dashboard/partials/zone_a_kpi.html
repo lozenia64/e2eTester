@@ -13,8 +13,8 @@
        data-passed="{{ t.passed }}"
        data-total="{{ t.modules }}">
     <div class="status-hero__figure">
-      <span class="status-hero__value">{{ t.passed }}/{{ t.modules }}</span>
-      <span class="status-hero__unit">모듈 정상 · {{ t.pass_rate }}%</span>
+      <span class="status-hero__value"><span data-count-up="{{ t.passed }}">{{ t.passed }}</span>/{{ t.modules }}</span>
+      <span class="status-hero__unit">모듈 정상 · <span data-count-up="{{ t.pass_rate }}">{{ t.pass_rate }}</span>%</span>
     </div>
   </div>
 

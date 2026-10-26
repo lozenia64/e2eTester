@@ -3,10 +3,12 @@
 import "../components/status-hero/styles.css";
 import { bindStatusHero } from "../components/status-hero/index";
 import "../components/system-matrix/styles.css";
+import "../components/system-matrix/entrance.css";
 import "../components/activity-feed/styles.css";
 import "idiomorph/dist/idiomorph-ext.esm.js";
 
 const REFRESH_MS = 30_000;
+const FIRST_PAINT_MS = 5_000;
 
 const root = document.querySelector<HTMLElement>(".dash");
 
@@ -52,7 +54,8 @@ function bind(dash: HTMLElement): void {
     }
     firstPaintDone = true;
     list.dataset.firstPaint = "true";
-    window.setTimeout(() => delete list.dataset.firstPaint, 800);
+    // 마지막 행 막대 + 문제 행 깜빡임(1.9s + 0.9s×3)이 끝난 뒤 내린다.
+    window.setTimeout(() => delete list.dataset.firstPaint, FIRST_PAINT_MS);
   });
 
   document.body.addEventListener("htmx:responseError", (event) => {

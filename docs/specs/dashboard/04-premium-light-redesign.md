@@ -251,7 +251,7 @@ row_h = (zone_c_height − gap × (N−1)) / N
 
 ### FR-003: 시스템 카드 리스트 (Zone C)
 
-**설명:** `data.systems`를 attention 우선 정렬 그대로 카드 행으로 렌더.
+**설명:** `data.systems`를 대표 배지 tone 그룹 순서로 카드 행 렌더 — `passed > anomaly > error > running > blocked > not_inspected`(그룹 안은 API 순서). API(`sort_systems_attention_first`)는 불변이며 재정렬은 대시보드 템플릿(`zone_b_matrix.html`)에서만 한다. 모듈 셀은 칸으로 이어진 진행 막대로 그리고, 첫 진입 시 행 순차 등장 → 막대 차오름 → 이상징후·오류 행 테두리 3회 깜빡임(`prefers-reduced-motion` 시 생략).
 
 **시스템 대표 배지 우선순위** (높은 것 하나만):
 
@@ -281,6 +281,7 @@ error > anomaly > running > other > not_inspected(미점검 모듈 존재) > pas
 2. 탭 visibility 복귀 시 즉시 refresh
 3. 수동 새로고침 버튼 — Zone A 우측, 컴팩트 pill
 4. API 오류 시 `#dash-error` 배너 (기존)
+5. 통과 수·정상률 카운트업은 노드당 첫 진입에만 실행한다. 진행 도중 새 목표값을 수신하면 이전 애니메이션을 취소하고 최신 값을 즉시 표시한다.
 
 ### FR-006: 시스템 드로어 (기존 유지)
 

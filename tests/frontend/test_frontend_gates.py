@@ -283,9 +283,14 @@ def test_dashboard_component_css_stays_with_its_owner():
     status_hero_css = (
         Path(__file__).resolve().parents[2] / "app/web/frontend/components/status-hero/styles.css"
     ).read_text(encoding="utf-8")
-    system_matrix_css = (
-        Path(__file__).resolve().parents[2] / "app/web/frontend/components/system-matrix/styles.css"
-    ).read_text(encoding="utf-8")
+    # 매트릭스 컴포넌트 CSS = 본체 + 첫 진입 연출(FG-004 400줄 상한으로 분리).
+    system_matrix_dir = (
+        Path(__file__).resolve().parents[2] / "app/web/frontend/components/system-matrix"
+    )
+    system_matrix_css = "".join(
+        (system_matrix_dir / name).read_text(encoding="utf-8")
+        for name in ("styles.css", "entrance.css")
+    )
 
     forbidden = (".dash-hero", ".dash-sys-row", "@keyframes dash-row-in")
     assert all(selector not in dashboard_css for selector in forbidden)

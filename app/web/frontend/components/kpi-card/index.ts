@@ -8,23 +8,25 @@ export function animateCountUp(
   el: HTMLElement,
   target: number,
   durationMs: number = DEFAULT_DURATION_MS,
-): void {
+): () => void {
   const prefersReducedMotion =
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (durationMs <= 0 || Number.isNaN(target) || prefersReducedMotion) {
     el.textContent = String(target);
-    return;
+    return () => {};
   }
   const start = performance.now();
+  let frame: number;
   const step = (now: number): void => {
     const progress = Math.min((now - start) / durationMs, 1);
     // ease-out cubic — 토큰 --ease-out 과 같은 감각
     const eased = 1 - (1 - progress) ** 3;
     el.textContent = String(Math.round(target * eased));
-    if (progress < 1) requestAnimationFrame(step);
+    if (progress < 1) frame = requestAnimationFrame(step);
   };
-  requestAnimationFrame(step);
+  frame = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(frame);
 }
 
 export function bindKpiCards(root: ParentNode = document): void {

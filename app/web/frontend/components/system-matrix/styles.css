@@ -28,28 +28,34 @@
   outline-offset: 2px;
 }
 
+/* 모듈 셀을 한 줄 진행 막대로 잇는다 — 셀 하나 = 막대 한 칸. */
 .dash-sys-row__cells {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: clamp(2px, 0.4cqi, 6px);
+  gap: 2px;
   overflow: hidden;
 }
 
 .dash-cell {
   position: relative;
   display: grid;
-  width: clamp(1.125rem, 2.6cqh, 2.25rem);
-  min-width: 1.125rem;
-  aspect-ratio: 1;
-  flex: 0 0 auto;
+  height: clamp(0.75rem, 2.5cqh, 2rem);
+  min-width: 0.5rem;
+  flex: 1 1 0;
   place-items: center;
-  border-radius: 0.25rem;
+  border-radius: 2px;
   background: var(--st-pending-surface);
   color: var(--pl-text-muted);
   font-size: clamp(0.5rem, 1.2cqh, 0.75rem);
   overflow: hidden;
 }
+
+.dash-cell:first-child { border-radius: 9999px 2px 2px 9999px; }
+.dash-cell:last-child { border-radius: 2px 9999px 9999px 2px; }
+.dash-cell:only-child { border-radius: 9999px; }
+.dash-cell__glyph { display: none; }
+.dash-cell--link:hover { filter: brightness(1.12); }
 
 .dash-cell[data-tone="passed"] { background: var(--st-passed-solid); color: var(--c-white); }
 .dash-cell[data-tone="anomaly"] { background: var(--st-anomaly-solid); color: var(--c-white); }
@@ -104,6 +110,19 @@
 .dash-sys-row__icon[data-tone="cancelled"] { background: var(--st-cancelled-solid); }
 .dash-sys-row__icon[data-tone="not_inspected"],
 .dash-sys-row__icon[data-tone="pending"] { background: var(--st-pending-solid); }
+
+.dash-sys-row__title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.dash-sys-row__meta {
+  font-size: clamp(0.625rem, 1.2cqh, 0.75rem);
+  font-variant-numeric: tabular-nums;
+  color: var(--pl-text-muted);
+}
 
 .dash-sys-row__name {
   border: 0;
@@ -357,30 +376,7 @@
     inset 3px 0 0 var(--st-blocked-solid);
 }
 
-/* 첫 로드에서만 재생한다. morph 는 노드를 보존하므로 갱신 시 재생될 신규 노드가
-   없지만, 매트릭스가 통째로 새로 그려지는 경로(빈 상태 → 데이터)에서도 반복되지
-   않도록 클래스로 한 번만 건다. */
-.dash__systems[data-first-paint="true"] .dash-sys-row {
-  animation: dash-row-in 0.35s var(--ease-out) both;
-}
-
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(1) { animation-delay: 0ms; }
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(2) { animation-delay: 40ms; }
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(3) { animation-delay: 80ms; }
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(4) { animation-delay: 120ms; }
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(5) { animation-delay: 160ms; }
-.dash__systems[data-first-paint="true"] .dash-sys-row:nth-child(6) { animation-delay: 200ms; }
-
-@keyframes dash-row-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .dash__systems[data-first-paint="true"] .dash-sys-row {
-    animation: none;
-  }
-
   .dash-sys-row:hover {
     transform: none;
   }

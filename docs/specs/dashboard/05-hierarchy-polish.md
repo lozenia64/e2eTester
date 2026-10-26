@@ -71,7 +71,7 @@
 | --- | --- |
 | **Editorial clarity** | 통과율 숫자 단독 노출 금지 — 반드시 `통과율` 라벨 + 맥락 문장 동반 |
 | **Identity first** | 시스템명이 모듈 칩보다 시각적으로 우위 (weight·size) |
-| **Exceptions first** | attention·error·anomaly·running 시스템은 카드 좌측 3px 액센트 + 상단 고정(기존 정렬 유지) |
+| **Exceptions first** | attention·error·anomaly·running 시스템은 카드 좌측 3px 액센트(정렬은 04 FR-003 tone 그룹 순서) |
 | **Scroll with dignity** | 문서 스크롤은 금지 유지; **Zone C만** `overflow-y: auto` 허용 (fade mask) |
 
 ### 2.2 색상·토큰 (추가)
@@ -338,7 +338,7 @@ const tier = computeTierFromViewport(root.clientHeight, systemCount);
 
 **비즈니스 규칙:**
 
-1. 정렬: `sort_systems_attention_first` 결과 순서 유지 (API 불변)
+1. 정렬: API(`sort_systems_attention_first`) 불변. 대시보드 화면은 04 FR-003의 tone 그룹 순서로 재정렬
 2. 시스템명 ellipsis 허용, **display:none 금지**
 3. 모듈 pill overflow: Row C `overflow-x: auto` **금지** — `overflow: hidden` + ellipsis; 넘친 수는 segment bar hover로 보완
 4. `minimal`/`micro`: segment bar 숨김, module dots 유지
