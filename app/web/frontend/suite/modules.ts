@@ -43,6 +43,8 @@ export function summarizeSuiteModules(
     if (status === "skipped") {
       continue;
     }
+    // 끝난 스텝에 남은 모듈(run 없음·PENDING 잔존)은 다시 돌지 않는다 — 남음이 아니라 미실행 종료로 센다.
+    const stepFinished = !SUITE_ACTIVE_STATUSES.has(status);
     const run = step.run_id ? runs.get(step.run_id) : undefined;
     if (run === undefined) {
       // 페이로드 도착 전 — passed 스텝은 전부 통과로 둬서 0% 로 깜빡이지 않게 한다.
@@ -50,6 +52,8 @@ export function summarizeSuiteModules(
       total += count;
       if (status === "passed") {
         passed += count;
+      } else if (stepFinished) {
+        cancelled += count;
       }
       continue;
     }
@@ -58,7 +62,7 @@ export function summarizeSuiteModules(
       if (chip.tone === "passed") passed += 1;
       else if (chip.tone === "error" || chip.tone === "anomaly") failed += 1;
       else if (chip.tone === "blocked") blocked += 1;
-      else if (chip.tone === "cancelled") cancelled += 1;
+      else if (chip.tone === "cancelled" || stepFinished) cancelled += 1;
     }
   }
   const done = passed + failed + blocked + cancelled;

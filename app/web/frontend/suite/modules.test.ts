@@ -43,11 +43,23 @@ describe("summarizeSuiteModules", () => {
     expect(s).toMatchObject({ total: 0, percent: 0 });
   });
 
+  it("끝난 스텝에 남은 미실행 모듈은 남음이 아니다 — 끝난 수트가 100% 에 닿는다", () => {
+    const runs = new Map([["r", { status: "ERROR", modules: mods(["a", "ERROR"], ["b", "PENDING"]) }]]);
+    const s = summarizeSuiteModules(
+      [
+        { order: 0, run_id: "r", status: "ERROR", module_total: 2 },
+        { order: 1, run_id: null, status: "CANCELLED", module_total: 3 },
+      ],
+      runs,
+    );
+    expect(s).toMatchObject({ total: 5, done: 5, percent: 100, failed: 1, remaining: 0 });
+  });
+
   it("anomaly 는 failed 에 합산, cancelled 는 done 에만", () => {
     const runs = new Map([
-      ["r", { status: "CANCELLED", modules: mods(["a", "ANOMALY"], ["b", "CANCELLED"], ["c", "PENDING"]) }],
+      ["r", { status: "RUNNING", modules: mods(["a", "ANOMALY"], ["b", "CANCELLED"], ["c", "PENDING"]) }],
     ]);
-    const s = summarizeSuiteModules([{ order: 0, run_id: "r", status: "CANCELLED", module_total: 3 }], runs);
+    const s = summarizeSuiteModules([{ order: 0, run_id: "r", status: "RUNNING", module_total: 3 }], runs);
     expect(s).toMatchObject({ done: 2, failed: 1, passed: 0, remaining: 1 });
   });
 });

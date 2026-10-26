@@ -24,6 +24,7 @@ export type SuiteLike = {
   steps?: SuiteStepLike[];
   current_step_index?: number;
   started_at?: string | null;
+  ended_at?: string | null;
   active_run_id?: string | null;
   awaiting_input_run_id?: string | null;
   awaiting_input_prompt?: string | null;
@@ -94,9 +95,10 @@ export function rememberSuite(suite: SuiteLike): void {
   lastSuite = suite;
 }
 
+// 같은 문구면 건드리지 않는다 — 1초 시계가 텍스트 노드를 갈아끼우면 스크린리더가 같은 말을 다시 읽는다.
 function setText(id: string, text: string): HTMLElement | null {
   const node = document.getElementById(id);
-  if (node) {
+  if (node && node.textContent !== text) {
     node.textContent = text;
   }
   return node;
@@ -209,7 +211,10 @@ function updateSuiteEtaBlock(
   currentStep: SuiteStepLike | undefined,
 ): void {
   const suiteStartedMs = suite.started_at ? Date.parse(String(suite.started_at)) : Number.NaN;
-  const suiteElapsedMs = Number.isNaN(suiteStartedMs) ? 0 : Math.max(0, Date.now() - suiteStartedMs);
+  // 끝난 수트는 ended_at 에서 멈춘다 — 1초 시계가 종료 후에도 경과를 올리지 않게.
+  const suiteEndedMs = suite.ended_at ? Date.parse(String(suite.ended_at)) : Number.NaN;
+  const suiteNowMs = Number.isNaN(suiteEndedMs) ? Date.now() : suiteEndedMs;
+  const suiteElapsedMs = Number.isNaN(suiteStartedMs) ? 0 : Math.max(0, suiteNowMs - suiteStartedMs);
 
   const run = activeRunPayload() as { started_at?: string | null } | null;
   const stepStartedMs = run?.started_at ? Date.parse(run.started_at) : Number.NaN;

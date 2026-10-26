@@ -70,6 +70,26 @@ describe("renderSuiteSummary", () => {
     expect(byId("suite-now-title").textContent).toBe("통과 2 · 실패 0");
   });
 
+  it("끝난 수트의 경과는 ended_at 에서 멈춘다 — 1초 시계가 계속 올리지 않는다", () => {
+    rememberSuite({
+      status: "PASSED",
+      current_step_index: 0,
+      started_at: "2026-10-26T04:41:37Z",
+      ended_at: "2026-10-26T04:55:00Z",
+      steps: [step("PASSED")],
+    });
+    renderSuiteSummary();
+    expect(byId("suite-progress-elapsed").textContent).toBe("13:23 경과");
+  });
+
+  it("같은 문구는 다시 쓰지 않는다 — 1초 시계가 텍스트 노드를 갈아끼우지 않는다", () => {
+    rememberSuite({ status: "PASSED", current_step_index: 0, steps: [step("PASSED")] });
+    renderSuiteSummary();
+    const before = byId("suite-now-title").firstChild;
+    renderSuiteSummary();
+    expect(byId("suite-now-title").firstChild).toBe(before);
+  });
+
   it("OTP 대기면 waiting 카드", () => {
     suiteRunCache.set("r1", {
       status: "WAITING_INPUT",
