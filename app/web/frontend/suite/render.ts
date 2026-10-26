@@ -15,6 +15,7 @@ export type SuiteStepLike = {
   system_name?: string | null;
   run_id?: string | null;
   status?: unknown;
+  module_total?: number;
 };
 
 export type SuiteLike = {

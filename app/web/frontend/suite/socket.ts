@@ -1,6 +1,7 @@
 // app.js 의 수트 소켓 묶음(수트 WS + 현재 하위 Run 진행 WS)을 로직 변경 없이 옮겼다.
 // 한 번에 하나의 하위 Run 만 구독한다 — 활성 Run 이 바뀌면 이전 소켓을 닫고 새로 연다.
 import { refreshSuiteOtpCountdown } from "./actions";
+import { resolveActiveSuiteRunId } from "./modules";
 import { renderSuiteSnapshot, renderSuiteStatusBadge, updateSuiteActions, type SuiteLike } from "./render";
 import { updateSuiteStepModuleProgress } from "./steps";
 
@@ -64,20 +65,6 @@ export function closeSuiteRunProgressSocket(): void {
   }
   suiteRunProgressRunId = null;
   suiteRunProgressPayload = null;
-}
-
-export function resolveActiveSuiteRunId(suite: SuiteLike | null | undefined): string | null {
-  if (suite?.awaiting_input_run_id) {
-    return suite.awaiting_input_run_id;
-  }
-  if (suite?.active_run_id) {
-    return suite.active_run_id;
-  }
-  const activeStep = (suite?.steps ?? []).find((step) => {
-    const status = String(step.status).toLowerCase();
-    return step.run_id && (status === "running" || status === "waiting_input");
-  });
-  return activeStep?.run_id ?? null;
 }
 
 export function syncSuiteRunProgressSocket(suite: SuiteLike): void {
