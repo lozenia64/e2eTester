@@ -1,0 +1,52 @@
+/* 매트릭스 첫 진입 연출 — 행 순차 등장 · 막대 차오름 · 문제 행 깜빡임. */
+
+/* 첫 로드에서만 재생한다. morph 는 노드를 보존하므로 갱신 시 재생될 신규 노드가
+   없지만, 매트릭스가 통째로 새로 그려지는 경로(빈 상태 → 데이터)에서도 반복되지
+   않도록 클래스로 한 번만 건다. */
+.dash__systems[data-first-paint="true"] .dash-sys-row {
+  animation: dash-row-in 0.45s var(--ease-out) both;
+  animation-delay: calc(400ms + var(--row, 0) * 120ms);
+}
+
+/* 행이 뜬 뒤 막대 칸이 왼쪽부터 차오른다. */
+.dash__systems[data-first-paint="true"] .dash-cell {
+  transform-origin: left center;
+  animation: dash-cell-grow 0.3s var(--ease-out) both;
+  animation-delay: calc(600ms + var(--row, 0) * 120ms + var(--i, 0) * 40ms);
+}
+
+/* 문제 시스템은 막대가 다 찬 뒤 테두리가 세 번 깜빡인다. */
+.dash-sys-row[data-accent-tone="anomaly"] { --alert-color: var(--st-anomaly-solid); }
+.dash-sys-row[data-accent-tone="error"] { --alert-color: var(--st-error-solid); }
+
+.dash__systems[data-first-paint="true"] .dash-sys-row:is([data-accent-tone="anomaly"], [data-accent-tone="error"]) {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  animation:
+    dash-row-in 0.45s var(--ease-out) calc(400ms + var(--row, 0) * 120ms) both,
+    dash-row-alert 0.9s ease-in-out 1.9s 3;
+}
+
+@keyframes dash-cell-grow {
+  from { transform: scaleX(0); }
+}
+
+@keyframes dash-row-alert {
+  50% { outline-color: var(--alert-color); }
+}
+
+/* 이동(translate) 대신 축소 — 지연 대기 중 행이 존 밖으로 밀려 스크롤바가 깜빡이지 않게. */
+@keyframes dash-row-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash__systems[data-first-paint="true"] .dash-sys-row {
+    animation: none;
+  }
+
+  .dash__systems[data-first-paint="true"] .dash-cell {
+    animation: none;
+  }
+}

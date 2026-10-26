@@ -240,7 +240,7 @@ def test_matrix_fragment_uses_unique_stable_system_row_ids(
     row_ids = re.findall(r'<div class="dash-sys-row"\s+id="([^"]+)"', html)
     expected_ids = [f"dash-system-{system['system_code']}" for system in dashboard_data["systems"]]
 
-    assert row_ids == expected_ids
+    assert sorted(row_ids) == sorted(expected_ids)
     assert len(row_ids) == len(set(row_ids))
 
 
@@ -437,3 +437,20 @@ def test_activity_fragment_uses_unique_stable_item_ids(client, dashboard_data: d
 
 def test_activity_fragment_unknown_zone_still_404(client):
     assert client.get("/api/dashboard/daily/fragments/nope").status_code == 404
+
+
+@pytest.mark.spec("SPEC-UI-005", "AC-007")
+def test_matrix_fragment_orders_passed_anomaly_error_then_not_inspected(
+    client: TestClient, dashboard_data: dict
+) -> None:
+    """대시보드 화면 순서: 전체 정상 > 이상징후 > 오류 > (진행 중 등) > 미점검."""
+    html = client.get("/api/dashboard/daily/fragments/matrix").text
+    codes = re.findall(r'<div class="dash-sys-row"\s+id="dash-system-([^"]+)"', html)
+    passed = [
+        s["system_code"]
+        for s in dashboard_data["systems"]
+        if s["summary_badge"]["tone"] == "passed"
+    ]
+    assert passed
+    assert codes[: len(passed)] == passed
+    assert codes[len(passed) :] == ["mhm", "hom", "hrp", "hwtc"]

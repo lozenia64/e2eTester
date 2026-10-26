@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { passRateToDegrees } from "./index";
+import { describe, expect, it, vi } from "vitest";
+import { bindStatusHero, passRateToDegrees } from "./index";
 
 describe("passRateToDegrees", () => {
   it("0 통과는 0도", () => {
@@ -24,5 +24,21 @@ describe("passRateToDegrees", () => {
 
   it("음수 입력은 0도로 잘린다", () => {
     expect(passRateToDegrees(-3, 31)).toBe(0);
+  });
+});
+
+describe("bindStatusHero 카운트업", () => {
+  it("노드당 한 번만 카운트업한다 — 폴링 갱신(morph)에서 다시 0부터 세지 않는다", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    document.body.innerHTML = '<span data-count-up="22">0</span>';
+    const el = document.querySelector<HTMLElement>("[data-count-up]")!;
+
+    bindStatusHero();
+    expect(el.textContent).toBe("22");
+
+    el.textContent = "23";
+    bindStatusHero();
+    expect(el.textContent).toBe("23");
+    vi.unstubAllGlobals();
   });
 });

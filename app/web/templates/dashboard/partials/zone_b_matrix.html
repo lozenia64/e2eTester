@@ -1,11 +1,18 @@
-{# Zone C — Premium Light system card list #}
+{# Zone C — Premium Light system card list.
+   대시보드 화면 순서: 전체 정상 > 이상징후 > 오류 > 진행 중 > 주의 > 미점검(그룹 안은 서버 순서 유지). #}
 {% from "dashboard/partials/_macros.html" import system_row %}
-<div id="dash-zone-matrix" class="dash__systems" data-system-count="{{ data.systems|length }}">
-  {% if not data.systems %}
+{% set ns = namespace(systems=[]) %}
+{% for tone in ["passed", "anomaly", "error", "running", "blocked", "not_inspected"] %}
+  {% for sys in data.systems if system_summary_badge(sys).tone == tone %}
+    {% set ns.systems = ns.systems + [sys] %}
+  {% endfor %}
+{% endfor %}
+<div id="dash-zone-matrix" class="dash__systems" data-system-count="{{ ns.systems|length }}">
+  {% if not ns.systems %}
   <p class="dash__empty">표시할 시스템이 없습니다.</p>
   {% else %}
-  {% for sys in data.systems %}
-  {{ system_row(sys) }}
+  {% for sys in ns.systems %}
+  {{ system_row(sys, loop.index0) }}
   {% endfor %}
   {% endif %}
 </div>
