@@ -143,6 +143,11 @@ def test_js_hooks_survive(client) -> None:
         'id="suite-step-list"',
         'data-role="step-run-link"',
         'data-role="step-module-progress"',
+        'id="suite-ring"',
+        'id="suite-now"',
+        'id="suite-counts"',
+        'id="suite-progress-elapsed"',
+        'id="suite-progress-eta"',
     ):
         assert hook in html, hook
 

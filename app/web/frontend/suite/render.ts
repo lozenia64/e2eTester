@@ -4,10 +4,11 @@
 //   (나) 서버가 준 expanded_step_order 를 그대로 반영한다(설계 D8 — 규칙 재구현 금지)
 import { normalizeTone, statusLabel } from "../components/status-badge/index";
 import { updateSuiteOtpPanel } from "./actions";
+import { passRateToDegrees } from "../components/status-hero/index";
 import { computeSuiteEta } from "./eta";
-import { computeRunModuleProgress } from "./progress";
+import { describeNow, summarizeSuiteModules, type NowCard } from "./modules";
 import { activeRunPayload, syncSuiteRunProgressSocket } from "./socket";
-import { refreshFinishedSuiteStepProgress, updateSuiteStepCard } from "./steps";
+import { refreshFinishedSuiteStepProgress, suiteRunCache, updateSuiteStepCard } from "./steps";
 
 export type SuiteStepLike = {
   order: number;
@@ -86,63 +87,116 @@ export function updateSuiteActions(status: unknown): void {
   }
 }
 
-export function updateSuiteProgressDetailWithModule(run: unknown): void {
-  const detail = document.getElementById("suite-progress-detail");
-  const data = run as { system_name?: string; system_code?: string } | null | undefined;
-  if (!detail || !data) {
-    return;
-  }
-  const progress = computeRunModuleProgress(run);
-  const systemLabel = `${data.system_name} (${String(data.system_code ?? "").toUpperCase()})`;
-  if (!progress.label) {
-    detail.textContent = `현재: ${systemLabel}`;
-    return;
-  }
-  if (progress.tone === "waiting") {
-    detail.textContent = `현재: ${systemLabel} · 모듈 ${progress.label} · OTP 대기`;
-    return;
-  }
-  detail.textContent = `현재: ${systemLabel} · 모듈 ${progress.label}`;
+// 마지막 수트 스냅샷. 하위 run 페이로드나 1초 시계가 요약만 다시 그릴 때 쓴다.
+let lastSuite: SuiteLike | null = null;
+
+export function rememberSuite(suite: SuiteLike): void {
+  lastSuite = suite;
 }
 
-export function updateSuiteProgress(suite: SuiteLike): void {
-  const steps = suite.steps ?? [];
-  const skipped = steps.filter((step) => String(step.status).toLowerCase() === "skipped").length;
-  const selectedTotal = steps.length - skipped;
-  const passed = steps.filter((step) => String(step.status).toLowerCase() === "passed").length;
-  const label = document.getElementById("suite-progress-label");
-  const bar = document.getElementById("suite-progress-bar");
-  const detail = document.getElementById("suite-progress-detail");
-  const currentIndex = suite.current_step_index ?? 0;
-  const currentStep = steps.find((step) => step.order === currentIndex) ?? steps[currentIndex];
-  if (label) {
-    const skippedSuffix = skipped > 0 ? ` (${skipped}개 제외)` : "";
-    label.textContent = `통과 ${passed}/${selectedTotal || steps.length}${skippedSuffix}`;
+function setText(id: string, text: string): HTMLElement | null {
+  const node = document.getElementById(id);
+  if (node) {
+    node.textContent = text;
   }
-  if (bar) {
-    const denominator = selectedTotal || steps.length;
-    bar.style.width = denominator > 0 ? `${Math.round((passed / denominator) * 100)}%` : "0%";
+  return node;
+}
+
+function formatShortClock(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// 직전 값에서 to 로 짧게 카운트업. 값이 같거나 동작 줄이기면 즉시 대입한다 — 1초 시계가 매번 불러도 움직이지 않는다.
+export function animateCount(node: HTMLElement, to: number): void {
+  const from = Number(node.dataset.value ?? node.textContent ?? 0) || 0;
+  node.dataset.value = String(to);
+  if (from === to || prefersReducedMotion() || typeof requestAnimationFrame !== "function") {
+    node.textContent = String(to);
+    return;
   }
-  if (detail) {
-    if (String(suite.status).toLowerCase() === "waiting_input") {
-      const waitingStep = steps.find((step) => step.run_id && step.run_id === suite.awaiting_input_run_id);
-      if (waitingStep) {
-        detail.textContent = `현재: ${waitingStep.system_name} (${waitingStep.system_code?.toUpperCase() ?? ""}) · OTP 대기`;
-      } else {
-        detail.textContent = "OTP 입력 대기 중입니다.";
-      }
-    } else if (
-      currentStep
-      && String(currentStep.status).toLowerCase() !== "skipped"
-      && SUITE_ACTIVE_STATUSES.has(String(suite.status).toLowerCase())
-    ) {
-      detail.textContent = `현재: ${currentStep.system_name} (${currentStep.system_code?.toUpperCase() ?? ""})`;
-    } else {
-      detail.textContent = skipped > 0 ? `${skipped}개 시스템이 선택에서 제외되었습니다.` : "";
+  const startedAt = performance.now();
+  const tick = (now: number): void => {
+    if (node.dataset.value !== String(to)) {
+      return;
     }
+    const k = Math.min(1, (now - startedAt) / 600);
+    node.textContent = String(Math.round(from + (to - from) * (1 - (1 - k) ** 3)));
+    if (k < 1) {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
+function renderNowCard(card: NowCard): void {
+  const root = document.getElementById("suite-now");
+  if (root) {
+    root.dataset.kind = card.kind;
+  }
+  if (card.kind === "finished") {
+    setText("suite-now-eyebrow", card.statusLabel);
+    setText("suite-now-title", `통과 ${card.passed} · 실패 ${card.failed}`);
+    setText("suite-now-meta", "");
+    return;
+  }
+  if (card.kind === "idle") {
+    setText("suite-now-eyebrow", "시작 대기 중");
+    setText("suite-now-title", "—");
+    setText("suite-now-meta", "");
+    return;
+  }
+  const startedMs = card.moduleStartedAt ? Date.parse(card.moduleStartedAt) : Number.NaN;
+  const eyebrow = card.kind === "waiting"
+    ? "OTP 입력 대기"
+    : Number.isNaN(startedMs)
+      ? "지금 실행 중"
+      : `지금 실행 중 · ${formatShortClock(Date.now() - startedMs)}`;
+  setText("suite-now-eyebrow", eyebrow);
+  setText("suite-now-title", card.moduleName ? `${card.systemName} › ${card.moduleName}` : card.systemName);
+  setText("suite-now-meta", `시스템 ${card.systemIndex}/${card.systemTotal} · 모듈 ${card.moduleIndex}/${card.moduleTotal}`);
+}
+
+// 상단 요약(설계 §2.2): 링 · "지금 실행 중" 카드 · 집계 줄. 칩과 같은 suiteRunCache 에서 계산한다.
+export function renderSuiteSummary(): void {
+  const suite = lastSuite;
+  if (!suite) {
+    return;
+  }
+  const steps = suite.steps ?? [];
+  const summary = summarizeSuiteModules(steps, suiteRunCache);
+
+  const ring = document.getElementById("suite-ring");
+  if (ring) {
+    ring.style.setProperty("--ring-deg", `${passRateToDegrees(summary.done, summary.total)}deg`);
+  }
+  const ringValue = document.getElementById("suite-ring-value");
+  if (ringValue) {
+    animateCount(ringValue, summary.percent);
   }
 
+  renderNowCard(describeNow(suite, suiteRunCache, summary));
+
+  setText("suite-count-passed", `✓ ${summary.passed} 통과`);
+  setText("suite-count-failed", `✕ ${summary.failed} 실패`);
+  const blocked = setText("suite-count-blocked", `⊘ ${summary.blocked} 차단`);
+  if (blocked) {
+    blocked.hidden = summary.blocked === 0;
+  }
+  setText("suite-count-remaining", `남음 ${summary.remaining}`);
+
+  const currentIndex = suite.current_step_index ?? 0;
+  const currentStep = steps.find((step) => step.order === currentIndex) ?? steps[currentIndex];
   updateSuiteEtaBlock(suite, steps, currentStep);
+}
+
+// 1초 시계 — 수트 경과 · 현재 모듈 경과 · ETA 를 이벤트가 없어도 흐르게 한다.
+export function startSuiteClock(): void {
+  window.setInterval(renderSuiteSummary, 1000);
 }
 
 // (가) 경과·ETA.
@@ -163,7 +217,7 @@ function updateSuiteEtaBlock(
 
   const elapsedNode = document.getElementById("suite-progress-elapsed");
   if (elapsedNode) {
-    elapsedNode.textContent = formatClock(suiteElapsedMs);
+    elapsedNode.textContent = `${formatClock(suiteElapsedMs)} 경과`;
   }
 
   const etaNode = document.getElementById("suite-progress-eta");
@@ -207,9 +261,10 @@ function applyExpandedStep(order: number | null): void {
 
 export function renderSuiteSnapshot(suite: unknown): void {
   const data = suite as SuiteLike;
+  rememberSuite(data);
   renderSuiteStatusBadge(data.status);
   updateSuiteActions(data.status);
-  updateSuiteProgress(data);
+  renderSuiteSummary();
   updateSuiteOtpPanel(data);
   for (const step of data.steps ?? []) {
     updateSuiteStepCard(step);

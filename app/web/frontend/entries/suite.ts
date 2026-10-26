@@ -3,10 +3,12 @@
 // 수트 WS + 하위 Run 진행 WS 의 이벤트마다 이뤄진다(설계 §3.3).
 import "../suite/styles.css";
 import { bindSuiteActions, bindSuiteOtpForm } from "../suite/actions";
+import { startSuiteClock } from "../suite/render";
 import { bindSuiteSocket } from "../suite/socket";
 
 document.addEventListener("DOMContentLoaded", () => {
   bindSuiteActions();
   bindSuiteOtpForm();
   bindSuiteSocket();
+  startSuiteClock();
 });

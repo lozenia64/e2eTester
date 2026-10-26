@@ -6,8 +6,8 @@
 import { normalizeTone, statusLabel } from "../components/status-badge/index";
 import { buildModuleChips, type ModuleChip } from "./modules";
 import { computeRunModuleProgress, type ModuleProgress } from "./progress";
-import { type SuiteLike, type SuiteStepLike, updateSuiteProgressDetailWithModule } from "./render";
-import { activeRunProgressRunId, refreshSuiteRunProgress } from "./socket";
+import { renderSuiteSummary, type SuiteLike, type SuiteStepLike } from "./render";
+import { refreshSuiteRunProgress } from "./socket";
 
 export function formatStepModuleProgressText(progress: ModuleProgress, stepStatus: unknown): string {
   if (!progress.label) {
@@ -102,9 +102,7 @@ export function updateSuiteStepModuleProgress(run: unknown): void {
   progressNode.setAttribute("aria-label", formatStepModuleProgressText(computeRunModuleProgress(run), stepStatus));
   progressNode.hidden = chips.length === 0 || stepStatus === "pending";
 
-  if (runId === activeRunProgressRunId()) {
-    updateSuiteProgressDetailWithModule(run);
-  }
+  renderSuiteSummary();
 }
 
 export function updateSuiteStepCard(step: SuiteStepLike): void {
