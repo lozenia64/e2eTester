@@ -1516,14 +1516,14 @@ def _upload_via_album(
     category_button = page.get_by_role("button", name=category_pattern).first
     common.click_with_log(category_button, f"{description} 업로드 영역 열기")
     common.wait_timeout_with_log(page, 500, "서류 등록 시트 표시 대기")
-    album_label = page.locator('label[for="galleyFile"]').first
+    album_label = page.locator('label[for="galleyFile"]:visible').first
     log(f"[upload] {description}: {file_path.name}")
     try:
         with page.expect_file_chooser(timeout=5000) as chooser_info:
             common.click_with_log(album_label, f"{description} 앨범 선택")
         chooser_info.value.set_files(str(file_path))
     except Exception:
-        page.locator(GALLERY_FILE_INPUT_SELECTOR).set_input_files(str(file_path))
+        page.locator(GALLERY_FILE_INPUT_SELECTOR).first.set_input_files(str(file_path))
     page.wait_for_function(
         """
         () => {
