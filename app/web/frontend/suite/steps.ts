@@ -43,34 +43,45 @@ const CHIP_ICONS: Partial<Record<string, string>> = {
   waiting_input: "OTP",
 };
 
-// 끝난 run 은 수트 WS 이벤트마다 다시 fetch 된다 — 직전 톤과 비교해 실제로 바뀐 칩만 pop 한다.
+// 같은 모듈의 노드를 유지해 포커스와 실행 중 애니메이션을 보존한다.
 export function renderModuleChips(list: HTMLElement, chips: ModuleChip[], runId: string): void {
   const previous = new Map(
-    [...list.querySelectorAll<HTMLElement>("li[data-module-id]")].map((li) => [li.dataset.moduleId, li.dataset.tone]),
+    [...list.querySelectorAll<HTMLElement>("li[data-module-id]")].map((li) => [li.dataset.moduleId, li]),
   );
-  const items = chips.map((chip) => {
-    const li = document.createElement("li");
-    li.className = "suite-chip";
-    li.dataset.moduleId = chip.moduleId;
-    li.dataset.tone = chip.tone;
-    const before = previous.get(chip.moduleId);
+  chips.forEach((chip, index) => {
+    let li = previous.get(chip.moduleId);
+    const before = li?.dataset.tone;
+    if (!li) {
+      li = document.createElement("li");
+      li.className = "suite-chip";
+      li.dataset.moduleId = chip.moduleId;
+      const link = document.createElement("a");
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      link.append(icon, document.createElement("span"));
+      li.append(link);
+      li.addEventListener("animationend", (event) => {
+        if ((event as AnimationEvent).animationName === "suite-pop") delete li!.dataset.pop;
+      });
+    }
     if (before !== undefined && before !== chip.tone) {
       li.dataset.pop = "";
-      li.addEventListener("animationend", () => delete li.dataset.pop, { once: true });
     }
-    const link = document.createElement("a");
+    li.dataset.tone = chip.tone;
+    const link = li.querySelector("a")!;
     link.href = `/runs/${runId}`;
-    const icon = document.createElement("span");
+    link.setAttribute("aria-label", `${chip.name} · ${statusLabel(chip.tone)}`);
+    const icon = link.children[0] as HTMLElement;
     icon.className = chip.tone === "running" ? "suite-chip__spin" : "suite-chip__icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = CHIP_ICONS[chip.tone] ?? "";
-    const name = document.createElement("span");
-    name.textContent = chip.tone === "blocked" ? `${chip.name} 차단` : chip.name;
-    link.append(icon, name);
-    li.append(link);
-    return li;
+    const iconText = CHIP_ICONS[chip.tone] ?? "";
+    if (icon.textContent !== iconText) icon.textContent = iconText;
+    const name = link.children[1]!;
+    const nameText = chip.tone === "blocked" ? `${chip.name} 차단` : chip.name;
+    if (name.textContent !== nameText) name.textContent = nameText;
+    if (list.children[index] !== li) list.insertBefore(li, list.children[index] ?? null);
+    previous.delete(chip.moduleId);
   });
-  list.replaceChildren(...items);
+  for (const li of previous.values()) li.remove();
 }
 
 export function findSuiteStepCardByRunId(runId: string | null | undefined): HTMLElement | null {
@@ -96,7 +107,7 @@ export function updateSuiteStepModuleProgress(run: unknown): void {
   // 원본은 배지의 textContent 를 읽었다. 새 계약에서 배지는 한국어 라벨을 담으므로
   // 상태 자체를 들고 있는 행의 data-status 를 읽는다 — 넘어가는 값은 원본과 같다.
   const stepStatus = card.dataset.status ?? "";
-  const chips = buildModuleChips(run);
+  const chips = buildModuleChips(run, stepStatus);
   renderModuleChips(progressNode, chips, runId ?? "");
   // 칩이 시각 정보를 대신하고, 기존 한 줄 요약은 스크린리더용 라벨로 남긴다.
   progressNode.setAttribute("aria-label", formatStepModuleProgressText(computeRunModuleProgress(run), stepStatus));
@@ -140,6 +151,9 @@ export function updateSuiteStepCard(step: SuiteStepLike): void {
       progressNode.replaceChildren();
       progressNode.hidden = true;
     }
+  } else {
+    const cached = suiteRunCache.get(step.run_id);
+    if (cached) updateSuiteStepModuleProgress(cached);
   }
 }
 

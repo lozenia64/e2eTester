@@ -18,6 +18,19 @@ from app.core.enums import RunStatus
 from app.platform.eventing.support import SqliteDatabase, ensure_schema
 
 
+@pytest.fixture(autouse=True)
+def fixed_query_clock(monkeypatch):
+    """조회 어댑터의 시계를 고정해 30일 표본이 실행 날짜에 따라 사라지지 않게 한다."""
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 30, 9, 0, tzinfo=UTC).astimezone(tz)
+
+    for adapter in ("in_memory_run_summary_query", "sqlite_run_summary_query"):
+        monkeypatch.setattr(f"app.contexts.run.infrastructure.{adapter}.datetime", FixedDatetime)
+
+
 def _row(system_code: str, status: RunStatus, *, started_min: int, duration_min: int | None):
     """테스트용 run_history_index 행 한 줄."""
     base = datetime(2026, 8, 29, 9, 0, tzinfo=UTC)
@@ -77,42 +90,47 @@ async def sqlite_query(tmp_path) -> _SqliteQuery:
     return _SqliteQuery(db)
 
 
-async def test_averages_only_passed_runs(memory_query) -> None:
+@pytest.fixture(params=["memory_query", "sqlite_query"])
+def query(request):
+    return request.getfixturevalue(request.param)
+
+
+async def test_averages_only_passed_runs(query) -> None:
     """실패 Run 이 평균을 끌어내리면 안 된다."""
-    await memory_query.seed(
+    await query.seed(
         [
             _row("hom", RunStatus.PASSED, started_min=0, duration_min=4),
             _row("hom", RunStatus.PASSED, started_min=60, duration_min=6),
             _row("hom", RunStatus.ERROR, started_min=120, duration_min=1),
         ]
     )
-    result = await memory_query.avg_duration_ms_by_system()
+    result = await query.avg_duration_ms_by_system()
     assert result["hom"] == 5 * 60 * 1000
 
 
-async def test_unfinished_runs_are_excluded(memory_query) -> None:
+async def test_unfinished_runs_are_excluded(query) -> None:
     """진행 중인 Run 은 ended_at 이 없어 표본이 아니다."""
-    await memory_query.seed(
+    await query.seed(
         [
             _row("mhm", RunStatus.PASSED, started_min=0, duration_min=2),
             _row("mhm", RunStatus.RUNNING, started_min=10, duration_min=None),
         ]
     )
-    assert (await memory_query.avg_duration_ms_by_system())["mhm"] == 2 * 60 * 1000
+    assert (await query.avg_duration_ms_by_system())["mhm"] == 2 * 60 * 1000
 
 
-async def test_system_without_history_has_no_key(memory_query) -> None:
+async def test_system_without_history_has_no_key(query) -> None:
     """0 을 돌려주면 화면이 '평균 0초' 를 표시한다. 키가 없어야 '평균 —' 로 갈린다."""
-    await memory_query.seed([_row("hom", RunStatus.PASSED, started_min=0, duration_min=3)])
-    result = await memory_query.avg_duration_ms_by_system()
+    await query.seed([_row("hom", RunStatus.PASSED, started_min=0, duration_min=3)])
+    result = await query.avg_duration_ms_by_system()
     assert "chbot" not in result
 
 
-async def test_days_window_excludes_older_runs(memory_query) -> None:
+async def test_days_window_excludes_older_runs(query) -> None:
     old = _row("fp", RunStatus.PASSED, started_min=0, duration_min=10)
     old["requested_at"] = datetime(2026, 1, 1, tzinfo=UTC)
-    await memory_query.seed([old, _row("fp", RunStatus.PASSED, started_min=0, duration_min=2)])
-    assert (await memory_query.avg_duration_ms_by_system(days=30))["fp"] == 2 * 60 * 1000
+    await query.seed([old, _row("fp", RunStatus.PASSED, started_min=0, duration_min=2)])
+    assert (await query.avg_duration_ms_by_system(days=30))["fp"] == 2 * 60 * 1000
 
 
 async def test_sqlite_and_memory_agree(sqlite_query, memory_query) -> None:
@@ -128,4 +146,5 @@ async def test_sqlite_and_memory_agree(sqlite_query, memory_query) -> None:
     assert (
         await sqlite_query.avg_duration_ms_by_system()
         == await memory_query.avg_duration_ms_by_system()
+        == {"hom": 300000, "mhm": 120000}
     )

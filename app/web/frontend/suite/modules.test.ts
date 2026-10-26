@@ -5,6 +5,15 @@ const mods = (...specs: Array<[string, string]>) =>
   specs.map(([module_id, status], order) => ({ module_id, name: module_id, order, status }));
 
 describe("buildModuleChips", () => {
+  it("강제 종료 run의 잔여 모듈은 취소로 표시해 완료 집계와 일치한다", () => {
+    expect(buildModuleChips({ status: "ERROR", modules: mods(["a", "ERROR"], ["b", "PENDING"], ["c", "RUNNING"]) })
+      .map((chip) => chip.tone)).toEqual(["error", "cancelled", "cancelled"]);
+  });
+
+  it("스텝 종료가 run 페이로드보다 먼저 도착해도 잔여 모듈은 취소로 표시한다", () => {
+    expect(buildModuleChips({ status: "RUNNING", modules: mods(["a", "RUNNING"]) }, "CANCELLED")
+      .map((chip) => chip.tone)).toEqual(["cancelled"]);
+  });
   it("order 순, 톤은 normalizeTone, skipped 는 제외", () => {
     const chips = buildModuleChips({
       status: "RUNNING",
@@ -107,6 +116,12 @@ describe("describeNow", () => {
       kind: "waiting",
       moduleName: "로그인",
     });
+  });
+
+  it("수트가 활성 run ID를 아직 비우지 않아도 끝난 run은 실행 중으로 표시하지 않는다", () => {
+    const runs = new Map([["r1", { status: "ERROR", modules: mods(["실패 모듈", "ERROR"]) }]]);
+    const suite = { status: "RUNNING", steps, active_run_id: "r1" };
+    expect(describeNow(suite, runs, summarizeSuiteModules(steps, runs))).toEqual({ kind: "idle" });
   });
 
   it("수트가 끝나면 finished — 라벨은 statusLabel", () => {

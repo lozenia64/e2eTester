@@ -30,12 +30,17 @@ describe("renderModuleChips", () => {
     expect(ul.querySelector("[data-pop]")).toBeNull();
   });
 
-  it("톤이 바뀐 칩만 pop, 같은 데이터 재렌더는 pop 없음", () => {
+  it("톤이 바뀐 칩만 pop, 같은 데이터 재렌더는 진행 중 pop을 유지한다", () => {
     const ul = document.createElement("ul");
     renderModuleChips(ul, [chip("a", "running"), chip("b", "pending")], "r1");
     renderModuleChips(ul, [chip("a", "passed"), chip("b", "pending")], "r1");
     expect([...ul.querySelectorAll<HTMLElement>("[data-pop]")].map((li) => li.dataset.moduleId)).toEqual(["a"]);
+    const popping = ul.querySelector("[data-pop]")!;
     renderModuleChips(ul, [chip("a", "passed"), chip("b", "pending")], "r1");
+    expect(ul.querySelector("[data-pop]")).toBe(popping);
+    const ended = new Event("animationend", { bubbles: true });
+    Object.defineProperty(ended, "animationName", { value: "suite-pop" });
+    popping.querySelector("a")!.dispatchEvent(ended);
     expect(ul.querySelector("[data-pop]")).toBeNull();
   });
 
@@ -43,5 +48,24 @@ describe("renderModuleChips", () => {
     const ul = document.createElement("ul");
     renderModuleChips(ul, [chip("로그아웃", "blocked")], "r1");
     expect(ul.textContent).toContain("차단");
+  });
+
+  it("상태 갱신에도 링크 포커스와 실행 중 스피너 노드를 유지한다", () => {
+    const ul = document.createElement("ul");
+    document.body.append(ul);
+    renderModuleChips(ul, [chip("a", "running"), chip("b", "pending")], "r1");
+    const link = ul.querySelector("a")!;
+    const spinner = ul.querySelector(".suite-chip__spin");
+    link.focus();
+    renderModuleChips(ul, [chip("a", "running"), chip("b", "passed")], "r1");
+    expect(document.activeElement).toBe(link);
+    expect(ul.querySelector(".suite-chip__spin")).toBe(spinner);
+    ul.remove();
+  });
+
+  it("각 링크의 접근성 이름에 모듈 상태를 포함한다", () => {
+    const ul = document.createElement("ul");
+    renderModuleChips(ul, [chip("로그인", "error")], "r1");
+    expect(ul.querySelector("a")?.getAttribute("aria-label")).toBe("로그인 · 점검실패");
   });
 });

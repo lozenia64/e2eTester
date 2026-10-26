@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderSuiteSummary, rememberSuite } from "./render";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { animateCount, renderSuiteSummary, rememberSuite } from "./render";
 import { suiteRunCache } from "./steps";
 
 const byId = (id: string) => document.getElementById(id) as HTMLElement;
@@ -20,6 +20,7 @@ const SUMMARY_MARKUP = `
 const step = (status: string) => ({ order: 0, system_name: "모바일", system_code: "mhm", run_id: "r1", status, module_total: 2 });
 
 describe("renderSuiteSummary", () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     document.body.innerHTML = SUMMARY_MARKUP;
     suiteRunCache.clear();
@@ -38,6 +39,7 @@ describe("renderSuiteSummary", () => {
     renderSuiteSummary();
     expect(byId("suite-ring-value").textContent).toBe("50");
     expect(byId("suite-ring").style.getPropertyValue("--ring-deg")).toBe("180deg");
+    expect(byId("suite-ring").getAttribute("aria-label")).toBe("전체 모듈 진행률 50%");
     expect(byId("suite-now").dataset.kind).toBe("running");
     expect(byId("suite-now-title").textContent).toBe("모바일 › 보험금청구");
     expect(byId("suite-now-meta").textContent).toBe("시스템 1/1 · 모듈 2/2");
@@ -99,5 +101,19 @@ describe("renderSuiteSummary", () => {
     renderSuiteSummary();
     expect(byId("suite-now").dataset.kind).toBe("waiting");
     expect(byId("suite-now-eyebrow").textContent).toBe("OTP 입력 대기");
+  });
+
+  it("같은 목표값 재렌더가 카운트업 도중 숫자를 앞뒤로 튀게 하지 않는다", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    const node = byId("suite-ring-value");
+    animateCount(node, 100);
+    frames.shift()!(performance.now() + 100);
+    const intermediate = Number(node.textContent);
+    expect(intermediate).toBeGreaterThan(0);
+    expect(intermediate).toBeLessThan(100);
+    animateCount(node, 100);
+    expect(Number(node.textContent)).toBe(intermediate);
   });
 });

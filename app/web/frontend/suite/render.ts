@@ -115,15 +115,21 @@ function prefersReducedMotion(): boolean {
 
 // 직전 값에서 to 로 짧게 카운트업. 값이 같거나 동작 줄이기면 즉시 대입한다 — 1초 시계가 매번 불러도 움직이지 않는다.
 export function animateCount(node: HTMLElement, to: number): void {
-  const from = Number(node.dataset.value ?? node.textContent ?? 0) || 0;
+  const target = String(to);
+  if (node.dataset.value === target && !prefersReducedMotion()) {
+    return;
+  }
+  const from = Number(node.textContent ?? 0) || 0;
   node.dataset.value = String(to);
+  const generation = String(Number(node.dataset.animationGeneration ?? 0) + 1);
+  node.dataset.animationGeneration = generation;
   if (from === to || prefersReducedMotion() || typeof requestAnimationFrame !== "function") {
     node.textContent = String(to);
     return;
   }
   const startedAt = performance.now();
   const tick = (now: number): void => {
-    if (node.dataset.value !== String(to)) {
+    if (node.dataset.animationGeneration !== generation) {
       return;
     }
     const k = Math.min(1, (now - startedAt) / 600);
@@ -175,6 +181,7 @@ export function renderSuiteSummary(): void {
   const ring = document.getElementById("suite-ring");
   if (ring) {
     ring.style.setProperty("--ring-deg", `${passRateToDegrees(summary.done, summary.total)}deg`);
+    ring.setAttribute("aria-label", `전체 모듈 진행률 ${summary.percent}%`);
   }
   const ringValue = document.getElementById("suite-ring-value");
   if (ringValue) {

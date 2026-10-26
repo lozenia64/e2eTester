@@ -22,10 +22,8 @@ let suiteRunProgressRunId: string | null = null;
 // 현재 구독 중인 하위 Run 의 마지막 페이로드. render.ts 가 경과(started_at)를,
 // actions.ts 가 OTP 카운트다운(awaiting_input_module_id)을 여기서 읽는다.
 let suiteRunProgressPayload: unknown = null;
-
-export function activeRunProgressRunId(): string | null {
-  return suiteRunProgressRunId;
-}
+// 같은 run을 연속 조회할 때 오래된 응답이 최신 상태를 덮지 않게 한다.
+const runRefreshVersions = new Map<string, number>();
 
 export function activeRunPayload(): unknown {
   return suiteRunProgressPayload;
@@ -45,12 +43,15 @@ export async function refreshSuiteRunProgress(runId: string | null | undefined):
   if (!runId) {
     return;
   }
+  const version = (runRefreshVersions.get(runId) ?? 0) + 1;
+  runRefreshVersions.set(runId, version);
   try {
     const response = await fetch(`/api/runs/${runId}`);
     if (!response.ok) {
       return;
     }
     const run: unknown = await response.json();
+    if (runRefreshVersions.get(runId) !== version) return;
     noteRunPayload(run);
     updateSuiteStepModuleProgress(run);
   } catch (error) {
@@ -86,6 +87,7 @@ export function syncSuiteRunProgressSocket(suite: SuiteLike): void {
   suiteRunProgressSocket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data as string) as { event_type?: string; payload?: unknown };
     if (message.event_type === "snapshot") {
+      runRefreshVersions.set(runId, (runRefreshVersions.get(runId) ?? 0) + 1);
       noteRunPayload(message.payload);
       updateSuiteStepModuleProgress(message.payload);
       return;

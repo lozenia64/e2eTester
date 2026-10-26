@@ -6,17 +6,24 @@ import { computeRunModuleProgress, orderedSelectedRunModules } from "./progress"
 import type { SuiteLike, SuiteStepLike } from "./render";
 
 const SUITE_ACTIVE_STATUSES = new Set(["pending", "running", "waiting_input"]);
+const TERMINAL_STATUSES = new Set(["passed", "anomaly", "failed", "error", "cancelled"]);
 
 export type ModuleChip = { moduleId: string; name: string; tone: StatusTone };
 
 type RunModuleLike = { module_id?: string; name?: string; status?: unknown; started_at?: string | null };
 
-export function buildModuleChips(run: unknown): ModuleChip[] {
-  return (orderedSelectedRunModules(run) as RunModuleLike[]).map((module) => ({
-    moduleId: String(module.module_id ?? ""),
-    name: module.name ?? "",
-    tone: normalizeTone(String(module.status ?? "")),
-  }));
+export function buildModuleChips(run: unknown, stepStatus?: unknown): ModuleChip[] {
+  const runStatus = (run as { status?: unknown } | undefined)?.status;
+  const finished = TERMINAL_STATUSES.has(String(stepStatus ?? "").toLowerCase())
+    || TERMINAL_STATUSES.has(String(runStatus ?? "").toLowerCase());
+  return (orderedSelectedRunModules(run) as RunModuleLike[]).map((module) => {
+    const tone = normalizeTone(String(module.status ?? ""));
+    return {
+      moduleId: String(module.module_id ?? ""),
+      name: module.name ?? "",
+      tone: finished && ["pending", "running", "waiting_input"].includes(tone) ? "cancelled" : tone,
+    };
+  });
 }
 
 export type SuiteModuleSummary = {
@@ -57,7 +64,7 @@ export function summarizeSuiteModules(
       }
       continue;
     }
-    for (const chip of buildModuleChips(run)) {
+    for (const chip of buildModuleChips(run, step.status)) {
       total += 1;
       if (chip.tone === "passed") passed += 1;
       else if (chip.tone === "error" || chip.tone === "anomaly") failed += 1;
@@ -119,10 +126,14 @@ export function describeNow(
   const selected = (suite.steps ?? []).filter((step) => String(step.status ?? "").toLowerCase() !== "skipped");
   const stepIndex = runId ? selected.findIndex((step) => step.run_id === runId) : -1;
   const step = selected[stepIndex];
-  if (!step) {
+  if (!step || TERMINAL_STATUSES.has(String(step.status ?? "").toLowerCase())) {
     return { kind: "idle" };
   }
   const run = runs.get(runId!);
+  const runStatus = (run as { status?: unknown } | undefined)?.status;
+  if (runStatus !== undefined && !SUITE_ACTIVE_STATUSES.has(String(runStatus).toLowerCase())) {
+    return { kind: "idle" };
+  }
   const progress = computeRunModuleProgress(run);
   const modules = orderedSelectedRunModules(run) as RunModuleLike[];
   const module = progress.current > 0 ? modules[progress.current - 1] : undefined;
