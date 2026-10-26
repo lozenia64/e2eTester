@@ -2,6 +2,7 @@
 // 최초 렌더는 서버 마크업이 끝낸다. 이후 갱신은 bindSuiteSocket 이 여는
 // 수트 WS + 하위 Run 진행 WS 의 이벤트마다 이뤄진다(설계 §3.3).
 import "../suite/styles.css";
+import "../suite/summary.css";
 import { bindSuiteActions, bindSuiteOtpForm } from "../suite/actions";
 import { startSuiteClock } from "../suite/render";
 import { bindSuiteSocket } from "../suite/socket";
