@@ -17,7 +17,6 @@ from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 INFORMATION_SECURITY_PLEDGE_FORM_LABEL = "(신)정보보호서약서_설계사대리점"
-FORM_COMPLETE_TEXT = "작성완료"
 FORM_COMPLETE_PATTERN = re.compile(r"^\s*(?:작성완료|제출완료)\s*$")
 
 AUTH_BUTTON = "#btnSaveCert"
