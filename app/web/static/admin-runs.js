@@ -920,9 +920,12 @@
   ];
   const SYSTEM_MAP_INTRO_MS = 1400;
 
+  function cssToken(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   function statusRgb(tone) {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(`--st-${tone}-solid`).trim();
-    const hex = /^#([0-9a-f]{6})$/i.exec(value)?.[1] || "64748b";
+    const hex = /^#([0-9a-f]{6})$/i.exec(cssToken(`--st-${tone}-solid`))?.[1] || "64748b";
     return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   }
 
@@ -991,12 +994,14 @@
   }
 
   function systemMapOption(map, progress) {
+    const panel = cssToken("--c-ink-950");
+    const white = cssToken("--c-white");
     return {
       animation: false,
       tooltip: {
         formatter(params) {
           const d = params.data || {};
-          return `<b>${escapeHtml(params.name)}</b><br/>실행 ${(d.runsShown ?? 0).toLocaleString()}회<br/>이상징후 ${d.anomalyShown ?? 0}건 · ${formatPercent(d.rate || 0)}<br/><span style="color:#9ca3af">클릭하면 아래에서 Run을 봅니다</span>`;
+          return `<b>${escapeHtml(params.name)}</b><br/>실행 ${(d.runsShown ?? 0).toLocaleString()}회<br/>이상징후 ${d.anomalyShown ?? 0}건 · ${formatPercent(d.rate || 0)}<br/><span style="color:var(--c-gray-400)">클릭하면 아래에서 Run을 봅니다</span>`;
         },
       },
       series: [
@@ -1010,7 +1015,7 @@
           width: "100%",
           height: "100%",
           // 루트 레벨 기본 테두리가 흰색이라 패널 배경색으로 덮는다.
-          levels: [{ itemStyle: { borderWidth: 0, gapWidth: 6, borderColor: "#0b1120" } }],
+          levels: [{ itemStyle: { borderWidth: 0, gapWidth: 6, borderColor: panel } }],
           itemStyle: { borderWidth: 0, borderRadius: 12 },
           label: {
             show: true,
@@ -1023,15 +1028,15 @@
             },
             rich: {
               badge: {
-                color: "#0b1120",
+                color: panel,
                 backgroundColor: "rgba(255,255,255,0.92)",
                 borderRadius: 999,
                 padding: [3, 8],
                 fontSize: 11,
                 fontWeight: 700,
               },
-              name: { color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 26 },
-              num: { color: "#fff", fontSize: 26, fontWeight: 900, lineHeight: 34 },
+              name: { color: white, fontSize: 15, fontWeight: 700, lineHeight: 26 },
+              num: { color: white, fontSize: 26, fontWeight: 900, lineHeight: 34 },
               sub: { color: "rgba(255,255,255,0.88)", fontSize: 12, lineHeight: 18 },
             },
           },
@@ -1052,13 +1057,25 @@
       .join("");
   }
 
+  // 집계는 Run 기록 기준이라 레지스트리에서 빠진 시스템 타일도 있다 — 체크박스가 없으면 필터가 사라진다.
+  function ensureSystemFilterOption(code, name) {
+    if (state.systems.some((item) => item.system_code === code)) return;
+    state.systems.push({ system_code: code, system_name: name || code });
+    document.getElementById("filter-system-options").innerHTML = "";
+    document.getElementById("filter-system").innerHTML = "";
+    renderSystemFilterOptions();
+  }
+
   function focusExploreOnSystem(code) {
-    const period = state.board?.system_map?.period || {};
+    const map = state.board?.system_map || {};
+    const period = map.period || {};
+    const system = (map.systems || []).find((item) => item.system_code === code);
+    ensureSystemFilterOption(code, system?.system_name);
+    // 상한(to)은 두지 않는다 — datetime-local 이 분 단위로 잘라 그 분의 Run 이 빠진다.
     applyFiltersToDom({
       system_codes: [code],
       statuses: ["PASSED", "ANOMALY"],
       from: period.from,
-      to: period.to,
     });
     state.preset = "all";
     renderPresets();
