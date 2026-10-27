@@ -11,7 +11,10 @@ export default defineConfig({
   base: "/static/dist/",
   build: {
     outDir: resolve(__dirname, "app/web/static/dist"),
-    emptyOutDir: true,
+    // watch(`npm run dev`) 재빌드마다 dist 를 비우면, 그 순간 dist 를 읽는 pytest·Playwright 가
+    // 깨진다. 파일명이 해시라 안 비워도 manifest 는 항상 새 파일만 가리킨다 — 비우기는 일회성
+    // `vite build` 에서만 한다.
+    emptyOutDir: !process.argv.includes("--watch"),
     manifest: true,
     rollupOptions: {
       input: {
