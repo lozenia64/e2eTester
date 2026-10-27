@@ -57,6 +57,7 @@
     openRowMenuId: null,
     boardLoadInFlight: false,
     runsLoadInFlight: false,
+    runsReloadPending: null,
   };
 
   function escapeHtml(text) {
@@ -443,7 +444,10 @@
       params.append("status", "ERROR");
       params.append("status", "FAILED");
     } else {
-      filters.statuses.forEach((status) => params.append("status", status));
+      // 이상징후 UI는 레거시 FAILED도 포함한다 — 지도 집계와 목록·CSV의 범위를 맞춘다.
+      const statuses = new Set(filters.statuses);
+      if (statuses.has("ANOMALY")) statuses.add("FAILED");
+      statuses.forEach((status) => params.append("status", status));
     }
     filters.system_codes.forEach((code) => params.append("system_code", code));
     if (filters.triggered_by) params.set("triggered_by", filters.triggered_by);
@@ -1162,7 +1166,11 @@
   }
 
   async function loadRuns({ reset = true, silent = false } = {}) {
-    if (state.runsLoadInFlight) return;
+    if (state.runsLoadInFlight) {
+      // 갱신 중 바뀐 필터는 마지막 조건으로 다시 조회한다. 더 보기 중복 요청은 무시한다.
+      if (reset) state.runsReloadPending = { silent: silent && (state.runsReloadPending?.silent ?? true) };
+      return;
+    }
     state.runsLoadInFlight = true;
     const previousCount = state.runs.length;
     if (reset) {
@@ -1186,6 +1194,7 @@
         return;
       }
       const data = await res.json();
+      if (state.runsReloadPending) return;
       const items = data.items || [];
       state.total = data.total ?? items.length;
       if (reset) state.runs = items;
@@ -1197,6 +1206,9 @@
       syncUrl();
     } finally {
       state.runsLoadInFlight = false;
+      const pending = state.runsReloadPending;
+      state.runsReloadPending = null;
+      if (pending) await loadRuns({ reset: true, silent: pending.silent });
     }
   }
 

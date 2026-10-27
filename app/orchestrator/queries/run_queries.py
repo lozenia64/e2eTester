@@ -234,7 +234,11 @@ class RunQueries:
         # SQLite 는 ISO 문자열 비교라 KST 월초를 UTC 로 맞춰야 경계가 어긋나지 않는다.
         period_from = performance_periods(now)[0].astimezone(UTC)
         counts = await self._summary.counts_by_system_status(
-            RunSummaryFilter(statuses=ADMIN_VISIBLE_RUN_STATUSES, requested_since=period_from)
+            RunSummaryFilter(
+                statuses=ADMIN_VISIBLE_RUN_STATUSES,
+                requested_since=period_from,
+                requested_before=now,
+            )
         )
         return build_admin_run_history_board(
             now=now,

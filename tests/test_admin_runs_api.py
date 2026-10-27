@@ -249,7 +249,7 @@ async def test_get_admin_run_history_board_system_map_counts_this_month(tmp_path
     db = SqliteDatabase(tmp_path / "board.db")
     await ensure_schema(db)
     month_start = performance_periods(datetime.now(UTC))[0].astimezone(UTC)
-    inside = month_start + timedelta(minutes=1)
+    inside = month_start
     await _seed(
         db,
         [
@@ -257,6 +257,9 @@ async def test_get_admin_run_history_board_system_map_counts_this_month(tmp_path
             *[_run(f"run_bad_{i}", RunStatus.ANOMALY, requested_at=inside) for i in range(6)],
             _run("run_err", RunStatus.ERROR, requested_at=inside),
             _run("run_prev", RunStatus.PASSED, requested_at=month_start - timedelta(minutes=1)),
+            _run(
+                "run_future", RunStatus.PASSED, requested_at=datetime.now(UTC) + timedelta(days=1)
+            ),
         ],
         preserve_time=True,
     )
