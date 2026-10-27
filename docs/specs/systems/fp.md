@@ -34,7 +34,7 @@ manifest → fp/executor.py → AccessWorkflowExecutor subclass
 ## 4. 화면 흐름 (sales01→03)
 
 ```text
-메인 접속 → sales01 본인인증(OTP) → sales02 OZ 전자서명 → sales03 작성완료(OTP)
+메인 접속 → sales01 본인인증(OTP) → sales02 또는 sales02_tm1 → TM 관리자 확인(해당 시) → OZ 전자서명 → sales03 또는 sales03_tm1 작성완료(OTP)
 ```
 
 ## 5. 모듈별 AC
@@ -64,6 +64,8 @@ Then PASSED
 
 **런타임:** `phone_auth_sms_requested` — resume 시 SMS 재요청 방지
 
+계약서 작성 화면은 `sales02.do`와 `sales02_tm1.do` 모두 성공으로 인정한다.
+
 **실패:** 주민번호·OTP 오류 alert → ANOMALY; nfilter 타임아웃 → ERROR
 
 ### fp.document.writing — FpDocumentWritingFlow
@@ -71,15 +73,26 @@ Then PASSED
 ```gherkin
 Given fp.identity.verification PASSED
 When document_writing runs
+Then preserve the arrived contract page (sales02.do or sales02_tm1.do)
+When the page is sales02_tm1.do
+Then verify the seven-digit manager_employee_id from the input preset before opening forms
 Then OZ 양식(정보보호서약서) 전자서명 진행
+And accept 작성완료 or 제출완료 as the form completion status
 And request 재인증 SMS (runtime.otp_code cleared)
 Then WAITING_INPUT (2차 OTP)
 When OTP submitted
-Then sales03 작성완료 화면
+Then sales03.do 또는 sales03_tm1.do 작성완료 화면
 Then PASSED
 ```
 
+완료 화면 대기는 두 경로를 모두 인정한다. 대기 시간 초과 시 제출 이후 발생한 실패 알림이 있으면
+해당 알림을 보고하고, 그렇지 않으면 대기 제한·기대 경로·현재 URL을 보고한다.
+제출 이전 알림이나 정상 인증 안내를 실패 원인으로 대체하지 않는다.
+
 **런타임:** `document_sms_requested`; 2차 OTP 전 `otp_code=""` 리셋
+
+관리자사번은 manifest의 선택 입력으로 프리셋에 저장한다. 일반 경로에서는 필요하지 않으며,
+TM 경로에서 누락·형식 오류·관리자 확인 실패 시 양식 제출 전에 오류로 종료한다.
 
 ## 6. OTP 정책
 

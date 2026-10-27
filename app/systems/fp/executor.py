@@ -15,6 +15,7 @@ class FpRuntime(AccessRuntime):
     ssn_back: str = ""
     carrier: str = ""
     phone_number: str = ""
+    manager_employee_id: str = ""
     otp_code: str = ""
     phone_auth_sms_requested: bool = False
     document_sms_requested: bool = False
@@ -42,6 +43,7 @@ class FpWorkflowExecutor(AccessWorkflowExecutor):
             ssn_back=(input_data.get("ssn_back") or "").strip(),
             carrier=(input_data.get("carrier") or "").strip(),
             phone_number=(input_data.get("phone_number") or "").strip(),
+            manager_employee_id=(input_data.get("manager_employee_id") or "").strip(),
             otp_code=(input_data.get("otp_code") or "").strip(),
         )
 

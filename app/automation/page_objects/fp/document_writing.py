@@ -6,14 +6,18 @@ import re
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.automation.page_objects.fp.contract_pages import (
+    CONTRACT_WRITE_PAGE_PATH,
+    DOCUMENT_COMPLETE_PAGE_PATHS,
+    is_contract_write_page,
+    is_document_complete_page,
+    is_tm_contract_write_page,
+)
 from app.runner.step_logging import log
 from app.systems.access_common import browser
 
-CONTRACT_WRITE_PAGE_PATH = "/fp/loan/sales02.do"
-DOCUMENT_COMPLETE_PAGE_PATH = "/fp/loan/sales03.do"
-
 INFORMATION_SECURITY_PLEDGE_FORM_LABEL = "(신)정보보호서약서_설계사대리점"
-FORM_COMPLETE_TEXT = "작성완료"
+FORM_COMPLETE_PATTERN = re.compile(r"^\s*(?:작성완료|제출완료)\s*$")
 
 AUTH_BUTTON = "#btnSaveCert"
 SMS_REQUEST_LINK = "#btnSendAuth"
@@ -85,17 +89,48 @@ def _resolve_otp_code(otp_code: str) -> str:
 
 
 def _ensure_contract_write_page(page: Page, base_url: str) -> None:
-    if CONTRACT_WRITE_PAGE_PATH in page.url:
+    if is_contract_write_page(page.url):
         log(f"[wait] Reuse contract write page: {page.url}")
         return
     target = f"{browser.normalize_base_url(base_url, base_url)}{CONTRACT_WRITE_PAGE_PATH}"
     log(f"[step] Open contract write page: {target}")
     page.goto(target, wait_until="domcontentloaded", timeout=browser.MAX_TIMEOUT_MS)
     page.wait_for_url(
-        lambda url: CONTRACT_WRITE_PAGE_PATH in url,
+        is_contract_write_page,
         timeout=browser.MAX_TIMEOUT_MS,
     )
     log(f"[wait] Contract write page ready: {page.url}")
+
+
+def _ensure_manager_verified(
+    page: Page, manager_employee_id: str, dialog_messages: list[str]
+) -> None:
+    if not is_tm_contract_write_page(page.url):
+        return
+    manager_employee_id = manager_employee_id.strip()
+    if not re.fullmatch(r"[0-9]{7}", manager_employee_id):
+        raise RuntimeError("TM 계약서 작성에는 관리자사번 7자리를 입력 프리셋에 입력해야 합니다.")
+    manager_input = page.locator("#managerStfno")
+    if manager_input.input_value() == manager_employee_id and page.evaluate(
+        "() => window.checkManagerNameFlag === true"
+    ):
+        return
+    log("[step] TM 계약서 관리자사번 확인")
+    dialog_index = len(dialog_messages)
+    manager_input.fill(manager_employee_id)
+    page.locator("tr").filter(has=manager_input).get_by_role(
+        "button", name="확인", exact=True
+    ).click()
+    try:
+        page.wait_for_function(
+            "() => window.checkManagerNameFlag === true", timeout=browser.MAX_TIMEOUT_MS
+        )
+    except PlaywrightTimeoutError:
+        _ensure_no_failure_dialogs(dialog_messages, dialog_index, "관리자사번 확인")
+        raise RuntimeError(
+            "관리자사번 확인에 실패했습니다. 입력 프리셋의 관리자사번을 확인해 주세요."
+        ) from None
+    log("[wait] TM 계약서 관리자사번 확인 완료")
 
 
 def _dismiss_oz_jquery_dialog(popup: Page) -> None:
@@ -252,14 +287,14 @@ def _wait_for_form_complete(page: Page) -> None:
     log(f"[wait] Settle after OZ submit ({FORM_SUBMIT_SETTLE_MS} ms)")
     page.wait_for_timeout(FORM_SUBMIT_SETTLE_MS)
     _, status = _resolve_information_security_pledge_row(page)
-    completed = status.filter(has_text=FORM_COMPLETE_TEXT)
+    completed = status.filter(has_text=FORM_COMPLETE_PATTERN)
     try:
         completed.wait_for(state="visible", timeout=browser.MAX_TIMEOUT_MS)
     except PlaywrightTimeoutError:
         text = (status.text_content() or "").strip()
         raise RuntimeError(
             f"{INFORMATION_SECURITY_PLEDGE_FORM_LABEL!r} 상태가 "
-            f"{FORM_COMPLETE_TEXT!r} 가 아닙니다: {text!r}"
+            f"작성완료 또는 제출완료가 아닙니다: {text!r}"
         ) from None
     text = (completed.text_content() or "").strip()
     log(f"[step] Verify form status cell: {text!r}")
@@ -315,9 +350,9 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
 
 
 def _wait_for_document_complete_page(page: Page) -> None:
-    log(f"[wait] Start document complete page wait: {DOCUMENT_COMPLETE_PAGE_PATH}")
+    log("[wait] 서류 작성 완료 화면 대기: sales03.do 또는 sales03_tm1.do")
     page.wait_for_url(
-        lambda url: DOCUMENT_COMPLETE_PAGE_PATH in url,
+        is_document_complete_page,
         timeout=OZ_POPUP_TIMEOUT_MS,
     )
     log(f"[wait] Document complete page ready: {page.url}")
@@ -328,10 +363,12 @@ def request_otp(
     *,
     base_url: str,
     dialog_messages: list[str],
+    manager_employee_id: str = "",
 ) -> str:
     """계약서 작성 화면에서 정보보호서약서 제출 후 휴대폰 인증번호를 요청한다."""
     browser.maybe_close_popup(page)
     _ensure_contract_write_page(page, base_url)
+    _ensure_manager_verified(page, manager_employee_id, dialog_messages)
     _open_and_submit_information_security_pledge(page)
     _wait_for_form_complete(page)
     _open_phone_auth_section(page, dialog_messages)
@@ -346,9 +383,9 @@ def submit_otp_and_complete(
     dialog_messages: list[str],
 ) -> str:
     """인증번호 입력 후 제출하여 작성완료 화면까지 진행한다."""
-    if CONTRACT_WRITE_PAGE_PATH not in page.url:
+    if not is_contract_write_page(page.url):
         raise RuntimeError(
-            "계약서 작성 화면(/fp/loan/sales02.do)이 아닙니다. 이전 모듈부터 다시 실행해 주세요."
+            "계약서 작성 화면(sales02.do 또는 sales02_tm1.do)이 아닙니다. 이전 모듈부터 다시 실행해 주세요."
         )
 
     resolved = _resolve_otp_code(otp_code)
@@ -364,11 +401,10 @@ def submit_otp_and_complete(
         _wait_for_document_complete_page(page)
     except PlaywrightTimeoutError:
         _ensure_no_failure_dialogs(dialog_messages, dialog_index, "서류 작성 제출")
-        if dialog_messages:
-            raise RuntimeError(f"서류 작성 제출 실패: {dialog_messages[-1]}")
         raise RuntimeError(
-            f"서류 작성 완료 화면({DOCUMENT_COMPLETE_PAGE_PATH})으로 이동하지 못했습니다."
-        )
+            f"서류 작성 완료 화면으로 {OZ_POPUP_TIMEOUT_MS / 1000:g}초 안에 이동하지 못했습니다. "
+            f"기대 경로: {', '.join(sorted(DOCUMENT_COMPLETE_PAGE_PATHS))}. 현재 URL: {page.url}"
+        ) from None
 
     _ensure_no_failure_dialogs(dialog_messages, dialog_index, "서류 작성 제출")
     return "FP 서류작성 성공"

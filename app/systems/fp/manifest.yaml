@@ -57,6 +57,12 @@ run_form:
   required: true
   placeholder: 01012345678
   help_text: 010 또는 011로 시작하는 11자리 숫자
+- key: manager_employee_id
+  label: 관리자사번
+  type: text
+  required: false
+  placeholder: 관리자사번 7자리
+  help_text: TM 계약서 화면에서는 필수입니다. 입력 프리셋에 저장하면 관리자 확인 후 점검을 계속합니다.
 modules:
 - module_id: fp.main.access
   system_code: fp
