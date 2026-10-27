@@ -3,6 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from app.contexts.insights.application.admin_performance import (
+    build_performance,
+    performance_periods,
+)
+from app.contexts.insights.application.savings_basis import load_savings_basis, saved_module_seconds
 from app.contexts.insights.application.stats_charts import build_usage_charts
 from app.contexts.insights.infrastructure.module_settings_repository import (
     ModuleSettingsRepositoryPort,
@@ -54,22 +59,9 @@ class StatsService:
 
         system_defs = {s.system_code: s.name for s in self._registry.list_systems()}
 
-        module_seconds: dict[str, dict[str, int]] = {}
-        for system in self._registry.list_systems():
-            module_seconds[system.system_code] = {
-                m.module_id: m.estimated_manual_seconds for m in system.modules
-            }
-
-        if self._module_settings_repo is not None:
-            overrides = await self._module_settings_repo.list()
-            for override in overrides:
-                parts = override.module_id.split(".", 1)
-                if len(parts) == 2:
-                    sys_code = parts[0]
-                    if sys_code in module_seconds:
-                        module_seconds[sys_code][override.module_id] = (
-                            override.estimated_manual_seconds
-                        )
+        module_seconds = await load_savings_basis(
+            self._registry.list_systems(), self._module_settings_repo
+        )
 
         actor_context = None
         if self._user_service is not None and self._schedule_repo is not None:
@@ -87,11 +79,7 @@ class StatsService:
             failed = sum(1 for m in run_modules if m.status in MODULE_ANOMALY_STATUSES)
             duration = sum(m.duration_ms or 0 for m in run_modules)
             sys_seconds = module_seconds.get(run.system_code, {})
-            saved_seconds = sum(
-                sys_seconds.get(m.module_id, 0)
-                for m in run_modules
-                if m.status == ModuleStatus.PASSED
-            )
+            saved_seconds = saved_module_seconds(run_modules, sys_seconds)
             code = run.system_code
             if code not in system_map:
                 system_map[code] = SystemUsageStat(
@@ -182,6 +170,16 @@ class StatsService:
             by_system=by_system,
         )
         return stats.model_copy(update={"charts": build_usage_charts(stats)})
+
+    async def get_performance_dashboard(self, *, now: datetime | None = None) -> dict:
+        moment = now or datetime.now(UTC)
+        _, end, previous_start, _ = performance_periods(moment)
+        from_dt, to_dt = previous_start.astimezone(UTC), end.astimezone(UTC)
+        runs = await self._stats_query.list_usage_run_rows(from_dt, to_dt)
+        modules = await self._stats_query.list_usage_module_rows(from_dt, to_dt)
+        systems = self._registry.list_systems()
+        basis = await load_savings_basis(systems, self._module_settings_repo)
+        return build_performance(moment, runs, modules, systems, basis)
 
     async def get_savings_summary(
         self,

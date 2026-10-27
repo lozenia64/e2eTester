@@ -472,6 +472,7 @@ e2eTester/
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/dashboard`
+- `GET /api/admin/dashboard/performance` — 한국 달력 기준 월간 추정 절감 시간·전월 동기간 비교·시스템별 기여·일별 누적(관리자 전용, 개인별 분해 없음)
 - `GET /api/admin/runs/board`
 - `GET /api/admin/runs/heatmap`
 - `GET /api/admin/runs`

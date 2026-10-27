@@ -40,7 +40,6 @@ GENERATED_FILES = {
 # 지운다. 비면 FG-002 가 완성된다.
 FG002_ALLOWLIST = {
     "app/web/templates/admin/runs.html",
-    "app/web/templates/admin/index.html",
     "app/web/templates/schedules.html",
     "app/web/templates/mobile_trigger.html",
     "app/web/templates/self_healing.html",
@@ -59,7 +58,6 @@ FG004_ALLOWLIST = {
 # P3 이관 완료 전까지 템플릿이 직접 로드하는 레거시 페이지 스크립트.
 # 화면을 이관할 때마다 여기서 한 줄씩 지운다. 비면 FG-005 가 완성된다.
 FG005_ALLOWLIST = {
-    "/static/admin-dashboard.js",
     "/static/admin-ops.js",
     "/static/admin-runs.js",
     "/static/admin-stats.js",

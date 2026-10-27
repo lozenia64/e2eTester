@@ -71,8 +71,12 @@ def test_vendor_entry_resolves_in_manifest(entry: str) -> None:
 def test_vendor_bundle_actually_contains_the_library(
     manifest: dict, entry: str, min_bytes: int
 ) -> None:
-    """import 가 트리셰이킹으로 사라지면 빈 번들이 나온다 — 크기로 잡는다."""
-    size = (DIST / manifest[entry]["file"]).stat().st_size
+    """공유 청크를 포함한 정적 import 전체가 라이브러리를 담아야 한다.
+
+    대시보드의 ECharts 지연 로딩과 기존 전역 브리지는 같은 청크를 공유한다.
+    엔트리 한 파일만 재면 정상적인 코드 분할을 라이브러리 누락으로 오판한다.
+    """
+    size = sum((DIST / file).stat().st_size for file in _js_closure(manifest, entry))
     assert size > min_bytes, (
         f"{entry} 번들이 {size}B 로 너무 작습니다 — 라이브러리가 안 실렸습니다."
     )

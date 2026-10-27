@@ -9,11 +9,10 @@ python3 -m pip install -r requirements-dev.txt
 python3 scripts/ci/run_all_gates.py --profile full
 ```
 
-로컬에서 전체 게이트를 실행하기 전에는 같은 작업 폴더의 `npm run dev`
-(`vite build --watch`)를 종료한다. 개발용 자동 빌드와 CI 빌드는 모두
-`app/web/static/dist/`를 사용하므로, 동시에 실행하면 재빌드 중 manifest·자산이
-교체되어 `ManifestMissingError`로 테스트가 실패할 수 있다. 전체 게이트가 끝난 뒤
-필요하면 `npm run dev`를 다시 실행한다.
+`npm run dev`(`vite build --watch`)는 켜 둔 채 게이트를 돌려도 된다. watch 모드는
+`emptyOutDir` 를 끄므로(`vite.config.ts`) 재빌드 중에도 `app/web/static/dist/` 가 비지
+않는다. 해시 파일명이라 이전 자산이 남아도 manifest 는 새 파일만 가리킨다. 쌓인 옛 자산은
+`npm run build` 가 정리한다.
 
 `ci_config_valid` 는 CI 설정 자체를 검사한다 — `gates.py` 의 경로 글롭이 실재
 파일에 매칭되는지, 프로필이 없는 게이트를 참조하지 않는지. 코드 이동으로 CI 가
