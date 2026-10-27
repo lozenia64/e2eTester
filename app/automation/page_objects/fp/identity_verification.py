@@ -5,11 +5,13 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from app.automation.page_objects.fp.contract_pages import (
+    is_contract_write_page,
+)
 from app.runner.step_logging import log
 from app.systems.access_common import browser
 
 SALES_PAGE_PATH = "/fp/loan/sales01.do"
-CONTRACT_WRITE_PAGE_PATH = "/fp/loan/sales02.do"
 CONTRACT_WRITE_LINK = 'a[href="/fp/loan/sales01.do"]'
 
 AGREE_ALL_LABEL = "label:has(#agreeAll)"
@@ -788,9 +790,9 @@ def _request_sms_code(page: Page, dialog_messages: list[str]) -> None:
 
 
 def _wait_for_contract_write_page(page: Page) -> None:
-    log(f"[wait] Start contract write page wait: {CONTRACT_WRITE_PAGE_PATH}")
+    log("[wait] 계약서 작성 화면 대기: sales02.do 또는 sales02_tm1.do")
     page.wait_for_url(
-        lambda url: CONTRACT_WRITE_PAGE_PATH in url,
+        is_contract_write_page,
         timeout=browser.MAX_TIMEOUT_MS,
     )
     log(f"[wait] Contract write page ready: {page.url}")
@@ -867,7 +869,7 @@ def submit_otp_and_complete(
         if dialog_messages:
             raise RuntimeError(f"계약서 체결 실패: {dialog_messages[-1]}")
         raise RuntimeError(
-            f"계약서 체결 후 계약서 작성 화면({CONTRACT_WRITE_PAGE_PATH})으로 이동하지 못했습니다."
+            "계약서 체결 후 계약서 작성 화면(sales02.do 또는 sales02_tm1.do)으로 이동하지 못했습니다."
         )
 
     _ensure_no_failure_dialogs(dialog_messages, dialog_index, "계약서 체결")

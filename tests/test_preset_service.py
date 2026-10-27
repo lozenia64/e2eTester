@@ -62,6 +62,22 @@ async def test_create_and_list_preset(tmp_path):
     assert await service.list_presets("user_1", system_code="mhm") == []
 
 
+async def test_fp_manager_employee_id_round_trips_in_preset(tmp_path):
+    service = _service(tmp_path)
+    preset = await service.create_preset(
+        "user_1",
+        CreatePresetRequest(
+            system_code="fp",
+            name="TM 점검",
+            input_data={"auth_method": "phone", "manager_employee_id": " 1234567 "},
+        ),
+    )
+    restored = await service.get_owned(preset.preset_id, "user_1")
+    assert restored.input_data["manager_employee_id"] == "1234567"
+    fields = service._run_service.get_system("fp").run_form
+    assert any(field.key == "manager_employee_id" and not field.required for field in fields)
+
+
 async def test_create_rejects_unsupported_auth(tmp_path):
     service = _service(tmp_path)
     bad_input = _hom_phone_input() | {"auth_method": "finance_certificate"}

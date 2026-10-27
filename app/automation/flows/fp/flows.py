@@ -42,6 +42,7 @@ class FpDocumentWritingFlow(Flow):
                 runtime.page,
                 base_url=runtime.base_url,
                 dialog_messages=runtime.dialog_messages,
+                manager_employee_id=runtime.manager_employee_id,
             )
             runtime.document_sms_requested = True
             if not runtime.otp_code:
