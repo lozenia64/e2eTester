@@ -30,10 +30,18 @@
 
 | API | 용도 |
 | --- | --- |
-| GET `/api/admin/runs/board` | Kanban 유사 보드 |
+| GET `/api/admin/runs/board` | 이번 달 시스템 지도 (`system_map`, `today_start`) |
 | GET `/api/admin/runs/heatmap` | 시간대 heatmap |
 | GET `/api/admin/runs` | paginated list |
 | GET `/api/admin/runs/export.csv` | CSV export |
+
+`/api/admin/runs/board` 의 `system_map` — `/admin/runs` 상단 트리맵:
+
+- 기간은 `Asia/Seoul` 월초 00:00부터 조회 시각까지, `requested_at` 귀속. `period.from`/`to` 는 UTC ISO.
+- 실행 횟수는 정상·이상징후 Run(`ADMIN_VISIBLE_RUN_STATUSES`), 이상징후는 ANOMALY+FAILED. 점검실패·취소는 일일 보존 정리로 사라져 제외한다.
+- `systems[]` 는 `system_code` 단위(`system_name` 은 기간 내 최신 행), `runs` 내림차순·동률 코드 오름차순. 실행 0회 시스템은 없다.
+- `top_runs`/`top_anomaly` 는 최댓값 시스템 코드(동률 코드 오름차순). 값이 전부 0이면 `null`.
+- 대시보드와 겹치는 KPI·7일 추이·주의 Run·시스템별 최근 결과는 이 화면에 두지 않는다(`/admin` 참조).
 
 ## 3. 사용량 통계
 

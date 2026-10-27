@@ -195,48 +195,6 @@ class InMemoryRunSummaryQuery:
             )
         return {code: round(sum(v) / len(v)) for code, v in buckets.items() if v}
 
-    async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:
-        last_map = await self.last_finished_at_by_system()
-        all_rows = await self._all_rows()
-        if not last_map:
-            return self._fallback_latest_terminal_per_system(all_rows)
-        result: list[RunSummaryRow] = []
-        for system_code in sorted(last_map):
-            moment = _as_utc(last_map[system_code])
-            matches = sorted(
-                [
-                    row
-                    for row in all_rows
-                    if row.system_code == system_code
-                    and _as_utc(row.ended_at or row.requested_at) == moment
-                ],
-                key=lambda row: row.requested_at,
-                reverse=True,
-            )
-            if matches:
-                result.append(matches[0])
-        if result:
-            return result
-        return self._fallback_latest_terminal_per_system(all_rows)
-
-    @staticmethod
-    def _fallback_latest_terminal_per_system(rows: list[RunSummaryRow]) -> list[RunSummaryRow]:
-        latest: dict[str, RunSummaryRow] = {}
-        for row in rows:
-            if row.status not in _TERMINAL_FOR_BASELINE:
-                continue
-            moment = row.ended_at or row.requested_at
-            current = latest.get(row.system_code)
-            if current is None:
-                latest[row.system_code] = row
-                continue
-            current_moment = current.ended_at or current.requested_at
-            if moment > current_moment or (
-                moment == current_moment and row.requested_at > current.requested_at
-            ):
-                latest[row.system_code] = row
-        return [latest[code] for code in sorted(latest)]
-
     async def find_previous_finished_run_id(
         self, system_code: str, before: datetime, exclude_run_id: str
     ) -> str | None:
