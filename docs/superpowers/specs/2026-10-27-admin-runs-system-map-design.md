@@ -57,7 +57,7 @@
 - **이상징후 건수**: `ANOMALY` + `FAILED` — 기존 KPI `today_anomaly` 와 같은 정의.
 - **이상징후 비율**: 이상징후 건수 / 실행 횟수.
 - 패널 부제: "정상·이상징후 Run 기준 · 이번 달 1일~지금".
-- 시스템명은 `system_code` 로 묶고 이름은 등록된 시스템 정의(없으면 가장 최근 행)를 쓴다 — 과거 이름 변경으로 한 시스템이 두 타일로 쪼개지지 않게.
+- 시스템명은 `system_code` 로 묶고 이름은 기간 내 가장 최근 행의 `system_name`(없으면 `system_code`)을 쓴다 *(계획 단계 조정: `RunQueries` 에 레지스트리 의존을 새로 넣지 않기 위함)* — 과거 이름 변경으로 한 시스템이 두 타일로 쪼개지지 않게.
 
 ### 4.2 API
 
@@ -81,7 +81,7 @@
 - `kpis`·`trend_7d`·`attention_runs`·`by_system_recent` 는 삭제. 이를 위해서만 존재하던 코드(`build_trend_7d`, `merge_daily_status_counts`, `build_by_system_recent`, `summarize_attention_row`, `BoardRunRow`/`_board_row`, `list_summaries_for_last_finished_by_system` 의 board 호출, `list_comparisons` 의 board 호출)는 다른 호출자가 없으면 함께 지운다. 구현 전 `grep` 으로 호출자를 확인한다.
 - `systems` 는 `runs` 내림차순. 이번 달 실행 0회인 등록 시스템은 포함하지 않는다.
 - `top_runs`/`top_anomaly`: 동률이면 `system_code` 오름차순 첫 번째. 이상징후가 전부 0이면 `top_anomaly` 는 `null`.
-- 집계: `RunSummaryQueryPort` 에 `counts_by_system_status(query) -> list[(system_code, status, count)]` 를 추가(SQLite: `GROUP BY system_code, status`, InMemory 동등 구현). 이름 해석은 §4.1. 빌더는 `admin_run_history_board.py` 의 순수 함수로 둔다.
+- 집계: `RunSummaryQueryPort` 에 `counts_by_system_status(query) -> list[(system_code, system_name, status, count)]` 를 추가(코드 단위로 묶고 이름은 최신 행, InMemory 동등 구현). 이름 해석은 §4.1. 빌더는 `admin_run_history_board.py` 의 순수 함수로 둔다.
 
 ### 4.3 시각
 
