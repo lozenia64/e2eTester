@@ -1,13 +1,10 @@
+import { formatTime } from "./dom";
 import type { SectionName } from "./types";
 
 const ENDPOINTS: Record<SectionName, string> = {
   performance: "/api/admin/dashboard/performance", daily: "/api/dashboard/daily", coverage: "/api/admin/dashboard",
 };
 const TITLES: Record<SectionName, string> = { performance: "월간 성과", daily: "오늘 현황", coverage: "7일 커버리지" };
-
-export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-}
 
 export class DashboardController {
   private inFlight = false;

@@ -1,5 +1,5 @@
 import { STATUS_TONES } from "../lib/status.generated";
-import { countTo, escapeHtml as esc, number, replaceContent, setText } from "./dom";
+import { countTo, escapeHtml as esc, formatTime as dateLabel, number, replaceContent, setText } from "./dom";
 import type { CoverageData, DailyData, PerformanceData } from "./types";
 
 function tone(value: string): string {
@@ -49,7 +49,6 @@ export function renderPerformance(root: HTMLElement, data: PerformanceData, firs
   const badge = root.querySelector<HTMLElement>("#perf-comparison");
   if (badge) badge.dataset.direction = data.change_percent === null ? "none" : data.change_percent < 0 ? "down" : "up";
   setText(root, "#perf-basis-note", data.basis_note);
-  const dateLabel = (iso: string): string => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
   setText(root, "#perf-period", `${dateLabel(data.period.from)} ~ ${dateLabel(data.period.to)} · 한국 시간`);
   if (badge) badge.title = `전월 비교 기간 ${dateLabel(data.period.previous_from)} ~ ${dateLabel(data.period.previous_to)}`;
   setText(root, "#perf-saving-note", data.total_seconds > 0 ? `통과 모듈별 수동 점검 기준 시간의 합계 · ${number(data.total_seconds)}초` : "산정 가능한 절감 시간 없음 · 모듈 기준 시간을 확인하세요.");
@@ -58,7 +57,7 @@ export function renderPerformance(root: HTMLElement, data: PerformanceData, firs
   if (bars) { bars.classList.toggle("perf-bars-first", first); }
   replaceContent(root, "#perf-trend-table", `<table class="perf-data-table"><caption>일별 절감 시간과 누적 시간 · 단위 초</caption><thead><tr><th scope="col">날짜</th><th scope="col">당일</th><th scope="col">누적</th></tr></thead><tbody>${data.daily.map(day => `<tr><th scope="row">${esc(day.date)}</th><td>${number(day.saved_seconds)}</td><td>${number(day.cumulative_seconds)}</td></tr>`).join("")}</tbody></table>`);
   const lead = data.by_system[0];
-  setText(root, "#perf-observation", lead && data.total_seconds > 0 ? `${lead.system_name}이 이번 달 추정 절감 시간의 ${number(lead.saved_seconds / data.total_seconds * 100, 1)}%를 기여했습니다. 시스템별 기여도를 참고해 점검 범위를 검토하세요.` : "집계 가능한 성과가 아직 없습니다. 모듈별 수동 점검 기준 시간을 설정하고 자동 점검을 완료하면 성과가 표시됩니다.");
+  setText(root, "#perf-observation", lead && data.total_seconds > 0 ? `이번 달 추정 절감 시간의 ${number(lead.saved_seconds / data.total_seconds * 100, 1)}%가 ${lead.system_name}에서 나왔습니다. 시스템별 기여도를 참고해 점검 범위를 검토하세요.` : "집계 가능한 성과가 아직 없습니다. 모듈별 수동 점검 기준 시간을 설정하고 자동 점검을 완료하면 성과가 표시됩니다.");
 }
 
 export function renderDaily(root: HTMLElement, data: DailyData): void {

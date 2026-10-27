@@ -17,6 +17,9 @@ export function replaceContent(root: HTMLElement, selector: string, html: string
   if (key) Array.from(el.querySelectorAll<HTMLElement>("[data-focus-key]")).find(node => node.dataset.focusKey === key)?.focus({ preventScroll: true });
 }
 export const number = (value: number, decimals = 0): string => value.toLocaleString("ko-KR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
 export function reducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
