@@ -22,13 +22,12 @@ ASSET_MANIFEST = AssetManifest(MANIFEST, base_url="/static/dist")
 TEMPLATES = Path("app/web/templates")
 
 VENDOR_ENTRIES = (
-    "entries/vendor-chart.ts",
     "entries/vendor-echarts.ts",
     "entries/vendor-plotly.ts",
 )
 
 VENDOR_TEMPLATE_REFS = {
-    "admin/runs.html": ("entries/vendor-chart.ts", "entries/vendor-echarts.ts"),
+    "admin/runs.html": ("entries/vendor-echarts.ts",),
     "admin/stats.html": ("entries/vendor-plotly.ts",),
     "insights.html": ("entries/vendor-plotly.ts",),
 }
@@ -63,7 +62,6 @@ def test_vendor_entry_resolves_in_manifest(entry: str) -> None:
 @pytest.mark.parametrize(
     ("entry", "min_bytes"),
     [
-        ("entries/vendor-chart.ts", 100_000),
         ("entries/vendor-echarts.ts", 300_000),
         ("entries/vendor-plotly.ts", 500_000),
     ],

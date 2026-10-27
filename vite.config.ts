@@ -30,8 +30,7 @@ export default defineConfig({
         "runs-history": resolve(__dirname, "app/web/frontend/entries/runs-history.ts"),
         // 차트 라이브러리 self-host(P3-4 §3.1). 레거시 페이지 스크립트가
         // 전역으로 쓰므로 브리지 엔트리로 얹는다 — 해당 화면이 P4 에서
-        // 이관되는 시점에 이 세 줄과 엔트리 파일을 함께 지운다.
-        "vendor-chart": resolve(__dirname, "app/web/frontend/entries/vendor-chart.ts"),
+        // 이관되는 시점에 이 줄들과 엔트리 파일을 함께 지운다.
         "vendor-echarts": resolve(__dirname, "app/web/frontend/entries/vendor-echarts.ts"),
         "vendor-plotly": resolve(__dirname, "app/web/frontend/entries/vendor-plotly.ts"),
       },

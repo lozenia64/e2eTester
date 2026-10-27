@@ -12,10 +12,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.contexts.insights.application.admin_performance import performance_periods
 from app.contexts.insights.application.admin_run_history_board import (
-    ATTENTION_STATUSES,
-    BoardRunRow,
     build_admin_run_history_board,
+    build_system_map,
 )
 from app.contexts.insights.application.admin_run_history_heatmap import (
     HeatmapRunRow,
@@ -28,7 +28,7 @@ from app.contexts.run.views.summary import summarize_row
 from app.contexts.scheduling.scheduler import schedule_today_start_utc
 from app.core.enums import RunStatus
 from app.core.settings import get_settings
-from app.core.status_labels import ADMIN_DASHBOARD_RUN_STATUSES
+from app.core.status_labels import ADMIN_DASHBOARD_RUN_STATUSES, ADMIN_VISIBLE_RUN_STATUSES
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -54,26 +54,6 @@ def _schedule_tz() -> ZoneInfo:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
         return ZoneInfo("UTC")
-
-
-def _board_row(row: RunSummaryRow) -> BoardRunRow:
-    return BoardRunRow(
-        run_id=row.run_id,
-        system_code=row.system_code,
-        system_name=row.system_name,
-        status=row.status,
-        requested_at=row.requested_at,
-        started_at=row.started_at,
-        ended_at=row.ended_at,
-        module_total=row.module_total,
-        module_passed=row.module_passed,
-        module_skipped=row.module_skipped,
-        failed_module_name=row.failed_module_name,
-        triggered_by=row.triggered_by,
-        suite_id=row.suite_id,
-        schedule_id=row.schedule_id,
-        created_by_user_name=row.created_by_user_name,
-    )
 
 
 def _resolve_statuses(
@@ -247,56 +227,25 @@ class RunQueries:
         *,
         actor_context: ActorContext | None = None,
     ) -> dict[str, Any]:
+        """이번 달 시스템 지도 보드. ``actor_context`` 는 라우트 호환용으로만 받는다."""
+        del actor_context
         tz = _schedule_tz()
         now = datetime.now(UTC)
-        today_start = schedule_today_start_utc()
-        terminal = frozenset(ADMIN_DASHBOARD_RUN_STATUSES)
-
-        total_finished = await self._summary.count(RunSummaryFilter(statuses=terminal))
-        today_counts = await self._summary.counts_by_status_filtered(
-            RunSummaryFilter(statuses=terminal, requested_since=today_start)
+        # SQLite 는 ISO 문자열 비교라 KST 월초를 UTC 로 맞춰야 경계가 어긋나지 않는다.
+        period_from = performance_periods(now)[0].astimezone(UTC)
+        counts = await self._summary.counts_by_system_status(
+            RunSummaryFilter(
+                statuses=ADMIN_VISIBLE_RUN_STATUSES,
+                requested_since=period_from,
+                requested_before=now,
+            )
         )
-
-        trend_local_start = now.astimezone(tz).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) - timedelta(days=6)
-        trend_since = trend_local_start.astimezone(UTC)
-        trend_raw = await self._summary.daily_status_counts(
-            RunSummaryFilter(statuses=terminal, requested_since=trend_since),
-            tz=tz,
-        )
-        attention_open_count = await self._summary.count(
-            RunSummaryFilter(statuses=ATTENTION_STATUSES)
-        )
-
-        attention_rows = await self._summary.list_summaries(
-            RunSummaryFilter(statuses=ATTENTION_STATUSES),
-            Page(limit=5),
-        )
-        by_system_rows = await self._summary.list_summaries_for_last_finished_by_system()
-
-        board = build_admin_run_history_board(
+        return build_admin_run_history_board(
             now=now,
             tz=tz,
-            today_start=today_start,
-            total_finished=total_finished,
-            today_status_counts=today_counts,
-            trend_counts_raw=trend_raw,
-            attention_rows=[_board_row(row) for row in attention_rows],
-            by_system_recent_rows=[_board_row(row) for row in by_system_rows],
-            attention_open_count=attention_open_count,
+            today_start=schedule_today_start_utc(),
+            system_map=build_system_map(counts, period_from=period_from, period_to=now),
         )
-        attention_comparisons = await self._summary.list_comparisons(
-            [row.run_id for row in attention_rows]
-        )
-        board["attention_runs"] = [
-            attach_comparison(
-                summarize_row(row, actor_context=actor_context),
-                attention_comparisons.get(row.run_id),
-            )
-            for row in attention_rows
-        ]
-        return board
 
     async def _rows_for_scope(
         self,

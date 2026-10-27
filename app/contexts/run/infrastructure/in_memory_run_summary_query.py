@@ -17,6 +17,7 @@ from app.contexts.run.contracts.query_rows import (
     RunSummaryFilter,
     RunSummaryRow,
 )
+from app.contexts.run.infrastructure.sqlite_run_summary_query import _group_by_system_status
 from app.core.enums import RunStatus
 from app.domain.summary_fields import run_summary_fields
 
@@ -153,6 +154,17 @@ class InMemoryRunSummaryQuery:
             buckets[key] = buckets.get(key, 0) + 1
         return [(day, status, count) for (day, status), count in sorted(buckets.items())]
 
+    async def counts_by_system_status(
+        self, query: RunSummaryFilter
+    ) -> list[tuple[str, str, str, int]]:
+        rows = sorted(
+            (row for row in await self._all_rows() if _matches(row, query)),
+            key=lambda row: row.requested_at,
+        )
+        return _group_by_system_status(
+            (row.system_code, row.system_name, row.status.value) for row in rows
+        )
+
     async def list_run_ids(self, query: RunSummaryFilter) -> list[str]:
         return [row.run_id for row in await self._all_rows() if _matches(row, query)]
 
@@ -182,48 +194,6 @@ class InMemoryRunSummaryQuery:
                 (row.ended_at - row.started_at).total_seconds() * 1000.0
             )
         return {code: round(sum(v) / len(v)) for code, v in buckets.items() if v}
-
-    async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:
-        last_map = await self.last_finished_at_by_system()
-        all_rows = await self._all_rows()
-        if not last_map:
-            return self._fallback_latest_terminal_per_system(all_rows)
-        result: list[RunSummaryRow] = []
-        for system_code in sorted(last_map):
-            moment = _as_utc(last_map[system_code])
-            matches = sorted(
-                [
-                    row
-                    for row in all_rows
-                    if row.system_code == system_code
-                    and _as_utc(row.ended_at or row.requested_at) == moment
-                ],
-                key=lambda row: row.requested_at,
-                reverse=True,
-            )
-            if matches:
-                result.append(matches[0])
-        if result:
-            return result
-        return self._fallback_latest_terminal_per_system(all_rows)
-
-    @staticmethod
-    def _fallback_latest_terminal_per_system(rows: list[RunSummaryRow]) -> list[RunSummaryRow]:
-        latest: dict[str, RunSummaryRow] = {}
-        for row in rows:
-            if row.status not in _TERMINAL_FOR_BASELINE:
-                continue
-            moment = row.ended_at or row.requested_at
-            current = latest.get(row.system_code)
-            if current is None:
-                latest[row.system_code] = row
-                continue
-            current_moment = current.ended_at or current.requested_at
-            if moment > current_moment or (
-                moment == current_moment and row.requested_at > current.requested_at
-            ):
-                latest[row.system_code] = row
-        return [latest[code] for code in sorted(latest)]
 
     async def find_previous_finished_run_id(
         self, system_code: str, before: datetime, exclude_run_id: str

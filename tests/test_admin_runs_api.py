@@ -243,16 +243,25 @@ async def test_daily_status_counts_uses_kst_day_key(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_admin_run_history_board_attention_open_is_global_count(tmp_path: Path) -> None:
+async def test_get_admin_run_history_board_system_map_counts_this_month(tmp_path: Path) -> None:
+    from app.contexts.insights.application.admin_performance import performance_periods
+
     db = SqliteDatabase(tmp_path / "board.db")
     await ensure_schema(db)
+    month_start = performance_periods(datetime.now(UTC))[0].astimezone(UTC)
+    inside = month_start
     await _seed(
         db,
         [
-            _run("run_ok", RunStatus.PASSED),
-            *[_run(f"run_bad_{i}", RunStatus.ANOMALY) for i in range(6)],
-            _run("run_err", RunStatus.ERROR),
+            _run("run_ok", RunStatus.PASSED, requested_at=inside),
+            *[_run(f"run_bad_{i}", RunStatus.ANOMALY, requested_at=inside) for i in range(6)],
+            _run("run_err", RunStatus.ERROR, requested_at=inside),
+            _run("run_prev", RunStatus.PASSED, requested_at=month_start - timedelta(minutes=1)),
+            _run(
+                "run_future", RunStatus.PASSED, requested_at=datetime.now(UTC) + timedelta(days=1)
+            ),
         ],
+        preserve_time=True,
     )
 
     queries = RunQueries(
@@ -261,11 +270,11 @@ async def test_get_admin_run_history_board_attention_open_is_global_count(tmp_pa
         log_store=InMemoryRunLogStore(),
     )
     board = await queries.get_admin_run_history_board()
-    assert board["kpis"]["total_finished"] == 8
-    assert board["kpis"]["attention_open"] == 7
-    assert len(board["attention_runs"]) == 5
-    assert len(board["by_system_recent"]) == 1
-    assert len(board["trend_7d"]) == 7
+    assert "kpis" not in board
+    assert board["system_map"]["systems"] == [
+        {"system_code": "hom", "system_name": "HOM", "runs": 7, "anomaly": 6}
+    ]
+    assert board["system_map"]["top_anomaly"] == "hom"
 
 
 async def _seed_history_only(db: SqliteDatabase, runs: list[Run]) -> None:
@@ -273,52 +282,6 @@ async def _seed_history_only(db: SqliteDatabase, runs: list[Run]) -> None:
         run = run.model_copy(update={"requested_at": datetime.now(UTC) - timedelta(minutes=index)})
         sql, params = _run_history_upsert(run.run_id, run_summary_fields(run))
         await db.execute(sql, params)
-
-
-@pytest.mark.asyncio
-async def test_list_summaries_for_last_finished_one_row_per_system(tmp_path: Path) -> None:
-    db = SqliteDatabase(tmp_path / "projection.db")
-    await ensure_schema(db)
-    finished_at = datetime(2026, 7, 14, 10, 0, tzinfo=UTC)
-    runs = [
-        _run("run_newer", RunStatus.PASSED, requested_at=finished_at).model_copy(
-            update={"ended_at": finished_at, "started_at": finished_at - timedelta(minutes=2)}
-        ),
-        _run("run_older", RunStatus.ANOMALY, requested_at=finished_at).model_copy(
-            update={"ended_at": finished_at, "started_at": finished_at - timedelta(minutes=3)}
-        ),
-    ]
-    await _seed_history_only(db, runs)
-    await db.execute(
-        """
-        INSERT INTO system_last_finished (system_code, last_finished_at)
-        VALUES (?, ?)
-        """,
-        ("hom", finished_at.isoformat()),
-    )
-
-    query = SqliteRunSummaryQuery(db)
-    rows = await query.list_summaries_for_last_finished_by_system()
-    assert len(rows) == 1
-    assert rows[0].run_id == "run_newer"
-
-
-@pytest.mark.asyncio
-async def test_list_summaries_for_last_finished_fallback_without_projection(tmp_path: Path) -> None:
-    db = SqliteDatabase(tmp_path / "fallback.db")
-    await ensure_schema(db)
-    await _seed_history_only(
-        db,
-        [
-            _run("run_new", RunStatus.ANOMALY),
-            _run("run_old", RunStatus.PASSED),
-        ],
-    )
-
-    query = SqliteRunSummaryQuery(db)
-    rows = await query.list_summaries_for_last_finished_by_system()
-    assert len(rows) == 1
-    assert rows[0].run_id == "run_new"
 
 
 @pytest.mark.asyncio
@@ -341,3 +304,45 @@ async def test_list_run_summaries_page_run_id_prefix(tmp_path: Path) -> None:
     page = await queries.list_run_summaries_page(limit=10, run_id_query="hom_alpha")
     assert page["total"] == 1
     assert page["items"][0]["run_id"] == "hom_alpha_1"
+
+
+@pytest.mark.asyncio
+async def test_counts_by_system_status_groups_by_code_with_latest_name(tmp_path: Path) -> None:
+    from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
+
+    db = SqliteDatabase(tmp_path / "by_system.db")
+    await ensure_schema(db)
+    since = datetime(2026, 10, 1, tzinfo=UTC)
+
+    def at(run: Run, day: int, name: str = "HOM", code: str = "hom") -> Run:
+        return run.model_copy(
+            update={
+                "requested_at": datetime(2026, 10, day, tzinfo=UTC),
+                "system_name": name,
+                "system_code": code,
+            }
+        )
+
+    await _seed(
+        db,
+        [
+            at(_run("r1", RunStatus.PASSED), 2, name="구 홈"),
+            at(_run("r2", RunStatus.PASSED), 5, name="대표홈페이지"),
+            at(_run("r3", RunStatus.ANOMALY), 3, name="구 홈"),
+            at(_run("r4", RunStatus.PASSED), 4, name="모바일홈", code="mhm"),
+            at(_run("r5", RunStatus.ERROR), 6, name="대표홈페이지"),
+            _run("r6", RunStatus.PASSED).model_copy(
+                update={"requested_at": datetime(2026, 9, 30, tzinfo=UTC)}
+            ),
+        ],
+        preserve_time=True,
+    )
+
+    rows = await SqliteRunSummaryQuery(db).counts_by_system_status(
+        RunSummaryFilter(statuses=ADMIN_VISIBLE_RUN_STATUSES, requested_since=since)
+    )
+    assert rows == [
+        ("hom", "대표홈페이지", "ANOMALY", 1),
+        ("hom", "대표홈페이지", "PASSED", 2),
+        ("mhm", "모바일홈", "PASSED", 1),
+    ]

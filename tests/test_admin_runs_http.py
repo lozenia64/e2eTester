@@ -58,18 +58,14 @@ class FakeRunQueries:
             "generated_at": datetime.now(UTC).isoformat(),
             "timezone": "Asia/Seoul",
             "today_start": datetime.now(UTC).isoformat(),
-            "kpis": {
-                "total_finished": 1,
-                "today_finished": 1,
-                "today_passed": 1,
-                "today_anomaly": 0,
-                "today_error": 0,
-                "today_cancelled": 0,
-                "attention_open": 0,
+            "system_map": {
+                "period": {"from": "2026-09-30T15:00:00+00:00", "to": "2026-10-14T12:00:00+00:00"},
+                "systems": [
+                    {"system_code": "hom", "system_name": "대표홈페이지", "runs": 3, "anomaly": 1}
+                ],
+                "top_runs": "hom",
+                "top_anomaly": "hom",
             },
-            "trend_7d": [],
-            "by_system_recent": [],
-            "attention_runs": [],
         }
 
     async def get_admin_run_history_heatmap(
@@ -121,13 +117,18 @@ def admin_client(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, FakeRunQu
     app.dependency_overrides.clear()
 
 
-def test_admin_runs_board_returns_kpis(admin_client: tuple[TestClient, FakeRunQueries]) -> None:
+def test_admin_runs_board_returns_system_map(
+    admin_client: tuple[TestClient, FakeRunQueries],
+) -> None:
     client, _ = admin_client
     response = client.get("/api/admin/runs/board")
     assert response.status_code == 200
     body = response.json()
-    assert body["kpis"]["total_finished"] == 1
-    assert "trend_7d" in body
+    assert body["system_map"]["systems"] == [
+        {"system_code": "hom", "system_name": "대표홈페이지", "runs": 3, "anomaly": 1}
+    ]
+    assert "today_start" in body
+    assert "trend_7d" not in body
 
 
 def test_admin_list_runs_include_total_wraps_page(
