@@ -27,3 +27,12 @@
 - UI·로그·README 문자열 한국어
 - `research/` 앱 외부
 - Windows `.sh`: `bash <path>.sh`
+
+## 코드베이스 그래프 (graphify)
+
+`graphify-out/graph.json` 은 **방향 그래프**다. 무방향으로 되돌리지 말 것 — 허브(`RunStatus` 등)가
+in-degree 싱크라서 무방향에서는 BFS 가 폭발한다(쿼리당 17.8k → 1.6k 토큰).
+
+- 정방향 질문("X 는 무엇을 쓰는가", "동작 흐름"): `graphify query "<질문>" --budget 4000`
+- 역방향 질문("무엇이 X 를 쓰는가", 변경 영향 범위): `graphify affected "<심볼>" --depth 1`
+- 단일 심볼 설명: `graphify explain "<심볼>"`
