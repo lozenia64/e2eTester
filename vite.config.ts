@@ -20,6 +20,7 @@ export default defineConfig({
         // 별 엔트리로 둔다 — 일반 페이지 번들에 상황판 CSS 를 얹지 않기 위함.
         wall: resolve(__dirname, "app/web/frontend/entries/wall.ts"),
         dashboard: resolve(__dirname, "app/web/frontend/entries/dashboard.ts"),
+        "admin-dashboard": resolve(__dirname, "app/web/frontend/entries/admin-dashboard.ts"),
         execute: resolve(__dirname, "app/web/frontend/entries/execute.ts"),
         suite: resolve(__dirname, "app/web/frontend/entries/suite.ts"),
         run: resolve(__dirname, "app/web/frontend/entries/run.ts"),

@@ -50,6 +50,15 @@ async def admin_coverage_dashboard(
     return await admin_queries.get_coverage_dashboard()
 
 
+@router.get("/dashboard/performance")
+async def admin_performance_dashboard(
+    current_user: User = Depends(require_admin),
+    stats_service: StatsService = Depends(get_stats_service),
+) -> dict[str, Any]:
+    """한국 달력 기준 월간 추정 절감 성과. 관리자 전용, 개인별 분해 없음."""
+    return await stats_service.get_performance_dashboard()
+
+
 def _fmt_saved_seconds(seconds: int) -> str:
     if seconds < 60:
         return f"{seconds}초"
