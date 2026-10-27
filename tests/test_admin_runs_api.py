@@ -341,3 +341,45 @@ async def test_list_run_summaries_page_run_id_prefix(tmp_path: Path) -> None:
     page = await queries.list_run_summaries_page(limit=10, run_id_query="hom_alpha")
     assert page["total"] == 1
     assert page["items"][0]["run_id"] == "hom_alpha_1"
+
+
+@pytest.mark.asyncio
+async def test_counts_by_system_status_groups_by_code_with_latest_name(tmp_path: Path) -> None:
+    from app.core.status_labels import ADMIN_VISIBLE_RUN_STATUSES
+
+    db = SqliteDatabase(tmp_path / "by_system.db")
+    await ensure_schema(db)
+    since = datetime(2026, 10, 1, tzinfo=UTC)
+
+    def at(run: Run, day: int, name: str = "HOM", code: str = "hom") -> Run:
+        return run.model_copy(
+            update={
+                "requested_at": datetime(2026, 10, day, tzinfo=UTC),
+                "system_name": name,
+                "system_code": code,
+            }
+        )
+
+    await _seed(
+        db,
+        [
+            at(_run("r1", RunStatus.PASSED), 2, name="구 홈"),
+            at(_run("r2", RunStatus.PASSED), 5, name="대표홈페이지"),
+            at(_run("r3", RunStatus.ANOMALY), 3, name="구 홈"),
+            at(_run("r4", RunStatus.PASSED), 4, name="모바일홈", code="mhm"),
+            at(_run("r5", RunStatus.ERROR), 6, name="대표홈페이지"),
+            _run("r6", RunStatus.PASSED).model_copy(
+                update={"requested_at": datetime(2026, 9, 30, tzinfo=UTC)}
+            ),
+        ],
+        preserve_time=True,
+    )
+
+    rows = await SqliteRunSummaryQuery(db).counts_by_system_status(
+        RunSummaryFilter(statuses=ADMIN_VISIBLE_RUN_STATUSES, requested_since=since)
+    )
+    assert rows == [
+        ("hom", "대표홈페이지", "ANOMALY", 1),
+        ("hom", "대표홈페이지", "PASSED", 2),
+        ("mhm", "모바일홈", "PASSED", 1),
+    ]

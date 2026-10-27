@@ -6,6 +6,7 @@ blob(``runs``) 테이블을 절대 만지지 않는다. 필터·정렬·페이�
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -148,6 +149,18 @@ def _where(query: RunSummaryFilter) -> tuple[str, list]:
     return " WHERE " + " AND ".join(clauses), params
 
 
+def _group_by_system_status(
+    rows: Iterable[tuple[str, str | None, str]],
+) -> list[tuple[str, str, str, int]]:
+    """``requested_at`` 오름차순 행 → 시스템×상태 집계. 이름은 마지막(최신) 행 기준."""
+    names: dict[str, str] = {}
+    counts: dict[tuple[str, str], int] = {}
+    for code, name, status in rows:
+        names[code] = name or names.get(code) or code
+        counts[(code, status)] = counts.get((code, status), 0) + 1
+    return [(code, names[code], status, n) for (code, status), n in sorted(counts.items())]
+
+
 class SqliteRunSummaryQuery:
     """``RunSummaryQueryPort`` SQLite 어댑터."""
 
@@ -215,6 +228,24 @@ class SqliteRunSummaryQuery:
             key = (day_key, row["status"])
             buckets[key] = buckets.get(key, 0) + 1
         return [(day, status, count) for (day, status), count in sorted(buckets.items())]
+
+    async def counts_by_system_status(
+        self, query: RunSummaryFilter
+    ) -> list[tuple[str, str, str, int]]:
+        """(system_code, 최신 system_name, status, count) — 코드로 묶어 이름 변경에도 한 행."""
+        where, params = _where(query)
+        rows = await self._db.fetchall(
+            f"""
+            SELECT system_code, system_name, status
+            FROM run_history_index
+            {where}
+            ORDER BY requested_at
+            """,
+            tuple(params),
+        )
+        return _group_by_system_status(
+            (row["system_code"], row["system_name"], row["status"]) for row in rows
+        )
 
     async def list_run_ids(self, query: RunSummaryFilter) -> list[str]:
         where, params = _where(query)

@@ -17,6 +17,7 @@ from app.contexts.run.contracts.query_rows import (
     RunSummaryFilter,
     RunSummaryRow,
 )
+from app.contexts.run.infrastructure.sqlite_run_summary_query import _group_by_system_status
 from app.core.enums import RunStatus
 from app.domain.summary_fields import run_summary_fields
 
@@ -152,6 +153,17 @@ class InMemoryRunSummaryQuery:
             key = (day_key, row.status.value)
             buckets[key] = buckets.get(key, 0) + 1
         return [(day, status, count) for (day, status), count in sorted(buckets.items())]
+
+    async def counts_by_system_status(
+        self, query: RunSummaryFilter
+    ) -> list[tuple[str, str, str, int]]:
+        rows = sorted(
+            (row for row in await self._all_rows() if _matches(row, query)),
+            key=lambda row: row.requested_at,
+        )
+        return _group_by_system_status(
+            (row.system_code, row.system_name, row.status.value) for row in rows
+        )
 
     async def list_run_ids(self, query: RunSummaryFilter) -> list[str]:
         return [row.run_id for row in await self._all_rows() if _matches(row, query)]
