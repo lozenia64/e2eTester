@@ -465,7 +465,6 @@ e2eTester/
 - `POST /api/schedules/{schedule_id}/pause-until`
 - `POST /api/schedules/{schedule_id}/duplicate`
 - `DELETE /api/schedules/{schedule_id}`
-
 - `GET /m/{trigger_token}`
 - `POST /api/trigger/{trigger_token}`
 - `GET /api/trigger/{trigger_token}/status`

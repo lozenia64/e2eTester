@@ -390,8 +390,9 @@ class SchedulerService:
             if mode:
                 if mode not in {"headed", "headless"}:
                     raise ValueError("브라우저 모드는 headed 또는 headless여야 합니다.")
-                schedule.browser_mode = mode
-                changed.append("브라우저 모드")
+                if mode != schedule.browser_mode:
+                    schedule.browser_mode = mode
+                    changed.append("브라우저 모드")
             input_changed = bool(
                 request.input_data and any(auth_input(request.input_data).values())
             )

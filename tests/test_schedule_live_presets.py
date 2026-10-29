@@ -342,6 +342,21 @@ async def test_legacy_browser_mode_update_controls_actual_execution(live):
     assert live["run_commands"].start_run_calls[-1]["input_data"]["browser_mode"] == "headless"
 
 
+async def test_same_browser_mode_update_records_no_change(live):
+    s = await live["scheduler"].create_schedule(
+        "fp",
+        CreateScheduleRequest(
+            cron="0 7 * * *", input_data={"name": "테스트"}, browser_mode="headless"
+        ),
+        user_id="owner",
+    )
+    before = len(s.change_log)
+    after = await live["scheduler"].update_schedule(
+        s.schedule_id, UpdateScheduleRequest(browser_mode="headless")
+    )
+    assert len(after.change_log) == before
+
+
 async def test_suite_normalizes_selection_before_resolving_inputs(live):
     s = await live["scheduler"].create_suite_schedule(
         CreateSuiteScheduleRequest(
