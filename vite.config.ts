@@ -24,6 +24,8 @@ export default defineConfig({
         wall: resolve(__dirname, "app/web/frontend/entries/wall.ts"),
         dashboard: resolve(__dirname, "app/web/frontend/entries/dashboard.ts"),
         "admin-dashboard": resolve(__dirname, "app/web/frontend/entries/admin-dashboard.ts"),
+        "admin-users": resolve(__dirname, "app/web/frontend/entries/admin-users.ts"),
+        "admin-modules": resolve(__dirname, "app/web/frontend/entries/admin-modules.ts"),
         execute: resolve(__dirname, "app/web/frontend/entries/execute.ts"),
         suite: resolve(__dirname, "app/web/frontend/entries/suite.ts"),
         run: resolve(__dirname, "app/web/frontend/entries/run.ts"),

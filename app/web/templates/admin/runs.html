@@ -575,7 +575,7 @@
     width: 6rem;
     height: 0.5rem;
     border-radius: 9999px;
-    background: linear-gradient(90deg, var(--st-passed-solid), var(--st-anomaly-solid) 50%, var(--st-error-solid));
+    background: linear-gradient(90deg, var(--st-passed-solid), var(--c-amber-200) 10%, var(--c-amber-400) 30%, var(--st-blocked-solid) 50%, var(--st-error-solid));
   }
   .adm-runs .adm-sysmap__chart { height: 20rem; cursor: pointer; }
   .adm-runs .adm-sysmap__empty {
@@ -642,9 +642,9 @@
 
 <div class="adm-runs space-y-6">
   <div>
-    <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">Run 이력</h1>
-    <p class="mt-1.5 text-sm text-gray-500">이번 달 시스템별 실행과 이상징후를 한눈에 보고, 아래에서 Run을 탐색합니다.</p>
+    <p class="text-[10px] font-bold tracking-[0.1em] text-indigo-600">실행 및 이상징후</p>
+    <h1 class="mt-1.5 text-[28px] leading-[1.25] font-[750] tracking-[-0.045em] text-gray-900">Run 이력</h1>
+    <p class="mt-2 text-xs/[1.8] text-gray-500">이번 달 시스템별 실행과 이상징후를 한눈에 보고, 아래에서 Run을 탐색합니다.</p>
     <p id="runs-updated-at" class="mt-1 text-xs text-gray-400"></p>
   </div>
 
@@ -655,9 +655,9 @@
         <div>
           <p class="adm-sysmap__eyebrow">이번 달 운영 현황</p>
           <h2 class="adm-sysmap__title" id="runs-system-map-title">시스템 지도</h2>
-          <p class="adm-sysmap__sub">타일 크기는 실행 횟수, 색은 이상징후 비율 · 정상·이상징후 Run 기준 · 이번 달 1일~지금</p>
+          <p class="adm-sysmap__sub">타일 크기는 실행 횟수, 색은 월간 이상징후 건수 · 정상·이상징후 Run 기준 · 이번 달 1일~지금</p>
         </div>
-        <span class="adm-sysmap__legend" aria-hidden="true">정상 <i></i> 이상징후 많음</span>
+        <span class="adm-sysmap__legend" aria-hidden="true">0건 <i></i> 10건 이상</span>
       </div>
       <div id="runs-system-map-chart" class="adm-sysmap__chart" role="img" aria-label="이번 달 시스템 지도"></div>
       <p id="runs-system-map-empty" class="adm-sysmap__empty hidden">이번 달 완료된 Run이 아직 없습니다.</p>
@@ -826,5 +826,5 @@
 {% block scripts %}
 {% import "_assets.html" as assets %}
 {{ assets.asset_script("entries/vendor-echarts.ts") }}
-<script src="/static/admin-runs.js?v=16" defer></script>
+<script src="/static/admin-runs.js?v=17" defer></script>
 {% endblock %}

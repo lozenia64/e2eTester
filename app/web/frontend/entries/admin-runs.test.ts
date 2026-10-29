@@ -6,10 +6,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
+  document.documentElement.removeAttribute("style");
   localStorage.clear();
 });
 
-async function setup({ delayInitial = false } = {}) {
+async function setup({ delayInitial = false, systems = [{ system_code: "hom", system_name: "홈", runs: 3, anomaly: 2 }] } = {}) {
   const statuses = ["PASSED", "ANOMALY", "ERROR", "CANCELLED"];
   let loop = 0;
   document.body.innerHTML = template
@@ -25,9 +26,10 @@ async function setup({ delayInitial = false } = {}) {
   vi.stubGlobal("matchMedia", () => ({ matches: true }));
   document.getElementById("runs-explore")!.scrollIntoView = vi.fn();
   const handlers: Record<string, (event: { data: { systemCode: string } }) => void> = {};
+  const setOption = vi.fn();
   vi.stubGlobal("echarts", { init: () => ({
     on: (name: string, handler: typeof handlers[string]) => { handlers[name] = handler; },
-    setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+    setOption, resize: vi.fn(), dispose: vi.fn(),
   }) });
   const queries: URLSearchParams[] = [];
   let finishInitial: (() => void) | undefined;
@@ -39,7 +41,7 @@ async function setup({ delayInitial = false } = {}) {
       today_start: "2026-10-27T15:00:00Z",
       system_map: {
         period: { from: "2026-09-30T15:00:00Z", to: "2026-10-28T00:00:45Z" },
-        systems: [{ system_code: "hom", system_name: "홈", runs: 3, anomaly: 2 }],
+        systems,
         top_runs: "hom", top_anomaly: "hom",
       },
     };
@@ -53,7 +55,7 @@ async function setup({ delayInitial = false } = {}) {
   });
   new Function(script)();
   await vi.waitFor(() => expect(queries).toHaveLength(1));
-  return { handlers, queries, finishInitial: finishInitial! };
+  return { handlers, queries, setOption, finishInitial: finishInitial! };
 }
 
 it("시스템 타일 클릭은 레거시 이상징후까지 목록에 포함한다", async () => {
@@ -79,4 +81,30 @@ it("목록 조회 중 타일을 클릭해도 최신 필터 조회를 누락하�
   await vi.waitFor(() => expect(queries).toHaveLength(2));
   expect(queries[1]!.getAll("system_code")).toEqual(["hom"]);
   expect(queries[1]!.getAll("status").sort()).toEqual(["ANOMALY", "FAILED", "PASSED"]);
+});
+
+
+it("시스템 지도는 실행 횟수와 관계없이 월간 이상징후 건수마다 색을 바꾼다", async () => {
+  const tokenRgb: Record<string, number[]> = {
+    "--st-passed-solid": [16, 185, 129], "--c-amber-200": [253, 230, 138],
+    "--c-amber-400": [251, 191, 36], "--st-blocked-solid": [249, 115, 22],
+    "--st-error-solid": [239, 68, 68],
+  };
+  Object.entries(tokenRgb).forEach(([name, rgb]) => {
+    document.documentElement.style.setProperty(name, "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join(""));
+  });
+  const counts = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1];
+  const systems = counts.map((anomaly, i) => ({ system_code: `s${i}`, system_name: `시스템${i}`, runs: i === 12 ? 1000 : 20, anomaly }));
+  const { setOption } = await setup({ systems });
+  await vi.waitFor(() => expect(setOption).toHaveBeenCalled());
+  const data = setOption.mock.calls.find(([option]) => option.series?.[0]?.type === "treemap")![0].series[0].data;
+  const colors = data.map((item: { itemStyle: { color: string } }) => item.itemStyle.color);
+  expect(colors[0]).toBe("rgb(16,185,129)");
+  expect(colors[1]).toBe("rgb(253,230,138)");
+  expect(colors[3]).toBe("rgb(251,191,36)");
+  expect(colors[5]).toBe("rgb(249,115,22)");
+  expect(colors[10]).toBe("rgb(239,68,68)");
+  expect(new Set(colors.slice(0, 11)).size).toBe(11);
+  expect(colors[11]).toBe(colors[10]);
+  expect(colors[12]).toBe(colors[1]);
 });
