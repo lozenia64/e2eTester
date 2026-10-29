@@ -915,12 +915,13 @@
     else renderHeatmapFallback(EMPTY_HEATMAP);
   }
 
-  // 이상징후 비율 경계 → 상태 색 토큰. 0% 정상 · 5% 이상징후 · 10% 이상 점검실패 색(설계 §4.3).
-  // 색 값은 tokens.generated.css 의 SSOT(app/core/status_colors.py)를 읽는다 — ECharts 는 CSS 변수를 모른다.
+  // 이번 달 이상징후 누적 건수별 색. 기준점 사이를 선형 보간하고 10건부터 빨강을 유지한다.
   const SYSTEM_MAP_COLOR_STOPS = [
-    [0, "passed"],
-    [0.05, "anomaly"],
-    [0.1, "error"],
+    [0, "--st-passed-solid"],
+    [1, "--c-amber-200"],
+    [3, "--c-amber-400"],
+    [5, "--st-blocked-solid"],
+    [10, "--st-error-solid"],
   ];
   const SYSTEM_MAP_INTRO_MS = 1400;
 
@@ -928,17 +929,17 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
-  function statusRgb(tone) {
-    const hex = /^#([0-9a-f]{6})$/i.exec(cssToken(`--st-${tone}-solid`))?.[1] || "64748b";
+  function tokenRgb(token) {
+    const hex = /^#([0-9a-f]{6})$/i.exec(cssToken(token))?.[1] || "64748b";
     return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   }
 
   let systemMapStops = null;
 
-  function anomalyColor(rate) {
-    systemMapStops ||= SYSTEM_MAP_COLOR_STOPS.map(([at, tone]) => [at, statusRgb(tone)]);
+  function anomalyColor(count) {
+    systemMapStops ||= SYSTEM_MAP_COLOR_STOPS.map(([at, token]) => [at, tokenRgb(token)]);
     const stops = systemMapStops;
-    const r = Math.min(Math.max(rate, 0), stops[stops.length - 1][0]);
+    const r = Math.min(Math.max(count, 0), stops[stops.length - 1][0]);
     let i = 1;
     while (i < stops.length - 1 && r > stops[i][0]) i += 1;
     const [r0, c0] = stops[i - 1];
@@ -992,14 +993,13 @@
         anomalyShown: Math.round(s.anomaly * progress),
         rate: anomalyRate(s),
         badge: isTopAnomaly ? "최다 이상징후" : s.system_code === map.top_runs ? "최다 실행" : "",
-        itemStyle: { color: anomalyColor(anomalyRate(s)) },
+        itemStyle: { color: anomalyColor(s.anomaly) },
       };
     });
   }
 
   function systemMapOption(map, progress) {
     const panel = cssToken("--c-ink-950");
-    const white = cssToken("--c-white");
     return {
       animation: false,
       tooltip: {
@@ -1039,9 +1039,9 @@
                 fontSize: 11,
                 fontWeight: 700,
               },
-              name: { color: white, fontSize: 15, fontWeight: 700, lineHeight: 26 },
-              num: { color: white, fontSize: 26, fontWeight: 900, lineHeight: 34 },
-              sub: { color: "rgba(255,255,255,0.88)", fontSize: 12, lineHeight: 18 },
+              name: { color: panel, fontSize: 15, fontWeight: 700, lineHeight: 26 },
+              num: { color: panel, fontSize: 26, fontWeight: 900, lineHeight: 34 },
+              sub: { color: panel, fontSize: 12, lineHeight: 18 },
             },
           },
           data: systemMapSeriesData(map, progress),
