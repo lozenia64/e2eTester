@@ -83,6 +83,15 @@ When 해당 사용자 로그인 시도
 Then 실패 (authenticate returns None)
 ```
 
+### AC-003a: 본인 계정 보호
+
+```gherkin
+Given admin 세션
+When 본인 user_id 로 PATCH active=false 또는 DELETE
+Then 400 "본인 계정은 비활성화할 수 없습니다." / "본인 계정은 삭제할 수 없습니다."
+And 사용자 상태는 변경되지 않는다
+```
+
 
 ### AC-004: 목록과 권한 편집
 

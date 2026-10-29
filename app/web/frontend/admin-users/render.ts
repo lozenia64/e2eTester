@@ -1,7 +1,7 @@
+import { escapeHtml } from "../lib/html";
 import type { AdminUser, UsersState } from "./types";
 
 export const selectedUser = (state: UsersState) => state.users.find(u => u.user_id === state.selectedId);
-export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 export const icon = (name: string) => `<svg aria-hidden="true" viewBox="0 0 24 24"><use href="#users-icon-${name}"></use></svg>`;
 export function getEl<T extends HTMLElement = HTMLElement>(root: HTMLElement, id: string): T {
   return root.querySelector<T>(`#${id}`)!;

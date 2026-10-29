@@ -1,8 +1,3 @@
-export function escapeHtml(value: string): string {
-  const span = document.createElement("span");
-  span.textContent = value;
-  return span.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
 export function setText(root: HTMLElement, selector: string, value: string): void {
   const el = root.querySelector(selector);
   if (el && el.textContent !== value) el.textContent = value;

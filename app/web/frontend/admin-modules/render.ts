@@ -1,7 +1,7 @@
 import { changedModules, currentSystem, duration, isDirty, validTime, visibleModules } from "./model";
+import { escapeHtml } from "../lib/html";
 import type { EditableModule, ModulesState } from "./types";
 
-export const escapeHtml = (text: string) => text.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 export const icon = (name: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#modules-icon-${name}"></use></svg>`;
 export const getEl = <T extends HTMLElement = HTMLElement>(root: HTMLElement, id: string) => root.querySelector<T>(`#${id}`)!;
 const text = (root: HTMLElement, id: string, value: string | number) => { getEl(root, id).textContent = String(value); };

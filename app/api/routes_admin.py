@@ -375,6 +375,8 @@ async def admin_toggle_user_active(
     is_active = payload.get("is_active")
     if not isinstance(is_active, bool):
         raise HTTPException(status_code=400, detail="is_active 값이 필요합니다.")
+    if not is_active and user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="본인 계정은 비활성화할 수 없습니다.")
     try:
         user = await user_service.update_user_active(user_id, is_active)
     except KeyError as exc:
@@ -388,6 +390,8 @@ async def admin_delete_user(
     current_user: User = Depends(require_admin),
     user_service: UserService = Depends(get_user_service),
 ) -> dict:
+    if user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="본인 계정은 삭제할 수 없습니다.")
     try:
         await user_service.delete_user(user_id)
     except KeyError as exc:

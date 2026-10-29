@@ -124,8 +124,10 @@ export class ModulesController {
         }
       }
       const remaining = system.modules.filter(isDirty);
+      const reasons = new Map(Array.isArray(result.failed) ? result.failed.map(f => [f.module_id, f.detail]) : []);
+      const label = (m: (typeof remaining)[number]) => reasons.get(m.module_id) ? `${m.name}: ${reasons.get(m.module_id)}` : m.name;
       this.state.feedbackError = !result.ok || remaining.length > 0;
-      this.state.feedback = this.state.feedbackError ? `일부 항목을 저장하지 못했습니다. ${remaining.length}개 모듈을 확인하고 다시 저장하세요.${remaining.length ? ` (${remaining.map(m => m.name).join(", ")})` : ""}` : `${changes.length}개 모듈의 시간을 저장했습니다.`;
+      this.state.feedback = this.state.feedbackError ? `일부 항목을 저장하지 못했습니다. ${remaining.length}개 모듈을 확인하고 다시 저장하세요.${remaining.length ? ` (${remaining.map(label).join(", ")})` : ""}` : `${changes.length}개 모듈의 시간을 저장했습니다.`;
     } catch (error) { if (!this.disposed) { this.state.feedback = errorMessage(error); this.state.feedbackError = true; } }
     finally {
       if (!this.disposed) { this.state.busy = false; this.render(); getEl(this.root, "modules-table-scroll").scrollTop = scroll; }

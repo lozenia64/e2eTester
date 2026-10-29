@@ -180,3 +180,12 @@ it("계정 삭제 확인을 취소하면 요청하지 않는다", async () => {
   click("users-delete");
   expect(api.mock.calls.some(([, options]) => options?.method === "DELETE")).toBe(false);
 });
+
+it("422 검증 오류 배열의 메시지를 추가 실패 안내로 표시한다", async () => {
+  await controller.init(); click("users-add");
+  const form = el<HTMLFormElement>("users-add-form");
+  api.mockImplementationOnce(async () => response({ detail: [{ msg: "이메일 형식이 아닙니다." }, { msg: "비밀번호가 너무 짧습니다." }] }, false));
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await vi.waitFor(() => expect(el("users-form-error").hidden).toBe(false));
+  expect(el("users-form-error").textContent).toBe("이메일 형식이 아닙니다., 비밀번호가 너무 짧습니다.");
+});
