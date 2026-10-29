@@ -13,15 +13,16 @@
 .usr-page button:disabled { cursor: default; }
 .usr-page :is(button, input, select):focus-visible { outline: 3px solid var(--c-violet-300); outline-offset: 3px; }
 .usr-page h1, .usr-page h2, .usr-page h3, .usr-page p, .usr-page dl, .usr-page dd { margin: 0; }
-.usr-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 3px; }
+.usr-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .usr-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--usr-accent); }
-.usr-head h1 { margin-top: 9px; font-size: 30px; line-height: 1.3; font-weight: 750; letter-spacing: -0.05em; color: var(--c-gray-900); }
-.usr-page .usr-subtitle { margin-top: 12px; font-size: 13px; line-height: 1.8; color: var(--usr-muted); }
+.usr-head .usr-eyebrow { font-size: 10px; }
+.usr-head h1 { margin-top: 6px; font-size: 28px; line-height: 1.25; font-weight: 750; letter-spacing: -0.045em; color: var(--c-gray-900); }
+.usr-page .usr-subtitle { margin-top: 8px; font-size: 12px; line-height: 1.8; color: var(--usr-muted); }
 .usr-primary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 16px; border: 1px solid transparent; border-radius: 9px; background: var(--usr-accent); color: var(--c-white); font-size: 13px !important; font-weight: 650 !important; box-shadow: 0 4px 10px rgb(79 70 229 / 0.12); white-space: nowrap; }
 .usr-primary:hover:not(:disabled) { background: var(--c-indigo-700); }
 .usr-primary:disabled { opacity: 0.45; box-shadow: none; }
 .usr-primary svg { width: 16px; height: 16px; }
-.usr-stats { display: flex; align-items: center; gap: 25px; margin-top: 27px; padding-bottom: 25px; border-bottom: 1px solid var(--usr-line); font-size: 12px; color: var(--usr-muted); }
+.usr-stats { display: flex; align-items: center; gap: 23px; margin-top: 16px; padding-bottom: 15px; border-bottom: 1px solid var(--usr-line); font-size: 12px; color: var(--usr-muted); }
 .usr-stats > div { display: inline-flex; align-items: center; gap: 8px; }
 .usr-stats strong { font-size: 18px; color: var(--usr-ink); font-variant-numeric: tabular-nums; }
 .usr-stat-sep { width: 1px; height: 18px; background: var(--usr-line); }
