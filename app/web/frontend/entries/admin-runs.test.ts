@@ -85,12 +85,14 @@ it("목록 조회 중 타일을 클릭해도 최신 필터 조회를 누락하�
 
 
 it("시스템 지도는 실행 횟수와 관계없이 월간 이상징후 건수마다 색을 바꾼다", async () => {
-  const tokens: Record<string, string> = {
-    "--st-passed-solid": "#10b981", "--c-amber-200": "#fde68a",
-    "--c-amber-400": "#fbbf24", "--st-blocked-solid": "#f97316",
-    "--st-error-solid": "#ef4444",
+  const tokenRgb: Record<string, number[]> = {
+    "--st-passed-solid": [16, 185, 129], "--c-amber-200": [253, 230, 138],
+    "--c-amber-400": [251, 191, 36], "--st-blocked-solid": [249, 115, 22],
+    "--st-error-solid": [239, 68, 68],
   };
-  Object.entries(tokens).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
+  Object.entries(tokenRgb).forEach(([name, rgb]) => {
+    document.documentElement.style.setProperty(name, "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join(""));
+  });
   const counts = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1];
   const systems = counts.map((anomaly, i) => ({ system_code: `s${i}`, system_name: `시스템${i}`, runs: i === 12 ? 1000 : 20, anomaly }));
   const { setOption } = await setup({ systems });

@@ -1,248 +1,70 @@
 {% extends "admin/base.html" %}
 {% block title %}사용자 관리{% endblock %}
 {% block nav_users %}bg-red-50 text-red-700 font-semibold{% endblock %}
-
+{% block head_extra %}{{ assets.asset_styles("entries/admin-users.ts") }}{% endblock %}
+{% macro icon(name) %}<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#users-icon-{{ name }}"></use></svg>{% endmacro %}
 {% block content %}
-<div class="flex items-center justify-between">
-    <div>
-        <p class="text-xs font-semibold uppercase tracking-wider text-red-600">Admin</p>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight text-gray-900">사용자 관리</h1>
-    </div>
-    <button id="btn-add-user" class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-        사용자 추가
-    </button>
-</div>
-
-<!-- 사용자 테이블 -->
-<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">이름</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">이메일</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">역할</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">상태</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">접근 시스템</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">생성일</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">작업</th>
-                </tr>
-            </thead>
-            <tbody id="users-tbody" class="divide-y divide-gray-100">
-                <tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">불러오는 중...</td></tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- 사용자 추가 모달 -->
-<div id="modal-add-user" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
-    <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">사용자 추가</h2>
-        <form id="form-add-user" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">이름</label>
-                <input name="name" type="text" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">이메일</label>
-                <input name="email" type="email" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
-                <input name="password" type="password" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">역할</label>
-                <select name="role" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="user">일반 사용자</option>
-                    <option value="admin">관리자</option>
-                </select>
-            </div>
-            <div id="form-error" class="hidden text-sm text-red-600"></div>
-            <div class="flex gap-3 pt-2">
-                <button type="submit" class="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700">추가</button>
-                <button type="button" id="btn-cancel-modal" class="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">취소</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- 시스템 관리 모달 -->
-<div id="modal-systems" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
-    <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 class="text-lg font-bold text-gray-900 mb-1">시스템 접근 관리</h2>
-        <p id="modal-systems-username" class="text-sm text-gray-500 mb-4"></p>
-        <p class="text-xs text-gray-400 mb-3">체크하지 않으면 모든 시스템에 접근 가능합니다.</p>
-        <div id="systems-checklist" class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3"></div>
-        <div id="systems-error" class="hidden mt-2 text-sm text-red-600"></div>
-        <div class="flex gap-3 pt-4">
-            <button id="btn-save-systems" class="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700">저장</button>
-            <button id="btn-cancel-systems" class="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">취소</button>
+<div id="admin-users-root" class="usr-page">
+  <svg class="usr-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="users-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="users-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="users-icon-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="users-icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+    <symbol id="users-icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="users-icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="users-icon-system" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  </svg>
+  <header class="usr-head">
+    <div><p class="usr-eyebrow">사용자 및 접근 권한</p><h1>사용자 관리</h1><p class="usr-subtitle">함께 점검할 사용자를 관리하고, 시스템 접근 권한을 설정하세요.</p></div>
+    <button type="button" class="usr-primary" id="users-add" disabled>{{ icon('plus') }} 사용자 추가</button>
+  </header>
+  <div class="usr-stats" aria-label="사용자 요약">
+    <div>전체 사용자 <strong id="users-total">—</strong></div><span class="usr-stat-sep"></span>
+    <div><span class="usr-dot"></span> 활성 사용자 <strong id="users-active-total">—</strong></div><span class="usr-stat-sep"></span>
+    <div>관리자 <strong id="users-admin-total">—</strong></div>
+  </div>
+  <div id="users-error" class="usr-error usr-load-error" role="alert" hidden><span id="users-error-message"></span><button type="button" id="users-retry">다시 불러오기</button></div>
+  <div class="usr-workspace">
+    <section aria-labelledby="users-list-title">
+      <div class="usr-list-card">
+        <div class="usr-list-top"><div class="usr-title-row"><h2 id="users-list-title">사용자 목록</h2><span class="usr-count" id="users-list-count">—</span></div><span>사용자를 선택해 권한을 관리하세요</span></div>
+        <label class="usr-search">{{ icon('search') }}<input id="users-search" type="search" placeholder="이름 또는 이메일로 검색" aria-label="이름 또는 이메일로 검색" autocomplete="off" disabled><kbd>/ 검색</kbd></label>
+        <div class="usr-tabs" role="group" aria-label="사용자 상태 필터">
+          <button type="button" class="usr-tab is-active" id="users-filter-all" data-users-filter="all" aria-pressed="true">전체 <span id="users-count-all">—</span></button>
+          <button type="button" class="usr-tab" id="users-filter-active" data-users-filter="active" aria-pressed="false">활성 <span id="users-count-active">—</span></button>
+          <button type="button" class="usr-tab" id="users-filter-inactive" data-users-filter="inactive" aria-pressed="false">비활성 <span id="users-count-inactive">—</span></button>
         </div>
-    </div>
+        <div class="usr-table-head" aria-hidden="true"><span>사용자</span><span>역할</span><span>상태</span></div>
+        <div id="users-rows" aria-label="사용자 목록" aria-busy="true"><div class="usr-empty">사용자를 불러오고 있습니다…</div></div>
+        <div class="usr-list-footer"><span id="users-result-count" aria-live="polite">사용자를 불러오고 있습니다…</span><span>{{ icon('shield') }} 관리자 전용</span></div>
+      </div>
+      <p class="usr-tip">{{ icon('info') }}<span>시스템 접근 권한은 사용자별로 설정할 수 있습니다.<br>관리자 계정은 모든 시스템에 접근할 수 있습니다.</span></p>
+    </section>
+    <section id="users-detail" class="usr-detail" aria-labelledby="users-detail-title" hidden>
+      <div class="usr-detail-head"><h2 id="users-detail-title">사용자 상세</h2><div class="usr-more-wrap"><button type="button" id="users-more" class="usr-icon-btn" aria-label="사용자 작업 더보기" aria-expanded="false" aria-controls="users-actions">{{ icon('more') }}</button><div class="usr-menu" id="users-actions" hidden><button type="button" id="users-toggle-active">비활성화</button><button type="button" id="users-delete" class="usr-danger">사용자 삭제</button></div></div></div>
+      <div class="usr-identity"><div class="usr-avatar" id="user-avatar" aria-hidden="true"></div><div><h3 id="user-name" tabindex="-1"></h3><p id="user-email"></p></div></div>
+      <dl class="usr-meta"><div><dt>역할</dt><dd id="user-role"></dd></div><div><dt>계정 상태</dt><dd id="user-status" class="usr-status"></dd></div><div><dt>계정 생성일</dt><dd id="user-created"></dd></div><div><dt>접근 범위</dt><dd id="user-scope"></dd></div></dl>
+      <div class="usr-permissions"><div class="usr-section-label"><h3>시스템 접근 권한</h3><span id="users-permission-count"></span></div><p class="usr-help" id="users-permission-help"></p>
+        <div class="usr-access-mode" role="group" aria-label="시스템 접근 범위"><button type="button" id="users-mode-all" aria-pressed="false">전체 시스템</button><button type="button" id="users-mode-selected" aria-pressed="true">선택한 시스템</button></div>
+        <div id="users-checks" aria-describedby="users-permission-help"></div>
+        <p id="users-detail-error" class="usr-error" role="alert" hidden></p>
+      </div>
+      <div class="usr-detail-footer"><span id="users-save-state" aria-live="polite">저장된 권한입니다</span><button type="button" id="users-save" class="usr-primary" disabled>{{ icon('check') }} 변경사항 저장</button></div>
+    </section>
+  </div>
+  <noscript><p class="usr-error">사용자 관리를 이용하려면 자바스크립트를 활성화하세요.</p></noscript>
+  <div class="usr-toast" id="users-toast" role="status" hidden></div>
+  <dialog id="users-add-dialog" class="usr-dialog" aria-labelledby="users-add-title">
+    <form id="users-add-form">
+      <p class="usr-eyebrow">새로운 사용자</p><h2 id="users-add-title">함께 점검할 사용자를 추가하세요</h2><p class="usr-help">계정을 만든 뒤 접근할 시스템을 설정할 수 있습니다.</p>
+      <label class="usr-field">이름<input name="name" type="text" required autocomplete="name" placeholder="이름을 입력하세요"></label>
+      <label class="usr-field">이메일<input name="email" type="email" required autocomplete="email" placeholder="name@example.com"></label>
+      <label class="usr-field">초기 비밀번호<input name="password" type="password" required autocomplete="new-password" placeholder="초기 비밀번호를 입력하세요"></label>
+      <label class="usr-field">역할<select name="role"><option value="user">일반 사용자</option><option value="admin">관리자</option></select></label>
+      <p id="users-form-error" class="usr-error" role="alert" hidden></p>
+      <div class="usr-dialog-actions"><button type="button" id="users-cancel-add" class="usr-text-btn">취소</button><button type="submit" id="users-submit-add" class="usr-primary">사용자 추가</button></div>
+    </form>
+  </dialog>
 </div>
 {% endblock %}
-
-{% block scripts %}
-<script>
-let usersData = [];
-let allSystems = [];
-let editingUserId = null;
-
-async function loadUsers() {
-    const res = await fetch('/api/admin/users');
-    usersData = await res.json();
-    renderUsers();
-}
-
-async function loadSystems() {
-    const res = await fetch('/api/admin/systems');
-    allSystems = await res.json();
-}
-
-function renderUsers() {
-    const tbody = document.getElementById('users-tbody');
-    if (usersData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">사용자 없음</td></tr>';
-        return;
-    }
-    tbody.innerHTML = usersData.map(u => {
-        const roleCls = u.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700';
-        const roleLabel = u.role === 'admin' ? '관리자' : '사용자';
-        const activeCls = u.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500';
-        const activeLabel = u.is_active ? '활성' : '비활성';
-        const at = u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '—';
-        const toggleLabel = u.is_active ? '비활성화' : '활성화';
-        const sysCodes = u.allowed_system_codes || [];
-        const sysLabel = sysCodes.length === 0
-            ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-500">제한 없음</span>'
-            : sysCodes.map(c => `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700">${c}</span>`).join(' ');
-        return `<tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">${u.name}</td>
-            <td class="px-4 py-3 text-gray-600">${u.email}</td>
-            <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${roleCls}">${roleLabel}</span></td>
-            <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${activeCls}">${activeLabel}</span></td>
-            <td class="px-4 py-3">${sysLabel}</td>
-            <td class="px-4 py-3 text-xs text-gray-500">${at}</td>
-            <td class="px-4 py-3 flex flex-wrap gap-2">
-                <button onclick="toggleActive('${u.user_id}', ${!u.is_active})" class="text-xs text-indigo-600 hover:underline">${toggleLabel}</button>
-                <button onclick="openSystemsModal('${u.user_id}')" class="text-xs text-green-600 hover:underline">시스템 관리</button>
-                <button onclick="deleteUser('${u.user_id}', '${u.name}')" class="text-xs text-red-500 hover:underline">삭제</button>
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-async function deleteUser(userId, userName) {
-    if (!confirm(`'${userName}' 사용자를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
-    if (res.ok) {
-        await loadUsers();
-    } else {
-        const data = await res.json();
-        alert(data.detail || '삭제 중 오류가 발생했습니다.');
-    }
-}
-
-async function toggleActive(userId, isActive) {
-    const res = await fetch(`/api/admin/users/${userId}/active`, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({is_active: isActive}),
-    });
-    if (res.ok) {
-        await loadUsers();
-    } else {
-        const data = await res.json();
-        alert(data.detail || '오류가 발생했습니다.');
-    }
-}
-
-function openSystemsModal(userId) {
-    editingUserId = userId;
-    const user = usersData.find(u => u.user_id === userId);
-    document.getElementById('modal-systems-username').textContent = `${user.name} (${user.email})`;
-    const allowed = user.allowed_system_codes || [];
-    const checklist = document.getElementById('systems-checklist');
-    checklist.innerHTML = allSystems.map(s => `
-        <label class="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-gray-50">
-            <input type="checkbox" value="${s.system_code}" ${allowed.includes(s.system_code) ? 'checked' : ''}
-                class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-            <span class="text-sm font-medium text-gray-800">${s.system_name}</span>
-            <span class="text-xs text-gray-400 font-mono">${s.system_code}</span>
-        </label>
-    `).join('');
-    document.getElementById('systems-error').classList.add('hidden');
-    const modal = document.getElementById('modal-systems');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-}
-
-document.getElementById('btn-save-systems').addEventListener('click', async () => {
-    const checks = document.querySelectorAll('#systems-checklist input[type=checkbox]:checked');
-    const codes = Array.from(checks).map(c => c.value);
-    const errEl = document.getElementById('systems-error');
-    errEl.classList.add('hidden');
-    const res = await fetch(`/api/admin/users/${editingUserId}/systems`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({allowed_system_codes: codes}),
-    });
-    if (res.ok) {
-        document.getElementById('modal-systems').classList.add('hidden');
-        document.getElementById('modal-systems').classList.remove('flex');
-        await loadUsers();
-    } else {
-        const data = await res.json();
-        errEl.textContent = data.detail || '저장 실패';
-        errEl.classList.remove('hidden');
-    }
-});
-
-document.getElementById('btn-cancel-systems').addEventListener('click', () => {
-    document.getElementById('modal-systems').classList.add('hidden');
-    document.getElementById('modal-systems').classList.remove('flex');
-});
-
-const modal = document.getElementById('modal-add-user');
-document.getElementById('btn-add-user').addEventListener('click', () => {
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-});
-document.getElementById('btn-cancel-modal').addEventListener('click', () => {
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-});
-
-document.getElementById('form-add-user').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const errEl = document.getElementById('form-error');
-    errEl.classList.add('hidden');
-    const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            name: fd.get('name'),
-            email: fd.get('email'),
-            password: fd.get('password'),
-            role: fd.get('role'),
-        }),
-    });
-    if (res.ok) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-        e.target.reset();
-        await loadUsers();
-    } else {
-        const data = await res.json();
-        errEl.textContent = data.detail || '오류가 발생했습니다.';
-        errEl.classList.remove('hidden');
-    }
-});
-
-Promise.all([loadUsers(), loadSystems()]);
-</script>
-{% endblock %}
+{% block scripts %}{{ assets.asset_script("entries/admin-users.ts") }}{% endblock %}
