@@ -240,6 +240,7 @@ class AppContainer:
             suite_svc.suite_service,
             self.scheduling.schedule_repository,
             self.run.run_queries,
+            self.preset.preset_repository,
         )
         realtime_projector = RealtimeProjector(
             self.realtime.realtime,

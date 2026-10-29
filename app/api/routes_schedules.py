@@ -250,11 +250,14 @@ async def duplicate_schedule(
     """예약 복제 — 같은 대상/주기/입력의 새 예약(비활성 상태)을 만든다."""
     schedule = await _get_schedule_or_404(schedule_repo, schedule_id)
     _assert_can_manage_schedule(schedule, current_user)
-    copy = await schedule_service.duplicate_schedule(
-        schedule_id,
-        user_id=current_user.user_id,
-        user_name=current_user.name,
-    )
+    try:
+        copy = await schedule_service.duplicate_schedule(
+            schedule_id,
+            user_id=current_user.user_id,
+            user_name=current_user.name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return copy.to_summary()
 
 

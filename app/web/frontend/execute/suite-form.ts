@@ -94,6 +94,21 @@ function collectRequest(form: HTMLFormElement): SuiteRequest {
   };
 }
 
+export function collectSuiteScheduleRequest(form: HTMLFormElement): SuiteRequest & { preset_ids: Record<string, string> } {
+  const preset_ids: Record<string, string> = {};
+  for (const code of selectedCodes(form)) {
+    const id = getPresetState().suitePresetSelection.get(code);
+    if (needsAuth(form, code) && id) preset_ids[code] = id;
+  }
+  return {
+    browser_mode: String(form.querySelector<HTMLSelectElement>('[name="browser_mode"]')?.value ?? "headed"),
+    systems: {},
+    preset_ids,
+    selected_system_codes: selectedCodes(form),
+    scope_system_codes: scopeCodes(form),
+  };
+}
+
 async function startSuiteRun(button: HTMLButtonElement, form: HTMLFormElement): Promise<void> {
   const legacy = getLegacy();
   const feedback = form.querySelector('[data-role="suite-feedback"]');
@@ -164,7 +179,7 @@ async function registerSuiteSchedule(form: HTMLFormElement, button: HTMLButtonEl
       body: JSON.stringify({
         cron: built.cron,
         name: form.querySelector<HTMLInputElement>('[data-role="schedule-name"]')?.value.trim() ?? "",
-        ...collectRequest(form),
+        ...collectSuiteScheduleRequest(form),
       }),
     });
     if (!response.ok) {

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.contexts.preset.infrastructure.ports import PresetRepositoryPort
 from app.contexts.run.application.service import RunService
 from app.contexts.scheduling.daily_report_scheduler import DailyReportScheduler
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
@@ -32,12 +33,14 @@ def compose_scheduler(
     suite_service: SuiteService,
     repository: SqliteScheduleRepository,
     run_queries: RunQueries,
+    preset_repository: PresetRepositoryPort | None = None,
 ) -> SchedulerService:
     return SchedulerService(
         run_commands=run_commands,
         suite_service=suite_service,
         repository=repository,
         run_queries=run_queries,
+        preset_repository=preset_repository,
     )
 
 

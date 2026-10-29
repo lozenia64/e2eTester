@@ -47,7 +47,9 @@
     drawerRun: null,
     openPopover: null,
     searchDebounceTimer: null,
-    trendChart: null,
+    systemMapChart: null,
+    systemMapShown: false,
+    systemMapResizeBound: false,
     heatmapChart: null,
     heatmapResizeBound: false,
     fromFilter: "",
@@ -55,6 +57,7 @@
     openRowMenuId: null,
     boardLoadInFlight: false,
     runsLoadInFlight: false,
+    runsReloadPending: null,
   };
 
   function escapeHtml(text) {
@@ -441,7 +444,10 @@
       params.append("status", "ERROR");
       params.append("status", "FAILED");
     } else {
-      filters.statuses.forEach((status) => params.append("status", status));
+      // 이상징후 UI는 레거시 FAILED도 포함한다 — 지도 집계와 목록·CSV의 범위를 맞춘다.
+      const statuses = new Set(filters.statuses);
+      if (statuses.has("ANOMALY")) statuses.add("FAILED");
+      statuses.forEach((status) => params.append("status", status));
     }
     filters.system_codes.forEach((code) => params.append("system_code", code));
     if (filters.triggered_by) params.set("triggered_by", filters.triggered_by);
@@ -576,127 +582,6 @@
           `<span class="adm-filter-chip">${escapeHtml(chip.label)}<button type="button" data-clear="${chip.key}" aria-label="필터 제거">×</button></span>`
       )
       .join("");
-  }
-
-  function renderKpis(kpis) {
-    const items = [
-      { label: "전체 완료 Run", value: kpis.total_finished, tone: "slate" },
-      { label: "오늘 완료", value: kpis.today_finished, tone: "slate" },
-      { label: "오늘 이상징후", value: kpis.today_anomaly, tone: "amber" },
-      { label: "오늘 점검실패", value: kpis.today_error, tone: "red" },
-      { label: "주의 필요", value: kpis.attention_open, tone: "amber" },
-    ];
-    document.getElementById("runs-kpi-grid").innerHTML = items
-      .map(
-        (item) => `
-      <div class="adm-kpi adm-kpi--${item.tone}">
-        <p class="adm-kpi__label">${escapeHtml(item.label)}</p>
-        <p class="adm-kpi__value">${item.value}</p>
-      </div>`
-      )
-      .join("");
-  }
-
-  function trendSegHeight(value, total, barHeight) {
-    if (!total || !value) return 0;
-    return Math.max(1, Math.round((value / total) * barHeight));
-  }
-
-  function renderTrendFallback(trend) {
-    const chart = document.getElementById("runs-trend-fallback");
-    const canvas = document.getElementById("runs-trend-canvas");
-    if (canvas) canvas.classList.add("hidden");
-    if (!chart) return;
-    chart.classList.remove("hidden");
-    const maxTotal = Math.max(1, ...trend.map((d) => d.passed + d.anomaly + d.error + d.cancelled));
-    chart.innerHTML = trend
-      .map((day) => {
-        const total = day.passed + day.anomaly + day.error + day.cancelled;
-        const barHeight = Math.max(4, Math.round((total / maxTotal) * 56));
-        const label = day.day.slice(5);
-        const segments = [
-          { cls: "adm-trend__seg--passed", value: day.passed },
-          { cls: "adm-trend__seg--anomaly", value: day.anomaly },
-          { cls: "adm-trend__seg--error", value: day.error },
-          { cls: "adm-trend__seg--cancelled", value: day.cancelled },
-        ]
-          .map(
-            (seg) =>
-              `<span class="adm-trend__seg ${seg.cls}" style="height:${trendSegHeight(seg.value, total, barHeight)}px"></span>`
-          )
-          .join("");
-        return `<div class="adm-trend__col" title="${escapeHtml(day.day)}">
-          <div class="adm-trend__stack" style="height:${barHeight}px">${segments}</div>
-          <span class="adm-trend__label">${escapeHtml(label)}</span>
-        </div>`;
-      })
-      .join("");
-  }
-
-  function renderTrend(trend) {
-    const canvas = document.getElementById("runs-trend-canvas");
-    const fallback = document.getElementById("runs-trend-fallback");
-    if (!canvas || typeof Chart === "undefined") {
-      renderTrendFallback(trend);
-      return;
-    }
-    fallback?.classList.add("hidden");
-    canvas.classList.remove("hidden");
-    if (state.trendChart) {
-      state.trendChart.destroy();
-      state.trendChart = null;
-    }
-    // Chart.js 는 CSS 변수를 해석하지 못한다 — 계산된 값을 넘겨야 한다.
-    // 토큰은 tokens.generated.css 가 :root 에 싣는다(SSOT: app/core/status_colors.py).
-    function statusSolid(tone) {
-      const value = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--st-${tone}-solid`)
-        .trim();
-      return value || "transparent";
-    }
-    state.trendChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels: trend.map((d) => d.day.slice(5)),
-        datasets: [
-          {
-            label: "정상",
-            data: trend.map((d) => d.passed),
-            backgroundColor: statusSolid("passed"),
-            stack: "status",
-          },
-          {
-            label: "이상징후",
-            data: trend.map((d) => d.anomaly),
-            backgroundColor: statusSolid("anomaly"),
-            stack: "status",
-          },
-          {
-            label: "점검실패",
-            data: trend.map((d) => d.error),
-            backgroundColor: statusSolid("error"),
-            stack: "status",
-          },
-          {
-            label: "취소",
-            data: trend.map((d) => d.cancelled),
-            backgroundColor: statusSolid("cancelled"),
-            stack: "status",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-        },
-        scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
-        },
-      },
-    });
   }
 
   const HEATMAP_VALUE_LABEL = {
@@ -843,62 +728,6 @@
       true
     );
     queueHeatmapResize();
-  }
-
-  function renderAttention(runs) {
-    const list = document.getElementById("runs-attention-list");
-    if (!runs.length) {
-      list.innerHTML = '<p class="py-4 text-center text-xs text-gray-400">주의 Run 없음</p>';
-      return;
-    }
-    list.innerHTML = runs
-      .map((run) => {
-        const isError = run.status === "ERROR";
-        const issue = run.failed_module_name
-          ? `${run.status_label} · ${run.failed_module_name}`
-          : run.status_label;
-        return `<button type="button" class="adm-attention-card w-full text-left${isError ? " adm-attention-card--error" : ""}" data-attention-run="${escapeHtml(run.run_id)}">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <p class="text-xs font-bold text-gray-900 truncate">${escapeHtml(run.system_name)}</p>
-              <p class="mt-0.5 text-xs text-gray-500 truncate">${escapeHtml(issue)}</p>
-              <div class="mt-1 flex flex-wrap gap-1">${comparisonBadgesHtml(run)}</div>
-            </div>
-            <span class="shrink-0 text-[10px] text-gray-400">${escapeHtml(formatWhen(run.requested_at).split(" · ")[0])}</span>
-          </div>
-        </button>`;
-      })
-      .join("");
-  }
-
-  const SYSTEM_STATUS_CLASS = {
-    PASSED: "text-green-700 bg-green-50 ring-green-100",
-    ANOMALY: "text-amber-800 bg-amber-50 ring-amber-100",
-    FAILED: "text-amber-800 bg-amber-50 ring-amber-100",
-    ERROR: "text-red-700 bg-red-50 ring-red-100",
-    CANCELLED: "text-gray-500 bg-gray-50 ring-gray-100",
-  };
-
-  function renderSystemRecent(items) {
-    const wrap = document.getElementById("runs-system-recent");
-    if (!wrap) return;
-    if (!items.length) {
-      wrap.innerHTML = '<p class="col-span-full py-4 text-center text-xs text-gray-400">데이터 없음</p>';
-      return;
-    }
-    wrap.innerHTML = items
-      .map((item) => {
-        const cls = SYSTEM_STATUS_CLASS[item.last_status] || "text-gray-600 bg-gray-50 ring-gray-100";
-        const when = item.last_at ? formatWhen(item.last_at).split(" · ")[0] : "—";
-        return `<button type="button" data-system-recent-run="${escapeHtml(item.run_id)}" class="w-full rounded-lg border border-gray-100 p-3 text-left hover:border-indigo-200 hover:bg-indigo-50/40 transition">
-          <div class="flex items-center justify-between gap-2">
-            <span class="truncate text-xs font-bold text-gray-900">${escapeHtml(item.system_name)}</span>
-            <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${cls}">${escapeHtml(item.last_status_label)}</span>
-          </div>
-          <p class="mt-1 text-[10px] text-gray-400">${escapeHtml(when)}</p>
-        </button>`;
-      })
-      .join("");
   }
 
   function moduleSummary(run) {
@@ -1086,6 +915,231 @@
     else renderHeatmapFallback(EMPTY_HEATMAP);
   }
 
+  // 이상징후 비율 경계 → 상태 색 토큰. 0% 정상 · 5% 이상징후 · 10% 이상 점검실패 색(설계 §4.3).
+  // 색 값은 tokens.generated.css 의 SSOT(app/core/status_colors.py)를 읽는다 — ECharts 는 CSS 변수를 모른다.
+  const SYSTEM_MAP_COLOR_STOPS = [
+    [0, "passed"],
+    [0.05, "anomaly"],
+    [0.1, "error"],
+  ];
+  const SYSTEM_MAP_INTRO_MS = 1400;
+
+  function cssToken(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function statusRgb(tone) {
+    const hex = /^#([0-9a-f]{6})$/i.exec(cssToken(`--st-${tone}-solid`))?.[1] || "64748b";
+    return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  }
+
+  let systemMapStops = null;
+
+  function anomalyColor(rate) {
+    systemMapStops ||= SYSTEM_MAP_COLOR_STOPS.map(([at, tone]) => [at, statusRgb(tone)]);
+    const stops = systemMapStops;
+    const r = Math.min(Math.max(rate, 0), stops[stops.length - 1][0]);
+    let i = 1;
+    while (i < stops.length - 1 && r > stops[i][0]) i += 1;
+    const [r0, c0] = stops[i - 1];
+    const [r1, c1] = stops[i];
+    const t = (r - r0) / (r1 - r0);
+    const rgb = c0.map((v, k) => Math.round(v + (c1[k] - v) * t));
+    return `rgb(${rgb.join(",")})`;
+  }
+
+  function prefersReducedMotion() {
+    return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  function anomalyRate(system) {
+    return system.runs ? system.anomaly / system.runs : 0;
+  }
+
+  function formatPercent(rate) {
+    return `${(rate * 100).toFixed(1)}%`;
+  }
+
+  // 시스템명 뒤에 조사를 붙이지 않는다 — '챗봇(모바일)' 같은 이름에서 조사가 어긋난다.
+  function systemMapSummaryHtml(map, progress = 1) {
+    const byCode = Object.fromEntries((map.systems || []).map((s) => [s.system_code, s]));
+    const topRuns = byCode[map.top_runs];
+    const topAnomaly = byCode[map.top_anomaly];
+    if (!topRuns) return "";
+    const count = (value) => `<span class="adm-sysmap__num">${Math.round(value * progress).toLocaleString()}</span>`;
+    const head = `이번 달 가장 많이 돈 건 <b>${escapeHtml(topRuns.system_name)}</b>(${count(topRuns.runs)}회)`;
+    if (!topAnomaly) return `${head}입니다. 이번 달 이상징후는 아직 없습니다.`;
+    return `${head}, 이상징후가 가장 많은 건 <b>${escapeHtml(topAnomaly.system_name)}</b>(${count(topAnomaly.anomaly)}건)입니다.`;
+  }
+
+  function systemMapSummaryText(map) {
+    const div = document.createElement("div");
+    div.innerHTML = systemMapSummaryHtml(map);
+    return div.textContent || "";
+  }
+
+  // progress 0→1: 타일 면적이 균등 격자에서 실제 비율로 펼쳐지고 숫자가 0에서 올라간다.
+  function systemMapSeriesData(map, progress) {
+    const systems = map.systems || [];
+    const even = systems.reduce((sum, s) => sum + s.runs, 0) / Math.max(systems.length, 1);
+    return systems.map((s) => {
+      const isTopAnomaly = s.system_code === map.top_anomaly;
+      return {
+        name: s.system_name,
+        value: even + (s.runs - even) * progress,
+        systemCode: s.system_code,
+        runsShown: Math.round(s.runs * progress),
+        anomalyShown: Math.round(s.anomaly * progress),
+        rate: anomalyRate(s),
+        badge: isTopAnomaly ? "최다 이상징후" : s.system_code === map.top_runs ? "최다 실행" : "",
+        itemStyle: { color: anomalyColor(anomalyRate(s)) },
+      };
+    });
+  }
+
+  function systemMapOption(map, progress) {
+    const panel = cssToken("--c-ink-950");
+    const white = cssToken("--c-white");
+    return {
+      animation: false,
+      tooltip: {
+        formatter(params) {
+          const d = params.data || {};
+          return `<b>${escapeHtml(params.name)}</b><br/>실행 ${(d.runsShown ?? 0).toLocaleString()}회<br/>이상징후 ${d.anomalyShown ?? 0}건 · ${formatPercent(d.rate || 0)}<br/><span style="color:var(--c-gray-400)">클릭하면 아래에서 Run을 봅니다</span>`;
+        },
+      },
+      series: [
+        {
+          type: "treemap",
+          roam: false,
+          nodeClick: false,
+          breadcrumb: { show: false },
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          // 루트 레벨 기본 테두리가 흰색이라 패널 배경색으로 덮는다.
+          levels: [{ itemStyle: { borderWidth: 0, gapWidth: 6, borderColor: panel } }],
+          itemStyle: { borderWidth: 0, borderRadius: 12 },
+          label: {
+            show: true,
+            position: "insideTopLeft",
+            padding: [10, 12],
+            formatter(params) {
+              const d = params.data;
+              const badge = d.badge ? `{badge|${d.badge}}\n` : "";
+              return `${badge}{name|${params.name}}\n{num|${d.runsShown.toLocaleString()}회}\n{sub|이상징후 ${d.anomalyShown}건 · ${formatPercent(d.rate)}}`;
+            },
+            rich: {
+              badge: {
+                color: panel,
+                backgroundColor: "rgba(255,255,255,0.92)",
+                borderRadius: 999,
+                padding: [3, 8],
+                fontSize: 11,
+                fontWeight: 700,
+              },
+              name: { color: white, fontSize: 15, fontWeight: 700, lineHeight: 26 },
+              num: { color: white, fontSize: 26, fontWeight: 900, lineHeight: 34 },
+              sub: { color: "rgba(255,255,255,0.88)", fontSize: 12, lineHeight: 18 },
+            },
+          },
+          data: systemMapSeriesData(map, progress),
+        },
+      ],
+    };
+  }
+
+  function renderSystemMapTable(map) {
+    const body = document.getElementById("runs-system-map-table");
+    if (!body) return;
+    body.innerHTML = (map.systems || [])
+      .map(
+        (s) =>
+          `<tr><th scope="row">${escapeHtml(s.system_name)}</th><td>${s.runs.toLocaleString()}</td><td>${s.anomaly.toLocaleString()}</td><td>${formatPercent(anomalyRate(s))}</td></tr>`
+      )
+      .join("");
+  }
+
+  // 집계는 Run 기록 기준이라 레지스트리에서 빠진 시스템 타일도 있다 — 체크박스가 없으면 필터가 사라진다.
+  function ensureSystemFilterOption(code, name) {
+    if (state.systems.some((item) => item.system_code === code)) return;
+    state.systems.push({ system_code: code, system_name: name || code });
+    document.getElementById("filter-system-options").innerHTML = "";
+    document.getElementById("filter-system").innerHTML = "";
+    renderSystemFilterOptions();
+  }
+
+  function focusExploreOnSystem(code) {
+    const map = state.board?.system_map || {};
+    const period = map.period || {};
+    const system = (map.systems || []).find((item) => item.system_code === code);
+    ensureSystemFilterOption(code, system?.system_name);
+    // 상한(to)은 두지 않는다 — datetime-local 이 분 단위로 잘라 그 분의 Run 이 빠진다.
+    applyFiltersToDom({
+      system_codes: [code],
+      statuses: ["PASSED", "ANOMALY"],
+      from: period.from,
+    });
+    state.preset = "all";
+    renderPresets();
+    loadRuns({ reset: true });
+    // smooth 는 일부 내장 브라우저(Orca)에서 무시돼 화면이 안 움직인다 — 즉시 이동.
+    document.getElementById("runs-explore")?.scrollIntoView({ block: "start" });
+  }
+
+  function renderSystemMap(map, { animate = false } = {}) {
+    const panel = document.getElementById("runs-system-map");
+    const el = document.getElementById("runs-system-map-chart");
+    const summary = document.getElementById("runs-system-map-summary");
+    const empty = document.getElementById("runs-system-map-empty");
+    if (!panel || !el || !summary || !map) return;
+    const hasData = (map.systems || []).length > 0;
+    el.classList.toggle("hidden", !hasData);
+    empty?.classList.toggle("hidden", hasData);
+    renderSystemMapTable(map);
+    if (!hasData) {
+      summary.innerHTML = "";
+      state.systemMapChart?.dispose();
+      state.systemMapChart = null;
+      return;
+    }
+    el.setAttribute("aria-label", systemMapSummaryText(map));
+    if (typeof echarts === "undefined") {
+      summary.innerHTML = systemMapSummaryHtml(map);
+      summary.classList.add("is-shown");
+      return;
+    }
+    if (!state.systemMapChart) {
+      state.systemMapChart = echarts.init(el);
+      state.systemMapChart.on("click", (params) => {
+        if (params.data?.systemCode) focusExploreOnSystem(params.data.systemCode);
+      });
+      if (!state.systemMapResizeBound) {
+        state.systemMapResizeBound = true;
+        window.addEventListener("resize", () => state.systemMapChart?.resize());
+      }
+    }
+    const chart = state.systemMapChart;
+    if (!animate || prefersReducedMotion()) {
+      chart.setOption(systemMapOption(map, 1), true);
+      summary.innerHTML = systemMapSummaryHtml(map);
+      summary.classList.add("is-shown");
+      return;
+    }
+    panel.classList.add("is-intro");
+    const startedAt = performance.now();
+    const frame = (now) => {
+      const t = Math.min((now - startedAt) / SYSTEM_MAP_INTRO_MS, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      chart.setOption(systemMapOption(map, eased), true);
+      summary.innerHTML = systemMapSummaryHtml(map, eased);
+      if (t < 1) requestAnimationFrame(frame);
+      else summary.classList.add("is-shown");
+    };
+    requestAnimationFrame(frame);
+  }
+
   async function loadBoard({ silent = false } = {}) {
     if (state.boardLoadInFlight) return;
     state.boardLoadInFlight = true;
@@ -1102,10 +1156,8 @@
       state.todayStart = state.board.today_start || null;
       document.getElementById("runs-board-loading")?.classList.add("hidden");
       document.getElementById("runs-board")?.classList.remove("hidden");
-      renderKpis(state.board.kpis);
-      renderTrend(state.board.trend_7d || []);
-      renderAttention(state.board.attention_runs || []);
-      renderSystemRecent(state.board.by_system_recent || []);
+      renderSystemMap(state.board.system_map, { animate: !silent && !state.systemMapShown });
+      state.systemMapShown = true;
       renderHeatmapPanel(heatmapPayload);
       updateRunsUpdatedAt(heatmapPayload?.generated_at || state.board.generated_at);
     } finally {
@@ -1114,7 +1166,11 @@
   }
 
   async function loadRuns({ reset = true, silent = false } = {}) {
-    if (state.runsLoadInFlight) return;
+    if (state.runsLoadInFlight) {
+      // 갱신 중 바뀐 필터는 마지막 조건으로 다시 조회한다. 더 보기 중복 요청은 무시한다.
+      if (reset) state.runsReloadPending = { silent: silent && (state.runsReloadPending?.silent ?? true) };
+      return;
+    }
     state.runsLoadInFlight = true;
     const previousCount = state.runs.length;
     if (reset) {
@@ -1138,6 +1194,7 @@
         return;
       }
       const data = await res.json();
+      if (state.runsReloadPending) return;
       const items = data.items || [];
       state.total = data.total ?? items.length;
       if (reset) state.runs = items;
@@ -1149,6 +1206,9 @@
       syncUrl();
     } finally {
       state.runsLoadInFlight = false;
+      const pending = state.runsReloadPending;
+      state.runsReloadPending = null;
+      if (pending) await loadRuns({ reset: true, silent: pending.silent });
     }
   }
 
@@ -1194,27 +1254,6 @@
       .join("")}</div>`;
   }
 
-  function boardRunStub(item) {
-    return {
-      run_id: item.run_id,
-      system_code: item.system_code,
-      system_name: item.system_name,
-      status: item.last_status || item.status,
-      status_label: item.last_status_label || item.status_label,
-      requested_at: item.last_at || item.requested_at,
-      triggered_by: item.triggered_by,
-      suite_id: item.suite_id,
-      schedule_id: item.schedule_id,
-      module_passed: item.module_passed,
-      module_total: item.module_total,
-      module_skipped: item.module_skipped,
-      failed_module_name: item.failed_module_name,
-      started_at: item.started_at,
-      ended_at: item.ended_at,
-      created_by_user_name: item.created_by_user_name,
-    };
-  }
-
   async function fetchRunDetail(runId) {
     try {
       const res = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
@@ -1225,29 +1264,9 @@
     return null;
   }
 
-  function mergeRunWithDetail(stub, detail) {
-    if (!detail) return stub;
-    const merged = { ...stub };
-    for (const [key, value] of Object.entries(detail)) {
-      if (value !== undefined && value !== null) merged[key] = value;
-    }
-    return merged;
-  }
-
   async function resolveRun(runId) {
     const fromList = state.runs.find((item) => item.run_id === runId);
     if (fromList) return fromList;
-    const fromAttention = (state.board?.attention_runs || []).find((item) => item.run_id === runId);
-    if (fromAttention) {
-      const detail = await fetchRunDetail(runId);
-      return mergeRunWithDetail(fromAttention, detail);
-    }
-    const fromRecent = (state.board?.by_system_recent || []).find((item) => item.run_id === runId);
-    if (fromRecent) {
-      const stub = boardRunStub(fromRecent);
-      const detail = await fetchRunDetail(runId);
-      return mergeRunWithDetail(stub, detail);
-    }
     return fetchRunDetail(runId);
   }
 
@@ -1512,16 +1531,6 @@
       closeRowMenus();
       const run = state.runs.find((item) => item.run_id === card.dataset.runId);
       if (run) openDrawer(run);
-    });
-    document.getElementById("runs-attention-list")?.addEventListener("click", (event) => {
-      const btn = event.target.closest("[data-attention-run]");
-      if (!btn) return;
-      openDrawerForRunId(btn.dataset.attentionRun);
-    });
-    document.getElementById("runs-system-recent")?.addEventListener("click", (event) => {
-      const btn = event.target.closest("[data-system-recent-run]");
-      if (!btn) return;
-      openDrawerForRunId(btn.dataset.systemRecentRun);
     });
     document.getElementById("runs-drawer-menu-btn")?.addEventListener("click", (event) => {
       event.stopPropagation();

@@ -1,6 +1,7 @@
 import { applyModuleSelection } from "./module-graph/render";
 import { getSelectedModuleIds } from "./module-graph/selection";
 import { syncConditionalFields } from "./run-form";
+import { rememberSchedulePreset } from "./schedule-reference";
 
 export type Preset = {
   preset_id: string;
@@ -89,6 +90,7 @@ export function applyPresetToForm(form: HTMLFormElement, preset: Preset): void {
   }
   syncConditionalFields(form);
   applyModuleSelection(form, preset.selected_module_ids);
+  rememberSchedulePreset(form, preset.preset_id, preset.input_data);
 }
 
 export async function loadPresets(): Promise<void> {
@@ -173,6 +175,7 @@ async function submitPresetSave(systemCode: string, form: HTMLFormElement, nameI
     const response = await fetch("/api/presets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system_code: systemCode, name, input_data: collectFormInput(form), selected_module_ids: getSelectedModuleIds(form) }) });
     if (!response.ok) throw new Error(await readErrorMessage(response) || `프리셋 저장에 실패했습니다. (${response.status})`);
     const preset = await response.json() as Preset;
+    rememberSchedulePreset(form, preset.preset_id, preset.input_data);
     (presetState.presetsBySystem[systemCode] ??= []).push(preset);
     renderAllPresetUI();
     saveForm.classList.add("is-hidden");

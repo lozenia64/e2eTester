@@ -50,6 +50,8 @@ class CreateScheduleRequest(BaseModel):
     input_data: dict[str, str] = Field(default_factory=dict)
     selected_module_ids: list[str] | None = None
     enabled: bool = True
+    preset_id: str | None = None
+    browser_mode: str | None = None
 
 
 class CreateSuiteScheduleRequest(BaseModel):
@@ -60,6 +62,7 @@ class CreateSuiteScheduleRequest(BaseModel):
     selected_system_codes: list[str] | None = None
     scope_system_codes: list[str] | None = None
     enabled: bool = True
+    preset_ids: dict[str, str] = Field(default_factory=dict)
 
 
 class UpdateScheduleRequest(BaseModel):
@@ -73,9 +76,11 @@ class UpdateScheduleRequest(BaseModel):
     cron: str | None = None
     input_data: dict[str, str] | None = None
     selected_module_ids: list[str] | None = None
-    # suite 예약 전용
+    # browser_mode는 단일·수트 공통, selected_system_codes는 수트 전용
     browser_mode: str | None = None
     selected_system_codes: list[str] | None = None
+    preset_id: str | None = None
+    preset_ids: dict[str, str] | None = None
 
 
 class PauseScheduleRequest(BaseModel):

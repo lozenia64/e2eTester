@@ -6,6 +6,7 @@ blob(``runs``) 테이블을 절대 만지지 않는다. 필터·정렬·페이�
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -25,46 +26,11 @@ _TERMINAL_FOR_BASELINE = (
     RunStatus.FAILED.value,
 )
 
-_LIST_BY_PROJECTION_SQL = """
-    SELECT {select_cols}
-    FROM system_last_finished s
-    INNER JOIN run_history_index r ON r.run_id = (
-        SELECT r2.run_id
-        FROM run_history_index r2
-        WHERE r2.system_code = s.system_code
-          AND COALESCE(r2.ended_at, r2.requested_at) = s.last_finished_at
-        ORDER BY r2.requested_at DESC
-        LIMIT 1
-    )
-    ORDER BY r.system_code
-"""
-
-_FALLBACK_LATEST_PER_SYSTEM_SQL = """
-    SELECT {select_cols}
-    FROM run_history_index r
-    WHERE r.run_id = (
-        SELECT r2.run_id
-        FROM run_history_index r2
-        WHERE r2.system_code = r.system_code
-          AND r2.status IN ({terminal})
-        ORDER BY COALESCE(r2.ended_at, r2.requested_at) DESC, r2.requested_at DESC
-        LIMIT 1
-    )
-    ORDER BY r.system_code
-"""
-
 _SELECT_COLUMNS = """
     run_id, system_code, system_name, status, requested_at, started_at, ended_at,
     schedule_id, suite_id, created_by_user_id, created_by_user_name, triggered_by,
     awaiting_input_module_id, awaiting_input_prompt, module_total, module_defined_total,
     module_skipped, module_passed, current_module_name, failed_module_name
-"""
-
-_SELECT_COLUMNS_R = """
-    r.run_id, r.system_code, r.system_name, r.status, r.requested_at, r.started_at, r.ended_at,
-    r.schedule_id, r.suite_id, r.created_by_user_id, r.created_by_user_name, r.triggered_by,
-    r.awaiting_input_module_id, r.awaiting_input_prompt, r.module_total, r.module_defined_total,
-    r.module_skipped, r.module_passed, r.current_module_name, r.failed_module_name
 """
 
 
@@ -148,6 +114,18 @@ def _where(query: RunSummaryFilter) -> tuple[str, list]:
     return " WHERE " + " AND ".join(clauses), params
 
 
+def _group_by_system_status(
+    rows: Iterable[tuple[str, str | None, str]],
+) -> list[tuple[str, str, str, int]]:
+    """``requested_at`` 오름차순 행 → 시스템×상태 집계. 이름은 마지막(최신) 행 기준."""
+    names: dict[str, str] = {}
+    counts: dict[tuple[str, str], int] = {}
+    for code, name, status in rows:
+        names[code] = name or names.get(code) or code
+        counts[(code, status)] = counts.get((code, status), 0) + 1
+    return [(code, names[code], status, n) for (code, status), n in sorted(counts.items())]
+
+
 class SqliteRunSummaryQuery:
     """``RunSummaryQueryPort`` SQLite 어댑터."""
 
@@ -216,6 +194,24 @@ class SqliteRunSummaryQuery:
             buckets[key] = buckets.get(key, 0) + 1
         return [(day, status, count) for (day, status), count in sorted(buckets.items())]
 
+    async def counts_by_system_status(
+        self, query: RunSummaryFilter
+    ) -> list[tuple[str, str, str, int]]:
+        """(system_code, 최신 system_name, status, count) — 코드로 묶어 이름 변경에도 한 행."""
+        where, params = _where(query)
+        rows = await self._db.fetchall(
+            f"""
+            SELECT system_code, system_name, status
+            FROM run_history_index
+            {where}
+            ORDER BY requested_at
+            """,
+            tuple(params),
+        )
+        return _group_by_system_status(
+            (row["system_code"], row["system_name"], row["status"]) for row in rows
+        )
+
     async def list_run_ids(self, query: RunSummaryFilter) -> list[str]:
         where, params = _where(query)
         rows = await self._db.fetchall(
@@ -267,25 +263,6 @@ class SqliteRunSummaryQuery:
                 continue
             result[row["system_code"]] = round(value)
         return result
-
-    async def list_summaries_for_last_finished_by_system(self) -> list[RunSummaryRow]:
-        count_row = await self._db.fetchone("SELECT COUNT(*) AS cnt FROM system_last_finished")
-        if not count_row or int(count_row["cnt"]) == 0:
-            return await self._fallback_latest_terminal_per_system()
-        sql = _LIST_BY_PROJECTION_SQL.format(select_cols=_SELECT_COLUMNS_R)
-        rows = await self._db.fetchall(sql)
-        if rows:
-            return [_row_to_summary(row) for row in rows]
-        return await self._fallback_latest_terminal_per_system()
-
-    async def _fallback_latest_terminal_per_system(self) -> list[RunSummaryRow]:
-        terminal_ph = ",".join("?" for _ in _TERMINAL_FOR_BASELINE)
-        sql = _FALLBACK_LATEST_PER_SYSTEM_SQL.format(
-            select_cols=_SELECT_COLUMNS,
-            terminal=terminal_ph,
-        )
-        rows = await self._db.fetchall(sql, _TERMINAL_FOR_BASELINE)
-        return [_row_to_summary(row) for row in rows]
 
     async def find_previous_finished_run_id(
         self, system_code: str, before: datetime, exclude_run_id: str

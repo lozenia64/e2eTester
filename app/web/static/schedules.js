@@ -52,6 +52,7 @@
     pause_cleared: "재개",
     auto_resumed: "자동 재개",
     duplicated: "복제 생성",
+    preset_linked: "프리셋 연결",
   };
   const DOW_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -312,6 +313,7 @@
             ${stateBadge(schedule)}
           </div>
           <p class="mt-0.5 text-[11px] text-gray-400">${esc(schedule.system_name)} · ${esc(targetLabel(schedule))}${schedule.auth_method ? ` · ${esc(schedule.auth_method)}` : ""}</p>
+          ${schedule.preparation_error ? `<p class="mt-1 text-xs text-red-600">${esc(schedule.preparation_error)}</p>` : ""}
         </td>
         <td class="px-4 py-3">
           <p class="text-sm font-semibold text-gray-700">${esc(schedule.cron_label || schedule.cron)}</p>
@@ -622,6 +624,7 @@
     }
 
     body.appendChild(drawerSummarySection(detail));
+    body.appendChild(drawerPresetsSection(detail));
     body.appendChild(drawerHistorySection(stats));
     body.appendChild(drawerActionsSection(detail));
     body.appendChild(drawerPauseSection(detail));
@@ -664,6 +667,25 @@
         </div>
       </div>
       ${detail.last_skipped_at ? `<p class="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700">🟡 ${relTime(detail.last_skipped_at)} 직전 실행이 끝나지 않아 주기를 건너뛰었습니다.</p>` : ""}`;
+    return section;
+  }
+
+  function drawerPresetsSection(detail) {
+    const section = sectionShell("연결된 프리셋", "다음 실행을 시작할 때 최신 인증값을 사용합니다");
+    const body = $('[data-role="section-body"]', section);
+    if (detail.preparation_error) {
+      const error = document.createElement("p");
+      error.className = "mb-2 text-xs font-semibold text-red-600";
+      error.textContent = detail.preparation_error;
+      body.appendChild(error);
+    }
+    for (const [code, binding] of Object.entries(detail.preset_bindings || {})) {
+      const row = document.createElement("p");
+      row.className = "text-xs text-gray-600";
+      const hasAuth = (SYSTEMS[code]?.run_form || []).some((field) => field.key !== "browser_mode");
+      row.textContent = `${code.toUpperCase()} · ${binding.status === "live" ? `${binding.name} · 최신값 사용` : binding.status === "missing" ? "프리셋 재연결 필요" : hasAuth ? "기존 저장값 사용 · 편집에서 프리셋을 연결해 주세요" : "인증정보 없음"}`;
+      body.appendChild(row);
+    }
     return section;
   }
 
@@ -890,10 +912,11 @@
 
     if (!isSuite) {
       body.appendChild(editModulesBlock(detail));
-      body.appendChild(editAuthBlock(detail));
+      if (!detail.preset_id) body.appendChild(editAuthBlock(detail));
     } else {
       body.appendChild(editSuiteBlock(detail));
     }
+    body.appendChild(editPresetsBlock(detail));
 
     const footer = document.createElement("div");
     footer.className = "flex items-center justify-end gap-2 border-t border-gray-100 pt-3";
@@ -1036,7 +1059,7 @@
           <option value="headless" ${detail.browser_mode === "headless" ? "selected" : ""}>백그라운드 실행</option>
         </select>
       </label>
-      <p class="mt-1 text-[11px] text-gray-400">시스템별 저장된 인증 프리셋은 그대로 유지됩니다. 시스템을 새로 추가하려면 프리셋이 필요해 실행 화면에서 다시 등록해 주세요.</p>`;
+      <p class="mt-1 text-[11px] text-gray-400">연결된 프리셋의 변경값은 다음 실행부터 반영됩니다. 시스템을 추가할 때 아래에서 프리셋도 선택해 주세요.</p>`;
     const list = $('[data-role="suite-systems"]', wrap);
     for (const system of entries) {
       const label = document.createElement("label");
@@ -1048,9 +1071,47 @@
     return wrap;
   }
 
+  function editPresetsBlock(detail) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = '<p class="text-xs font-semibold text-gray-700">실행에 사용할 프리셋</p><p class="mt-1 text-[11px] text-gray-500">연결 후 인증값은 프리셋 관리에서 수정하세요. 예약의 실행 모듈과 브라우저 모드는 유지됩니다.</p>';
+    const codes = detail.schedule_kind === "suite" ? Object.keys(SYSTEMS) : [detail.system_code];
+    for (const code of codes) {
+      const options = (detail.preset_options || []).filter((p) => p.system_code === code);
+      const current = detail.schedule_kind === "suite" ? detail.preset_ids?.[code] : detail.preset_id;
+      if (!options.length && !current && !(SYSTEMS[code]?.run_form || []).some((field) => field.key !== "browser_mode")) continue;
+      const label = document.createElement("label");
+      label.className = "mt-2 block text-xs font-semibold text-gray-600";
+      label.dataset.presetFor = code;
+      label.innerHTML = `${esc(SYSTEMS[code]?.name || code.toUpperCase())}
+        <select data-preset-code="${esc(code)}" class="schedc-field mt-1 !py-1.5 !text-xs">
+          ${!current ? '<option value="">기존 저장값 유지 · 프리셋 선택 시 최신값 사용</option>' : ""}
+          ${current && !options.some((p) => p.preset_id === current) ? `<option value="${esc(current)}" selected>연결된 프리셋 없음 · 다시 선택해 주세요</option>` : ""}
+          ${options.map((p) => `<option value="${esc(p.preset_id)}" ${p.preset_id === current ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+        </select>`;
+      wrap.appendChild(label);
+    }
+    if (detail.schedule_kind !== "suite" && detail.preset_id) {
+      const label = document.createElement("label");
+      label.className = "mt-2 block text-xs font-semibold text-gray-600";
+      label.innerHTML = `브라우저 모드<select data-role="single-browser-mode" class="schedc-field mt-1 !py-1.5 !text-xs"><option value="headed">실제 브라우저 창 열기</option><option value="headless">백그라운드 실행</option></select>`;
+      $('select', label).value = detail.browser_mode || "headed";
+      wrap.appendChild(label);
+    }
+    return wrap;
+  }
+
   async function saveEdit(detail, section) {
     const isSuite = detail.schedule_kind === "suite";
     const payload = {};
+    const chosenPresets = {};
+    for (const field of $$('[data-preset-code]', section)) {
+      const code = field.dataset.presetCode;
+      const selected = detail.schedule_kind !== "suite" || $(`[data-system-code="${code}"]`, section)?.checked;
+      const original = detail.schedule_kind === "suite" ? detail.preset_ids?.[code] : detail.preset_id;
+      if (selected && field.value && field.value !== original) chosenPresets[code] = field.value;
+    }
+    if (isSuite && Object.keys(chosenPresets).length) payload.preset_ids = chosenPresets;
+    if (!isSuite && chosenPresets[detail.system_code]) payload.preset_id = chosenPresets[detail.system_code];
 
     const name = $('[data-edit="name"]', section)?.value ?? "";
     if (name.trim() !== detail.name) payload.name = name.trim();
@@ -1077,7 +1138,14 @@
         if (field.dataset.authKey === "auth_method" && value === (detail.auth_method || "")) continue;
         inputData[field.dataset.authKey] = value;
       }
-      if (Object.keys(inputData).length) payload.input_data = inputData;
+      if (payload.preset_id && Object.keys(inputData).some((key) => key !== "browser_mode")) {
+        toast("인증정보를 프리셋으로 먼저 저장한 뒤 연결해 주세요. 입력값과 프리셋 연결을 함께 저장할 수 없습니다.");
+        return;
+      }
+      if (payload.preset_id && inputData.browser_mode) payload.browser_mode = inputData.browser_mode;
+      if (Object.keys(inputData).length && !detail.preset_id && !payload.preset_id) payload.input_data = inputData;
+      const browserMode = $('[data-role="single-browser-mode"]', section)?.value;
+      if (browserMode && browserMode !== (detail.browser_mode || "headed")) payload.browser_mode = browserMode;
     } else {
       const chosen = $$("[data-system-code]", section)
         .filter((box) => box.checked)

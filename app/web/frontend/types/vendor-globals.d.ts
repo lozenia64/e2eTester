@@ -8,7 +8,6 @@ type Htmx = typeof import("htmx.org").default;
 
 declare global {
   interface Window {
-    Chart: unknown;
     echarts: unknown;
     Plotly: unknown;
     htmx?: Htmx;
