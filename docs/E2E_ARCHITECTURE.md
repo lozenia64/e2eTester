@@ -465,6 +465,7 @@ e2eTester/
 - `POST /api/schedules/{schedule_id}/pause-until`
 - `POST /api/schedules/{schedule_id}/duplicate`
 - `DELETE /api/schedules/{schedule_id}`
+
 - `GET /m/{trigger_token}`
 - `POST /api/trigger/{trigger_token}`
 - `GET /api/trigger/{trigger_token}/status`
@@ -496,6 +497,20 @@ e2eTester/
 - `GET /admin/stats`
 - `GET /admin/ops`
 - `GET /admin/modules`
+
+예약 인증값은 프리셋 참조를 우선한다. 단일 예약 생성·수정은 `preset_id`, 전체 예약은
+시스템별 `preset_ids`를 받고 예약 생성자 소유의 프리셋인지 검증한다. 연결된 예약은 실행
+시작 시 최신 프리셋을 조회해 Run/Suite 입력 스냅샷을 확정한다. 진행 중인 실행의 OTP 재개와
+재시도는 확정된 입력을 유지하며, 예약의 모듈·시스템 선택과 `browser_mode`도 유지한다.
+같은 시스템에 참조와 인증 입력값을 함께 보내는 생성 요청은 거부한다. 참조 없는 기존
+직접 입력 API는 호환한다.
+
+기존 예약은 기동 시와 실행 준비 시 같은 소유자·시스템에서 저장 인증값이 모두 일치하는
+프리셋이 하나일 때만 자동 연결한다(새 프리셋 필드 추가는 허용). 모호하거나 불일치하면
+기존 저장값을 유지하며 예약 편집에서 연결할 수 있다. 삭제·권한·시스템 불일치 참조는
+실행을 차단하고 `preparation_error`로 안내한다. 상세 응답은 인증값 없이 `preset_bindings`
+(연결 상태·이름)와 `preset_options`(예약 소유자 후보의 ID·시스템·이름)를 제공한다.
+다른 소유자로 프리셋 참조 예약을 복제하는 요청은 거부한다.
 
 OTP·취소·부분재실행: `POST /api/runs/{run_id}/otp`, `POST /api/runs/{run_id}/cancel`, `POST /api/runs/{run_id}/rerun` (`?from_module=`). Suite OTP: `POST /api/suites/{suite_id}/otp`. SMS 중계: `POST /api/otp/inbound`.
 

@@ -6,10 +6,16 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from app.contexts.preset.infrastructure.ports import PresetRepositoryPort
 from app.contexts.run.contracts.query_rows import RunSummaryRow
 from app.contexts.scheduling.command_port import ScheduleCommandPort, ScheduleRunQueryPort
 from app.contexts.scheduling.cron import next_run_after, parse_cron
 from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
+from app.contexts.scheduling.preset_bindings import (
+    SchedulePresetBindings,
+    auth_input,
+    normalize_codes,
+)
 from app.contexts.scheduling.schedule_center import (
     MATCH_BEFORE,
     ExecutionPoint,
@@ -92,7 +98,6 @@ def schedule_month_start_utc() -> datetime:
 class SchedulerService:
     """예약(Schedule) CRUD 와, cron 기준으로 Run/Suite 를 자동 트리거하는 백그라운드 루프.
 
-    메모리 기반이라 서버 재시작 시 예약이 사라진다(영구 저장소 도입 시 함께 개선 예정).
     예약 실행은 무인 실행이므로, 휴대폰/카카오 인증처럼 사람 개입이 필요한 단계가
     선택되어 있으면 해당 Run/Suite 은 OTP 대기(WAITING_INPUT)에서 멈출 수 있다.
     """
@@ -104,6 +109,7 @@ class SchedulerService:
         repository: ScheduleRepositoryPort,
         run_queries: ScheduleRunQueryPort,
         tick_seconds: int = DEFAULT_TICK_SECONDS,
+        preset_repository: PresetRepositoryPort | None = None,
     ) -> None:
         self._run_commands = run_commands
         self._suite_service = suite_service
@@ -113,6 +119,7 @@ class SchedulerService:
         self._tick_seconds = tick_seconds
         self._timezone, self._timezone_name = _resolve_timezone()
         self._running = False
+        self._presets = SchedulePresetBindings(preset_repository)
 
     # --- CRUD -------------------------------------------------------------
 
@@ -125,9 +132,11 @@ class SchedulerService:
     ) -> Schedule:
         system = self._run_commands.get_system(system_code)  # KeyError -> 404
         parse_cron(request.cron)  # ValueError -> 400
-        sanitized_input, resolved_module_ids = self._run_commands.validate_run_request(
-            system_code, request.input_data, request.selected_module_ids
-        )
+        if request.preset_id and auth_input(request.input_data):
+            raise ValueError("프리셋 참조와 인증 입력값을 함께 저장할 수 없습니다.")
+        mode = request.browser_mode or request.input_data.get("browser_mode")
+        if mode and mode not in {"headed", "headless"}:
+            raise ValueError("브라우저 모드는 headed 또는 headless여야 합니다.")
         schedule = Schedule(
             schedule_id=f"sch_{uuid4().hex[:8]}",
             schedule_kind="system",
@@ -138,13 +147,23 @@ class SchedulerService:
             timezone=self._timezone_name,
             enabled=request.enabled,
             trigger_token=_new_trigger_token(),
-            input_data=sanitized_input,
-            selected_module_ids=resolved_module_ids,
+            input_data=dict(request.input_data),
+            preset_id=request.preset_id,
+            browser_mode=mode,
+            selected_module_ids=request.selected_module_ids,
             created_at=datetime.now(UTC),
             created_by_user_id=user_id,
             created_by_user_name=user_name,
             next_run_at=self._next_run_from_now(request.cron) if request.enabled else None,
         )
+        inputs = await self._presets.resolve(schedule)
+        sanitized_input, resolved_module_ids = self._run_commands.validate_run_request(
+            system_code, inputs[system_code], request.selected_module_ids
+        )
+        schedule.input_data = {} if schedule.preset_id else dict(request.input_data)
+        if not schedule.preset_id:
+            schedule.input_data.update(sanitized_input)
+        schedule.selected_module_ids = resolved_module_ids
         schedule.record_change(
             "created", f"예약 등록({cron_to_label(schedule.cron)})", user_name=user_name
         )
@@ -158,11 +177,30 @@ class SchedulerService:
         user_name: str | None = None,
     ) -> Schedule:
         parse_cron(request.cron)  # ValueError -> 400
+        if any(request.systems.get(code) for code in request.preset_ids):
+            raise ValueError("프리셋 참조와 같은 시스템의 인증 입력값을 함께 저장할 수 없습니다.")
+        selected = request.selected_system_codes
+        if selected is None:
+            selected = [s.system_code for s in self._run_commands.list_systems()]
+        candidate = Schedule(
+            schedule_id="검증",
+            system_code="suite",
+            system_name="전체 점검",
+            schedule_kind="suite",
+            cron=request.cron,
+            timezone=self._timezone_name,
+            created_at=datetime.now(UTC),
+            created_by_user_id=user_id,
+            preset_ids=request.preset_ids,
+            selected_system_codes=selected,
+            suite_systems=request.systems,
+        )
+        inputs = await self._presets.resolve(candidate)
         browser_mode, normalized_systems, resolved_system_codes = (
             self._suite_service.validate_suite_request(
                 request.browser_mode,
-                request.systems,
-                request.selected_system_codes,
+                inputs,
+                selected,
             )
         )
         schedule = Schedule(
@@ -176,7 +214,12 @@ class SchedulerService:
             enabled=request.enabled,
             trigger_token=_new_trigger_token(),
             browser_mode=browser_mode,
-            suite_systems=normalized_systems,
+            suite_systems={
+                code: values
+                for code, values in normalized_systems.items()
+                if code not in request.preset_ids
+            },
+            preset_ids=dict(request.preset_ids),
             selected_system_codes=resolved_system_codes,
             scope_system_codes=request.scope_system_codes,
             step_total=len(resolved_system_codes),
@@ -249,7 +292,10 @@ class SchedulerService:
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
         await self._ensure_trigger_token(schedule)
         await self._refresh_last_execution_status(schedule)
-        return self._augment_summary(schedule.to_detail(), schedule)
+        await self._migrate_presets(schedule)
+        payload = self._augment_summary(schedule.to_detail(), schedule)
+        payload.update(await self._presets.describe(schedule))
+        return payload
 
     async def update_schedule(
         self,
@@ -262,7 +308,8 @@ class SchedulerService:
         ``input_data`` 는 제공된 비어있지 않은 키만 기존 값 위에 병합한다(저장된 PII 를
         화면에 되돌려주지 않고 교체 가능). 검증은 생성 경로와 동일한 규칙을 통과해야 한다.
         """
-        schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        schedule = (await self._repository.get(schedule_id)).model_copy(deep=True)
+        schedule.browser_mode = schedule.browser_mode or schedule.input_data.get("browser_mode")
         changed: list[str] = []
 
         if request.name is not None and request.name.strip() != schedule.name:
@@ -275,11 +322,32 @@ class SchedulerService:
             changed.append(f"주기({cron_to_label(schedule.cron)})")
 
         if schedule.schedule_kind == "suite":
-            if request.browser_mode is not None or request.selected_system_codes is not None:
+            if request.preset_id is not None:
+                raise ValueError("전체 예약은 시스템별 프리셋을 선택해 주세요.")
+            if request.preset_ids is not None:
+                schedule.preset_ids.update(request.preset_ids)
+                for code in request.preset_ids:
+                    if schedule.suite_systems:
+                        schedule.suite_systems.pop(code, None)
+                changed.append("프리셋 연결")
+            if request.selected_system_codes is not None:
+                selected_codes = normalize_codes(request.selected_system_codes)
+                schedule.preset_ids = {
+                    code: pid for code, pid in schedule.preset_ids.items() if code in selected_codes
+                }
+                if schedule.selected_system_codes != selected_codes:
+                    changed.append("시스템 선택")
+                schedule.selected_system_codes = selected_codes
+            if (
+                request.browser_mode is not None
+                or request.selected_system_codes is not None
+                or request.preset_ids is not None
+            ):
+                inputs = await self._presets.resolve(schedule)
                 browser_mode, normalized_systems, resolved_system_codes = (
                     self._suite_service.validate_suite_request(
                         request.browser_mode or schedule.browser_mode or "headed",
-                        dict(schedule.suite_systems or {}),
+                        inputs,
                         request.selected_system_codes
                         if request.selected_system_codes is not None
                         else schedule.selected_system_codes,
@@ -293,19 +361,46 @@ class SchedulerService:
                 ):
                     changed.append("시스템 선택")
                 schedule.browser_mode = browser_mode
-                schedule.suite_systems = normalized_systems
+                schedule.suite_systems = {
+                    code: values
+                    for code, values in normalized_systems.items()
+                    if code not in schedule.preset_ids
+                }
                 schedule.selected_system_codes = resolved_system_codes
                 schedule.step_total = len(resolved_system_codes)
         else:
+            if request.preset_ids is not None:
+                raise ValueError("단일 예약은 프리셋 하나를 선택해 주세요.")
+            if request.preset_id is not None:
+                if not request.preset_id.strip():
+                    raise ValueError("연결할 프리셋을 선택해 주세요.")
+                schedule.preset_id = request.preset_id
+                schedule.browser_mode = schedule.browser_mode or schedule.input_data.get(
+                    "browser_mode"
+                )
+                schedule.input_data = {}
+                await self._presets.resolve(schedule)
+                changed.append("프리셋 연결")
+            if schedule.preset_id and auth_input(request.input_data or {}):
+                raise ValueError("연결된 프리셋의 인증값은 프리셋 관리에서 수정해 주세요.")
+            legacy_mode = (request.input_data or {}).get("browser_mode", "").strip()
+            if legacy_mode and request.browser_mode and legacy_mode != request.browser_mode:
+                raise ValueError("브라우저 모드를 하나로 지정해 주세요.")
+            mode = request.browser_mode if request.browser_mode is not None else legacy_mode
+            if mode:
+                if mode not in {"headed", "headless"}:
+                    raise ValueError("브라우저 모드는 headed 또는 headless여야 합니다.")
+                schedule.browser_mode = mode
+                changed.append("브라우저 모드")
             input_changed = bool(
-                request.input_data and any(value.strip() for value in request.input_data.values())
+                request.input_data and any(auth_input(request.input_data).values())
             )
             modules_changed = (
                 request.selected_module_ids is not None
                 and request.selected_module_ids != (schedule.selected_module_ids or [])
             )
             if input_changed or modules_changed:
-                merged_input = dict(schedule.input_data)
+                merged_input = (await self._presets.resolve(schedule))[schedule.system_code]
                 if request.input_data:
                     merged_input.update(
                         {
@@ -321,13 +416,15 @@ class SchedulerService:
                     if request.selected_module_ids is not None
                     else schedule.selected_module_ids,
                 )
-                schedule.input_data = sanitized_input
+                schedule.input_data = {} if schedule.preset_id else sanitized_input
                 schedule.selected_module_ids = resolved_module_ids
                 if input_changed:
                     changed.append("인증값")
                 if modules_changed:
                     changed.append("모듈 선택")
 
+        if "프리셋 연결" in changed:
+            schedule.preparation_error = None
         if not changed:
             return schedule
 
@@ -371,7 +468,14 @@ class SchedulerService:
     ) -> Schedule:
         """예약 복제 — 같은 대상/주기/입력으로 새 예약을 만든다(검토 후 켜도록 비활성 상태)."""
         source = await self._repository.get(schedule_id)  # KeyError -> 404
+        if (
+            user_id
+            and user_id != source.created_by_user_id
+            and (source.preset_id or source.preset_ids)
+        ):
+            raise ValueError("다른 사용자의 프리셋을 참조하는 예약은 복제할 수 없습니다.")
         copy = source.model_copy(
+            deep=True,
             update={
                 "schedule_id": f"sch_{uuid4().hex[:8]}",
                 "name": f"{source.name or source.system_name} (복사본)".strip(),
@@ -405,8 +509,9 @@ class SchedulerService:
                 "paused_until": None,
                 "disabled_at": datetime.now(UTC),
                 "updated_at": None,
+                "preparation_error": None,
                 "change_log": [],
-            }
+            },
         )
         copy.record_change(
             "duplicated",
@@ -698,6 +803,7 @@ class SchedulerService:
             "status": None,
             "waiting_input": False,
             "progress": None,
+            "preparation_error": schedule.preparation_error,
         }
         if schedule.schedule_kind == "suite":
             if not schedule.last_suite_id:
@@ -789,6 +895,7 @@ class SchedulerService:
         now = datetime.now(UTC)
         rescheduled = 0
         for schedule in await self._repository.list():
+            await self._migrate_presets(schedule)
             if (
                 schedule.enabled
                 and schedule.next_run_at is not None
@@ -877,9 +984,14 @@ class SchedulerService:
     ) -> Run:
         actor_id = user_id or schedule.created_by_user_id
         actor_name = user_name or schedule.created_by_user_name
+        systems = await self._prepare_inputs(schedule)
+        input_data = systems[schedule.system_code]
+        mode = schedule.browser_mode or schedule.input_data.get("browser_mode")
+        if mode:
+            input_data["browser_mode"] = mode
         run = await self._run_commands.start_run(
             schedule.system_code,
-            dict(schedule.input_data),
+            input_data,
             list(schedule.selected_module_ids)
             if schedule.selected_module_ids is not None
             else None,
@@ -901,10 +1013,11 @@ class SchedulerService:
     ) -> SuiteRun:
         actor_id = user_id or schedule.created_by_user_id
         actor_name = user_name or schedule.created_by_user_name
+        systems = await self._prepare_inputs(schedule)
         suite = await self._suite_service.start_suite(
             StartSuiteRequest(
                 browser_mode=schedule.browser_mode or "headed",
-                systems=dict(schedule.suite_systems or {}),
+                systems=systems,
                 selected_system_codes=list(schedule.selected_system_codes)
                 if schedule.selected_system_codes is not None
                 else None,
@@ -921,6 +1034,31 @@ class SchedulerService:
         schedule.last_run_at = datetime.now(UTC)
         schedule.last_suite_status = suite.status
         return suite
+
+    async def _migrate_presets(self, schedule: Schedule) -> None:
+        if await self._presets.migrate(schedule):
+            await self._repository.save(schedule)
+
+    async def _prepare_inputs(self, schedule: Schedule) -> dict[str, dict[str, str]]:
+        await self._migrate_presets(schedule)
+        try:
+            inputs = await self._presets.resolve(schedule)
+            if schedule.schedule_kind == "suite":
+                self._suite_service.validate_suite_request(
+                    schedule.browser_mode or "headed", inputs, schedule.selected_system_codes
+                )
+            else:
+                self._run_commands.validate_run_request(
+                    schedule.system_code, inputs[schedule.system_code], schedule.selected_module_ids
+                )
+        except ValueError as exc:
+            schedule.preparation_error = str(exc)
+            await self._repository.save(schedule)
+            raise
+        if schedule.preparation_error:
+            schedule.preparation_error = None
+            await self._repository.save(schedule)
+        return inputs
 
     async def _last_execution_active(self, schedule: Schedule) -> bool:
         if schedule.schedule_kind == "suite":
