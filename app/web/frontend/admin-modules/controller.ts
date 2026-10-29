@@ -30,7 +30,6 @@ export class ModulesController {
     }, { signal: this.events.signal });
     const dialog = getEl<HTMLDialogElement>(root, "modules-discard-dialog");
     dialog.addEventListener("cancel", () => { this.pending = null; }, { signal: this.events.signal });
-    dialog.addEventListener("close", () => getEl(root, "modules-search").focus({ preventScroll: true }), { signal: this.events.signal });
     window.addEventListener("beforeunload", event => {
       if (changedModules(this.state).length || this.state.busy) { event.preventDefault(); event.returnValue = ""; }
     }, { signal: this.events.signal });

@@ -22,7 +22,7 @@ const body = () => JSON.parse(String(api.mock.calls.find(([, options]) => option
 beforeEach(() => {
   document.body.innerHTML = template.replace(/{% macro[\s\S]*?{% endmacro %}/g, "").replace(/{%[\s\S]*?%}|{{[\s\S]*?}}/g, "");
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); setTimeout(() => this.dispatchEvent(new Event("close"))); };
   api = vi.fn(async (_url: string, options?: RequestInit) => options?.method === "PUT"
     ? response({ ok: true, saved: JSON.parse(String(options.body)).modules }) : response(fixture()));
   vi.stubGlobal("fetch", api);
@@ -67,6 +67,12 @@ it("시스템 전환 확인을 취소하면 초안을 유지하고 승인하면 
   expect(el<HTMLButtonElement>("modules-save").disabled).toBe(false);
   choose("mhm"); click("modules-discard"); choose("hom");
   expect(document.querySelector<HTMLInputElement>("[data-module-id]")!.value).toBe("60");
+});
+
+it("변경사항을 버리고 시스템을 전환하면 대화상자가 닫힌 뒤에도 제목에 포커스가 남는다", async () => {
+  await controller.init(); edit("hom.module1", "75"); choose("mhm"); click("modules-discard");
+  await new Promise(resolve => setTimeout(resolve));
+  expect(document.activeElement).toBe(el("modules-title"));
 });
 
 it.each(["", "-1", "1.5", "9007199254740992"])("잘못된 시간 %s는 저장하지 않는다", async value => {
