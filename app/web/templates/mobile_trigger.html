@@ -99,6 +99,12 @@
         let pollTimer = null;
 
         function render(payload, note) {
+            if (payload.preparation_error) {
+                otpForm.classList.remove("is-visible");
+                progressNode.textContent = "";
+                renderError(payload.preparation_error);
+                return;
+            }
             const view = STATUS_VIEW[payload.status] ?? { label: payload.status ?? "-", cls: "badge-cancelled", spin: false };
             badge.className = `badge ${view.cls}`;
             badge.innerHTML = view.spin ? '<span class="spinner"></span>' : "";

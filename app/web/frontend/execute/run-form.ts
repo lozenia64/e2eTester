@@ -1,5 +1,6 @@
 import { getSelectedModuleIds } from "./module-graph/selection";
 import { getLegacy } from "./legacy-bridge";
+import { scheduleReference } from "./schedule-reference";
 
 export { updateOtpPanel } from "../components/otp-panel";
 
@@ -146,7 +147,7 @@ async function registerSchedule(
       body: JSON.stringify({
         cron: built.cron,
         name: nameInput?.value.trim() ?? "",
-        input_data: collectFormInput(form),
+        ...scheduleReference(form),
         selected_module_ids: selectedModuleIds,
       }),
     });

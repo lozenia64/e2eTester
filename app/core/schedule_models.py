@@ -40,6 +40,9 @@ class Schedule(BaseModel):
     selected_module_ids: list[str] | None = None
     browser_mode: str | None = None
     suite_systems: dict[str, dict[str, str]] | None = None
+    preset_id: str | None = None
+    preset_ids: dict[str, str] = Field(default_factory=dict)
+    preparation_error: str | None = None
     selected_system_codes: list[str] | None = None
     scope_system_codes: list[str] | None = None
     step_total: int | None = None
@@ -88,6 +91,9 @@ class Schedule(BaseModel):
         return {
             "schedule_id": self.schedule_id,
             "schedule_kind": self.schedule_kind,
+            "preset_id": self.preset_id,
+            "preset_ids": dict(self.preset_ids),
+            "preparation_error": self.preparation_error,
             "system_code": self.system_code,
             "system_name": self.system_name,
             "name": self.name,
@@ -104,7 +110,7 @@ class Schedule(BaseModel):
             "selected_system_count": len(self.selected_system_codes)
             if is_suite and self.selected_system_codes is not None
             else None,
-            "browser_mode": self.browser_mode if is_suite else None,
+            "browser_mode": self.browser_mode,
             "auth_method": None if is_suite else self.input_data.get("auth_method"),
             "created_at": self.created_at.isoformat(),
             "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,

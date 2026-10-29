@@ -4,6 +4,7 @@ from typing import Protocol
 
 from app.contexts.run.application.command_port import RunCommandPort
 from app.contexts.run.contracts.query_rows import RunSummaryRow
+from app.core.system_models import SystemDefinition
 
 
 class ScheduleCommandPort(RunCommandPort, Protocol):
@@ -13,7 +14,7 @@ class ScheduleCommandPort(RunCommandPort, Protocol):
     이 포트를 만족하며, 스케줄러는 구체 서비스가 아닌 이 포트에만 의존한다.
     """
 
-    def list_systems(self): ...
+    def list_systems(self) -> list[SystemDefinition]: ...
 
 
 class ScheduleRunQueryPort(Protocol):
