@@ -88,9 +88,10 @@ it("0초도 정상적으로 저장한다", async () => {
 
 it("부분 저장은 성공 항목만 기준값을 갱신하고 실패 항목만 재시도한다", async () => {
   await controller.init(); edit("hom.module1", "75"); edit("hom.module2", "85");
-  api.mockImplementationOnce(async () => response({ ok: false, saved: [{ module_id: "hom.module1", estimated_manual_seconds: 75 }], failed: [{ module_id: "hom.module2", detail: "실패" }] }));
+  api.mockImplementationOnce(async () => response({ ok: false, saved: [{ module_id: "hom.module1", estimated_manual_seconds: 75 }], failed: [{ module_id: "hom.module2", detail: "값이 너무 큽니다" }] }));
   click("modules-save");
   await vi.waitFor(() => expect(el("modules-feedback").textContent).toContain("일부"));
+  expect(el("modules-feedback").textContent).toContain("(업무 2: 값이 너무 큽니다)");
   expect(el("modules-dirty-count").textContent).toBe("1");
   api.mockClear(); click("modules-save");
   await vi.waitFor(() => expect(body().modules).toEqual([{ module_id: "hom.module2", estimated_manual_seconds: 85 }]));

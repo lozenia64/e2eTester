@@ -8,6 +8,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     try {
       const data = await response.json();
       if (typeof data.detail === "string") message = data.detail;
+      else if (Array.isArray(data.detail)) message = data.detail.map((item: { msg?: string }) => item.msg ?? "입력값을 확인하세요.").join(", ");
     } catch { /* JSON이 아닌 서버 오류에도 재시도 가능한 안내를 표시한다. */ }
     throw new Error(message);
   }

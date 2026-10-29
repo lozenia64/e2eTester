@@ -1,5 +1,6 @@
 import { STATUS_TONES } from "../lib/status.generated";
-import { countTo, escapeHtml as esc, formatTime as dateLabel, number, replaceContent, setText } from "./dom";
+import { escapeHtml as esc } from "../lib/html";
+import { countTo, formatTime as dateLabel, number, replaceContent, setText } from "./dom";
 import type { CoverageData, DailyData, PerformanceData } from "./types";
 
 function tone(value: string): string {
