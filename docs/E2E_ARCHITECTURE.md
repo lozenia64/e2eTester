@@ -473,6 +473,8 @@ e2eTester/
 - `POST /api/trigger/{trigger_token}`
 - `GET /api/trigger/{trigger_token}/status`
 - `POST /api/trigger/{trigger_token}/otp`
+
+트리거 상태 응답은 `execution_id`와 OTP 대기 중인 `otp_run_id`·`otp_request_id`를 포함한다. 텔레그램은 이 식별자에 답장을 고정하고, Run 서비스가 대기 컨텍스트를 다시 검사해 다른 실행·인증 단계로 전달되지 않게 한다. 기존 모바일 OTP 요청 형식은 유지한다.
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/dashboard`

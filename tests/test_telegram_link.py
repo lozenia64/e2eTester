@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -31,6 +32,9 @@ class _Repo:
 
     async def list(self) -> list[User]:
         return list(self.items.values())
+
+    async def delete(self, user_id: str) -> None:
+        del self.items[user_id]
 
 
 def _user(user_id: str, *, telegram_user_id: int | None = None) -> User:
@@ -69,6 +73,34 @@ async def test_unlink_clears_telegram_id():
     assert await service.get_user_by_telegram_id(111) is None
 
 
+@pytest.mark.parametrize("operation", ["deactivate", "delete"])
+async def test_link_cannot_overwrite_concurrent_admin_change(operation):
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class PausedRepo(_Repo):
+        async def list(self):
+            entered.set()
+            await release.wait()
+            return await super().list()
+
+    repo = PausedRepo([_user("a")])
+    service = UserService(repo)
+    linking = asyncio.create_task(service.link_telegram("a", 111))
+    await entered.wait()
+    change = asyncio.create_task(
+        service.update_user_active("a", False)
+        if operation == "deactivate"
+        else service.delete_user("a")
+    )
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(linking, change)
+    if operation == "deactivate":
+        assert repo.items["a"].is_active is False
+    else:
+        assert "a" not in repo.items
+
+
 async def test_unknown_telegram_id_finds_nobody():
     assert await UserService(_Repo([_user("a")])).get_user_by_telegram_id(111) is None
 
@@ -91,11 +123,16 @@ class _Bot:
             "AB12CD34", "e2e_check_bot", "https://t.me/e2e_check_bot?start=AB12CD34"
         )
 
+    async def unlink_user(self, user_id: str) -> None:
+        await self.users.unlink_telegram(user_id)
+
 
 @pytest.fixture
 def web():
     def build(user: User, bot):
         repo = _Repo([user])
+        if bot is not None:
+            bot.users = UserService(repo)
         app = FastAPI()
         app.include_router(router)
         app.dependency_overrides[get_current_user] = lambda: repo.items[user.user_id]

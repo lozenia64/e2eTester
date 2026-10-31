@@ -810,6 +810,13 @@ class SchedulerService:
             "waiting_input": False,
             "progress": None,
             "preparation_error": schedule.preparation_error,
+            "execution_id": (
+                schedule.last_suite_id
+                if schedule.schedule_kind == "suite"
+                else schedule.last_run_id
+            ),
+            "otp_run_id": None,
+            "otp_request_id": None,
         }
         if schedule.schedule_kind == "suite":
             if not schedule.last_suite_id:
@@ -828,6 +835,11 @@ class SchedulerService:
                     "progress": f"{terminal_steps}/{len(suite.steps)}",
                 }
             )
+            if suite.status == SuiteStatus.WAITING_INPUT and suite.awaiting_input_run_id:
+                payload["otp_run_id"] = suite.awaiting_input_run_id
+                payload["otp_request_id"] = await self._run_commands.get_otp_request_id(
+                    suite.awaiting_input_run_id
+                )
             return payload
         if not schedule.last_run_id:
             return payload
@@ -845,11 +857,40 @@ class SchedulerService:
                 "progress": f"{passed}/{len(countable)}",
             }
         )
+        if run.status == RunStatus.WAITING_INPUT:
+            payload["otp_run_id"] = run.run_id
+            payload["otp_request_id"] = await self._run_commands.get_otp_request_id(run.run_id)
         return payload
 
-    async def submit_trigger_otp(self, schedule_id: str, otp_code: str) -> dict:
+    async def submit_trigger_otp(
+        self,
+        schedule_id: str,
+        otp_code: str,
+        *,
+        expected_execution_id: str | None = None,
+        expected_otp_run_id: str | None = None,
+        expected_otp_request_id: str | None = None,
+    ) -> dict:
         """모바일 트리거 페이지에서 입력한 OTP 를 예약의 최근 실행(Run/Suite)에 전달한다."""
         schedule = await self._repository.get(schedule_id)  # KeyError -> 404
+        execution_id = (
+            schedule.last_suite_id if schedule.schedule_kind == "suite" else schedule.last_run_id
+        )
+        if expected_execution_id is not None and execution_id != expected_execution_id:
+            raise ValueError("인증번호를 요청한 실행이 바뀌었습니다.")
+        if expected_otp_request_id is not None:
+            if not expected_otp_run_id:
+                raise ValueError("인증번호 대상이 없습니다.")
+            if schedule.schedule_kind == "suite":
+                suite = await self._suite_service.get_suite(execution_id)
+                if suite.awaiting_input_run_id != expected_otp_run_id:
+                    raise ValueError("인증번호를 요청한 Suite 단계가 바뀌었습니다.")
+            elif execution_id != expected_otp_run_id:
+                raise ValueError("인증번호를 요청한 Run이 바뀌었습니다.")
+            await self._run_commands.submit_otp(
+                expected_otp_run_id, otp_code, expected_request_id=expected_otp_request_id
+            )
+            return await self.trigger_status(schedule_id)
         if schedule.schedule_kind == "suite":
             if not schedule.last_suite_id:
                 raise KeyError("이 예약으로 실행된 Suite 가 없습니다.")

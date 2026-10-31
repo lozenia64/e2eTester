@@ -84,6 +84,16 @@ class _Confirm:
     nonce: str
     schedule_id: str
     issued_at: float
+    user_id: str
+
+
+@dataclass(frozen=True)
+class _OtpTarget:
+    schedule_id: str
+    user_id: str
+    execution_id: str
+    otp_run_id: str
+    otp_request_id: str
 
 
 def _label(status: dict) -> str:
@@ -123,24 +133,41 @@ class TelegramBot:
         self._watch_interval = watch_interval
         self._username: str | None = None
         self._pending_links: dict[str, _PendingLink] = {}
+        self._link_lock = asyncio.Lock()
         # 사용자마다 유효한 확인 카드는 하나다. 새 카드가 이전 카드를 무효화한다.
         self._confirms: dict[int, _Confirm] = {}
         self._watchers: dict[tuple[int, str], asyncio.Task[None]] = {}
         # message_id 는 채팅마다 따로 매겨지므로 채팅과 함께 키로 쓴다.
-        self._otp_prompts: dict[tuple[int, int], str] = {}
+        self._otp_prompts: dict[tuple[int, int], _OtpTarget] = {}
+
+    async def unlink_user(self, user_id: str) -> None:
+        """연결 중인 작업과 직렬화하고 미사용 코드·확인 카드를 함께 폐기한다."""
+        async with self._link_lock:
+            self._pending_links = {
+                code: pending
+                for code, pending in self._pending_links.items()
+                if pending.user_id != user_id
+            }
+            self._confirms = {
+                chat: confirm
+                for chat, confirm in self._confirms.items()
+                if confirm.user_id != user_id
+            }
+            await self._users.unlink_telegram(user_id)
 
     async def issue_link(self, user_id: str) -> TelegramLink:
         """웹에서 로그인한 사용자에게 일회용 연결 코드를 발급한다(새 코드가 이전 코드를 대체)."""
         username = self._username or (await self._call("getMe"))["username"]
         self._username = username
-        now = self._now()
-        self._pending_links = {
-            code: pending
-            for code, pending in self._pending_links.items()
-            if pending.user_id != user_id and now - pending.issued_at <= _LINK_TTL_S
-        }
-        code = secrets.token_hex(4).upper()
-        self._pending_links[code] = _PendingLink(user_id, now)
+        async with self._link_lock:
+            now = self._now()
+            self._pending_links = {
+                code: pending
+                for code, pending in self._pending_links.items()
+                if pending.user_id != user_id and now - pending.issued_at <= _LINK_TTL_S
+            }
+            code = secrets.token_hex(4).upper()
+            self._pending_links[code] = _PendingLink(user_id, now)
         return TelegramLink(code, username, f"https://t.me/{username}?start={code}")
 
     async def run_forever(self) -> None:
@@ -177,8 +204,10 @@ class TelegramBot:
                             log_event="schedule.telegram_update_error",
                         )
         finally:
-            for watcher in self._watchers.values():
+            watchers = list(self._watchers.values())
+            for watcher in watchers:
                 watcher.cancel()
+            await asyncio.gather(*watchers, return_exceptions=True)
             await self._client.aclose()
 
     async def handle_update(self, update: dict) -> None:
@@ -201,38 +230,46 @@ class TelegramBot:
         parts = text.split()
         command = parts[0] if parts else ""
         if command in ("/start", "/link") and len(parts) == 2:
-            await self._link(chat_id, parts[1])
+            if self._now() - message["date"] > _MAX_MESSAGE_AGE_S:
+                await self._send(chat_id, "만료된 연결 메시지입니다. 새로 보내 주세요.")
+            else:
+                await self._link(chat_id, parts[1])
             return
+        reply_id = (message.get("reply_to_message") or {}).get("message_id", 0)
+        target = self._otp_prompts.get((chat_id, reply_id))
         user = await self._active_user(chat_id)
         if user is None:
+            if target is not None:
+                await self._delete(chat_id, message["message_id"])
             if command == "/start":
                 await self._send(chat_id, _LINK_GUIDE_TEXT)
             return
         age = self._now() - message["date"]
         if age > _MAX_MESSAGE_AGE_S:
+            if target is not None:
+                await self._delete(chat_id, message["message_id"])
             await self._send(
                 chat_id, f"{int(age // 60)}분 전 메시지라 처리하지 않았습니다. 다시 보내 주세요."
             )
             return
-        reply_id = (message.get("reply_to_message") or {}).get("message_id", 0)
-        schedule_id = self._otp_prompts.get((chat_id, reply_id))
-        if schedule_id is not None:
-            await self._submit_otp(chat_id, schedule_id, text, message["message_id"])
+        if target is not None:
+            await self._submit_otp(chat_id, target, text, message["message_id"])
         elif text == "/run":
             await self._send_schedule_list(chat_id, user)
         else:
             await self._send(chat_id, _HELP_TEXT)
 
     async def _link(self, chat_id: int, code: str) -> None:
-        pending = self._pending_links.pop(code.upper(), None)
-        if pending is None or self._now() - pending.issued_at > _LINK_TTL_S:
-            await self._send(chat_id, _BAD_LINK_TEXT)
-            return
-        try:
-            user = await self._users.link_telegram(pending.user_id, chat_id)
-        except KeyError:
-            await self._send(chat_id, _BAD_LINK_TEXT)
-            return
+        async with self._link_lock:
+            pending = self._pending_links.pop(code.upper(), None)
+            if pending is None or self._now() - pending.issued_at > _LINK_TTL_S:
+                await self._send(chat_id, _BAD_LINK_TEXT)
+                return
+            try:
+                user = await self._users.link_telegram(pending.user_id, chat_id)
+            except (KeyError, ValueError):
+                await self._send(chat_id, _BAD_LINK_TEXT)
+                return
         await self._send(chat_id, f"{user.name} 계정에 연결했습니다. {_HELP_TEXT}")
 
     async def _visible_schedules(self, user: User) -> list[dict]:
@@ -278,7 +315,7 @@ class TelegramBot:
         if schedule is None:
             await self._edit(chat_id, message_id, "예약을 찾을 수 없습니다.")
             return
-        confirm = _Confirm(secrets.token_urlsafe(8), schedule_id, self._now())
+        confirm = _Confirm(secrets.token_urlsafe(8), schedule_id, self._now(), user.user_id)
         self._confirms[chat_id] = confirm
         await self._edit(
             chat_id,
@@ -294,7 +331,7 @@ class TelegramBot:
 
     async def _on_run_tap(self, user: User, chat_id: int, query: dict, nonce: str) -> None:
         confirm = self._confirms.get(chat_id)
-        if confirm is None or confirm.nonce != nonce:
+        if confirm is None or confirm.nonce != nonce or confirm.user_id != user.user_id:
             await self._answer(query, _EXPIRED_TEXT)
             return
         age = self._now() - confirm.issued_at
@@ -311,12 +348,13 @@ class TelegramBot:
 
     async def _start(self, user: User, chat_id: int, message_id: int, schedule_id: str) -> None:
         # 카드를 띄운 뒤 권한이 바뀌었을 수 있어 실행 직전에 다시 확인한다.
-        if await self._find_schedule(user, schedule_id) is None:
+        current = await self._authorized_user(chat_id, user.user_id, schedule_id)
+        if current is None:
             await self._edit(chat_id, message_id, _START_FAILED_TEXT)
             return
         try:
             status = await self._schedules.trigger_now(
-                schedule_id, user_id=user.user_id, user_name=user.name
+                schedule_id, user_id=current.user_id, user_name=current.name
             )
         except (KeyError, ValueError):
             await self._edit(chat_id, message_id, _START_FAILED_TEXT)
@@ -325,32 +363,76 @@ class TelegramBot:
         if status["already_running"]:
             text = f"이미 실행 중입니다.\n{text}"
         # 메시지 편집이 실패해도 결과 알림은 받도록 감시를 먼저 건다.
-        if (chat_id, schedule_id) not in self._watchers:
-            self._watchers[(chat_id, schedule_id)] = asyncio.create_task(
-                self._watch(chat_id, schedule_id, message_id, text)
+        previous = self._watchers.get((chat_id, schedule_id))
+        if previous is not None:
+            previous.cancel()
+            await asyncio.gather(previous, return_exceptions=True)
+        self._watchers[(chat_id, schedule_id)] = asyncio.create_task(
+            self._watch(
+                chat_id,
+                schedule_id,
+                message_id,
+                text,
+                user_id=current.user_id,
+                execution_id=status["execution_id"],
             )
+        )
         await self._edit(chat_id, message_id, text)
 
     async def _watch(
-        self, chat_id: int, schedule_id: str, message_id: int, shown: str | None = None
+        self,
+        chat_id: int,
+        schedule_id: str,
+        message_id: int,
+        shown: str | None = None,
+        *,
+        user_id: str | None = None,
+        execution_id: str | None = None,
     ) -> None:
         """진행은 메시지 하나를 편집하고, 알림이 필요한 OTP 요청·결과는 새 메시지로 보낸다."""
         prompt_id: int | None = None
         try:
+            if user_id is None:
+                initial_user = await self._active_user(chat_id)
+                if initial_user is None:
+                    return
+                user_id = initial_user.user_id
             while True:
                 await asyncio.sleep(self._watch_interval)
                 try:
+                    if await self._authorized_user(chat_id, user_id, schedule_id) is None:
+                        return
                     status = await self._schedules.trigger_status(schedule_id)
-                    if status["waiting_input"] and prompt_id is None:
-                        prompt = await self._send(
-                            chat_id, _OTP_PROMPT_TEXT, reply_markup={"force_reply": True}
+                    if execution_id is None:
+                        execution_id = status["execution_id"]
+                    if execution_id is None or status["execution_id"] != execution_id:
+                        return
+                    target = None
+                    if (
+                        status["waiting_input"]
+                        and status["otp_request_id"]
+                        and status["otp_run_id"]
+                    ):
+                        target = _OtpTarget(
+                            schedule_id,
+                            user_id,
+                            execution_id,
+                            status["otp_run_id"],
+                            status["otp_request_id"],
                         )
-                        self._otp_prompts[(chat_id, prompt["message_id"])] = schedule_id
-                        prompt_id = prompt["message_id"]
-                    elif not status["waiting_input"] and prompt_id is not None:
+                    if (
+                        prompt_id is not None
+                        and self._otp_prompts.get((chat_id, prompt_id)) != target
+                    ):
                         self._otp_prompts.pop((chat_id, prompt_id), None)
                         await self._delete(chat_id, prompt_id)
                         prompt_id = None
+                    if target is not None and prompt_id is None:
+                        prompt = await self._send(
+                            chat_id, _OTP_PROMPT_TEXT, reply_markup={"force_reply": True}
+                        )
+                        self._otp_prompts[(chat_id, prompt["message_id"])] = target
+                        prompt_id = prompt["message_id"]
                     if status["status"] not in _ACTIVE_RUN_STATUSES:
                         await self._send(
                             chat_id, f"점검 완료: {status['name']}\n결과: {_label(status)}"
@@ -370,11 +452,30 @@ class TelegramBot:
                         error=str(exc),
                     )
         finally:
+            if prompt_id is not None:
+                self._otp_prompts.pop((chat_id, prompt_id), None)
+                await self._delete(chat_id, prompt_id)
             self._watchers.pop((chat_id, schedule_id), None)
 
-    async def _submit_otp(self, chat_id: int, schedule_id: str, code: str, message_id: int) -> None:
+    async def _authorized_user(self, chat_id: int, user_id: str, schedule_id: str) -> User | None:
+        user = await self._active_user(chat_id)
+        if user is None or user.user_id != user_id:
+            return None
+        return user if await self._find_schedule(user, schedule_id) is not None else None
+
+    async def _submit_otp(
+        self, chat_id: int, target: _OtpTarget, code: str, message_id: int
+    ) -> None:
         try:
-            await self._schedules.submit_trigger_otp(schedule_id, code)
+            if await self._authorized_user(chat_id, target.user_id, target.schedule_id) is None:
+                raise ValueError("인증번호 요청 권한이 만료되었습니다.")
+            await self._schedules.submit_trigger_otp(
+                target.schedule_id,
+                code,
+                expected_execution_id=target.execution_id,
+                expected_otp_run_id=target.otp_run_id,
+                expected_otp_request_id=target.otp_request_id,
+            )
             notice = "인증번호를 전달했습니다."
         except (KeyError, ValueError):
             notice = "인증번호를 전달하지 못했습니다. 대시보드에서 확인해 주세요."

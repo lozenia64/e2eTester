@@ -55,6 +55,7 @@ class _FakeSchedules:
         self.trigger_error: Exception | None = None
         self.otp_error: Exception | None = None
         self.already_running = False
+        self.steady_status: dict | None = None
 
     async def list_schedules(self, user_id: str | None = None) -> list[dict]:
         self.list_filters.append(user_id)
@@ -71,11 +72,31 @@ class _FakeSchedules:
     async def trigger_status(self, schedule_id: str) -> dict:
         if schedule_id == "gone":
             raise KeyError(schedule_id)
-        return self.statuses.pop(0) if self.statuses else _status("PASSED", progress="3/3")
+        return (
+            self.statuses.pop(0)
+            if self.statuses
+            else (self.steady_status or _status("PASSED", progress="3/3"))
+        )
 
-    async def submit_trigger_otp(self, schedule_id: str, otp_code: str) -> dict:
+    async def submit_trigger_otp(
+        self,
+        schedule_id: str,
+        otp_code: str,
+        *,
+        expected_execution_id: str | None = None,
+        expected_otp_run_id: str | None = None,
+        expected_otp_request_id: str | None = None,
+    ) -> dict:
         if self.otp_error is not None:
             raise self.otp_error
+        if expected_execution_id is not None and self.steady_status is not None:
+            if self.steady_status["execution_id"] != expected_execution_id:
+                raise ValueError("실행이 바뀌었습니다.")
+            if expected_otp_request_id is not None and (
+                self.steady_status["otp_request_id"] != expected_otp_request_id
+                or self.steady_status["otp_run_id"] != expected_otp_run_id
+            ):
+                raise ValueError("인증 요청이 바뀌었습니다.")
         self.otp_calls.append((schedule_id, otp_code))
         return _status("RUNNING")
 
@@ -98,6 +119,11 @@ class _FakeUsers:
         self.by_telegram[telegram_user_id] = linked
         return linked
 
+    async def unlink_telegram(self, user_id: str):
+        self.by_telegram = {
+            key: user for key, user in self.by_telegram.items() if user.user_id != user_id
+        }
+
 
 def _user(user_id: str, name: str, *, role: str = "user", active: bool = True) -> SimpleNamespace:
     return SimpleNamespace(user_id=user_id, name=name, role=role, is_active=active)
@@ -112,6 +138,9 @@ def _status(status: str | None, *, progress: str | None = None, waiting: bool = 
         "waiting_input": waiting,
         "awaiting_prompt": "010-1234-5678 로 받은 인증번호",
         "preparation_error": None,
+        "execution_id": "run_a",
+        "otp_run_id": "run_a" if waiting else None,
+        "otp_request_id": "request_a" if waiting else None,
     }
 
 
@@ -148,7 +177,7 @@ class _Clock:
 
 
 @pytest.fixture
-def harness():
+async def harness():
     telegram = _Telegram()
     schedules = _FakeSchedules()
     users = _FakeUsers()
@@ -161,9 +190,12 @@ def harness():
         now=clock,
         watch_interval=0,
     )
-    return SimpleNamespace(
-        bot=bot, telegram=telegram, schedules=schedules, users=users, clock=clock
-    )
+    yield SimpleNamespace(bot=bot, telegram=telegram, schedules=schedules, users=users, clock=clock)
+    tasks = list(bot._watchers.values())
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await bot._client.aclose()
 
 
 def _message(text: str, *, sender: int = ALICE, age: float = 0, **extra) -> dict:
@@ -547,14 +579,99 @@ async def test_prompt_is_removed_when_otp_arrives_by_sms(harness):
 
 
 async def _prompt_otp(h, chat_id: int = ALICE, schedule_id: str = "sch_a") -> int:
-    h.schedules.statuses = [_status("WAITING_INPUT", waiting=True)]
+    h.schedules.steady_status = _status("WAITING_INPUT", waiting=True)
     before = set(h.bot._otp_prompts)
     task = asyncio.create_task(h.bot._watch(chat_id, schedule_id, 20))
+    h.bot._watchers[(chat_id, schedule_id)] = task
     while set(h.bot._otp_prompts) == before:
         await asyncio.sleep(0)
+    return next(iter(set(h.bot._otp_prompts) - before))[1]
+
+
+@pytest.mark.parametrize("change", ["unlink", "inactive", "relink", "scope"])
+async def test_watch_stops_after_access_is_revoked(harness, change):
+    prompt_id = await _prompt_otp(harness)
+    task = harness.bot._watchers[(ALICE, "sch_a")]
+    if change == "unlink":
+        del harness.users.by_telegram[ALICE]
+    elif change == "inactive":
+        harness.users.by_telegram[ALICE].is_active = False
+    elif change == "relink":
+        harness.users.by_telegram[ALICE] = _user("usr_bob", "밥")
+    else:
+        harness.schedules.items[0]["owner"] = "usr_bob"
+    before = len(harness.telegram.of("sendMessage"))
+    harness.schedules.steady_status = _status("PASSED")
+    await task
+    assert len(harness.telegram.of("sendMessage")) == before
+    assert (ALICE, prompt_id) not in harness.bot._otp_prompts
+
+
+@pytest.mark.parametrize("change", ["relink", "scope", "execution", "otp_request"])
+async def test_old_prompt_cannot_submit_after_target_changes(harness, change):
+    prompt_id = await _prompt_otp(harness)
+    if change == "relink":
+        harness.users.by_telegram[ALICE] = _user("usr_bob", "밥")
+    elif change == "scope":
+        harness.schedules.items[0]["owner"] = "usr_bob"
+    elif change == "execution":
+        harness.schedules.steady_status = {
+            **_status("WAITING_INPUT", waiting=True),
+            "execution_id": "run_next",
+        }
+    else:
+        harness.schedules.steady_status = {
+            **_status("WAITING_INPUT", waiting=True),
+            "otp_request_id": "request_next",
+        }
+    await harness.bot.handle_update(_message("123456", reply_to_message={"message_id": prompt_id}))
+    assert harness.schedules.otp_calls == []
+
+
+async def test_watch_replaces_prompt_for_next_otp_in_same_execution(harness):
+    old = await _prompt_otp(harness)
+    harness.schedules.steady_status = {
+        **_status("WAITING_INPUT", waiting=True),
+        "otp_run_id": "run_step_b",
+        "otp_request_id": "request_step_b",
+    }
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if (ALICE, old) not in harness.bot._otp_prompts:
+            break
+    assert (ALICE, old) not in harness.bot._otp_prompts
+    assert any(key != (ALICE, old) for key in harness.bot._otp_prompts)
+
+
+async def test_cancelled_watch_removes_otp_prompt(harness):
+    prompt_id = await _prompt_otp(harness)
+    task = harness.bot._watchers[(ALICE, "sch_a")]
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
-    return next(iter(set(h.bot._otp_prompts) - before))[1]
+    assert (ALICE, prompt_id) not in harness.bot._otp_prompts
+    assert any(p["message_id"] == prompt_id for p in harness.telegram.of("deleteMessage"))
+
+
+async def test_old_execution_watch_does_not_follow_next_execution(harness):
+    await _prompt_otp(harness)
+    task = harness.bot._watchers[(ALICE, "sch_a")]
+    before = len(harness.telegram.of("sendMessage"))
+    harness.schedules.steady_status = {**_status("PASSED"), "execution_id": "run_next"}
+    await task
+    assert len(harness.telegram.of("sendMessage")) == before
+
+
+async def test_unlink_revokes_unused_link_code(harness):
+    link = await harness.bot.issue_link("usr_alice")
+    await harness.bot.unlink_user("usr_alice")
+    await harness.bot.handle_update(_message(f"/link {link.code}", sender=999))
+    assert harness.users.linked == []
+
+
+async def test_stale_link_message_cannot_connect(harness):
+    link = await harness.bot.issue_link("usr_new")
+    await harness.bot.handle_update(_message(f"/link {link.code}", sender=999, age=300))
+    assert harness.users.linked == []
 
 
 async def test_otp_reply_is_submitted_then_deleted(harness):

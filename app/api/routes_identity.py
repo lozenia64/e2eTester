@@ -121,10 +121,14 @@ async def issue_telegram_link(
 async def unlink_telegram(
     current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
+    telegram_bot: TelegramBot | None = Depends(get_telegram_bot),
 ):
     if isinstance(current_user, RedirectResponse):
         return current_user
-    await user_service.unlink_telegram(current_user.user_id)
+    if telegram_bot is not None:
+        await telegram_bot.unlink_user(current_user.user_id)
+    else:
+        await user_service.unlink_telegram(current_user.user_id)
     return RedirectResponse(url="/account/telegram", status_code=status.HTTP_303_SEE_OTHER)
 
 
