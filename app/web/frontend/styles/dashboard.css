@@ -1,4 +1,4 @@
-/* SPEC-UI-004 Premium Light — daily dashboard */
+/* SPEC-UI-001 daily dashboard */
 /* 디자인 토큰(--pl-*, --st-*, --ease-out)은 primitives.css 와 tokens.generated.css 가 담당한다. */
 /* 넌스크롤 셸(.dash 뷰포트 규칙)은 shell.css 로 옮겼다(설계 D7). */
 

@@ -265,6 +265,7 @@ def page(browser):
     context.close()
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-020")
 @pytest.mark.parametrize("tone", ["passed", "anomaly", "error"])
 def test_dashboard_first_paint_respects_reduced_motion(page, live_server: str, tone: str) -> None:
     """모션 감소 설정에서는 문제 행도 첫 진입·깜빡임 연출을 생략한다."""
@@ -306,9 +307,7 @@ def _load_dashboard_and_assert_no_scroll(page, base_url: str, width: int, height
     )
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-001")
-@pytest.mark.spec("SPEC-UI-007", "AC-001")
-@pytest.mark.spec("SPEC-UI-007", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-004")
 @pytest.mark.parametrize("width,height", VIEWPORTS_MOBILE)
 def test_dashboard_no_scroll_mobile(
     page,
@@ -319,23 +318,19 @@ def test_dashboard_no_scroll_mobile(
     _load_dashboard_and_assert_no_scroll(page, live_server, width, height)
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-002")
-@pytest.mark.spec("SPEC-UI-007", "AC-001")
-@pytest.mark.spec("SPEC-UI-007", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-004")
 def test_dashboard_no_scroll_1280x720(page, live_server: str) -> None:
     width, height = VIEWPORT_DESKTOP_720
     _load_dashboard_and_assert_no_scroll(page, live_server, width, height)
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-003")
-@pytest.mark.spec("SPEC-UI-007", "AC-001")
-@pytest.mark.spec("SPEC-UI-007", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-004")
 def test_dashboard_no_scroll_1920x1080(page, live_server: str) -> None:
     width, height = VIEWPORT_DESKTOP_1080
     _load_dashboard_and_assert_no_scroll(page, live_server, width, height)
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-001")
+@pytest.mark.spec("SPEC-UI-001", "AC-009")
 def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -356,7 +351,7 @@ def test_dashboard_hero_visible_1280x720(page, live_server: str) -> None:
     assert first_card.is_visible()
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-005")
 def test_dashboard_zone_c_fits_without_scroll(page, live_server: str) -> None:
     _load_dashboard_1280x720(page, live_server)
     _assert_no_scroll(page, ".dash__systems")
@@ -366,7 +361,7 @@ def test_dashboard_zone_c_fits_without_scroll(page, live_server: str) -> None:
     assert doc["sh"] <= doc["ih"]
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-005")
 def test_zone_c_no_internal_scroll_1280x720(page, live_server: str) -> None:
     _load_dashboard_1280x720(page, live_server)
     _assert_no_scroll(page, ".dash__systems")
@@ -376,7 +371,7 @@ def test_zone_c_no_internal_scroll_1280x720(page, live_server: str) -> None:
     assert has_scrollable in (None, "", "false")
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-003")
+@pytest.mark.spec("SPEC-UI-001", "AC-007")
 def test_system_rows_equal_partition_1280x720(page, live_server: str) -> None:
     _load_dashboard_1280x720(page, live_server)
     page.wait_for_selector(".dash-sys-row")
@@ -399,7 +394,7 @@ def test_system_rows_equal_partition_1280x720(page, live_server: str) -> None:
     assert abs(metrics["sum"] - metrics["container"]) <= 4, metrics
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-007")
+@pytest.mark.spec("SPEC-UI-001", "AC-008")
 @pytest.mark.parametrize("width,height", [(1280, 720), (1920, 1080), (320, 568)])
 def test_no_data_scrollable_dataset(page, live_server: str, width: int, height: int) -> None:
     page.set_viewport_size({"width": width, "height": height})
@@ -411,7 +406,7 @@ def test_no_data_scrollable_dataset(page, live_server: str, width: int, height: 
     )
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-008")
 def test_no_density_dataset_and_still_fits_at_568(page, live_server: str) -> None:
     """밀도 티어 JS 철거 후에도 좁은 뷰포트에서 넘치지 않아야 한다."""
     page.set_viewport_size({"width": 1280, "height": 720})
@@ -438,7 +433,7 @@ def test_no_density_dataset_and_still_fits_at_568(page, live_server: str) -> Non
     assert state["zoneOk"], "매트릭스 존이 내부 스크롤을 만든다"
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-008")
+@pytest.mark.spec("SPEC-UI-001", "AC-016")
 def test_attention_row_inset_accent_1280x720(page, live_server: str) -> None:
     _load_dashboard_1280x720(page, live_server)
     result = page.evaluate(
@@ -462,7 +457,7 @@ def test_attention_row_inset_accent_1280x720(page, live_server: str) -> None:
     assert result["ok"], result
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-003")
+@pytest.mark.spec("SPEC-UI-001", "AC-014")
 def test_dashboard_system_name_min_font(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -474,7 +469,7 @@ def test_dashboard_system_name_min_font(page, live_server: str) -> None:
     assert fs >= 14
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-009")
+@pytest.mark.spec("SPEC-UI-001", "AC-017")
 def test_matrix_run_cell_has_token_focus_outline(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -507,6 +502,7 @@ def test_matrix_run_cell_has_token_focus_outline(page, live_server: str) -> None
     }
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-017")
 def test_activity_run_link_has_visible_parent_focus_ring(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -541,7 +537,7 @@ def test_activity_run_link_has_visible_parent_focus_ring(page, live_server: str)
     assert focus["tokenColor"] != normal
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-008")
+@pytest.mark.spec("SPEC-UI-001", "AC-015")
 def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
     page.set_viewport_size({"width": 320, "height": 568})
     page.goto(f"{live_server}/")
@@ -550,7 +546,7 @@ def test_dashboard_attention_visible_mobile(page, live_server: str) -> None:
     assert page.locator('a.dash-attention__inbox[href="/anomalies"]').count() == 1
 
 
-@pytest.mark.spec("SPEC-UI-006", "AC-001")
+@pytest.mark.spec("SPEC-UI-001", "AC-010")
 def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{empty_day_live_server}/")
@@ -564,7 +560,7 @@ def test_hero_title_in_view_1280x720(page, empty_day_live_server: str) -> None:
     assert page.locator(".status-hero__cards .kpi-card").first.is_visible()
 
 
-@pytest.mark.spec("SPEC-UI-006", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-014")
 def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -580,7 +576,7 @@ def test_system_identity_in_view_1280x720(page, live_server: str) -> None:
     assert fs >= 14
 
 
-@pytest.mark.spec("SPEC-UI-006", "AC-003")
+@pytest.mark.spec("SPEC-UI-001", "AC-011")
 def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -593,7 +589,7 @@ def test_all_four_kpi_tiles_in_dash_box(page, live_server: str) -> None:
         assert rect and rect["inBox"], f"tile {i} outside .dash"
 
 
-@pytest.mark.spec("SPEC-UI-008", "AC-001")
+@pytest.mark.spec("SPEC-UI-001", "AC-018")
 def test_dash_not_under_sidebar_1280x720(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -604,7 +600,7 @@ def test_dash_not_under_sidebar_1280x720(page, live_server: str) -> None:
     assert m["overlapPx"] <= 1, m
 
 
-@pytest.mark.spec("SPEC-UI-008", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-018")
 def test_main_padding_left_desktop_1280x720(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -613,7 +609,7 @@ def test_main_padding_left_desktop_1280x720(page, live_server: str) -> None:
     assert pl in ("256px", "16rem") or float(pl.replace("px", "")) >= 250, pl
 
 
-@pytest.mark.spec("SPEC-UI-008", "AC-003")
+@pytest.mark.spec("SPEC-UI-001", "AC-018")
 def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -631,7 +627,7 @@ def test_hero_and_first_kpi_right_of_sidebar(page, live_server: str) -> None:
     assert tile_left >= sw - 1, {"tile_left": tile_left, "sidebarWidth": sw}
 
 
-@pytest.mark.spec("SPEC-UI-008", "AC-004")
+@pytest.mark.spec("SPEC-UI-001", "AC-018")
 def test_system_identity_right_of_sidebar(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{live_server}/")
@@ -647,7 +643,7 @@ def test_system_identity_right_of_sidebar(page, live_server: str) -> None:
     assert name_left >= sw - 1
 
 
-@pytest.mark.spec("SPEC-UI-008", "AC-005")
+@pytest.mark.spec("SPEC-UI-001", "AC-019")
 def test_no_main_inset_mobile_390x844(page, live_server: str) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
     page.goto(f"{live_server}/")
@@ -691,6 +687,7 @@ def test_status_hero_contains_ring_headline_and_card_stack(kpi_fragment_html):
     assert "kpi-band" not in kpi_fragment_html
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-011")
 def test_status_hero_renders_exactly_four_cards(kpi_fragment_html):
     assert kpi_fragment_html.count('class="kpi-card"') == 4
 
@@ -709,6 +706,7 @@ def test_pending_patches_card_links_to_patches(kpi_fragment_html):
     assert 'href="/self-healing#patches"' in kpi_fragment_html
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-006")
 def test_three_column_layout_at_1920(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(live_server, wait_until="networkidle")
@@ -734,6 +732,7 @@ def test_three_column_layout_at_1920(page, live_server: str) -> None:
     assert abs(boxes["matrix"]["top"] - boxes["activity"]["top"]) <= 2
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-005")
 @pytest.mark.parametrize("width,height", [(1366, 768), (1920, 1080), (2560, 1440)])
 def test_only_activity_column_scrolls_internally(
     page, live_server: str, width: int, height: int
@@ -760,6 +759,7 @@ def test_only_activity_column_scrolls_internally(
     assert state["activity"] in ("auto", "scroll")
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-006")
 def test_stacks_to_single_column_on_mobile(page, live_server: str) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
     page.goto(live_server, wait_until="networkidle")
@@ -778,6 +778,7 @@ def test_stacks_to_single_column_on_mobile(page, live_server: str) -> None:
     assert boxes["matrix"]["top"] > boxes["hero"]["top"], "모바일에서 세로 스택이 아니다"
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-006")
 def test_dashboard_uses_two_columns_at_1280_with_shell_relative_padding(
     page, live_server: str
 ) -> None:
@@ -820,6 +821,7 @@ def test_dashboard_uses_two_columns_at_1280_with_shell_relative_padding(
     assert 18 <= state["paddingLeft"] <= 22, state
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-012")
 def test_matrix_row_is_single_line_with_cells(page, live_server: str) -> None:
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(live_server, wait_until="networkidle")
@@ -846,6 +848,7 @@ def test_matrix_row_is_single_line_with_cells(page, live_server: str) -> None:
     assert shape["legacySegments"] == 0, "레거시 segment bar 가 남아 있다"
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-020")
 def test_reduced_motion_disables_cell_animation(browser, live_server: str) -> None:
     context = browser.new_context(reduced_motion="reduce", viewport={"width": 1920, "height": 1080})
     page = context.new_page()

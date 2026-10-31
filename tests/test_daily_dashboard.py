@@ -312,7 +312,7 @@ def test_system_attention_rank_and_sort_helpers():
     assert items[0]["system_code"] == "bad"
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-003")
 def test_system_summary_badge_error_wins():
     view = {
         "counts": {
@@ -329,7 +329,7 @@ def test_system_summary_badge_error_wins():
     assert badge == {"label": "점검실패", "tone": "error"}
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-003")
 def test_system_summary_badge_all_passed():
     view = {
         "counts": {
@@ -346,7 +346,7 @@ def test_system_summary_badge_all_passed():
     assert badge == {"label": "정상", "tone": "passed"}
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-003")
 def test_system_summary_badge_anomaly_wins_over_running():
     view = {
         "counts": {
@@ -363,7 +363,7 @@ def test_system_summary_badge_anomaly_wins_over_running():
     assert badge == {"label": "이상징후", "tone": "anomaly"}
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-003")
 def test_system_summary_badge_not_inspected_when_uninspected_modules():
     view = {
         "counts": {
@@ -380,7 +380,7 @@ def test_system_summary_badge_not_inspected_when_uninspected_modules():
     assert badge == {"label": "미점검", "tone": "not_inspected"}
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-003")
 def test_system_summary_badge_not_inspected_when_zero_modules():
     view = {
         "counts": {
@@ -397,6 +397,7 @@ def test_system_summary_badge_not_inspected_when_zero_modules():
     assert badge == {"label": "미점검", "tone": "not_inspected"}
 
 
+@pytest.mark.spec("SPEC-UI-001", "AC-021")
 def test_dashboard_includes_activity_feed():
     systems = [_sysdef("hom", ["login", "search"])]
     rows = [

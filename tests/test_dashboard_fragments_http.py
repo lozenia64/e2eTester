@@ -222,7 +222,7 @@ def client(registry: ModuleRegistry, dashboard_data: dict) -> TestClient:
         yield test_client
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-005")
+@pytest.mark.spec("SPEC-UI-001", "AC-012")
 def test_matrix_fragment_renders_card_rows(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/matrix")
     assert response.status_code == 200
@@ -244,7 +244,7 @@ def test_matrix_fragment_uses_unique_stable_system_row_ids(
     assert len(row_ids) == len(set(row_ids))
 
 
-@pytest.mark.spec("SPEC-UI-004", "AC-006")
+@pytest.mark.spec("SPEC-UI-001", "AC-009")
 def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     response = client.get("/api/dashboard/daily/fragments/kpi")
     assert response.status_code == 200
@@ -261,7 +261,7 @@ def test_kpi_fragment_renders_hero(client: TestClient) -> None:
     assert 'class="status-hero__cards"' in html
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-002")
+@pytest.mark.spec("SPEC-UI-001", "AC-010")
 def test_kpi_fragment_renders_empty_day_summary(
     client: TestClient, registry: ModuleRegistry
 ) -> None:
@@ -285,14 +285,14 @@ def test_kpi_fragment_renders_empty_day_summary(
     assert "아직 점검이 시작되지 않았습니다" in html
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-004")
+@pytest.mark.spec("SPEC-UI-001", "AC-011")
 def test_kpi_fragment_always_four_stat_tiles(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/kpi").text
     assert 'class="status-hero__cards"' in html
     assert html.count('class="kpi-card"') == 4
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-007")
+@pytest.mark.spec("SPEC-UI-001", "AC-012")
 def test_matrix_fragment_renders_module_cells(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/matrix").text
     assert "dash-sys-row__cells" in html
@@ -303,7 +303,7 @@ def test_matrix_fragment_renders_module_cells(client: TestClient) -> None:
     assert "dash-mod" not in html
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-009")
+@pytest.mark.spec("SPEC-UI-001", "AC-017")
 def test_matrix_fragment_uses_native_name_button_without_row_button_semantics(
     client: TestClient,
 ) -> None:
@@ -323,7 +323,7 @@ def test_matrix_fragment_uses_native_name_button_without_row_button_semantics(
     assert name_button.group("label") == name_button.group("name")
 
 
-@pytest.mark.spec("SPEC-UI-007", "AC-008")
+@pytest.mark.spec("SPEC-UI-001", "AC-016")
 def test_matrix_fragment_error_system_has_attention_priority(client: TestClient) -> None:
     html = client.get("/api/dashboard/daily/fragments/matrix").text
     # hom has ERROR in _build_realistic_six_system_dashboard
@@ -333,7 +333,7 @@ def test_matrix_fragment_error_system_has_attention_priority(client: TestClient)
     assert 'data-priority="attention"' in row_chunk
 
 
-@pytest.mark.spec("SPEC-UI-006", "AC-005")
+@pytest.mark.spec("SPEC-UI-001", "AC-009")
 def test_fragments_include_status_hero_contract(client: TestClient) -> None:
     kpi = client.get("/api/dashboard/daily/fragments/kpi").text
     matrix = client.get("/api/dashboard/daily/fragments/matrix").text
@@ -439,7 +439,7 @@ def test_activity_fragment_unknown_zone_still_404(client):
     assert client.get("/api/dashboard/daily/fragments/nope").status_code == 404
 
 
-@pytest.mark.spec("SPEC-UI-005", "AC-007")
+@pytest.mark.spec("SPEC-UI-001", "AC-013")
 def test_matrix_fragment_orders_passed_anomaly_error_then_not_inspected(
     client: TestClient, dashboard_data: dict
 ) -> None:

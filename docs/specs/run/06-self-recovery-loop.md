@@ -341,7 +341,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 
 ## 12. Task 11 — 수동 검증 대체 근거
 
-계획서(`docs/superpowers/plans/2026-08-17-self-recovery-loop.md`) Step 3 의 시뮬레이션 모드
+계획서(git 이력의 `docs/superpowers/plans/2026-08-17-self-recovery-loop.md`) Step 3 의 시뮬레이션 모드
 수동 검증은 앱을 직접 띄워 클릭하는 대신, 체크리스트 각 항목을 증명하는 실제 경로(mock 없는
 실제 라우터·Jinja 템플릿·이벤트 저장소·프로젝션) 자동화 테스트로 대체 확인했다. 아래 테스트는
 전부 Task 6/7/9/10 리뷰에서 "프로덕션 경로에서 실제로 동작하는가"(모킹만 통과하는 게 아니라)
@@ -353,9 +353,6 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | 모듈이 ANOMALY 로 실패 | 재시도 없이 즉시 확정, 배지 없음 | `test_run_state_machine.py::test_post_step_failure_skips_non_retryable_status`, `test_run_state_machine.py::test_site_signal_never_retries_even_when_policy_allows`, `test_run_detail_recovery_badge.py::test_run_detail_omits_badge_for_clean_module` |
 | 일간 점검 현황 | 복구가 있던 시스템에 불안정 표식 | `test_projection_handlers.py::test_module_recovery_updates_daily_projection_recovered_flag`, `test_dashboard_fragments_http.py::test_matrix_fragment_shows_recovered_cell_flag`, `test_daily_dashboard.py::test_recovered_flag_surfaces_on_module_view` |
 | 완료 이메일 | "자동 복구된 모듈: ..." 줄 존재 | `test_email_notification_dedup.py::test_plain_text_body_includes_recovered_module_summary`, `test_report_renderer_recovery_badge.py::test_run_report_html_end_to_end_includes_recovered_badge` |
-
-각 테스트가 실제로 무엇을 검증하는지의 전체 근거표는
-`.superpowers/sdd/2026-08-17-self-recovery-loop/task-11-report.md` 참고.
 
 **계획서 Step 4(실브라우저 tier 1/2 수동 검증)는 수행하지 않았다.** `E2E_EXECUTION_MODE=remote`
 + 실제 시스템 로그인 + 실제 `E2E_OTP_RELAY_TOKEN` 이 필요하며, 이 작업을 수행한 환경에는
