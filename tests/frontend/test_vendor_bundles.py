@@ -10,6 +10,7 @@ CDN 을 npm 으로 바꾸는 변경의 실패 양상은 둘이다.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -21,15 +22,22 @@ MANIFEST = DIST / ".vite/manifest.json"
 ASSET_MANIFEST = AssetManifest(MANIFEST, base_url="/static/dist")
 TEMPLATES = Path("app/web/templates")
 
+PLOTLY = "vendor/plotly.min.js"
+
 VENDOR_ENTRIES = (
     "entries/vendor-echarts.ts",
-    "entries/vendor-plotly.ts",
+    PLOTLY,
 )
 
 VENDOR_TEMPLATE_REFS = {
     "admin/runs.html": ("entries/vendor-echarts.ts",),
-    "admin/stats.html": ("entries/vendor-plotly.ts",),
-    "insights.html": ("entries/vendor-plotly.ts",),
+    "admin/stats.html": (PLOTLY,),
+    "insights.html": (PLOTLY,),
+}
+
+PLOTLY_CONSUMERS = {
+    "admin/stats.html": "/static/admin-stats.js",
+    "insights.html": "/static/insights.js",
 }
 
 
@@ -63,7 +71,7 @@ def test_vendor_entry_resolves_in_manifest(entry: str) -> None:
     ("entry", "min_bytes"),
     [
         ("entries/vendor-echarts.ts", 300_000),
-        ("entries/vendor-plotly.ts", 500_000),
+        (PLOTLY, 500_000),
     ],
 )
 def test_vendor_bundle_actually_contains_the_library(
@@ -102,6 +110,20 @@ def test_template_loads_its_vendor_entries(template: str, entries: tuple[str, ..
     source = (TEMPLATES / template).read_text(encoding="utf-8")
     for entry in entries:
         assert entry in source, f"{template} 이 {entry} 를 로드하지 않습니다."
+
+
+@pytest.mark.parametrize(("template", "consumer"), sorted(PLOTLY_CONSUMERS.items()))
+def test_plotly_loads_before_its_consumer(template: str, consumer: str) -> None:
+    """소비 스크립트는 전역 `Plotly` 가 없으면 조용히 return 해 차트만 사라진다.
+
+    순서가 뒤집히거나 소비 스크립트가 defer 를 잃으면 문서 순서 보장이 깨진다.
+    """
+    source = (TEMPLATES / template).read_text(encoding="utf-8")
+    tag = f'assets.asset_classic_script("{PLOTLY}")'
+    assert tag in source
+    match = re.search(rf'<script src="{re.escape(consumer)}[^"]*" defer></script>', source)
+    assert match, f"{template} 의 {consumer} 가 defer 스크립트가 아닙니다."
+    assert source.index(tag) < match.start()
 
 
 @pytest.mark.parametrize("template", sorted(VENDOR_TEMPLATE_REFS))
