@@ -94,7 +94,7 @@ jobs:
         if: matrix.gate == 'typecheck_web' || matrix.gate == 'eslint_web' || matrix.gate == 'build_web' || matrix.gate == 'vitest_web' || matrix.gate == 'coverage'
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install web dependencies

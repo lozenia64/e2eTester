@@ -4,7 +4,7 @@
 
 ## 빠른 시작
 
-**준비:** Python 3.13+, Node 22+, Git, Redis.
+**준비:** Python 3.13+, Node 24 (`.nvmrc`), Git, Redis.
 
 ```bash
 git clone https://github.com/lozenia64/e2eTester.git && cd e2eTester
