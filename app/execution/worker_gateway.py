@@ -13,7 +13,6 @@ from app.core.system_models import ModuleDefinition
 from app.execution.gateway import ExecutionGateway, ExecutionHandle, LogSink
 from app.execution.protocol import (
     CloseSessionRequest,
-    HeartbeatRequest,
     OpenSessionRequest,
     OpenSessionResponse,
     RecoverSessionRequest,
@@ -163,12 +162,6 @@ class WorkerExecutionGateway(ExecutionGateway):
             request.model_dump(),
             dict,
         )
-
-    async def heartbeat_session(self, session_id: str, worker_id: str) -> bool:
-        """세션 하트비트를 워커에 전달한다(리스 갱신)."""
-        request = HeartbeatRequest(worker_id=worker_id, session_id=session_id)
-        response = await self._post_json("/sessions/heartbeat", request.model_dump(), dict)
-        return bool(response.get("ok"))
 
     async def capture_storage_state(self, handle: ExecutionHandle) -> str | None:
         """워커에서 세션 storage_state 를 받아 온다(Phase C 내구 체크포인트 캡처).

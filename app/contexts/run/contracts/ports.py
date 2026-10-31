@@ -45,7 +45,6 @@ class RunSummaryQueryPort(Protocol):
     async def list_summaries(self, query: RunSummaryFilter, page: Page) -> list[RunSummaryRow]: ...
     async def count(self, query: RunSummaryFilter) -> int: ...
     async def counts_by_status(self) -> dict[str, int]: ...
-    async def counts_by_status_filtered(self, query: RunSummaryFilter) -> dict[str, int]: ...
     async def daily_status_counts(
         self, query: RunSummaryFilter, *, tz: ZoneInfo | None = None
     ) -> list[tuple[str, str, int]]: ...
@@ -71,9 +70,6 @@ class ModuleHistoryQueryPort(Protocol):
         self, system_code: str, *, limit: int | None = None
     ) -> list[ModuleHistoryRow]: ...
     async def list_for_runs(self, run_ids: list[str]) -> list[ModuleHistoryRow]: ...
-    async def list_between(
-        self, since: datetime | None, until: datetime | None
-    ) -> list[ModuleHistoryRow]: ...
 
 
 class RunLogStorePort(Protocol):
@@ -94,7 +90,7 @@ class RunLogStorePort(Protocol):
 class RunControlStorePort(Protocol):
     """Run 의 **비공개 제어 상태**(클라이언트에 직렬화되지 않음) 저장 경계.
 
-    Run blob 은 ``model_dump`` 로 모든 WebSocket 리스너에 그대로 방송되므로(``RunEventPublisher``),
+    Run 상태는 모든 WebSocket 리스너에 방송되므로(``RealtimeProjector``),
     취소 의도·재개 컨텍스트(세션 토큰·resume index) 같은 내부 제어 상태는 Run blob 이 아니라 이
     형제 스토어가 소유한다 — 모듈 로그를 ``RunLogStorePort`` 로 분리한 것과 같은 이유다. 이로써
     ``RunService`` 의 서비스-인스턴스 메모리 dict(``_pending_otp``/``_cancel_requested``)가 사라지고

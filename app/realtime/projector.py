@@ -2,7 +2,7 @@
 
 **blob 재수화 없음**: 실시간 WS payload 는 오직 이벤트 payload(fat event)에서 조립한다.
 Run 상태 변경 이벤트는 ``run_summary`` 섹션(``RunView`` 계약)을, 모듈 전이 이벤트는
-``module`` 와이어 dict + ``run_status``(``ModuleView`` 계약)를 실어 나른다. 따라서 이 프로젝터
+``module`` 와이어 dict(``RunModuleRecord``) + ``run_status`` 를 실어 나른다. 따라서 이 프로젝터
 는 Run/Suite 상태 저장소(blob)나 로그 스토어를 전혀 읽지 않는다 — WS 이벤트가 고빈도임을
 고려한 읽기 경로 blob 제거의 핵심.
 
@@ -47,15 +47,9 @@ class RealtimeProjector:
         self,
         run_realtime: RealtimeNotificationPort,
         suite_realtime: SuiteRealtimeNotificationPort,
-        *,
-        run_loader=None,
-        suite_loader=None,
-        log_store=None,
     ) -> None:
         self._run_realtime = run_realtime
         self._suite_realtime = suite_realtime
-        # run_loader/suite_loader/log_store 는 더 이상 쓰지 않는다(blob 미접근). 기존 배선
-        # 호환을 위해 시그니처만 유지한다(컴포지션 루트가 넘겨도 무시).
 
     async def apply(self, event: EventEnvelope) -> None:
         if event.aggregate_type == "Run":

@@ -9,9 +9,6 @@ import pytest
 
 from app.contexts.run.domain.aggregate import RunAggregate
 from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
-    SqliteSuiteWriteRepository,
-)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.platform.eventing.bus import EventBus, RunFinished
@@ -50,17 +47,11 @@ async def test_concurrent_process_once_publishes_run_finished_once(tmp_path):
     db = SqliteDatabase(tmp_path / "outbox_dedup.db")
     await ensure_schema(db)
     write_repo = SqliteRunWriteRepository(db)
-    suite_write_repo = SqliteSuiteWriteRepository(db)
     projections = make_projection_handlers(db, write_repo)
     outbox = SqliteOutbox(db)
     run_realtime = RealtimeNotificationAdapter()
     suite_realtime = SuiteRealtimeNotificationAdapter()
-    projector = RealtimeProjector(
-        run_realtime,
-        suite_realtime,
-        run_loader=write_repo.get_run,
-        suite_loader=suite_write_repo.get_suite,
-    )
+    projector = RealtimeProjector(run_realtime, suite_realtime)
 
     run = _sample_run()
     aggregate = RunAggregate.for_new_run(run)

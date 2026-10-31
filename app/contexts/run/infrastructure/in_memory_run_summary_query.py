@@ -131,14 +131,6 @@ class InMemoryRunSummaryQuery:
             counts[row.status.value] = counts.get(row.status.value, 0) + 1
         return counts
 
-    async def counts_by_status_filtered(self, query: RunSummaryFilter) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for row in await self._all_rows():
-            if not _matches(row, query):
-                continue
-            counts[row.status.value] = counts.get(row.status.value, 0) + 1
-        return counts
-
     async def daily_status_counts(
         self, query: RunSummaryFilter, *, tz: ZoneInfo | None = None
     ) -> list[tuple[str, str, int]]:

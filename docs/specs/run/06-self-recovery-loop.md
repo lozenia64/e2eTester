@@ -239,7 +239,7 @@ Then 결정은 RetryModule(tier=RESET_TO_MODULE_ENTRY) 로 낮춰진다
 
 ### 5.2 WebSocket 이벤트
 
-신규 `event_type` 없음. `recovered`/`recovery_tiers`/`failure_signals` 는 기존 `module_*`/`snapshot` 페이로드의 모듈 필드로 실려 나간다. `RunModuleRecovered`·`RunAutoRerunTriggered` 는 감사용 도메인 이벤트로, `RunEventPublisher` 를 거치지 않고 이벤트 스트림·프로젝션 경로로만 흐른다.
+신규 `event_type` 없음. `recovered`/`recovery_tiers`/`failure_signals` 는 기존 `module_*`/`snapshot` 페이로드의 모듈 필드로 실려 나간다. `RunModuleRecovered`·`RunAutoRerunTriggered` 는 감사용 도메인 이벤트로, WS 이벤트로 변환되지 않고 이벤트 스트림·프로젝션 경로로만 흐른다.
 
 ## 6. 데이터 모델 (해당 시)
 

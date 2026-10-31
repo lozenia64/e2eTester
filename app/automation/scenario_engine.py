@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from app.automation.ports import AutomationContext, AutomationPort, Flow
+from app.automation.ports import AutomationContext, Flow
 from app.runner.step_outcome import StepOutcome
 
 
@@ -28,8 +28,3 @@ class ScenarioEngine:
         if flow is None:
             return None
         return flow.run(ctx)
-
-
-def as_automation_port(engine: ScenarioEngine) -> AutomationPort:
-    """ScenarioEngine 을 AutomationPort 로 노출한다(구조적 타이핑)."""
-    return engine

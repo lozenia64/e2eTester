@@ -256,10 +256,6 @@ class SessionServer:
         session = self._sessions.get(session_id)
         return session.run_id if session else None
 
-    def get_session_execution_mode(self, session_id: str) -> str | None:
-        session = self._sessions.get(session_id)
-        return session.execution_mode if session else None
-
     @staticmethod
     async def _run_on_session_thread(pool: ThreadPoolExecutor, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(pool, fn, *args)

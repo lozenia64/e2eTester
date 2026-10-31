@@ -37,9 +37,6 @@ class SystemExecutionPolicy:
     execution_profile: ExecutionProfile
     module_policies: dict[str, ModuleExecutionPolicy]
 
-    def for_module(self, module_id: str) -> ModuleExecutionPolicy | None:
-        return self.module_policies.get(module_id)
-
 
 def _parse_retryable_on(raw_values: list[str]) -> frozenset[ModuleStatus]:
     parsed: set[ModuleStatus] = set()

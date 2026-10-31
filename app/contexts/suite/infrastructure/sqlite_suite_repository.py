@@ -29,6 +29,3 @@ class SqliteSuiteRepository:
             "SELECT state_json FROM aggregate_snapshots WHERE aggregate_type = 'Suite'"
         )
         return [SuiteRecord.deserialize(row["state_json"]) for row in rows]
-
-    async def list_suites_by_user(self, user_id: str) -> list[SuiteRun]:
-        return [suite for suite in await self.list_suites() if suite.created_by_user_id == user_id]

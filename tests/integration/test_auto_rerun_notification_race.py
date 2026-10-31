@@ -38,9 +38,6 @@ from app.contexts.run.infrastructure.in_memory_run_summary_query import InMemory
 from app.contexts.run.infrastructure.sqlite_run_control_store import SqliteRunControlStore
 from app.contexts.run.infrastructure.sqlite_run_summary_query import SqliteRunSummaryQuery
 from app.contexts.run.infrastructure.sqlite_run_write_repository import SqliteRunWriteRepository
-from app.contexts.suite.infrastructure.sqlite_suite_write_repository import (
-    SqliteSuiteWriteRepository,
-)
 from app.core.enums import ModuleStatus, RunStatus
 from app.core.run_models import Run, RunModule
 from app.core.settings import E2ESettings
@@ -282,13 +279,7 @@ async def _build_real_pipeline(tmp_path, *, start_queue: bool) -> SimpleNamespac
     db = SqliteDatabase(tmp_path / "race.db")
     await ensure_schema(db)
     write_repo = _RelayOnFinishRepo(db)
-    suite_write_repo = SqliteSuiteWriteRepository(db)
-    projector = RealtimeProjector(
-        RealtimeNotificationAdapter(),
-        SuiteRealtimeNotificationAdapter(),
-        run_loader=write_repo.get_run,
-        suite_loader=suite_write_repo.get_suite,
-    )
+    projector = RealtimeProjector(RealtimeNotificationAdapter(), SuiteRealtimeNotificationAdapter())
     event_bus = EventBus()
     relay = make_outbox_relay(
         SqliteOutbox(db),

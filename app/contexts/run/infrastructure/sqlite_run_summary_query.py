@@ -160,14 +160,6 @@ class SqliteRunSummaryQuery:
         )
         return {row["status"]: int(row["cnt"]) for row in rows}
 
-    async def counts_by_status_filtered(self, query: RunSummaryFilter) -> dict[str, int]:
-        where, params = _where(query)
-        rows = await self._db.fetchall(
-            f"SELECT status, COUNT(*) AS cnt FROM run_history_index{where} GROUP BY status",
-            tuple(params),
-        )
-        return {row["status"]: int(row["cnt"]) for row in rows}
-
     async def daily_status_counts(
         self, query: RunSummaryFilter, *, tz: ZoneInfo | None = None
     ) -> list[tuple[str, str, int]]:

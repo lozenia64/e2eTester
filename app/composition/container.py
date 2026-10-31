@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 from app.ai.failure_analyzer import GeminiFailureAnalyzer
 from app.contexts.healing.composition import HealingContainer, compose_healing
@@ -91,16 +91,6 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 logger = get_logger(__name__)
-
-
-@runtime_checkable
-class Startable(Protocol):
-    def start(self) -> None: ...
-
-
-@runtime_checkable
-class Stoppable(Protocol):
-    async def stop(self) -> None: ...
 
 
 @dataclass
@@ -245,13 +235,7 @@ class AppContainer:
             self.run.run_queries,
             self.preset.preset_repository,
         )
-        realtime_projector = RealtimeProjector(
-            self.realtime.realtime,
-            self.realtime.suite_realtime,
-            run_loader=self.run.repos.run_write_repo.get_run,
-            suite_loader=self.suite.repos.suite_write_repo.get_suite,
-            log_store=self.run.repos.run_log_store,
-        )
+        realtime_projector = RealtimeProjector(self.realtime.realtime, self.realtime.suite_realtime)
         run_projection_loader = RunProjectionLoader(self.run.repos.run_write_repo)
         self.outbox_relay = OutboxRelay(
             SqliteOutbox(self.es_db),
