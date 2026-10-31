@@ -71,13 +71,18 @@ class _FakeRunService:
     async def get_run(self, run_id: str):
         return self.runs[run_id]
 
+    async def get_otp_request_id(self, run_id: str):
+        return f"request:{run_id}"
+
     async def start_run(self, system_code, input_data, selected_module_ids, **kwargs):
         run = _fake_run(f"run_new_{len(self.started)}", RunStatus.RUNNING)
         self.started.append(system_code)
         self.runs[run.run_id] = run
         return run
 
-    async def submit_otp(self, run_id: str, otp_code: str):
+    async def submit_otp(
+        self, run_id: str, otp_code: str, *, expected_request_id: str | None = None
+    ):
         self.otp_calls.append((run_id, otp_code))
         return self.runs[run_id]
 
@@ -181,6 +186,23 @@ async def test_trigger_now_fires_run_when_idle():
     assert payload["status"] == RunStatus.RUNNING.value
 
 
+async def test_trigger_now_records_acting_user():
+    run_service = _FakeRunService()
+    recorded = {}
+    original = run_service.start_run
+
+    async def capture(*args, **kwargs):
+        recorded.update(kwargs)
+        return await original(*args, **kwargs)
+
+    run_service.start_run = capture
+    repo = _FakeScheduleRepo([_schedule()])
+    await _scheduler(repo, run_service).trigger_now(
+        "sch_test1", user_id="usr_a", user_name="앨리스"
+    )
+    assert (recorded["user_id"], recorded["user_name"]) == ("usr_a", "앨리스")
+
+
 async def test_trigger_now_attaches_to_active_run_instead_of_double_firing():
     active = _fake_run(
         "run_active",
@@ -224,7 +246,12 @@ async def test_trigger_status_reports_waiting_input_and_progress():
 async def test_submit_trigger_otp_routes_to_run_or_suite():
     run = _fake_run("run_wait", RunStatus.WAITING_INPUT)
     run_schedule = _schedule(last_run_id="run_wait")
-    suite = SimpleNamespace(suite_id="suite_1", status=SuiteStatus.WAITING_INPUT, steps=[])
+    suite = SimpleNamespace(
+        suite_id="suite_1",
+        status=SuiteStatus.WAITING_INPUT,
+        steps=[],
+        awaiting_input_run_id="run_wait",
+    )
     suite_schedule = _schedule(
         schedule_id="sch_suite",
         schedule_kind="suite",
@@ -251,6 +278,52 @@ async def test_submit_trigger_otp_raises_without_last_execution():
     service = _scheduler(_FakeScheduleRepo([schedule]))
     with pytest.raises(KeyError):
         await service.submit_trigger_otp(schedule.schedule_id, "123456")
+
+
+async def test_bound_suite_otp_cannot_move_to_next_step():
+    suite = SimpleNamespace(
+        suite_id="suite_1",
+        status=SuiteStatus.WAITING_INPUT,
+        steps=[],
+        awaiting_input_run_id="run_b",
+    )
+    schedule = _schedule(schedule_kind="suite", last_suite_id="suite_1")
+    runs = _FakeRunService(runs={"run_b": _fake_run("run_b", RunStatus.WAITING_INPUT)})
+    suites = _FakeSuiteService(suites={"suite_1": suite})
+    service = _scheduler(_FakeScheduleRepo([schedule]), run_service=runs, suite_service=suites)
+    with pytest.raises(ValueError):
+        await service.submit_trigger_otp(
+            schedule.schedule_id,
+            "123456",
+            expected_execution_id="suite_1",
+            expected_otp_run_id="run_a",
+            expected_otp_request_id="request:run_a",
+        )
+    assert runs.otp_calls == suites.otp_calls == []
+    await service.submit_trigger_otp(
+        schedule.schedule_id,
+        "654321",
+        expected_execution_id="suite_1",
+        expected_otp_run_id="run_b",
+        expected_otp_request_id="request:run_b",
+    )
+    assert runs.otp_calls == [("run_b", "654321")]
+    assert suites.otp_calls == []
+
+
+async def test_bound_otp_cannot_move_to_next_schedule_execution():
+    runs = _FakeRunService(runs={"run_b": _fake_run("run_b", RunStatus.WAITING_INPUT)})
+    schedule = _schedule(last_run_id="run_b")
+    service = _scheduler(_FakeScheduleRepo([schedule]), run_service=runs)
+    with pytest.raises(ValueError):
+        await service.submit_trigger_otp(
+            schedule.schedule_id,
+            "123456",
+            expected_execution_id="run_a",
+            expected_otp_run_id="run_a",
+            expected_otp_request_id="request:run_a",
+        )
+    assert runs.otp_calls == []
 
 
 # --------------------------------------------------------------------------- #

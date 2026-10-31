@@ -79,7 +79,10 @@ async def test_submit_otp_keeps_pending_until_resume_dispatch(tmp_path):
     )
     service._execute_run = AsyncMock()  # type: ignore[method-assign]
 
-    await service.submit_otp("run_otp", "123456")
+    request_id = await service.get_otp_request_id("run_otp")
+    await service.submit_otp("run_otp", "123456", expected_request_id=request_id)
+    with pytest.raises(ValueError):
+        await service.submit_otp("run_otp", "123456", expected_request_id=request_id)
 
     pending = await control.get_pending("run_otp")
     assert pending is not None
@@ -100,3 +103,31 @@ async def test_submit_otp_keeps_pending_until_resume_dispatch(tmp_path):
     args = service._execute_run.await_args
     assert args.args[0] == "run_otp"
     assert args.args[2] == 1
+
+
+async def test_old_otp_request_is_rejected_when_same_module_waits_again(tmp_path):
+    run = _waiting_run()
+    control = InMemoryRunControlStore()
+    await control.set_pending("run_otp", "sess-1", "simulated", 1, "hrp.login")
+    repo = InMemoryRunRepository()
+    await repo.create_run(run)
+    gateway = AsyncMock()
+    service = RunService(
+        registry=ModuleRegistry(),
+        write_repo=repo,
+        summary_query=AsyncMock(),
+        realtime=RealtimeNotificationAdapter(),
+        log_store=InMemoryRunLogStore(),
+        execution_gateway=gateway,
+        event_bus=EventBus(),
+        control_store=control,
+        input_store=InMemoryRunInputStore(),
+        run_queue=AsyncMock(),
+        artifact_manager=ArtifactManager(root_dir=tmp_path / "artifacts"),
+    )
+    previous = await service.get_otp_request_id("run_otp")
+    await control.set_pending("run_otp", "sess-1", "simulated", 1, "hrp.login")
+    assert await service.get_otp_request_id("run_otp") != previous
+    with pytest.raises(ValueError):
+        await service.submit_otp("run_otp", "123456", expected_request_id=previous)
+    gateway.submit_input.assert_not_awaited()

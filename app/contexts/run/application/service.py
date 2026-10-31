@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -111,6 +112,7 @@ class RunService:
         # 포트로만 의존하며 구체 어댑터 선택은 컴포지션 루트(app/main.py)가 독점한다(코어는
         # 어떤 구체 어댑터도 import 하지 않는다).
         self._control_store = control_store
+        self._otp_submit_lock = asyncio.Lock()
         self._input_store = input_store
         # 자가 치유 이벤트 기록자(선택 협력자). 실행 어댑터는 치유 시도 '사실'만
         # StepExecutionResult 에 실어 보고하고, 영속·패치 제안은 여기서 위임한다.
@@ -375,11 +377,31 @@ class RunService:
         )
         return run
 
-    async def submit_otp(self, run_id: str, otp_code: str) -> Run:
+    async def get_otp_request_id(self, run_id: str) -> str | None:
+        """세션 정보는 노출하지 않고 대기 시점까지 포함한 인증 요청 식별자를 만든다."""
+        pending = await self._control_store.get_pending(run_id)
+        return (
+            sha256(pending.model_dump_json().encode()).hexdigest() if pending is not None else None
+        )
+
+    async def submit_otp(
+        self, run_id: str, otp_code: str, *, expected_request_id: str | None = None
+    ) -> Run:
+        async with self._otp_submit_lock:
+            return await self._submit_otp_locked(run_id, otp_code, expected_request_id)
+
+    async def _submit_otp_locked(
+        self, run_id: str, otp_code: str, expected_request_id: str | None
+    ) -> Run:
         run = await self._write_repo.get_run(run_id)
         pending = await self._control_store.get_pending(run_id)
         if pending is None:
             raise KeyError(f"Run is not waiting for OTP: {run_id}")
+        if expected_request_id is not None and (
+            run.status != RunStatus.WAITING_INPUT
+            or sha256(pending.model_dump_json().encode()).hexdigest() != expected_request_id
+        ):
+            raise ValueError("인증번호 요청이 만료되었습니다.")
         input_data = await self._input_store.get(run_id)
         if input_data is None:
             # 입력값이 사라진 경우(예: 재기동 후 인메모리 스토어가 비었음). 이어받을 수 없다.

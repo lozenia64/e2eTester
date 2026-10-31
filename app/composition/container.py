@@ -44,6 +44,7 @@ from app.contexts.scheduling.composition import (
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
     SqliteScheduleRepository,
 )
+from app.contexts.scheduling.telegram_bot import TelegramBot, build_telegram_bot
 from app.contexts.suite.composition import (
     SuiteContainer,
     compose_suite_repositories,
@@ -127,6 +128,8 @@ class AppContainer:
     _scheduler_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
     _retention_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
     _daily_report_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
+    telegram_bot: TelegramBot | None = field(init=False, default=None)
+    _telegram_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
 
     @classmethod
     def build(cls, settings: E2ESettings) -> AppContainer:
@@ -313,10 +316,14 @@ class AppContainer:
             self.scheduling.daily_report_scheduler = compose_daily_report_scheduler(
                 daily_report_service
             )
+        self.telegram_bot = build_telegram_bot(
+            self.settings, self.scheduling.scheduler, self.identity.user_service
+        )
 
     def apply_to_app_state(self, app: FastAPI) -> None:
         app.state.settings = self.settings
         app.state.user_service = self.identity.user_service
+        app.state.telegram_bot = self.telegram_bot
         app.state.healing_service = self.healing.healing_service
         app.state.module_settings_repo = self.insights.repos.module_settings_repository
         app.state.preset_service = self.preset.preset_service
@@ -443,8 +450,17 @@ class AppContainer:
             self._daily_report_task = asyncio.create_task(
                 self.scheduling.daily_report_scheduler.run_forever()
             )
+        if self.telegram_bot is not None:
+            self._telegram_task = asyncio.create_task(self.telegram_bot.run_forever())
 
     async def stop(self) -> None:
+        if self._telegram_task is not None:
+            self._telegram_task.cancel()
+            try:
+                await self._telegram_task
+            except asyncio.CancelledError:
+                pass
+            self._telegram_task = None
         await self.outbox_relay.stop()
         if self.realtime.redis_fanout is not None:
             await self.realtime.redis_fanout.stop()

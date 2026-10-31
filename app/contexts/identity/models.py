@@ -15,6 +15,7 @@ class User(BaseModel):
     is_active: bool = True
     created_at: datetime
     allowed_system_codes: list[str] = []
+    telegram_user_id: int | None = None
 
 
 class UserPublic(BaseModel):
