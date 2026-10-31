@@ -29,7 +29,7 @@
 
 ## 3. Remote 모드
 
-`E2E_EXECUTION_MODE=remote` → `RedisJobQueue`, 워커가 `dispatch_run_job` 소비
+`E2E_EXECUTION_MODE=remote` 에서도 Run 오케스트레이션은 API 프로세스의 `ProfilePartitionedRunQueue` 가 in-process 로 소비한다. 브라우저 스텝만 `WorkerExecutionGateway` 로 워커에 위임하고, Redis 는 워커 세션 리스·실시간 fan-out·체크포인트에만 쓴다.
 
 ## 4. OTP 동시성 이점
 

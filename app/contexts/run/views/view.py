@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 from app.core.enums import RunStatus
 from app.core.run_models import Run, RunComparison, RunModule
 from app.core.status_labels import run_status_label
-from app.domain.snapshots import RunSnapshot
 
 
 class RunView(BaseModel):
@@ -41,10 +40,6 @@ class RunView(BaseModel):
     comparison: RunComparison | None = None
     created_by_user_id: str | None = None
     created_by_user_name: str | None = None
-
-    @classmethod
-    def from_snapshot(cls, snapshot: RunSnapshot) -> RunView:
-        return cls.from_run(snapshot.to_run())
 
     @classmethod
     def from_run(cls, run: Run) -> RunView:

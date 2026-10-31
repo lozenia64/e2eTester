@@ -16,29 +16,11 @@ class SqliteEmailNotificationDedupStore:
     async def try_claim_run(self, run_id: str) -> bool:
         return await self._try_claim("run", run_id)
 
-    async def try_claim_suite(self, suite_id: str) -> bool:
-        return await self._try_claim("suite", suite_id)
-
     async def release_run(self, run_id: str) -> None:
         await self._release("run", run_id)
 
-    async def release_suite(self, suite_id: str) -> None:
-        await self._release("suite", suite_id)
-
-    def try_claim_run_sync(self, run_id: str) -> bool:
-        return self._try_claim_sync("run", run_id)
-
-    def try_claim_suite_sync(self, suite_id: str) -> bool:
-        return self._try_claim_sync("suite", suite_id)
-
     def try_claim_sync(self, scope: str, entity_id: str) -> bool:
         return self._try_claim_sync(scope, entity_id)
-
-    def release_run_sync(self, run_id: str) -> None:
-        self._release_sync("run", run_id)
-
-    def release_suite_sync(self, suite_id: str) -> None:
-        self._release_sync("suite", suite_id)
 
     def release_sync(self, scope: str, entity_id: str) -> None:
         self._release_sync(scope, entity_id)

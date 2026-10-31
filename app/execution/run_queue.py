@@ -5,19 +5,16 @@ from collections.abc import Awaitable, Callable
 
 from app.core.logging import get_logger
 from app.execution.in_memory_job_queue import DEFAULT_RUN_CONCURRENCY, InMemoryJobQueue
-from app.execution.job_queue_port import Job, JobQueuePort, RunJobDescriptor
+from app.execution.job_queue_port import Job, RunJobDescriptor
 
 logger = get_logger(__name__)
-
-# 하위 호환: 기존 import 경로 유지.
-JobQueue = JobQueuePort
 
 
 class RunExecutionQueue:
     """Run 실행을 위한 **감독되는(in-process) 작업 큐**.
 
-    ``InMemoryJobQueue`` 백엔드를 워커 풀이 소비한다. 원격 모드에서는 API 가
-    ``RedisJobQueue`` 로 작업을 적재하고, 별도 워커 프로세스가 소비한다.
+    ``InMemoryJobQueue`` 백엔드를 워커 풀이 소비한다. 원격 모드에서도 Run 오케스트레이션은
+    이 큐가 API 프로세스에서 소비하고, 브라우저 스텝만 워커에 위임한다.
     """
 
     def __init__(

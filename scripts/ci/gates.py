@@ -5,7 +5,6 @@ from __future__ import annotations
 import glob as _glob
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -187,9 +186,6 @@ PROFILE_GATES: dict[str, list[str]] = {
 
 SECURITY_PROFILES: frozenset[str] = frozenset({"new_system"})
 SECURITY_RISK_FLAGS: frozenset[str] = frozenset({"pii", "otp", "auth"})
-
-_PATH_IN_BACKTICKS = re.compile(r"`([^`]+)`")
-_PATH_LIKE = re.compile(r"(?:^|\s)((?:app|docs|scripts|tests)/[^\s`]+)")
 
 
 def resolve_gates(profile: str, risk_flags: list[str] | None = None) -> list[str]:
@@ -497,19 +493,6 @@ def run_gates(
             if stop_on_tier_failure:
                 failed_tiers.add(tier)
     return results
-
-
-def extract_paths_from_markdown(text: str) -> list[str]:
-    """Extract repo-relative paths from markdown backticks and path-like tokens."""
-    paths: list[str] = []
-    for match in _PATH_IN_BACKTICKS.finditer(text):
-        candidate = match.group(1).strip().replace("\\", "/")
-        if candidate.startswith(("app/", "docs/", "scripts/", "tests/")):
-            paths.append(candidate)
-    for match in _PATH_LIKE.finditer(text):
-        candidate = match.group(1).strip().replace("\\", "/")
-        paths.append(candidate)
-    return paths
 
 
 def validate_ci_config(workspace: Path) -> list[str]:

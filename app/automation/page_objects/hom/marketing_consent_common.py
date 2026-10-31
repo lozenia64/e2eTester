@@ -312,20 +312,6 @@ def is_disagree_selected(page: Page) -> bool:
     return radio.is_checked()
 
 
-def is_agree_selected(page: Page) -> bool:
-    state = _marketing_consent_all_agree_state(page)
-    if state == "agree":
-        return True
-    if state == "disagree":
-        return False
-
-    agree = page.locator("#formAllAgreeY")
-    if agree.count() > 0:
-        return agree.is_checked()
-    radio = _find_radio(page, AGREE_LABEL_PATTERN, "동의합니다")
-    return radio.is_checked()
-
-
 def select_disagree(page: Page, timeout_ms: int) -> None:
     _click_radio(page, DISAGREE_LABEL_PATTERN, "동의하지 않습니다", timeout_ms)
 

@@ -43,12 +43,6 @@ class SessionCheckpointStorePort(Protocol):
     async def delete(self, run_id: str) -> None: ...
 
 
-class _Cipher(Protocol):
-    def encrypt(self, plaintext: str) -> str: ...
-
-    def decrypt(self, ciphertext: str) -> str: ...
-
-
 class InMemorySessionCheckpointStore:
     """테스트/개발용 인메모리 어댑터."""
 

@@ -92,12 +92,7 @@ async def test_relay_hydrates_run_events_with_logs(tmp_path, event_type, bus_typ
     log_store = InMemoryRunLogStore()
     projections = ProjectionHandlers(db, loaders={"Run": RunProjectionLoader(write_repo)})
     outbox = SqliteOutbox(db)
-    projector = RealtimeProjector(
-        RealtimeNotificationAdapter(),
-        SuiteRealtimeNotificationAdapter(),
-        run_loader=write_repo.get_run,
-        suite_loader=SqliteSuiteWriteRepository(db).get_suite,
-    )
+    projector = RealtimeProjector(RealtimeNotificationAdapter(), SuiteRealtimeNotificationAdapter())
     relay = OutboxRelay(
         outbox,
         projections,
@@ -161,12 +156,7 @@ async def test_relay_hydrates_suite_finished_payload(tmp_path):
     suite_write_repo = SqliteSuiteWriteRepository(db)
     projections = ProjectionHandlers(db, loaders={"Run": RunProjectionLoader(write_repo)})
     outbox = SqliteOutbox(db)
-    projector = RealtimeProjector(
-        RealtimeNotificationAdapter(),
-        SuiteRealtimeNotificationAdapter(),
-        run_loader=write_repo.get_run,
-        suite_loader=suite_write_repo.get_suite,
-    )
+    projector = RealtimeProjector(RealtimeNotificationAdapter(), SuiteRealtimeNotificationAdapter())
     stub = _SuiteFinishedStub()
     relay = OutboxRelay(
         outbox,

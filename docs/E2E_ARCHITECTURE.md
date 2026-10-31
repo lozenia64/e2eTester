@@ -89,12 +89,10 @@ e2eTester/
           comparator.py            # RunComparator: 직전 Run 대비 비교(저장소 의존)
           planner.py               # RunPlanner: 선택 모듈·실행 순서 계획
           command_port.py          # RunCommandPort: suite saga 가 의존하는 Run 커맨드 포트(Protocol)
-          event_publisher.py       # RunEventPublisher: 도메인 상태 → DashboardEvent(WS 표현)
         views/
           view.py                  # RunView: Run 읽기 모델 프로젝션(엔티티 직접 직렬화 금지 경계)
           summary.py               # summarize_row: 최근 Run 요약 뷰(행 기반)
           actor.py                 # resolve_run_actor: 표시·집계용 실행자(user) 해석
-          module_view.py           # ModuleView: 모듈 읽기 모델 프로젝션
         contracts/
           ports.py                 # RunWriteRepositoryPort / RunSummaryQueryPort / RunLogStorePort 등
           query_rows.py            # RunSummaryRow / ModuleHistoryRow / Page / RunSummaryFilter 등
@@ -140,7 +138,6 @@ e2eTester/
           sqlite_suite_control_store.py
           sqlite_suite_summary_query.py
           encrypted_suite_input_store.py
-          in_memory_suite_repository.py
           in_memory_suite_control_store.py
           in_memory_suite_input_store.py
           hydration.py             # SuiteHydrator (EventBus SuiteFinished payload)
@@ -183,7 +180,7 @@ e2eTester/
       profile_queue.py             # ProfilePartitionedRunQueue: execution_profile 별 JobQueue 라우팅
       job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)
       protocol.py                  # 워커 HTTP 프로토콜 DTO (OpenSession/RunStep/resume-from-step 등)
-      run_queue.py                 # RunExecutionQueue(+JobQueue 포트): 감독되는 실행 작업 큐(워커 풀)
+      run_queue.py                 # RunExecutionQueue: 감독되는 실행 작업 큐(워커 풀)
     contexts/healing/              # 자가 치유 컨텍스트
       engine.py                    # SelfHealingEngine: 셀렉터 파싱→DOM 스캔→후보 검증→오버라이드(실행 스레드)
       selector_healer.py           # 순수 스코어러: 깨진 셀렉터 파싱·요소 지문·후보 신뢰도
@@ -257,7 +254,6 @@ e2eTester/
           compensation_flow.py
         access/                    # 접속 점검 공용 Flow
           access_flow.py
-          login_flow.py
         fp/
         hrp/
         hwtc/
@@ -280,7 +276,6 @@ e2eTester/
       workflow_engine.py           # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
     scenarios/
       rep_homepage/                # 대표홈페이지(PC·모바일) 공용 시나리오 (채널 무관 1벌)
-        constants.py               # → app/automation/scenarios/rep_homepage/constants.py shim
         channel.py                 # ChannelProfile / ChannelSteps (PageObject 어댑터 계약)
         runtime.py                 # RepHomepageRuntime (PC·모바일 단일 런타임)
         executor.py                # RepHomepageExecutor (런타임 기동; 단계는 automation Flow)

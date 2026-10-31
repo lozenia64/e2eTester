@@ -70,9 +70,6 @@ class UserService:
     async def get_user(self, user_id: str) -> User:
         return await self._repo.get(user_id)
 
-    async def get_user_by_email(self, email: str) -> User | None:
-        return await self._repo.get_by_email(email)
-
     async def get_user_by_telegram_id(self, telegram_user_id: int) -> User | None:
         for user in await self._repo.list():
             if user.telegram_user_id == telegram_user_id:

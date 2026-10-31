@@ -64,21 +64,6 @@ class SqliteEventStore:
             rows,
         )
 
-    async def list_for_aggregate(
-        self, aggregate_type: str, aggregate_id: str
-    ) -> list[EventEnvelope]:
-        rows = await self._db.fetchall(
-            """
-            SELECT event_id, aggregate_type, aggregate_id, event_type, payload,
-                   occurred_at, version
-            FROM domain_events
-            WHERE aggregate_type = ? AND aggregate_id = ?
-            ORDER BY sequence_id ASC
-            """,
-            (aggregate_type, aggregate_id),
-        )
-        return [_row_to_event(row) for row in rows]
-
     async def list_all(self) -> list[StoredEvent]:
         """전 이벤트를 정본 시퀀스 순으로 돌려준다(프로젝션 리빌드용)."""
         rows = await self._db.fetchall(

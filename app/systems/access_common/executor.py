@@ -83,20 +83,3 @@ class AccessWorkflowExecutor(BaseWorkflowExecutor):
 
     def _shutdown_browser(self, runtime: AccessRuntime) -> None:
         browser.shutdown_browser(runtime.page, runtime.context)
-
-
-def create_access_executor(
-    artifact_manager: ArtifactManager,
-    *,
-    execution_mode: str,
-    system_code: str,
-    base_url: str,
-    mobile: bool = False,
-) -> AccessWorkflowExecutor:
-    return AccessWorkflowExecutor(
-        artifact_manager,
-        execution_mode=execution_mode,
-        system_code=system_code,
-        base_url=base_url,
-        mobile=mobile,
-    )

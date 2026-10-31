@@ -130,8 +130,8 @@ class RunAggregate:
         """모듈의 공개 와이어 표현(``RunModule`` 직렬화, 로그 제외).
 
         로그는 별도 집합체(``RunLogStorePort``)가 소유하므로 이벤트에 싣지 않는다(발행 시점엔
-        비어 있지만 명시적으로 배제해 계약을 못박는다). ``ModuleView.dump`` 의 ``module`` 항목과
-        동일 형태이므로 실시간 프로젝터가 blob 없이 ``module_*`` WS payload 를 만든다.
+        비어 있지만 명시적으로 배제해 계약을 못박는다). 실시간 프로젝터는 이 형태 그대로
+        blob 없이 ``module_*`` WS payload 를 만든다.
         """
         return RunModuleRecord.from_domain(module)
 

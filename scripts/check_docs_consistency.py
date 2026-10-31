@@ -45,11 +45,6 @@ from app.platform.stdio_utf8 import configure_stdio_utf8
 configure_stdio_utf8()
 
 
-def _configure_stdio_utf8() -> None:
-    """Backward-compatible alias for scripts that still reference the old name."""
-    configure_stdio_utf8()
-
-
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - 의존성 안내

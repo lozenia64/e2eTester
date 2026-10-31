@@ -84,26 +84,3 @@ class SqliteModuleHistoryQuery:
             tuple(run_ids),
         )
         return [_row_to_history(row) for row in rows]
-
-    async def list_between(
-        self, since: datetime | None, until: datetime | None
-    ) -> list[ModuleHistoryRow]:
-        clauses: list[str] = []
-        params: list = []
-        if since is not None:
-            clauses.append("requested_at >= ?")
-            params.append(since.isoformat())
-        if until is not None:
-            clauses.append("requested_at <= ?")
-            params.append(until.isoformat())
-        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-        rows = await self._db.fetchall(
-            f"""
-            SELECT {_SELECT_COLUMNS}
-            FROM module_history_index
-            {where}
-            ORDER BY requested_at DESC, run_id, module_id
-            """,
-            tuple(params),
-        )
-        return [_row_to_history(row) for row in rows]

@@ -912,7 +912,6 @@ class RunCompletionEmailNotifier:
             if artifact.kind == "screenshot":
                 inline, inline_total_bytes, new_omitted = self._try_select_inline_screenshot(
                     artifact,
-                    inline_screenshots,
                     inline_total_bytes,
                     module_meta,
                 )
@@ -1058,7 +1057,6 @@ class RunCompletionEmailNotifier:
             if artifact.kind == "screenshot":
                 inline, inline_total_bytes, new_omitted = self._try_select_inline_screenshot(
                     artifact,
-                    inline_screenshots,
                     inline_total_bytes,
                     module_meta,
                 )
@@ -1091,7 +1089,6 @@ class RunCompletionEmailNotifier:
     def _try_select_inline_screenshot(
         self,
         artifact: RunArtifact,
-        already_selected: list[InlineScreenshot],
         inline_total_bytes: int,
         module_meta: dict[str, dict[str, str]],
     ) -> tuple[InlineScreenshot | None, int, list[OmittedArtifact]]:
