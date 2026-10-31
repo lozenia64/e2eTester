@@ -26,7 +26,7 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 | --- | --- |
 | 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web`, `build_web`, `vitest_web` |
 | 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
-| 2 | `coverage` (= `pytest --cov`, 바닥선 57%) |
+| 2 | `coverage` (= `pytest --cov`, 바닥선 59%) |
 | 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
 
 로컬 러너(`--profile full`)는 Tier 2 에서 `coverage` 대신 빠른 `pytest` 를 쓴다.

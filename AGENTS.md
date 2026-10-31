@@ -2,11 +2,14 @@
 
 ## SSOT
 
+> 전체 매트릭스·동기화 규칙: `docs/DOCS_GOVERNANCE.md`
+
 - 아키텍처·API: `docs/E2E_ARCHITECTURE.md`
 - 설치·env: `docs/INSTALL.md`, `.env.example`
-- CI: `docs/CI.md`
+- 외부 연동(OTP 중계·텔레그램 봇): `docs/otp_relay.md`, `docs/telegram_bot.md`
+- CI: `docs/CI.md` (`scripts/ci/gates.py`)
 - 시나리오: `docs/scenarios/{code}.md` (manifest 1:1)
-- 행동·AC Spec: `docs/specs/` (`docs/specs/README.md`)
+- 행동·AC Spec: `docs/specs/` (`docs/specs/README.md`, `docs/specs/00-GOVERNANCE.md`)
 - 문서·PR DoD: `docs/DOCS_GOVERNANCE.md`
 
 ## 실행·검증

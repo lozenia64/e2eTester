@@ -36,28 +36,20 @@ PR 병합 전 자동 검증 게이트로 아키텍처·문서·단위 테스트 
 
 ### FR-001: 게이트 계층
 
-| Tier | 게이트 | 명령 |
-| --- | --- | --- |
-| 0 | ruff, ruff_format, docs_consistency | `ruff check`, `check_docs_consistency.py` |
-| 1 | architecture_gates, import_contracts, projection_validate, snapshot_validate | 각 스크립트 |
-| 2 | pytest | `pytest tests/ -q` |
-| 3 | pip_audit, bandit | auth/PII 경로·주간 |
+게이트 정의·실행 명령의 SSOT는 `scripts/ci/gates.py` 및 [docs/CI.md](../../CI.md)다.
+
+| Tier | 게이트 |
+| --- | --- |
+| 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web`, `build_web`, `vitest_web` |
+| 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
+| 2 | `pytest` (로컬 `--profile full`) / `coverage` (`pytest --cov`, CI 및 `--gate coverage`) |
+| 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
 
 전체: `python3 scripts/ci/run_all_gates.py --profile full`
 
-### FR-002: 아키텍처 게이트 (AG)
+### FR-002: 아키텍처·프론트엔드 게이트 (AG / FG)
 
-| ID | 규칙 |
-| --- | --- |
-| AG-001 | `app/` 내 `list_runs()` 직접 호출 금지 |
-| AG-002 | `app/orchestrator/` 및 `app/contexts/*/application/` playwright import 금지 |
-| AG-003 | `app/domain/` 및 `app/contexts/*/domain/` I/O·async import 금지 |
-| AG-004 | `app/orchestrator/` 및 `app/contexts/*/application/` `list_all_runs`/`list_runs_since` 금지 |
-| AG-005 | aggregate `.snapshot`/`.suite` 직접 접근 금지 |
-| AG-006 | automation/systems/runner `print`/`redirect_stdout` 금지 |
-| AG-007 | QueryPort가 Run/SuiteRun 반환 금지 |
-| AG-008 | 서비스에서 run/suite 필드 직접 대입 금지 |
-| AG-009 | contexts/api → runner/automation/systems import 금지 |
+아키텍처 게이트(`AG-001~009`, `scripts/check_architecture_gates.py`) 및 프론트엔드 게이트(`FG-001~007`, `scripts/check_frontend_gates.py`)의 규칙 상세는 [docs/CI.md](../../CI.md)를 참조한다.
 
 ### FR-003: 문서 정합성 가드
 

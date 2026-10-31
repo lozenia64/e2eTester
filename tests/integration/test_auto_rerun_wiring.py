@@ -121,6 +121,7 @@ async def _run_to_completion(
 
 
 @pytest.mark.asyncio
+@pytest.mark.spec("SPEC-RUN-006", "AC-006")
 async def test_scheduled_error_run_auto_reruns_in_place_when_enabled(tmp_path):
     """auto_rerun_enabled=True 인 예약 Run 이 ERROR 로 끝나면 실패 모듈부터 1회 자동
     재실행되고, 재실행도 실패하면 auto_rerun_of 가 남아 더 이상 연쇄되지 않는다."""

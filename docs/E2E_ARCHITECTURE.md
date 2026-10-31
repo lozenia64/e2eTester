@@ -1,6 +1,6 @@
 # E2E Tester 아키텍처
 
-> **SSOT:** 플랫폼 구조·폴더 트리(§3)·API(§4)·상태 모델(§5). 시나리오: `docs/scenarios/{code}.md`. 설치·env: `docs/INSTALL.md`. 문서 규칙: `docs/DOCS_GOVERNANCE.md`. 기계 검증: `scripts/check_docs_consistency.py`.
+> **SSOT:** 플랫폼 구조·폴더 트리(§4)·API(§5.2)·상태 모델(§5.3). 시나리오: `docs/scenarios/{code}.md`. 설치·env: `docs/INSTALL.md`. 문서 규칙: `docs/DOCS_GOVERNANCE.md`. 기계 검증: `scripts/check_docs_consistency.py`.
 
 ## 1. 요약
 
@@ -17,10 +17,12 @@ Browser → FastAPI (app/main.py, AppContainer)
 
 - **API / 워커 분리:** API 프로세스에 Playwright 없음. `E2E_EXECUTION_MODE=remote` + Redis + `scripts/run_local.py`.
 - **공유 브라우저 세션:** Run 내 모듈 순차 실행, OTP 일시정지 시 세션 유지. 체크포인트(`SessionCheckpointStorePort`)로 재기동 복구 가능.
-- **자동 복구 루프(`SPEC-RUN-006`):** 모듈이 `ERROR` 로 실패하면 실패 신호(`FailureSignal`)에 따라 복구 등급(`RecoveryTier`)을 골라 재시도 전 세션을 되감는다 — tier 0(제자리 재시도) → tier 1(`ExecutionGateway.recover_session` 으로 모듈 진입 URL 재이동) → tier 2(세션 재개설, Run 당 `E2E_RECOVERY_TIER2_BUDGET` 예산). `ANOMALY`(사이트 이상)는 안전 규칙으로 절대 자동 복구하지 않는다. 재시도로 통과한 모듈은 `recovered` 플래그로 Run 상세·일간 현황·완료 메일에 노출된다. 예약 Run 이 `ERROR` 로 끝나면 `E2E_AUTO_RERUN_ENABLED` 설정 시 실패 모듈부터 1회 자동 재실행(같은 Run 을 제자리 재개, `E2E_RUN_MAX_DURATION_S` 상한 적용)한다.
-  - **tier 2 현행 한계:** 등급 이름(`REPLAY_FROM_LOGIN`)과 달리, `worker/session_server.py` 의 `_reopen_session` 은 브라우저 런타임을 재구축할 뿐 **로그인 모듈을 다시 주행하지 않는다**. 공용 `user_data_dir` 을 쓰는 레거시 3종(HOM/FP/HRP)은 재구축이 Chromium 프로필 잠금에 걸려 tier 0 으로 안전하게 폴백하고, 그 외 시스템은 새 컨텍스트에 쿠키가 없어 재시도가 미인증으로 실패한다 — 즉 **현재 tier 2 는 `SESSION_LOST` 에 대해 실질적 복구 이득이 없다**. 로그인 재주행 구현은 후속 작업이며, 그래서 `E2E_EXECUTION_MODE=remote` / `E2E_AUTO_RERUN_ENABLED=true` 를 운영에서 켜기 전에 실브라우저 수동 검증(`SPEC-RUN-006` 계획서 Step 4)이 필수 게이트로 남아 있다.
 - **Suite:** 이벤트 기반 Saga. `RunCommandPort` 로 하위 Run 구동. `selected_system_codes` 로 시스템 부분 선택.
+
+## 3. 상태·복구·CQRS 원칙
+
 - **종료 3분류:** `PASSED`(정상) / `ANOMALY`(사이트 이상) / `ERROR`(도구 실패). 우선순위 ERROR > ANOMALY > PASSED.
+- **자동 복구 루프([`SPEC-RUN-006`](specs/run/06-self-recovery-loop.md)):** 모듈이 `ERROR` 로 실패하면 `FailureSignal` 에 따라 `RecoveryTier`(tier 0 제자리 재시도 → tier 1 모듈 진입 URL 재이동 → tier 2 세션 재개설, `E2E_RECOVERY_TIER2_BUDGET` 예산)로 되감아 재시도한다(`ANOMALY` 는 복구 금지). 예약 Run 이 `ERROR` 로 끝나면 `E2E_AUTO_RERUN_ENABLED` 설정 시 실패 모듈부터 1회 자동 재실행한다. 현행 tier 2(`_reopen_session`)가 로그인 모듈을 재주행하지 않는 한계와 운영 활성화 전 필수 수동 검증 게이트는 [`SPEC-RUN-006` FR-004](specs/run/06-self-recovery-loop.md)를 따른다.
 - **CQRS:** 쓰기 `RunWriteRepositoryPort` + 이벤트. 읽기 `*QueryPort` projection 테이블. REST/WS 는 `RunView`/`SuiteView` 만.
 
 ## 4. 현재 폴더 구조
@@ -199,34 +201,36 @@ e2eTester/
       report_renderer.py
       infrastructure/
         sqlite_email_notification_dedup.py
-    contexts/insights/application/ # 운영 인텔리전스 컨텍스트(읽기 전용 — 프로젝션 소비)
-      insights_service.py          # InsightsService: 운영 인텔리전스 얇은 I/O 인터프리터
-      insights_anomalies.py        # 이상징후 인박스 목록 도출(순수 빌더)
-      insights_health.py           # 시스템 헬스 대시보드(순수 빌더)
-      insights_timeline.py         # 시스템 수직 타임라인(순수 빌더)
-      insights_breakdown.py        # 모듈 딥다이브(순수 빌더)
-      insights_charts.py           # 인사이트 Plotly figure JSON 구성
-      insights_common.py           # 인사이트 공용 헬퍼
-      stats_service.py             # StatsService: 사용량·절감 시간 통계(admin)
-      stats_charts.py              # 통계 차트 데이터 구성
-      ops_service.py               # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
-      daily_dashboard.py           # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
-    contexts/insights/contracts/
-      query_rows.py                # AnomalyInboxRow / DailyStatusRow / StatsRollupRow 등
-    contexts/insights/infrastructure/
-      ports.py                   # StatsQueryPort / DailyStatusQueryPort / Anomaly* 포트
-      sqlite_stats_query.py      # StatsQueryPort SQLite 어댑터
-      in_memory_stats_query.py   # StatsQueryPort 인메모리 어댑터(테스트)
-      sqlite_daily_status_query.py # DailyStatusQueryPort
-      sqlite_anomaly_handling_store.py # AnomalyHandlingStorePort
-      sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
-      module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
-      sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
-    contexts/preset/application/
-      service.py                   # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
-    contexts/preset/infrastructure/
-      ports.py                   # PresetRepositoryPort
-      sqlite_preset_repository.py # SQLite 인증 프리셋 어댑터(auth_presets 테이블, PII 의도 영속)
+    contexts/insights/             # 운영 인텔리전스 컨텍스트(읽기 전용 — 프로젝션 소비)
+      application/
+        insights_service.py        # InsightsService: 운영 인텔리전스 얇은 I/O 인터프리터
+        insights_anomalies.py      # 이상징후 인박스 목록 도출(순수 빌더)
+        insights_health.py         # 시스템 헬스 대시보드(순수 빌더)
+        insights_timeline.py       # 시스템 수직 타임라인(순수 빌더)
+        insights_breakdown.py      # 모듈 딥다이브(순수 빌더)
+        insights_charts.py         # 인사이트 Plotly figure JSON 구성
+        insights_common.py         # 인사이트 공용 헬퍼
+        stats_service.py           # StatsService: 사용량·절감 시간 통계(admin)
+        stats_charts.py            # 통계 차트 데이터 구성
+        ops_service.py             # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
+        daily_dashboard.py         # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
+      contracts/
+        query_rows.py              # AnomalyInboxRow / DailyStatusRow / StatsRollupRow 등
+      infrastructure/
+        ports.py                   # StatsQueryPort / DailyStatusQueryPort / Anomaly* 포트
+        sqlite_stats_query.py      # StatsQueryPort SQLite 어댑터
+        in_memory_stats_query.py   # StatsQueryPort 인메모리 어댑터(테스트)
+        sqlite_daily_status_query.py # DailyStatusQueryPort
+        sqlite_anomaly_handling_store.py # AnomalyHandlingStorePort
+        sqlite_anomaly_inbox_query.py # AnomalyInboxQueryPort
+        module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
+        sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
+    contexts/preset/               # 인증 프리셋 컨텍스트
+      application/
+        service.py                 # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
+      infrastructure/
+        ports.py                   # PresetRepositoryPort
+        sqlite_preset_repository.py # SQLite 인증 프리셋 어댑터(auth_presets 테이블, PII 의도 영속)
     orchestrator/                  # 공유 CQRS 질의 계층(run/suite/insights/preset/healing 서비스는 contexts/ 로 이동됨)
       queries/                     # RunQueries / DailyDashboardQueries (읽기 전용 질의 핸들러)
     registry/
@@ -353,6 +357,10 @@ e2eTester/
     INSTALL.md                     # 설치·실행·환경변수
     E2E_ARCHITECTURE.md            # 플랫폼 아키텍처·API·폴더 트리
     otp_relay.md                   # OTP SMS 중계기 구성 가이드
+    telegram_bot.md                # 텔레그램 봇 설정·사용 가이드
+    specs/                         # SDD 행동·수용 기준(AC) 명세 카탈로그
+      README.md                    # Spec 인덱스·워크플로
+      00-GOVERNANCE.md             # SDD 거버넌스·SSOT 계층
     scenarios/
       hom.md
       mhm.md
@@ -383,6 +391,8 @@ e2eTester/
 ```
 
 ## 5. 계층 요약
+
+### 5.1 오케스트레이션·실행·영속
 
 오케스트레이션(`RunService`/`SuiteService`)은 `RunStateMachine`·`RunAggregate`·`SuiteStateMachine`·`SuiteAggregate` 에 결정·변경을 위임하고, 브라우저는 `ExecutionGateway` 포트 뒤 `worker/SessionServer` 가 실행한다. 저장소는 포트-어댑터(CQRS write/read 분리). 부수 관심사(AI·메일·치유)는 `EventBus` 구독자.
 
@@ -468,8 +478,6 @@ e2eTester/
 - `POST /api/trigger/{trigger_token}`
 - `GET /api/trigger/{trigger_token}/status`
 - `POST /api/trigger/{trigger_token}/otp`
-
-트리거 상태 응답은 `execution_id`와 OTP 대기 중인 `otp_run_id`·`otp_request_id`를 포함한다. 텔레그램은 이 식별자에 답장을 고정하고, Run 서비스가 대기 컨텍스트를 다시 검사해 다른 실행·인증 단계로 전달되지 않게 한다. 기존 모바일 OTP 요청 형식은 유지한다.
 - `WS /ws/runs/{run_id}`
 - `WS /ws/suites/{suite_id}`
 - `GET /api/admin/dashboard`
@@ -498,21 +506,7 @@ e2eTester/
 - `GET /admin/ops`
 - `GET /admin/modules`
 
-예약 인증값은 프리셋 참조를 우선한다. 단일 예약 생성·수정은 `preset_id`, 전체 예약은
-시스템별 `preset_ids`를 받고 예약 생성자 소유의 프리셋인지 검증한다. 연결된 예약은 실행
-시작 시 최신 프리셋을 조회해 Run/Suite 입력 스냅샷을 확정한다. 진행 중인 실행의 OTP 재개와
-재시도는 확정된 입력을 유지하며, 예약의 모듈·시스템 선택과 `browser_mode`도 유지한다.
-같은 시스템에 참조와 인증 입력값을 함께 보내는 생성 요청은 거부한다. 참조 없는 기존
-직접 입력 API는 호환한다.
-
-기존 예약은 기동 시와 실행 준비 시 같은 소유자·시스템에서 저장 인증값이 모두 일치하는
-프리셋이 하나일 때만 자동 연결한다(새 프리셋 필드 추가는 허용). 모호하거나 불일치하면
-기존 저장값을 유지하며 예약 편집에서 연결할 수 있다. 삭제·권한·시스템 불일치 참조는
-실행을 차단하고 `preparation_error`로 안내한다. 상세 응답은 인증값 없이 `preset_bindings`
-(연결 상태·이름)와 `preset_options`(예약 소유자 후보의 ID·시스템·이름)를 제공한다.
-다른 소유자로 프리셋 참조 예약을 복제하는 요청은 거부한다.
-
-OTP·취소·부분재실행: `POST /api/runs/{run_id}/otp`, `POST /api/runs/{run_id}/cancel`, `POST /api/runs/{run_id}/rerun` (`?from_module=`). Suite OTP: `POST /api/suites/{suite_id}/otp`. SMS 중계: `POST /api/otp/inbound`.
+> **세부 행동 명세:** 예약-프리셋 참조 연결·자동 전환(`preset_bindings`/`preset_options`)은 [`SPEC-SCHED-001`](specs/scheduling/01-scheduler.md)(FR-006)·[`SPEC-PRESET-001`](specs/presets/01-auth-presets.md), 모바일 트리거·텔레그램 OTP 요청 식별자(`execution_id`/`otp_run_id`/`otp_request_id`)는 [`SPEC-SCHED-003`](specs/scheduling/03-mobile-trigger.md)·[`SPEC-SCHED-004`](specs/scheduling/04-telegram-bot.md), OTP·취소·부분재실행은 [`SPEC-RUN-002`](specs/run/02-otp-cancel-rerun.md)·[`SPEC-INT-001`](specs/integrations/01-otp-relay.md)을 참조한다.
 
 ### 5.3 상태·이벤트·아티팩트
 

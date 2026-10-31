@@ -14,11 +14,12 @@
   6. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
      — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
        `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
-  6. 코드가 읽는 환경변수가 docs/INSTALL.md 또는 .env.example 에 문서화되어 있는지
+  6. 코드가 읽는 환경변수가 docs/INSTALL.md 와 .env.example 양쪽에 모두 문서화되어 있는지
   7. 기본 Gemini 모델 체인(코드 상수)이 docs/INSTALL.md / .env.example 와 일치하는지
   8. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
   9. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
   10. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
+  11. (역방향) 주요 디렉터리(app/api, app/contexts, docs)의 항목이 §4 폴더 트리에 누락 없이 등재되어 있는지
 
 사용법:
   python3 scripts/check_docs_consistency.py            # 전체 검사
@@ -327,13 +328,14 @@ def check_documented_routes_exist() -> CheckResult:
 # 4. 환경변수 문서화
 # --------------------------------------------------------------------------- #
 def _collect_env_names() -> tuple[set[str], set[str]]:
-    """설정을 읽는 런타임 프로세스(`app/` + `worker/`)의 환경변수 이름을 모은다.
+    """설정을 읽는 런타임 프로세스(`app/` + `worker/`)의 프로젝트 환경변수 이름을 모은다.
 
     `worker/` 를 포함해야 하는 이유: 씬 워커는 API 와 별개 프로세스로 기동하면서
     자기 바인드 주소를 직접 `os.environ` 에서 읽는다. `app/` 만 훑던 동안
     `E2E_WORKER_HTTP_HOST`/`_PORT` 가 어느 문서에도 없이 새어나갔다.
     `scripts/` 는 개발 도구라 제외한다 — CI 전용 변수(GITHUB_* 등)까지 설치 문서에
-    올리라고 요구하게 된다.
+    올리라고 요구하게 된다. OS 기본 환경변수(LOCALAPPDATA 등)는 제외하고 프로젝트
+    환경변수(E2E_*/GEMINI_*)만 대상으로 삼는다.
     """
     literals: set[str] = set()
     prefixes: set[str] = set()
@@ -343,25 +345,30 @@ def _collect_env_names() -> tuple[set[str], set[str]]:
         for grp in OS_ENV_RE.findall(text):
             literals.update(name for name in grp if name)
         prefixes.update(DYNAMIC_ENV_PREFIX_RE.findall(text))
-    return literals, prefixes
+    project_literals = {name for name in literals if name.startswith(("E2E_", "GEMINI_"))}
+    return project_literals, prefixes
 
 
 def check_env_vars_documented() -> CheckResult:
-    result = CheckResult("코드가 읽는 환경변수가 docs/INSTALL.md/.env.example 에 문서화")
-    doc_text = _read(INSTALL_DOC) + "\n" + _read(ENV_EXAMPLE)
+    result = CheckResult("코드가 읽는 환경변수가 docs/INSTALL.md 와 .env.example 양쪽에 문서화")
     literals, prefixes = _collect_env_names()
-    for name in sorted(literals):
-        if name not in doc_text:
-            result.problems.append(
-                f"환경변수 `{name}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
-            )
-    for prefix in sorted(prefixes):
-        if prefix not in doc_text:
-            result.problems.append(
-                f"동적 환경변수 prefix `{prefix}{{...}}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
-            )
+    for doc_path in (INSTALL_DOC, ENV_EXAMPLE):
+        doc_label = doc_path.relative_to(REPO_ROOT).as_posix()
+        doc_text = _read(doc_path)
+        for name in sorted(literals):
+            if name not in doc_text:
+                result.problems.append(
+                    f"환경변수 `{name}` 가 `{doc_label}` 에 문서화되지 않음 "
+                    f"(docs/INSTALL.md 와 .env.example 양쪽 모두 갱신 필요)."
+                )
+        for prefix in sorted(prefixes):
+            if prefix not in doc_text:
+                result.problems.append(
+                    f"동적 환경변수 prefix `{prefix}{{...}}` 가 `{doc_label}` 에 문서화되지 않음."
+                )
     result.details.append(
-        f"환경변수 {len(literals)}개 + 동적 prefix {len(prefixes)}개를 문서와 대조했습니다."
+        f"환경변수 {len(literals)}개 + 동적 prefix {len(prefixes)}개를 "
+        f"docs/INSTALL.md 및 .env.example 각각과 대조했습니다."
     )
     return result
 
@@ -449,6 +456,45 @@ def check_folder_tree_paths_exist() -> CheckResult:
     return result
 
 
+def check_key_dirs_documented_in_tree() -> CheckResult:
+    """역방향: 주요 디렉터리의 1단계 항목이 E2E_ARCHITECTURE.md §4 폴더 트리에 등재되어 있는지."""
+    result = CheckResult("주요 디렉터리(app/api, app/contexts, docs) 항목이 §4 폴더 트리에 등재")
+    documented_paths = {rel for rel, _ in _extract_folder_tree_entries()}
+    checked = 0
+
+    for api_file in sorted((REPO_ROOT / "app" / "api").glob("*.py")):
+        if api_file.name == "__init__.py":
+            continue
+        checked += 1
+        rel = api_file.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(
+                f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음 "
+                f"(라우터/모듈 추가 시 §4 동시 갱신 필요)."
+            )
+
+    for ctx_dir in sorted((REPO_ROOT / "app" / "contexts").iterdir()):
+        if not ctx_dir.is_dir() or ctx_dir.name.startswith("__"):
+            continue
+        checked += 1
+        rel = ctx_dir.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(
+                f"바운디드 컨텍스트 `{rel}/` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음."
+            )
+
+    for doc_entry in sorted((REPO_ROOT / "docs").iterdir()):
+        if doc_entry.name.startswith("."):
+            continue
+        checked += 1
+        rel = doc_entry.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음.")
+
+    result.details.append(f"주요 디렉터리 항목 {checked}개를 §4 폴더 트리와 대조했습니다.")
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # 5. 기본 Gemini 모델 체인
 # --------------------------------------------------------------------------- #
@@ -491,6 +537,7 @@ def run_all() -> list[CheckResult]:
         check_documented_routes_exist(),
         check_documented_env_vars_used(),
         check_folder_tree_paths_exist(),
+        check_key_dirs_documented_in_tree(),
     ]
 
 
