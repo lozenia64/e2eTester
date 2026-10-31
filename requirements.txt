@@ -1,5 +1,5 @@
-playwright>=1.62.0,<2.0
-fastapi>=0.141.1,<1.0
+playwright>=1.64.1,<2.0
+fastapi>=0.162.0,<1.0
 # starlette·pydantic 은 fastapi 가 끌어오지만 코드에서 직접 import 하므로 명시한다
 # (직접 의존성은 전이 의존성에 기대지 않고 직접 선언). 버전 하한은 fastapi 요구치에 맞춘다.
 starlette>=0.46,<2.0
@@ -21,7 +21,7 @@ pyjwt>=2.13.0,<3.0
 # cron 예약(5필드) 파싱·다음 실행 시각 계산·DST 처리. 자체 1분 단위 탐색 파서 대체.
 croniter>=6.2.4,<7.0
 # .env 파싱(출처 추적 보조 경로). 자체 줄 단위 파서 대체(따옴표/엣지케이스 처리 위임).
-python-dotenv>=1.2.3,<2.0
+python-dotenv>=1.2.4,<2.0
 # 비밀번호 해싱. Argon2id 기본 + 기존 bcrypt 해시 검증/업그레이드(passlib 의 유지보수 후속).
 pwdlib[argon2]>=0.3.1,<1.0
 redis>=8.1.0,<9.0
