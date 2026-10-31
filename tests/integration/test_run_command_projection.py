@@ -152,7 +152,7 @@ async def test_projector_module_and_run_events_are_blob_free(tmp_path: Path) -> 
         events.append(await queue.get())
     by_type = {event.event_type: event for event in events}
 
-    # module_* 이벤트는 임베드된 module 와이어 dict + run_status 로 조립된다(ModuleView 계약).
+    # module_* 이벤트는 임베드된 module 와이어 dict(RunModuleRecord) + run_status 로 조립된다.
     finished = by_type["module_finished"]
     assert finished.payload["module"]["module_id"] == "hom.login"
     assert finished.payload["module"]["status"] == ModuleStatus.PASSED.value
