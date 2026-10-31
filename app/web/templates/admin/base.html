@@ -79,8 +79,6 @@
             {% if current_user %}
             <p class="text-xs text-gray-500">{{ current_user.name }}</p>
             <a href="/account/password" class="block text-xs text-gray-600 hover:text-gray-900">비밀번호 변경</a>
-            <a href="/account/telegram" class="block text-xs text-gray-600 hover:text-gray-900">텔레그램 연결</a>
-            <a href="/" class="block text-xs text-indigo-600 font-semibold hover:underline">일반 사용자 화면</a>
             <form method="post" action="/auth/logout">
                 <button type="submit" class="text-xs text-gray-400 hover:text-gray-700">로그아웃</button>
             </form>
