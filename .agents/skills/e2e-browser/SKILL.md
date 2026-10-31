@@ -19,6 +19,8 @@ Manual live-site E2E for **e2eTester** follows this priority — never skip ahea
 
 Do not start the app's Playwright worker or `playwright install` for agent-driven UI checks unless the user explicitly asks to run automated test suites (`pytest`, CI gates).
 
+- **대표홈페이지(`hom`/`mhm`) 실사이트 재현 예외**: 위 내장 브라우저나 Playwright MCP 대신 `RepHomepageExecutor.build_runtime` 기동 순서를 따른다. 사용자가 이미 로그인해 둔 브라우저는 절대 재시작하지 않는다.
+
 ## Resolve Orca CLI once
 
 Pick one executable for the whole session (see `orca-cli` skill):

@@ -9,6 +9,10 @@ python3 -m pip install -r requirements-dev.txt
 python3 scripts/ci/run_all_gates.py --profile full
 ```
 
+- 새 워크트리는 게이트 실행 전 `npm ci` 를 먼저 수행한다.
+- 전체 게이트(`--profile full`)는 실행 시간이 길 수 있으므로 에이전트 실행 시 백그라운드로 구동하는 것을 권장한다.
+- Windows 환경에서 `.sh` 스크립트 실행이 필요할 때는 `bash <path>.sh` 로 호출한다.
+
 `npm run dev`(`vite build --watch`)는 켜 둔 채 게이트를 돌려도 된다. watch 모드는
 `emptyOutDir` 를 끄므로(`vite.config.ts`) 재빌드 중에도 `app/web/static/dist/` 가 비지
 않는다. 해시 파일명이라 이전 자산이 남아도 manifest 는 새 파일만 가리킨다. 쌓인 옛 자산은
