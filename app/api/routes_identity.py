@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.api.dependencies import get_telegram_bot
 from app.contexts.identity.dependencies import get_current_user, get_user_service
 from app.contexts.identity.jwt import create_access_token
 from app.contexts.identity.models import TokenResponse, User, UserPublic
+from app.contexts.scheduling.telegram_bot import _LINK_TTL_S, TelegramApiError, TelegramBot
 from app.web.asset_manifest import TEMPLATE_SEARCH_DIRS, asset_css, asset_js
 
 if TYPE_CHECKING:
@@ -67,6 +69,63 @@ async def logout():
 @router.get("/auth/me", response_model=UserPublic)
 async def me(current_user=Depends(get_current_user)):
     return UserPublic(**current_user.model_dump())
+
+
+def _telegram_page(
+    request: Request,
+    current_user: User,
+    telegram_bot: TelegramBot | None,
+    **context: object,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "account/telegram.html",
+        {
+            "current_user": current_user,
+            "bot_enabled": telegram_bot is not None,
+            "link_ttl_minutes": _LINK_TTL_S // 60,
+            **context,
+        },
+    )
+
+
+@router.get("/account/telegram", response_class=HTMLResponse)
+async def telegram_page(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    telegram_bot: TelegramBot | None = Depends(get_telegram_bot),
+):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    return _telegram_page(request, current_user, telegram_bot)
+
+
+@router.post("/account/telegram/link", response_class=HTMLResponse)
+async def issue_telegram_link(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    telegram_bot: TelegramBot | None = Depends(get_telegram_bot),
+):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    if telegram_bot is None:
+        return _telegram_page(request, current_user, telegram_bot)
+    try:
+        link = await telegram_bot.issue_link(current_user.user_id)
+    except TelegramApiError:
+        return _telegram_page(request, current_user, telegram_bot, issue_failed=True)
+    return _telegram_page(request, current_user, telegram_bot, link=link)
+
+
+@router.post("/account/telegram/unlink")
+async def unlink_telegram(
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+):
+    if isinstance(current_user, RedirectResponse):
+        return current_user
+    await user_service.unlink_telegram(current_user.user_id)
+    return RedirectResponse(url="/account/telegram", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/account/password", response_class=HTMLResponse)

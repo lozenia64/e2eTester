@@ -71,7 +71,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 | `E2E_FAILURE_ANALYZER_ENABLED` / `GEMINI_API_KEY` / `GEMINI_MODELS` / `E2E_GEMINI_SSL_VERIFY` | AI 분석 |
 | `E2E_EMAIL_ENABLED` / `E2E_EMAIL_GMAIL_ACCOUNT` / `E2E_EMAIL_GMAIL_APP_PASSWORD` / `E2E_EMAIL_RECIPIENTS_{코드}` / `E2E_EMAIL_OPERATOR_RECIPIENTS` | 종료 메일 |
 | `E2E_OTP_RELAY_TOKEN` / `E2E_OTP_RELAY_REGEX` | SMS OTP 중계 |
-| `E2E_TELEGRAM_BOT_TOKEN` / `E2E_TELEGRAM_OWNER_ID` | 텔레그램 봇 예약 실행. 둘 다 있어야 켜짐 |
+| `E2E_TELEGRAM_BOT_TOKEN` | 텔레그램 봇 예약 실행. 사용자별 연결은 계정 화면에서 함 |
 
 전체·예시값: `.env.example`.
 
@@ -80,7 +80,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 - **AI 분석:** `E2E_FAILURE_ANALYZER_ENABLED=true`, `GEMINI_API_KEY`, `GEMINI_MODELS=gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview`
 - **종료 메일:** `E2E_EMAIL_ENABLED=true`, Gmail 앱 비밀번호. HTML 은 고정 템플릿, Gemini 는 JSON 콘텐츠만
 - **OTP 중계:** `E2E_OTP_RELAY_TOKEN`, `E2E_OTP_RELAY_REGEX` — [otp_relay.md](otp_relay.md)
-- **텔레그램 봇:** `E2E_TELEGRAM_BOT_TOKEN`, `E2E_TELEGRAM_OWNER_ID` — [telegram_bot.md](telegram_bot.md)
+- **텔레그램 봇:** `E2E_TELEGRAM_BOT_TOKEN` — [telegram_bot.md](telegram_bot.md)
 - **자가 치유:** 무인 실행 중 셀렉터 복구, `/self-healing` 에서 패치 승인
 
 ## 더 읽을 곳

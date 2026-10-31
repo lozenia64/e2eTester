@@ -9,21 +9,26 @@
 
 ## 1. 개요
 
-소유자 1인이 텔레그램 봇으로 저장된 예약을 즉시 실행한다. API 프로세스가 `getUpdates` long polling 으로 수신하고 `trigger_now` 를 내부 호출한다. 공개 인바운드 경로는 없다. 설정: [docs/telegram_bot.md](../../telegram_bot.md).
+사용자가 텔레그램 봇 하나를 함께 쓰며 각자 본인 예약을 즉시 실행한다. API 프로세스가 `getUpdates` long polling 으로 수신하고 `trigger_now` 를 내부 호출한다. 공개 인바운드 경로는 없다. 설정: [docs/telegram_bot.md](../../telegram_bot.md).
 
-## 2. FR-001: 활성화
+## 2. FR-001: 활성화와 계정 연결
 
-`E2E_TELEGRAM_BOT_TOKEN` 과 `E2E_TELEGRAM_OWNER_ID` 가 모두 있을 때만 켠다.
+- `E2E_TELEGRAM_BOT_TOKEN` 이 있을 때만 켠다.
+- 로그인한 사용자가 `/account/telegram` 에서 일회용 코드를 받아 봇에 `/link <코드>` 또는 `/start <코드>` 로 보낸다.
+- 코드는 메모리에 두고 10분간 1회 유효하다. 새 코드는 같은 사용자의 이전 코드를 대체한다.
+- 연결은 `User.telegram_user_id` 에 저장한다. 텔레그램 계정 하나는 사용자 한 명에게만 연결된다.
 
 ## 3. FR-002: 인가
 
-비공개 채팅이면서 `from.id == chat.id == owner` 일 때만 처리한다. 그 외 발신자에게는 답하지 않는다. `allowed_updates` 는 `message`, `callback_query` 로 고정한다.
+비공개 채팅(`from.id == chat.id`)이고 `telegram_user_id` 가 그 ID 인 활성 사용자가 있을 때만 처리한다. 사용자 조회는 매 업데이트마다 한다. 미연결 발신자는 `/start` 에만 연결 안내를 받는다. `allowed_updates` 는 `message`, `callback_query` 로 고정한다.
+
+예약 범위는 `GET /api/schedules` 와 같다. 일반 사용자는 본인이 만든 예약, 관리자는 전체다. 카드 표시와 실행 직전에 각각 확인한다. 실행 기록에는 버튼을 누른 사용자가 남는다.
 
 ## 4. FR-003: 실행 흐름
 
 `/run` → 예약 선택 → 확인 카드 [실행]. 목록과 카드는 부수효과가 없다.
 
-- 확인 nonce 는 메모리에 1개만 두고 첫 await 전에 소비한다.
+- 확인 nonce 는 메모리에 사용자당 1개만 두고 첫 await 전에 소비한다.
 - 유효 시간은 카드 발급 후 1~60초이고 벽시계로 잰다.
 - 2분 넘게 지난 메시지는 처리하지 않고 알린다.
 
@@ -66,9 +71,25 @@ Then 실행하지 않는다
 ### AC-004: 미인가 차단
 
 ```gherkin
-Given 소유자가 아닌 발신자
+Given 연결되지 않았거나 비활성인 발신자
 When /run 또는 [실행] 탭을 보냄
 Then 답하지 않고 실행하지 않는다
+```
+
+### AC-005: 사용자별 예약 범위
+
+```gherkin
+Given 사용자 A 와 사용자 B 가 각자 예약을 만듦
+When 사용자 A 가 /run 을 보내거나 B 의 예약 ID 로 버튼을 위조
+Then A 의 예약만 보이고 B 의 예약은 열리지 않는다
+```
+
+### AC-006: 연결 코드 1회 사용
+
+```gherkin
+Given 발급된 연결 코드
+When 코드가 사용되었거나 10분이 지남
+Then 더 이상 계정을 연결하지 않는다
 ```
 
 ## 8. 한계

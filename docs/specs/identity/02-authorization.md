@@ -34,6 +34,7 @@
 | Suite 시작 | `resolve_suite_request_for_user` |
 | Preset | create/update 시 `_ensure_system_access` |
 | Schedule | per-system 생성·캘린더 스코프 |
+| 텔레그램 봇 | 연결된 활성 사용자만; 예약 범위는 Schedule 목록과 동일 |
 | Daily dashboard | `allowed_system_codes` 필터 |
 | Insights | per-system 403 |
 | Anomalies | 쿼리 스코프 |

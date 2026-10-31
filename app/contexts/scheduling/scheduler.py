@@ -772,7 +772,12 @@ class SchedulerService:
                 found = schedule
         return found
 
-    async def trigger_now(self, schedule_id: str) -> dict:
+    async def trigger_now(
+        self,
+        schedule_id: str,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> dict:
         """모바일 트리거 진입점: 즉시 실행하되, 직전 실행이 아직 진행 중이면 **새로 만들지
         않고** 그 실행에 합류한다(페이지 새로고침/중복 탭이 실 사이트 점검을 이중 발사하지
         않게 하는 멱등 가드 — cron 루프의 overlap 스킵과 같은 정책)."""
@@ -782,9 +787,9 @@ class SchedulerService:
             payload["already_running"] = True
             return payload
         if schedule.schedule_kind == "suite":
-            await self._trigger_suite(schedule)
+            await self._trigger_suite(schedule, user_id=user_id, user_name=user_name)
         else:
-            await self._trigger_run(schedule)
+            await self._trigger_run(schedule, user_id=user_id, user_name=user_name)
         await self._repository.save(schedule)
         payload = await self.trigger_status(schedule_id)
         payload["already_running"] = False

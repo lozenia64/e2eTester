@@ -50,7 +50,7 @@ e2eTester/
       routes_healing.py            # 자가 치유 센터 (/api/healing/*)
       routes_admin.py
       routes_otp.py                # SMS 중계 인바운드 OTP (/api/otp/inbound)
-      routes_identity.py           # /login, /auth/*, /account/password
+      routes_identity.py           # /login, /auth/*, /account/password, /account/telegram
       ws_runs.py
       ws_suites.py
     contexts/identity/             # 인증·사용자(identity) 컨텍스트 (구 app/auth)
@@ -239,7 +239,7 @@ e2eTester/
       scheduler.py
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
-      telegram_bot.py              # 텔레그램 봇 예약 즉시 실행(long polling, 소유자 전용)
+      telegram_bot.py              # 텔레그램 봇 예약 즉시 실행(long polling, 사용자별 계정 연결)
       command_port.py              # ScheduleRunQueryPort 등 스케줄러 의존 포트
       infrastructure/
         ports.py                   # ScheduleRepositoryPort
@@ -404,6 +404,9 @@ e2eTester/
 - `POST /auth/logout`
 - `GET /auth/me`
 - `GET /account/password`
+- `GET /account/telegram`
+- `POST /account/telegram/link`
+- `POST /account/telegram/unlink`
 - `POST /auth/change-password`
 - `GET /runs/history`
 - `GET /presets`

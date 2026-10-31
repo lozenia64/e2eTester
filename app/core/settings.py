@@ -127,11 +127,10 @@ class E2ESettings(BaseSettings):
     otp_relay_token: SecretStr | None = Field(default=None, validation_alias="E2E_OTP_RELAY_TOKEN")
     otp_relay_regex: str | None = Field(default=None, validation_alias="E2E_OTP_RELAY_REGEX")
 
-    # 텔레그램 봇(예약 즉시 실행). 둘 다 설정해야 켜진다.
+    # 텔레그램 봇(예약 즉시 실행). 사용자별 연결은 계정 화면에서 하고 DB 에 저장한다.
     telegram_bot_token: SecretStr | None = Field(
         default=None, validation_alias="E2E_TELEGRAM_BOT_TOKEN"
     )
-    telegram_owner_id: int | None = Field(default=None, validation_alias="E2E_TELEGRAM_OWNER_ID")
 
     # 자동 재실행(설계 §3.6)
     # 예약 Run 이 도구 오류(ERROR)로 끝났을 때 1회 자동 재실행할지.
@@ -159,12 +158,6 @@ class E2ESettings(BaseSettings):
     @classmethod
     def _coerce_bool_flags(cls, value: Any) -> bool:
         return _parse_bool_flag(value, default=False)
-
-    @field_validator("telegram_owner_id", mode="before")
-    @classmethod
-    def _blank_owner_id_is_unset(cls, value: Any) -> Any:
-        # 선택 기능의 빈 값(`E2E_TELEGRAM_OWNER_ID=`)이 앱 기동을 막으면 안 된다.
-        return None if isinstance(value, str) and not value.strip() else value
 
     def gemini_api_key_str(self) -> str:
         if self.gemini_api_key is None:

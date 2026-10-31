@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.contexts.run.contracts.ports import RunSummaryQueryPort
     from app.contexts.scheduling.infrastructure.ports import ScheduleRepositoryPort
     from app.contexts.scheduling.scheduler import SchedulerService
+    from app.contexts.scheduling.telegram_bot import TelegramBot
     from app.contexts.suite.application.service import SuiteService
     from app.contexts.suite.contracts.ports import SuiteRepositoryPort, SuiteSummaryQueryPort
     from app.core.settings import E2ESettings
@@ -91,6 +92,10 @@ def get_preset_service(connection: HTTPConnection) -> PresetService:
 
 def get_schedule_service(connection: HTTPConnection) -> SchedulerService:
     return connection.app.state.schedule_service
+
+
+def get_telegram_bot(connection: HTTPConnection) -> TelegramBot | None:
+    return connection.app.state.telegram_bot
 
 
 def get_run_queue(connection: HTTPConnection) -> RunExecutionQueue:

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}텔레그램 연결{% endblock %}
+
+{% block content %}
+<section class="max-w-lg">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">텔레그램 연결</h1>
+        <p class="mt-1 text-sm text-gray-500">폰의 텔레그램에서 내 예약을 실행하고 결과를 받습니다.</p>
+    </div>
+
+    {% if issue_failed %}
+    <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        코드를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.
+    </div>
+    {% endif %}
+
+    <div class="rounded-2xl border border-gray-200 bg-white px-6 py-8 shadow-sm">
+        {% if not bot_enabled %}
+        <p class="text-sm text-gray-600">텔레그램 봇이 설정되지 않았습니다. 관리자에게 문의해 주세요.</p>
+        {% elif link %}
+        <p class="text-sm text-gray-700">
+            텔레그램에서 <span class="font-semibold">@{{ link.bot_username }}</span> 봇을 열고 다음 내용을 보내세요.
+        </p>
+        <p class="mt-4 rounded-lg bg-gray-100 px-4 py-3 text-center font-mono text-lg font-semibold text-gray-900">/link {{ link.code }}</p>
+        <p class="mt-4 text-sm text-gray-600">
+            이 PC에 텔레그램이 있다면 <a href="{{ link.url }}" class="text-indigo-600 hover:underline" target="_blank" rel="noopener">링크로 열 수 있습니다</a>.
+        </p>
+        <p class="mt-2 text-xs text-gray-400">코드는 {{ link_ttl_minutes }}분 동안 한 번만 쓸 수 있습니다. 다른 사람에게 보여 주지 마세요.</p>
+        <a href="/account/telegram" class="mt-5 inline-block text-sm text-gray-500 hover:text-gray-700">연결을 마쳤습니다</a>
+        {% elif current_user.telegram_user_id %}
+        <p class="text-sm text-gray-700">텔레그램 계정이 연결되어 있습니다. 봇에게 <span class="font-mono">/run</span>을 보내면 내 예약 목록이 열립니다.</p>
+        <form method="post" action="/account/telegram/unlink" class="mt-5">
+            <button type="submit" class="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">연결 해제</button>
+        </form>
+        {% else %}
+        <p class="text-sm text-gray-700">연결 코드를 받아 텔레그램 봇에 보내면 내 계정과 연결됩니다.</p>
+        <form method="post" action="/account/telegram/link" class="mt-5">
+            <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">연결 코드 받기</button>
+        </form>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

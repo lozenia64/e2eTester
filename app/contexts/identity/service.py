@@ -67,6 +67,24 @@ class UserService:
     async def get_user_by_email(self, email: str) -> User | None:
         return await self._repo.get_by_email(email)
 
+    async def get_user_by_telegram_id(self, telegram_user_id: int) -> User | None:
+        for user in await self._repo.list():
+            if user.telegram_user_id == telegram_user_id:
+                return user
+        return None
+
+    async def link_telegram(self, user_id: str, telegram_user_id: int) -> User:
+        """텔레그램 계정 하나는 사용자 한 명에게만 연결한다(기존 연결은 옮겨 온다)."""
+        user = await self._repo.get(user_id)
+        previous = await self.get_user_by_telegram_id(telegram_user_id)
+        if previous is not None and previous.user_id != user_id:
+            await self._repo.save(previous.model_copy(update={"telegram_user_id": None}))
+        return await self._repo.save(user.model_copy(update={"telegram_user_id": telegram_user_id}))
+
+    async def unlink_telegram(self, user_id: str) -> None:
+        user = await self._repo.get(user_id)
+        await self._repo.save(user.model_copy(update={"telegram_user_id": None}))
+
     async def list_users(self) -> list[User]:
         return await self._repo.list()
 

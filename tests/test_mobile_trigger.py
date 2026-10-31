@@ -181,6 +181,23 @@ async def test_trigger_now_fires_run_when_idle():
     assert payload["status"] == RunStatus.RUNNING.value
 
 
+async def test_trigger_now_records_acting_user():
+    run_service = _FakeRunService()
+    recorded = {}
+    original = run_service.start_run
+
+    async def capture(*args, **kwargs):
+        recorded.update(kwargs)
+        return await original(*args, **kwargs)
+
+    run_service.start_run = capture
+    repo = _FakeScheduleRepo([_schedule()])
+    await _scheduler(repo, run_service).trigger_now(
+        "sch_test1", user_id="usr_a", user_name="앨리스"
+    )
+    assert (recorded["user_id"], recorded["user_name"]) == ("usr_a", "앨리스")
+
+
 async def test_trigger_now_attaches_to_active_run_instead_of_double_firing():
     active = _fake_run(
         "run_active",
