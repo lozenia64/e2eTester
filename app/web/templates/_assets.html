@@ -7,3 +7,8 @@
 {% macro asset_script(entry="entries/main.ts") -%}
 <script type="module" src="{{ asset_js(entry) }}"></script>
 {%- endmacro %}
+
+{# 번들을 거치지 않는 UMD 벤더 파일용. defer 는 문서 순서대로 실행되므로 소비 스크립트보다 앞에 둔다. #}
+{% macro asset_classic_script(entry) -%}
+<script src="{{ asset_js(entry) }}" defer></script>
+{%- endmacro %}

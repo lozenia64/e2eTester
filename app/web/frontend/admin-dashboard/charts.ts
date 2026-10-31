@@ -41,10 +41,7 @@ export function createTrend(root: HTMLElement): { update: (data: PerformanceData
       try {
         if (!loading) {
           loading = (async () => {
-            const [{ init, use }, { LineChart }, { GridComponent, TooltipComponent }, { CanvasRenderer }] = await Promise.all([
-              import("echarts/core"), import("echarts/charts"), import("echarts/components"), import("echarts/renderers"),
-            ]);
-            use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+            const { init } = await import("./echarts-setup");
             if (!disposed) chart = init(host);
           })();
         }
