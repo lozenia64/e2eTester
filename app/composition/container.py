@@ -44,6 +44,7 @@ from app.contexts.scheduling.composition import (
 from app.contexts.scheduling.infrastructure.sqlite_schedule_repository import (
     SqliteScheduleRepository,
 )
+from app.contexts.scheduling.telegram_bot import build_telegram_bot
 from app.contexts.suite.composition import (
     SuiteContainer,
     compose_suite_repositories,
@@ -127,6 +128,7 @@ class AppContainer:
     _scheduler_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
     _retention_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
     _daily_report_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
+    _telegram_task: asyncio.Task[None] | None = field(init=False, default=None, repr=False)
 
     @classmethod
     def build(cls, settings: E2ESettings) -> AppContainer:
@@ -443,8 +445,18 @@ class AppContainer:
             self._daily_report_task = asyncio.create_task(
                 self.scheduling.daily_report_scheduler.run_forever()
             )
+        telegram_bot = build_telegram_bot(self.settings, self.scheduling.scheduler)
+        if telegram_bot is not None:
+            self._telegram_task = asyncio.create_task(telegram_bot.run_forever())
 
     async def stop(self) -> None:
+        if self._telegram_task is not None:
+            self._telegram_task.cancel()
+            try:
+                await self._telegram_task
+            except asyncio.CancelledError:
+                pass
+            self._telegram_task = None
         await self.outbox_relay.stop()
         if self.realtime.redis_fanout is not None:
             await self.realtime.redis_fanout.stop()

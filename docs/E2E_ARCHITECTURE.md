@@ -239,6 +239,7 @@ e2eTester/
       scheduler.py
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
+      telegram_bot.py              # 텔레그램 봇 예약 즉시 실행(long polling, 소유자 전용)
       command_port.py              # ScheduleRunQueryPort 등 스케줄러 의존 포트
       infrastructure/
         ports.py                   # ScheduleRepositoryPort

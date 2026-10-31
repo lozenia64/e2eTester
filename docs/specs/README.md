@@ -81,6 +81,7 @@
 | SPEC-SCHED-001 | [scheduling/01-scheduler.md](scheduling/01-scheduler.md) | Cron·자동 Run/Suite |
 | SPEC-SCHED-002 | [scheduling/02-schedule-center.md](scheduling/02-schedule-center.md) | 예약 관리 센터 UI·API |
 | SPEC-SCHED-003 | [scheduling/03-mobile-trigger.md](scheduling/03-mobile-trigger.md) | 모바일 즉시 점검 토큰 |
+| SPEC-SCHED-004 | [scheduling/04-telegram-bot.md](scheduling/04-telegram-bot.md) | 텔레그램 봇 예약 즉시 실행 |
 
 ### 대시보드·UI
 

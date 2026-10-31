@@ -17,6 +17,7 @@
 | 사용 안내 | `README.md` | 링크만 |
 | 설치·env | `docs/INSTALL.md`, `.env.example` | 링크만 |
 | OTP 중계기(안드로이드) | `docs/otp_relay.md` | INSTALL 은 env만 |
+| 텔레그램 봇 설정 | `docs/telegram_bot.md` | INSTALL 은 env만 |
 | 에이전트 지침 | `AGENTS.md` | 링크만 |
 | CI 게이트 | `docs/CI.md` | 링크만 |
 | 런타임 기본값 | 소스코드 | 가드로 동기화 |
