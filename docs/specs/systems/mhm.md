@@ -55,6 +55,18 @@ Then PASSED
 
 `SPEC-SYS-HOM` hom.login AC 동일 (phone OTP pause / kakao no pause).
 
+### 로그인 전후 하단 배너 (`.dialog.bottom.bottom_bnr`)
+
+```gherkin
+Given 로그인 전 또는 로그인 후 팝업 점검 단계
+When 하단 배너가 표시되어 있으면
+Then 닫기 버튼으로 닫고 다음 단계를 진행한다
+When 배너가 없거나 처리 도중 사라지면
+Then 오류·경고 없이 다음 단계를 진행한다
+When 배너를 닫지 못하면
+Then 경고만 남기고 다음 단계를 진행한다
+```
+
 ### mhm.contract.list / detail
 
 ```gherkin
