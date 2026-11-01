@@ -56,6 +56,7 @@ e2eTester/
       ws_runs.py
       ws_suites.py
     contexts/identity/             # 인증·사용자(identity) 컨텍스트 (구 app/auth)
+      composition.py               # IdentityContainer 조립
       dependencies.py
       jwt.py
       service.py
@@ -65,7 +66,7 @@ e2eTester/
         sqlite_user_repository.py  # SQLite 사용자 어댑터(기본 사용)
     core/
       schedule_time.py             # schedule_day_label / resolve_schedule_timezone (프로젝션 결정성)
-      enums.py                     # RunStatus/SuiteStatus/ModuleStatus (PASSED/ANOMALY/ERROR/...)
+      enums.py                     # RunStatus/SuiteStatus/ModuleStatus/AnomalyState/FailureSignal/RecoveryTier
       env_utils.py
       logging.py                   # 구조적 로거 + 로그 컨텍스트 바인딩
       system_models.py             # ModuleDefinition/SystemDefinition/RunForm* (매니페스트 정적 구조)
@@ -78,8 +79,11 @@ e2eTester/
       ops_buffer.py                # 최근 운영 이벤트 링 버퍼(관리자 운영 관측)
       settings.py                  # E2ESettings (환경변수 기반 설정)
       status_labels.py             # 상태 라벨·집계 분류(정상/이상징후/점검실패) SSOT
+      status_colors.py             # 상태 팔레트(PALETTE) 색상 토큰 SSOT
+      status_view.py               # status_badge_view (Jinja·프론트 배지 표현 뷰)
     contexts/                      # 바운디드 컨텍스트(WP-B1) — 컨텍스트별 domain/application/views
       run/
+        composition.py             # RunContainer 조립(저장소·RunService·RunQueries)
         domain/
           aggregate.py             # RunAggregate: Run 상태 전이 규칙·불변식(순수, I/O 무지)
           state_machine.py         # RunStateMachine: Run 실행 결정 전이표 + decide_rehydration(순수)
@@ -119,6 +123,7 @@ e2eTester/
           backfill/                # run_history_index / module_history_index 백필
           migration/legacy_blob_migration.py
       suite/
+        composition.py             # SuiteContainer 조립(저장소·SuiteService)
         domain/
           aggregate.py             # SuiteAggregate: Suite 상태 전이 규칙·불변식(순수, RunAggregate 와 동형)
           state_machine.py         # SuiteStateMachine: Suite 사가 결정 전이표(순수)
@@ -156,6 +161,7 @@ e2eTester/
       security/
         input_crypto.py            # AES-GCM 입력 암호화 프리미티브
       eventing/                    # 이벤트 소싱·아웃박스·도메인 버스·프로젝션 핸들러
+        composition.py             # EventingContainer 조립(EventBus·EmailNotificationSubscriber)
         envelope.py                # EventEnvelope: domain_events/outbox 직렬화 봉투(물리 계층)
         event_store.py             # SqliteEventStore (domain events append-only)
         outbox.py                  # SqliteOutbox (transactional outbox)
@@ -167,23 +173,28 @@ e2eTester/
         subscribers/
           email_notification.py    # EmailNotificationSubscriber (종료 메일)
     realtime/
+      composition.py               # RealtimeContainer 조립(로컬/Redis fan-out)
       adapter.py                   # RealtimeNotificationPort 구현
       listener_registry.py         # WebSocket 리스너 큐 레지스트리(프로세스-로컬)
       projector.py                 # RealtimeProjector (OutboxRelay가 WS fan-out 담당)
       ports.py                     # RealtimeNotificationPort
       redis_fanout.py              # Redis pub/sub fan-out (다중 API 프로세스)
     execution/
+      composition.py               # ExecutionContainer 조립(게이트웨이·세션 레지스트리·큐)
       gateway.py                   # ExecutionGateway 포트 + ExecutionHandle (오케스트레이션 ↔ 실행 경계)
       results.py                   # StepExecutionResult: 실행 결과 계약(WP-C4 — runner 에서 이관)
       session_checkpoint.py        # SessionCheckpointStorePort + SessionCheckpoint (모듈 경계 내구 체크포인트)
+      redis_session_registry.py    # Redis 기반 워커 세션 리스 레지스트리
       composite_gateway.py         # CompositeExecutionGateway: execution_mode 로 어댑터 라우팅
       worker_gateway.py            # WorkerExecutionGateway: worker/ HTTP API 클라이언트(실 브라우저 실행을 워커 SessionServer 로 위임)
       simulated_gateway.py         # SimulatedExecutionGateway: simulated 모드 테스트 더블 어댑터
       profile_queue.py             # ProfilePartitionedRunQueue: execution_profile 별 JobQueue 라우팅
+      in_memory_job_queue.py       # 인메모리 JobQueuePort 어댑터
       job_queue_port.py            # JobQueuePort / JobDescriptor (execution_profile 태깅)
       protocol.py                  # 워커 HTTP 프로토콜 DTO (OpenSession/RunStep/resume-from-step 등)
       run_queue.py                 # RunExecutionQueue: 감독되는 실행 작업 큐(워커 풀)
     contexts/healing/              # 자가 치유 컨텍스트
+      composition.py               # HealingContainer 조립
       engine.py                    # SelfHealingEngine: 셀렉터 파싱→DOM 스캔→후보 검증→오버라이드(실행 스레드)
       selector_healer.py           # 순수 스코어러: 깨진 셀렉터 파싱·요소 지문·후보 신뢰도
       page_proxy.py                # HealedPage/HealedFrame: 런타임 오버라이드 적용 프록시
@@ -197,11 +208,14 @@ e2eTester/
         ports.py                   # HealingEventStorePort / HealingPolicyStorePort / HealingPatchStorePort
         sqlite_healing_stores.py   # SQLite 치유 이벤트/정책/패치 어댑터 + 동기 정책 리더
     notifications/
-      run_completion_email.py
-      report_renderer.py
+      run_completion_email.py      # Run/Suite 종료 메일 발송기
+      daily_report.py              # 전사 일간 점검 리포트 집계 모델
+      daily_report_email.py        # 전사 일간 점검 리포트 메일 발송 서비스
+      report_renderer.py           # 완료/일간 메일 HTML·텍스트 렌더러 (status_colors.PALETTE 파생)
       infrastructure/
         sqlite_email_notification_dedup.py
     contexts/insights/             # 운영 인텔리전스 컨텍스트(읽기 전용 — 프로젝션 소비)
+      composition.py               # InsightsContainer 조립
       application/
         insights_service.py        # InsightsService: 운영 인텔리전스 얇은 I/O 인터프리터
         insights_anomalies.py      # 이상징후 인박스 목록 도출(순수 빌더)
@@ -212,8 +226,15 @@ e2eTester/
         insights_common.py         # 인사이트 공용 헬퍼
         stats_service.py           # StatsService: 사용량·절감 시간 통계(admin)
         stats_charts.py            # 통계 차트 데이터 구성
+        savings_basis.py           # 모듈별 수동 업무 시간·절감 산정 기준 헬퍼
+        admin_performance.py       # 월간 추정 절감 성과 읽기 모델(GET /api/admin/dashboard/performance)
+        admin_coverage_dashboard.py # 7일×3슬롯 커버리지 히트맵 빌더(GET /api/admin/dashboard, /api/runs/coverage)
+        admin_run_history_board.py # 월간 시스템 지도 트리맵 빌더(GET /api/admin/runs/board)
+        admin_run_history_heatmap.py # 시간대별 실행 히트맵 빌더(GET /api/admin/runs/heatmap)
         ops_service.py             # OpsService: Run/Suite/스케줄·큐 운영 스냅샷(admin)
         daily_dashboard.py         # 일간 점검 현황 집계(순수 빌더, GET /api/dashboard/daily)
+        daily_summary.py           # 일간 대시보드 KPI 4장·주의 항목 요약 빌더(GET /api/dashboard/daily/summary)
+        wall_view.py               # 비인증 상황판(/wall) 읽기 모델 빌더
       contracts/
         query_rows.py              # AnomalyInboxRow / DailyStatusRow / StatsRollupRow 등
       infrastructure/
@@ -226,20 +247,28 @@ e2eTester/
         module_settings_repository.py # ModuleSettingsRepositoryPort + 인메모리 어댑터
         sqlite_module_settings_repository.py # SQLite 모듈별 수동 업무 시간 설정
     contexts/preset/               # 인증 프리셋 컨텍스트
+      composition.py               # PresetContainer 조립
       application/
         service.py                 # PresetService: 인증 프리셋(사용자별 격리·검증 후 저장)
       infrastructure/
         ports.py                   # PresetRepositoryPort
         sqlite_preset_repository.py # SQLite 인증 프리셋 어댑터(auth_presets 테이블, PII 의도 영속)
     orchestrator/                  # 공유 CQRS 질의 계층(run/suite/insights/preset/healing 서비스는 contexts/ 로 이동됨)
-      queries/                     # RunQueries / DailyDashboardQueries (읽기 전용 질의 핸들러)
+      queries/
+        run_queries.py             # RunQueries (Run 목록·상세·이력 질의)
+        daily_queries.py           # DailyDashboardQueries (일간 점검 현황 질의)
+        daily_summary_queries.py   # DailySummaryQueries (일간 요약·KPI·상황판 질의)
+        admin_dashboard_queries.py # AdminDashboardQueries (7일 커버리지·관리자 대시보드 질의)
     registry/
       loader.py
     contexts/scheduling/           # 예약 컨텍스트
+      composition.py               # SchedulingContainer 조립(스케줄러·보존 정리·일간 리포트)
       cron.py
       scheduler.py
+      preset_bindings.py           # 예약-프리셋 참조 연결·자동 전환 헬퍼
       schedule_center.py           # 예약 점검 관리 센터 순수 빌더(관제 보드·캘린더·이력 통계)
       run_retention.py             # 일일 점검실패·취소 Run 보존 정리 배치
+      daily_report_scheduler.py    # 전사 일간 점검 리포트 메일 cron 스케줄러
       telegram_bot.py              # 텔레그램 봇 예약 즉시 실행(long polling, 사용자별 계정 연결)
       command_port.py              # ScheduleRunQueryPort 등 스케줄러 의존 포트
       infrastructure/
@@ -274,7 +303,10 @@ e2eTester/
           constants.py             # 청구 본문 문구 등 도메인 결합 규칙 SSOT
       fixtures/                    # 계약 테스트용 최소 HTML
     runner/                        # 실행 평면(Playwright 구동 — contexts/api 는 import 금지, AG-009)
+      failure_signal.py            # classify_failure: 모듈 예외 → FailureSignal 분류
+      page_diagnostic.py           # 실패 시점 페이지 URL·다이얼로그·DOM 진단 스냅샷
       screenshot.py                # 모듈 종료 시 공용 스크린샷 캡처 (시스템 무관)
+      step_logging.py              # 스텝 실행 로깅 헬퍼(전역 print/redirect_stdout 금지, AG-006)
       step_outcome.py              # StepOutcome 타입드 결과 (StepCompleted/StepNeedsInput)
       workflow_common.py           # write_log_line + StepExecutionResult 재노출(계약은 execution/results.py)
       workflow_engine.py           # BaseWorkflowExecutor (공용 실행 골격) + WorkflowRuntime 계약
@@ -312,15 +344,45 @@ e2eTester/
         executor.py                # ChbotWorkflowExecutor
         manifest.yaml
     web/
-      frontend/
-        entries/
-          dashboard.ts              # 일간 대시보드 페이지 엔트리 (Vite)
+      asset_manifest.py            # Vite manifest(.vite/manifest.json) 로더 (asset_js / asset_css)
+      frontend/                    # Vite + TypeScript 프론트엔드 소스 (app/web/static/dist/ 로 빌드)
+        entries/                   # 페이지별 Vite 엔트리 (main, dashboard, wall, execute*, run, runs-history, suite, admin-*)
+          dashboard.ts             # 일간 대시보드 엔트리
+          wall.ts                  # 비인증 상황판 엔트리
+          execute.ts               # 점검 실행 페이지 엔트리
+          execute-badges.ts        # 점검 실행 좌측 배지 엔트리
+          run.ts                   # Run 상세 엔트리
+          runs-history.ts          # 점검 이력·7일 커버리지 엔트리
+          suite.ts                 # Suite 상세 엔트리
+          admin-dashboard.ts       # 관리자 성과·커버리지 대시보드 엔트리
+          admin-users.ts           # 관리자 사용자 관리 엔트리
+          admin-modules.ts         # 관리자 모듈 시간 설정 엔트리
+          main.ts                  # 공통 셸 엔트리
+          vendor-echarts.ts        # ECharts self-host 번들 엔트리
+        components/                # 공용 UI 컴포넌트·Jinja 매크로 (status-badge, status-hero, kpi-card, system-matrix, activity-feed, otp-panel)
+        lib/                       # 프론트 공용 유틸·생성 토큰 (status.generated.ts, otp-countdown.ts, html.ts)
+        styles/                    # 디자인 토큰·레이아웃 스타일 (tokens.generated.css, primitives.css, shell.css, dashboard.css 등)
+        run/                       # Run 상세 프론트 모듈
+        suite/                     # Suite 상세 프론트 모듈
+        execute/                   # 점검 실행·의존성 그래프 프론트 모듈
+        runs-history/              # 점검 이력·커버리지 드릴다운 프론트 모듈
+        admin-dashboard/           # 관리자 대시보드 프론트 모듈
+        admin-users/               # 관리자 사용자 관리 프론트 모듈
+        admin-modules/             # 관리자 모듈 설정 프론트 모듈
       templates/
+        _assets.html               # Vite 번들 로드 Jinja 매크로 (asset_js / asset_css)
         base.html
         dashboard.html             # 일간 점검 현황 대시보드 (로그인 후 첫 화면)
+        dashboard/
+          partials/                # 일간 대시보드 HTMX fragment (zone_a_kpi, zone_b_matrix, zone_c_activity, system_panel, _macros)
+        wall.html                  # 비인증 상황판 전체 페이지 (/wall)
+        wall_fragment.html         # 비인증 상황판 HTMX 갱신 본문 (/wall/fragment)
         execute.html               # 시스템 단위 점검 실행 (Run 트리거 UI)
+        execute/
+          _system_list.html        # 점검 실행 좌측 대상 목록 파셜
         run.html
-        runs_history.html          # 당일 이전 Run 이력
+        runs_history.html          # 점검 이력·7일 커버리지
+        presets.html               # 인증 프리셋 관리
         suite.html
         schedules.html             # 예약 점검 관리 센터
         anomalies.html             # 이상징후 인박스
@@ -330,27 +392,34 @@ e2eTester/
         login.html
         account/
           password.html
+          telegram.html            # 사용자별 텔레그램 봇 연결 화면 (/account/telegram)
         admin/
           base.html
-          index.html
+          index.html               # 관리자 성과·7일 커버리지 대시보드 (/admin)
+          runs.html                # 관리자 전체 Run 보드·트리맵 (/admin/runs)
           users.html
           modules.html
           ops.html                 # 운영 관측
           stats.html
       static/
-        app.js                     # 실행 화면(execute)·Run/Suite 화면 공용 스크립트
+        app.js                     # 실행 화면(execute)·이력 등 레거시 공용 스크립트
+        presets.js                 # 프리셋 관리 페이지 스크립트
         schedules.js               # 예약 관리 센터 (페이지 전용)
         anomalies.js               # 이상징후 인박스 (페이지 전용)
         insights.js                # 시스템 인사이트 (페이지 전용)
         healing.js                 # 자가 치유 센터 (페이지 전용)
+        admin-runs.js              # 관리자 Run 보드 스크립트
         admin-ops.js
         admin-stats.js
+        mobile-nav.js              # 모바일 내비게이션 드로어
+        nav-badges.js              # 사이드바 배지 폴링
         favicon.ico / favicon.svg / apple-touch-icon*.png
     main.py                        # FastAPI 앱 팩토리 + lifespan (AppContainer.start/stop 위임)
   worker/
     main.py                        # out-of-process 브라우저 워커 진입점
     http_server.py                 # ExecutionGateway HTTP surface (resume-from-step 포함)
     session_server.py              # SessionServer: 유일한 in-process Playwright 세션 호스트(스레드 풀·런타임 수명·로그 브리지·storage_state 캡처/복원)
+    health.py                      # 워커 헬스체크 프로브
   docs/
     DOCS_GOVERNANCE.md             # 문서 SSOT 매트릭스·PR 체크리스트
     CI.md                          # GitHub Actions·게이트 계층·branch protection 운영
@@ -370,31 +439,43 @@ e2eTester/
       chbot.md
   scripts/
     check_docs_consistency.py      # 문서-코드 정합성 가드
-    check_architecture_gates.py    # 아키텍처 정책 게이트 (AG-001~003)
+    check_architecture_gates.py    # 아키텍처 정책 게이트 (AG-001~009)
+    check_frontend_gates.py        # 프론트엔드 정책 게이트 (FG-001~007)
+    gen_frontend_tokens.py         # status_labels.py / status_colors.py → TS·CSS 토큰 생성기
+    graphify_doc_bridge.py         # graphify 문서↔코드 mentions 엣지 브리지
+    run_local.py                   # 로컬 멀티프로세스(Redis + 워커 + API) 통합 기동
+    run_redis.py                   # 로컬 Redis 프로세스 기동 헬퍼
+    rebuild_projections.py         # CQRS 프로젝션 재구축 및 결정성 검증(--validate)
+    rebuild_snapshots.py           # aggregate_snapshots 재구축 및 결정성 검증(--validate)
     ci/
       gates.py                     # CI 게이트 SSOT
       run_all_gates.py             # 로컬 pre-PR 전체 게이트 실행
-  tests/                           # 순수 계층 단위 테스트 (브라우저/외부 사이트 불필요, CI 실행)
+      check_ci_config.py           # CI 경로 글롭·게이트 설정 자체 검증
+      plan.py                      # 변경 파일 기반 GitHub Actions 게이트 매트릭스 플래너
+  tests/                           # 순수 계층·통합·뷰포트 테스트 (CI 실행)
   .github/
     workflows/
-      ci.yml                       # CI: docs·architecture·ruff·pytest·(조건부) security
+      ci.yml                       # CI: docs·architecture·frontend·ruff·pytest/coverage·(조건부) security
     dependabot.yml
     pull_request_template.md       # PR DoD 체크리스트
   research/                        # 1회성 probe 스크립트 (앱 구성 요소 아님)
   artifacts/
   .env.example
+  package.json                     # 프론트엔드(Vite·TypeScript·Vitest·ESLint) 패키지 정의
+  vite.config.ts                   # Vite 멀티 엔트리 번들 설정 (출력: app/web/static/dist/)
+  tsconfig.json                    # TypeScript 타입체크 설정
   requirements.txt
-  requirements-dev.txt             # 개발/CI 의존성 (pytest·ruff)
-  pyproject.toml                   # ruff·pytest 설정
+  requirements-dev.txt             # 개발/CI 의존성 (pytest·ruff·import-linter·pyright)
+  pyproject.toml                   # ruff·pytest·coverage·importlinter·pyright 설정
   README.md
   AGENTS.md
 ```
 
 ## 5. 계층 요약
 
-### 5.1 오케스트레이션·실행·영속
+### 5.1 오케스트레이션·실행·영속·프론트엔드
 
-오케스트레이션(`RunService`/`SuiteService`)은 `RunStateMachine`·`RunAggregate`·`SuiteStateMachine`·`SuiteAggregate` 에 결정·변경을 위임하고, 브라우저는 `ExecutionGateway` 포트 뒤 `worker/SessionServer` 가 실행한다. 저장소는 포트-어댑터(CQRS write/read 분리). 부수 관심사(AI·메일·치유)는 `EventBus` 구독자.
+오케스트레이션(`RunService`/`SuiteService`)은 `RunStateMachine`·`RunAggregate`·`SuiteStateMachine`·`SuiteAggregate` 에 결정·변경을 위임하고, 브라우저는 `ExecutionGateway` 포트 뒤 `worker/SessionServer` 가 실행한다. 저장소는 포트-어댑터(CQRS write/read 분리). 부수 관심사(AI·완료 메일·치유)는 `EventBus` 구독자이며, 정기 작업(`SchedulerService`·`RunRetentionScheduler`·`DailyReportScheduler`·`TelegramBot`)은 `AppContainer` lifespan 백그라운드 태스크로 기동된다. 프론트엔드 상태 라벨·색상 토큰은 `app/core/status_labels.py`·`status_colors.py` 가 SSOT 이며 `gen_frontend_tokens.py` 와 Vite(`app/web/static/dist/`)를 통해 템플릿·번들에 주입된다.
 
 ### 5.2 API 계층
 
@@ -506,7 +587,7 @@ e2eTester/
 - `GET /admin/ops`
 - `GET /admin/modules`
 
-> **세부 행동 명세:** 예약-프리셋 참조 연결·자동 전환(`preset_bindings`/`preset_options`)은 [`SPEC-SCHED-001`](specs/scheduling/01-scheduler.md)(FR-006)·[`SPEC-PRESET-001`](specs/presets/01-auth-presets.md), 모바일 트리거·텔레그램 OTP 요청 식별자(`execution_id`/`otp_run_id`/`otp_request_id`)는 [`SPEC-SCHED-003`](specs/scheduling/03-mobile-trigger.md)·[`SPEC-SCHED-004`](specs/scheduling/04-telegram-bot.md), OTP·취소·부분재실행은 [`SPEC-RUN-002`](specs/run/02-otp-cancel-rerun.md)·[`SPEC-INT-001`](specs/integrations/01-otp-relay.md)을 참조한다.
+> **세부 행동 명세:** 전체 도메인별 SDD 행동 명세 인덱스는 [`docs/specs/README.md`](specs/README.md)를 참조한다(예: 예약-프리셋 참조 연결·자동 전환 `preset_bindings`/`preset_options`는 [`SPEC-SCHED-001`](specs/scheduling/01-scheduler.md)·[`SPEC-PRESET-001`](specs/presets/01-auth-presets.md), 모바일 트리거·텔레그램 OTP 요청 식별자 `execution_id`/`otp_run_id`/`otp_request_id`는 [`SPEC-SCHED-003`](specs/scheduling/03-mobile-trigger.md)·[`SPEC-SCHED-004`](specs/scheduling/04-telegram-bot.md), OTP·취소·부분재실행은 [`SPEC-RUN-002`](specs/run/02-otp-cancel-rerun.md)·[`SPEC-INT-001`](specs/integrations/01-otp-relay.md)).
 
 ### 5.3 상태·이벤트·아티팩트
 

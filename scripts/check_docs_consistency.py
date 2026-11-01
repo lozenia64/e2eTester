@@ -489,20 +489,36 @@ def check_folder_tree_paths_exist() -> CheckResult:
 
 def check_key_dirs_documented_in_tree() -> CheckResult:
     """역방향: 주요 디렉터리의 1단계 항목이 E2E_ARCHITECTURE.md §4 폴더 트리에 등재되어 있는지."""
-    result = CheckResult("주요 디렉터리(app/api, app/contexts, docs) 항목이 §4 폴더 트리에 등재")
+    result = CheckResult(
+        "주요 디렉터리(app/api·core·runner·notifications·contexts·templates, worker, docs) §4 트리 등재"
+    )
     documented_paths = {rel for rel, _ in _extract_folder_tree_entries()}
     checked = 0
 
-    for api_file in sorted((REPO_ROOT / "app" / "api").glob("*.py")):
-        if api_file.name == "__init__.py":
-            continue
+    py_check_dirs = (
+        REPO_ROOT / "app" / "api",
+        REPO_ROOT / "app" / "core",
+        REPO_ROOT / "app" / "runner",
+        REPO_ROOT / "app" / "notifications",
+        REPO_ROOT / "worker",
+    )
+    for py_dir in py_check_dirs:
+        for py_file in sorted(py_dir.glob("*.py")):
+            if py_file.name == "__init__.py":
+                continue
+            checked += 1
+            rel = py_file.relative_to(REPO_ROOT).as_posix()
+            if rel not in documented_paths:
+                result.problems.append(
+                    f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음 "
+                    f"(모듈 추가 시 §4 동시 갱신 필요)."
+                )
+
+    for html_file in sorted((REPO_ROOT / "app" / "web" / "templates").glob("*.html")):
         checked += 1
-        rel = api_file.relative_to(REPO_ROOT).as_posix()
+        rel = html_file.relative_to(REPO_ROOT).as_posix()
         if rel not in documented_paths:
-            result.problems.append(
-                f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음 "
-                f"(라우터/모듈 추가 시 §4 동시 갱신 필요)."
-            )
+            result.problems.append(f"템플릿 `{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음.")
 
     for ctx_dir in sorted((REPO_ROOT / "app" / "contexts").iterdir()):
         if not ctx_dir.is_dir() or ctx_dir.name.startswith("__"):
