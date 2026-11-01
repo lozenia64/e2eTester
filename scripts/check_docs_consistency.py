@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,10 +62,12 @@ MANIFEST_GLOB = "app/systems/*/manifest.yaml"
 SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
 SPECS_SYSTEMS_DIR = REPO_ROOT / "docs" / "specs" / "systems"
 SPECS_INDEX_DOC = REPO_ROOT / "docs" / "specs" / "README.md"
-SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#]+\.md)(?:#[^)]*)?\)")
 SPEC_INDEX_ROW_RE = re.compile(
-    r"^\|\s*(SPEC-[A-Z0-9-]+)\s*\|\s*\[[^\]]*\]\(([^)#]+\.md)\)", re.MULTILINE
+    r"^\|\s*(SPEC-[A-Z0-9-]+)\s*\|\s*\[[^\]]*\]\(([^)#]+\.md)(?:#[^)]*)?\)",
+    re.MULTILINE,
 )
+SPEC_DECLARED_ID_RE = re.compile(r"^\|\s*\*\*ID\*\*\s*\|\s*`(SPEC-[A-Z0-9-]+)`\s*\|", re.MULTILINE)
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
 CI_DOC = REPO_ROOT / "docs" / "CI.md"
 README_DOC = REPO_ROOT / "README.md"
@@ -259,15 +262,30 @@ def check_spec_index_links_exist() -> CheckResult:
             f"Spec 파일 `docs/specs/{missing}` 가 docs/specs/README.md 인덱스에 등록되지 않음."
         )
 
+    rows = SPEC_INDEX_ROW_RE.findall(text)
+    indexed_paths = Counter((specs_root / rel.strip()).resolve() for _, rel in rows)
+    for rel in sorted(actual_specs - {"00-GOVERNANCE.md", "_TEMPLATE.md"}):
+        count = indexed_paths[(specs_root / rel).resolve()]
+        if count != 1:
+            result.problems.append(
+                f"Spec 파일 `docs/specs/{rel}` 의 ID 인덱스 행은 정확히 1개여야 함 "
+                f"(현재 {count}개)."
+            )
+    for spec_id, count in sorted(Counter(spec_id for spec_id, _ in rows).items()):
+        if count > 1:
+            result.problems.append(f"인덱스의 `{spec_id}` 가 {count}개 행에 중복 등록됨.")
+
     id_checked = 0
-    for spec_id, rel in SPEC_INDEX_ROW_RE.findall(text):
+    for spec_id, rel in rows:
         target = specs_root / rel.strip()
         if not target.is_file():
             continue
         id_checked += 1
-        if f"`{spec_id}`" not in _read(target):
+        declared_id = SPEC_DECLARED_ID_RE.search(_read(target))
+        if declared_id is None or declared_id.group(1) != spec_id:
             result.problems.append(
-                f"인덱스의 `{spec_id}` 가 `docs/specs/{rel.strip()}` 본문에 없음 (SPEC ID 불일치)."
+                f"인덱스의 `{spec_id}` 가 `docs/specs/{rel.strip()}` 의 ID 메타데이터와 다름 "
+                "(SPEC ID 불일치)."
             )
 
     result.details.append(

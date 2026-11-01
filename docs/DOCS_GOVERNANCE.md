@@ -35,7 +35,7 @@ python3 scripts/check_docs_consistency.py
 
 검사:
 - manifest ↔ `docs/scenarios/{code}.md` · `docs/specs/systems/{code}.md` 1:1 대응 및 `module_id` 포함, `execution_profile` 허용값(`heavy|light|interactive`)
-- `docs/specs/README.md` 인덱스 ↔ `docs/specs/**/*.md` 파일 양방향 1:1 및 `SPEC-*` ID 일치(`tests/test_spec_traceability.py` 로 `@pytest.mark.spec` ↔ Spec·AC 검증 병행)
+- `docs/specs/README.md` 인덱스 ↔ `docs/specs/**/*.md` 파일 양방향 1:1 및 `SPEC-*` ID 메타데이터 일치(세부 기준: [`SPEC-PLATFORM-005` AC-003](specs/platform/05-ci-gates.md#ac-003-spec-인덱스-무결성), `tests/test_spec_traceability.py` 로 `@pytest.mark.spec` ↔ Spec·AC 검증 병행)
 - API 라우트(`app/` 전체) ↔ `docs/E2E_ARCHITECTURE.md` §5.2 양방향(`include_in_schema=False` 인프라 라우트 제외)
 - 환경변수(`app/` + `worker/`) ↔ `docs/INSTALL.md` · `.env.example` 양방향 및 기본 Gemini 모델 체인(`app/ai/gemini_models.py`) 일치
 - `docs/E2E_ARCHITECTURE.md` §4 폴더 트리 경로 실재 및 주요 디렉터리(`app/api·core·runner·notifications·contexts·templates`, `worker`, `docs`) 역방향 등재
