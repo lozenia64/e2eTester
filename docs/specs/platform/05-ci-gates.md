@@ -36,28 +36,11 @@ PR 병합 전 자동 검증 게이트로 아키텍처·문서·단위 테스트 
 
 ### FR-001: 게이트 계층
 
-| Tier | 게이트 | 명령 |
-| --- | --- | --- |
-| 0 | ruff, ruff_format, docs_consistency | `ruff check`, `check_docs_consistency.py` |
-| 1 | architecture_gates, import_contracts, projection_validate, snapshot_validate | 각 스크립트 |
-| 2 | pytest | `pytest tests/ -q` |
-| 3 | pip_audit, bandit | auth/PII 경로·주간 |
+게이트 정의의 SSOT는 `scripts/ci/gates.py`다. Tier별 목록·로컬/CI 실행 명령과 커버리지 기준은 [docs/CI.md](../../CI.md)를 참조한다.
 
-전체: `python3 scripts/ci/run_all_gates.py --profile full`
+### FR-002: 아키텍처·프론트엔드 게이트 (AG / FG)
 
-### FR-002: 아키텍처 게이트 (AG)
-
-| ID | 규칙 |
-| --- | --- |
-| AG-001 | `app/` 내 `list_runs()` 직접 호출 금지 |
-| AG-002 | `app/orchestrator/` 및 `app/contexts/*/application/` playwright import 금지 |
-| AG-003 | `app/domain/` 및 `app/contexts/*/domain/` I/O·async import 금지 |
-| AG-004 | `app/orchestrator/` 및 `app/contexts/*/application/` `list_all_runs`/`list_runs_since` 금지 |
-| AG-005 | aggregate `.snapshot`/`.suite` 직접 접근 금지 |
-| AG-006 | automation/systems/runner `print`/`redirect_stdout` 금지 |
-| AG-007 | QueryPort가 Run/SuiteRun 반환 금지 |
-| AG-008 | 서비스에서 run/suite 필드 직접 대입 금지 |
-| AG-009 | contexts/api → runner/automation/systems import 금지 |
+아키텍처 게이트(`AG-001~009`, `scripts/check_architecture_gates.py`) 및 프론트엔드 게이트(`FG-001~007`, `scripts/check_frontend_gates.py`)의 규칙 상세는 [docs/CI.md](../../CI.md)를 참조한다.
 
 ### FR-003: 문서 정합성 가드
 
@@ -65,10 +48,11 @@ PR 병합 전 자동 검증 게이트로 아키텍처·문서·단위 테스트 
 
 - manifest ↔ `docs/scenarios/{code}.md` 1:1·module_id
 - manifest ↔ `docs/specs/systems/{code}.md` 1:1·module_id
-- `docs/specs/README.md` 인덱스 링크 파일 실재
+- `docs/specs/README.md` 인덱스 ↔ Spec 파일 양방향 등재 및 ID 메타데이터 일치(섹션 앵커가 있는 링크도 파일 경로로 대조)
 - API ↔ `E2E_ARCHITECTURE.md` §5.2 양방향
-- env ↔ INSTALL/.env.example 양방향
-- §4 폴더 트리 실재
+- 프로젝트 환경변수(`E2E_*`/`GEMINI_*`) ↔ INSTALL/.env.example 양방향(코드 변수는 두 문서 각각에 등재)
+- §4 폴더 트리 실재 및 주요 디렉터리 항목의 역방향 등재
+- CI 게이트 및 AG/FG 규칙 ID의 CI 문서 등재
 
 **Spec AC·Gherkin·행동 서술은 기계 검증 대상이 아니다** — PR 리뷰·`@pytest.mark.spec`·수동 시나리오.
 
@@ -96,7 +80,21 @@ Otherwise FAIL
 ```gherkin
 Given docs/specs/README.md 인덱스
 When docs_consistency 실행
-Then 모든 .md 링크 대상 파일이 docs/specs/ 아래에 존재
+Then docs/specs/ 내부의 모든 .md 링크 대상 파일이 존재하고 모든 Spec 파일이 인덱스에 등재됨
+And 섹션 앵커가 있는 링크도 동일한 파일로 인식함
+And 인덱스 ID는 대상 Spec의 ID 메타데이터와 일치함 (의존 Spec 언급으로 대체 불가)
+And 행동 Spec마다 ID 인덱스 행이 정확히 하나이고 ID 중복이 없음 (거버넌스·템플릿은 ID 없이 링크만 등록)
+```
+
+### AC-004: 환경변수·폴더·게이트 문서 누락 차단
+
+```gherkin
+Given 프로젝트 환경변수 또는 주요 디렉터리 항목 또는 CI 게이트·AG/FG 규칙 ID 변경
+When docs_consistency 실행
+Then 환경변수는 INSTALL과 .env.example 각각에서 확인됨
+And 주요 디렉터리 항목은 아키텍처 §4 트리에서 확인됨
+And CI 게이트·규칙 ID는 CI 문서에서 확인됨
+Otherwise FAIL
 ```
 
 ## 4. API 계약 (해당 시)
@@ -133,7 +131,8 @@ Then 모든 .md 링크 대상 파일이 docs/specs/ 아래에 존재
 | --- | --- | --- | --- |
 | AC-001 | CI | `scripts/ci/run_all_gates.py --profile full` | 전체 게이트 |
 | AC-002 | CI | `scripts/check_docs_consistency.py` | manifest↔문서 |
-| AC-003 | CI | `scripts/check_docs_consistency.py` | README 인덱스 링크 |
+| AC-003 | 단위·CI | `tests/test_docs_consistency.py`, `scripts/check_docs_consistency.py` | 인덱스 양방향·ID 메타데이터·섹션 앵커 링크·ID 누락/중복 차단 |
+| AC-004 | CI | `scripts/check_docs_consistency.py` | 환경변수 양쪽 등재·주요 디렉터리·게이트 규칙 등재 |
 | — | CI | `scripts/check_architecture_gates.py` | AG-001~009 |
 | — | CI | `importlinter` | import 계약 |
 | — | CI | `pytest tests/ -q` | 단위 회귀 |

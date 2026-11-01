@@ -7,7 +7,14 @@ PR 게이트: 순수 단위 테스트 + 문서/아키텍처 정책 + ruff. **라
 ```bash
 python3 -m pip install -r requirements-dev.txt
 python3 scripts/ci/run_all_gates.py --profile full
+python3 scripts/ci/run_all_gates.py --profile docs_only          # 문서만 변경 시 빠른 검증
+python3 scripts/ci/run_all_gates.py --gate coverage              # 단일 게이트 실행
+python3 scripts/ci/run_all_gates.py --profile full --risk-flags pii,otp,auth  # Tier 3 보안 게이트 포함
 ```
+
+- 새 워크트리는 게이트 실행 전 `npm ci` 를 먼저 수행한다.
+- 전체 게이트(`--profile full`)는 실행 시간이 길 수 있으므로 에이전트 실행 시 백그라운드로 구동하는 것을 권장한다(`--fail-fast` 로 첫 실패 시 즉시 중단 가능).
+- Windows 환경에서 `.sh` 스크립트 실행이 필요할 때는 `bash <path>.sh` 로 호출한다.
 
 `npm run dev`(`vite build --watch`)는 켜 둔 채 게이트를 돌려도 된다. watch 모드는
 `emptyOutDir` 를 끄므로(`vite.config.ts`) 재빌드 중에도 `app/web/static/dist/` 가 비지
@@ -26,7 +33,7 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 | --- | --- |
 | 0 | `ci_config_valid`, `ruff`, `ruff_format`, `docs_consistency`, `frontend_gates`, `frontend_tokens`, `typecheck_web`, `eslint_web`, `build_web`, `vitest_web` |
 | 1 | `architecture_gates` (AG-001~009), `import_contracts`, `pyright_decider`, `projection_validate`, `snapshot_validate` |
-| 2 | `coverage` (= `pytest --cov`, 바닥선 57%) |
+| 2 | `coverage` (= `pytest --cov`, 바닥선 59%) |
 | 3 | `pip_audit`, `bandit_security` (auth/PII 경로·주간) |
 
 로컬 러너(`--profile full`)는 Tier 2 에서 `coverage` 대신 빠른 `pytest` 를 쓴다.
@@ -34,16 +41,19 @@ SSOT: `scripts/ci/gates.py`, 워크플로: `.github/workflows/ci.yml`.
 
 ## 아키텍처 게이트 요약
 
+SSOT: `scripts/check_architecture_gates.py`.
+
 | 규칙 | 내용 |
 | --- | --- |
-| AG-001 | `list_runs()` 직접 호출 금지 |
-| AG-002 | orchestrator 에서 playwright import 금지 |
-| AG-003 | domain 에 I/O import 금지 |
-| AG-004~005 | list_all_runs·aggregate 직접 접근 금지 |
-| AG-006 | 스텝 계층 `print`/`redirect_stdout` 금지 |
-| AG-007 | QueryPort 반환에 Run/Suite 엔티티 금지 |
-| AG-008 | 서비스에서 run/suite 필드 직접 대입 금지 |
-| AG-009 | contexts/api 에서 실행 평면 import 금지 |
+| AG-001 | `app/` 내 `list_runs()` 직접 호출 금지 (`RunSummaryQueryPort` 등 프로젝션 질의 사용) |
+| AG-002 | 애플리케이션 계층(`app/orchestrator/`, `app/contexts/*/application/`)에서 `playwright` import 금지 |
+| AG-003 | 도메인 계층(`app/domain/`, `app/contexts/*/domain/`)에 I/O·async 런타임 import 금지 |
+| AG-004 | 애플리케이션 계층에서 `list_all_runs()` / `list_runs_since()` 직접 호출 금지 |
+| AG-005 | `app/domain/`·`app/contexts/`·`tests/` 외에서 aggregate `.snapshot` / `.suite` 직접 접근 금지 |
+| AG-006 | 스텝 계층(`app/automation`, `app/systems`, `app/runner`)에서 `print` / `redirect_stdout` 금지 |
+| AG-007 | `*QueryPort` 프로토콜 반환 타입에 `Run`/`SuiteRun` 엔티티 금지 (화면형 Row DTO 만) |
+| AG-008 | 애플리케이션 서비스에서 `run`/`suite`/`step`/`module` 필드 직접 대입 금지 (유일 변이자 = 애그리거트) |
+| AG-009 | `app/contexts/`·`app/api/` 에서 실행 평면(`app.runner`/`automation`/`systems`) import 금지 |
 
 ## 프론트엔드 게이트 요약
 
@@ -51,16 +61,15 @@ SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_f
 
 | 규칙 | 내용 |
 | --- | --- |
-| FG-001 | 템플릿에 외부 CDN `<script>`/`<link>` 금지 |
+| FG-001 | 템플릿(`.html`, `.jinja`)에 외부 CDN `<script>`/`<link>` 금지 (예외 없음) |
 | FG-002 | `app/web/frontend/` · `app/web/templates/` · `app/web/static/*.js` 내 하드코딩 hex 금지 (생성물·`theme-color` meta 제외, allowlist 축소형) |
-| FG-003 | 상태 라벨은 `lib/status.generated.ts` 경유만 |
-| FG-004 | 엔트리·컴포넌트 파일 400줄 상한 |
-| FG-005 | 템플릿의 `/static/` 직접 참조 금지 (allowlist 제외) |
-| FG-006 | 템플릿의 **상태→표현 매핑 중복** 금지 — 상태 키 맵 리터럴, enum+라벨 동일 줄 (allowlist 축소형) |
-| FG-007 | 메일 상태 색이 `app/core/status_colors.py` 의 `PALETTE` 파생인지 (레이아웃 색 제외) |
+| FG-003 | 프론트엔드(`.ts`, 테스트 제외) 상태 라벨은 `lib/status.generated.ts` 경유만 |
+| FG-004 | 엔트리·컴포넌트 파일(`.ts`, `.css`) 400줄 상한 (`FG004_ALLOWLIST` 제외) |
+| FG-005 | 템플릿의 `/static/` 직접 참조 금지 (`_assets.html` 매크로 사용, `FG005_ALLOWLIST` 제외) |
+| FG-006 | 템플릿의 **상태→표현 매핑 중복** 금지 — 상태 키 맵 리터럴, enum+라벨 동일 줄 (예외 없음) |
+| FG-007 | 메일 렌더러(`report_renderer.py`) 상태 색이 `app/core/status_colors.py` 의 `PALETTE` 파생인지 (레이아웃 색 제외) |
 
-`frontend_tokens` 는 `status_labels.py` 에서 토큰·타입을 재생성해 커밋본과
-diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것을 막는다.
+`frontend_tokens` 는 `app/core/status_labels.py` 와 `app/core/status_colors.py` 에서 토큰(`tokens.generated.css`)·타입/라벨(`status.generated.ts`)을 재생성해 커밋본과 diff 를 검사한다 — 상태·색상을 바꾸고 프론트 갱신을 잊는 것을 막는다.
 
 `build_web`(`npm run build`)와 `vitest_web`(`npm run test`)은 정적 검사만으로는
 잡히지 않는 것을 막는다 — 타입·린트가 통과해도 Vite/PostCSS/Tailwind 파이프라인이
@@ -68,7 +77,7 @@ diff 를 검사한다 — 상태를 추가하고 프론트 갱신을 잊는 것�
 아무것도 강제하지 않는다. 둘 다 Node 를 요구하므로 `docs_only` 프로파일에서는 제외한다.
 
 `coverage`(Tier 2, `pytest --cov`)도 CI 에서는 Node·빌드가 필요하다 —
-`base.html` 이 `asset_styles()`/`asset_script()`(`app/web/asset_manifest.py`)로
+`base.html`/`_assets.html` 이 `asset_css()`/`asset_js()`(`app/web/asset_manifest.py`)로
 실제 Vite manifest 를 요구하므로, 템플릿을 렌더링하는 테스트는 `dist/` 없이 돌지
 않는다. `.github/workflows/ci.yml` 의 `gate` job 은 게이트당 컨테이너가 분리돼
 다른 job 의 `build_web` 산출물을 공유받지 못하므로, `coverage` job 자체에

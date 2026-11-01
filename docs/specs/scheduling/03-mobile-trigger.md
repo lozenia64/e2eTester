@@ -28,8 +28,8 @@
 
 | API | 용도 |
 | --- | --- |
-| GET `/api/trigger/{token}/status` | polling |
-| POST `/api/trigger/{token}/otp` | phone auth resume |
+| GET `/api/trigger/{token}/status` | polling (`execution_id`, OTP 대기 시 `otp_run_id`·`otp_request_id` 포함) |
+| POST `/api/trigger/{token}/otp` | phone auth resume (Run 서비스가 대기 컨텍스트를 재검사해 다른 실행·인증 단계로 전달 차단) |
 
 ## 5. 토큰
 

@@ -10,15 +10,17 @@
   2. manifest 의 모든 module_id 가 짝이 되는 시나리오 문서에 등장하는지
   3. 시스템 manifest ↔ SDD Spec 1:1 대응 (docs/specs/systems/{code}.md)
   4. manifest 의 모든 module_id 가 짝이 되는 SDD Spec에 등장하는지
-  5. docs/specs/README.md 인덱스의 .md 링크 대상 파일이 실재하는지
+  5. docs/specs/README.md 인덱스 ↔ docs/specs/**/*.md 파일 양방향 1:1 및 SPEC ID 일치
   6. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
      — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
        `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
-  6. 코드가 읽는 환경변수가 docs/INSTALL.md 또는 .env.example 에 문서화되어 있는지
+  6. 코드가 읽는 환경변수가 docs/INSTALL.md 와 .env.example 양쪽에 모두 문서화되어 있는지
   7. 기본 Gemini 모델 체인(코드 상수)이 docs/INSTALL.md / .env.example 와 일치하는지
   8. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
   9. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
   10. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
+  11. (역방향) 주요 디렉터리(app/api, app/contexts, docs 등)의 항목이 §4 폴더 트리에 누락 없이 등재되어 있는지
+  12. CI 게이트(scripts/ci/gates.py)·아키텍처 규칙(AG-*)·프론트엔드 규칙(FG-*)이 docs/CI.md 에 문서화되어 있는지
 
 사용법:
   python3 scripts/check_docs_consistency.py            # 전체 검사
@@ -33,6 +35,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -59,8 +62,14 @@ MANIFEST_GLOB = "app/systems/*/manifest.yaml"
 SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
 SPECS_SYSTEMS_DIR = REPO_ROOT / "docs" / "specs" / "systems"
 SPECS_INDEX_DOC = REPO_ROOT / "docs" / "specs" / "README.md"
-SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#]+\.md)(?:#[^)]*)?\)")
+SPEC_INDEX_ROW_RE = re.compile(
+    r"^\|\s*(SPEC-[A-Z0-9-]+)\s*\|\s*\[[^\]]*\]\(([^)#]+\.md)(?:#[^)]*)?\)",
+    re.MULTILINE,
+)
+SPEC_DECLARED_ID_RE = re.compile(r"^\|\s*\*\*ID\*\*\s*\|\s*`(SPEC-[A-Z0-9-]+)`\s*\|", re.MULTILINE)
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
+CI_DOC = REPO_ROOT / "docs" / "CI.md"
 README_DOC = REPO_ROOT / "README.md"
 INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
@@ -215,30 +224,73 @@ def check_spec_lists_modules(manifests: dict[str, dict]) -> CheckResult:
 
 
 def check_spec_index_links_exist() -> CheckResult:
-    """docs/specs/README.md 인덱스에 나열된 Spec 파일이 실제로 존재하는지 검사."""
-    result = CheckResult("docs/specs/README.md 인덱스 링크 파일 실재")
+    """docs/specs/README.md 인덱스 ↔ docs/specs/**/*.md 양방향 정합성 및 SPEC ID 일치 검사."""
+    result = CheckResult("docs/specs/README.md 인덱스 ↔ Spec 파일 양방향 및 SPEC ID 정합")
     if not SPECS_INDEX_DOC.exists():
         result.problems.append("docs/specs/README.md 가 없습니다.")
         return result
     text = _read(SPECS_INDEX_DOC)
     specs_root = SPECS_INDEX_DOC.parent
     checked = 0
-    seen: set[str] = set()
+    linked_specs: set[str] = set()
     for raw in SPEC_INDEX_LINK_RE.findall(text):
         rel = raw.split("#", 1)[0].strip()
         if not rel or rel.startswith("http"):
             continue
-        if rel in seen:
+        target = (specs_root / rel).resolve()
+        try:
+            norm_rel = target.relative_to(specs_root.resolve()).as_posix()
+        except ValueError:
+            continue  # docs/specs/ 외부 문서 링크(../DOCS_GOVERNANCE.md 등)는 인덱스 대상 아님
+        if norm_rel in linked_specs:
             continue
-        seen.add(rel)
+        linked_specs.add(norm_rel)
         checked += 1
-        target = specs_root / rel
         if not target.is_file():
             result.problems.append(
                 f"인덱스 링크 `{rel}` 대상 파일이 없음 "
                 f"(docs/specs/README.md 또는 Spec 파일 경로 갱신 필요)."
             )
-    result.details.append(f"인덱스 .md 링크 {checked}개의 실재를 확인했습니다.")
+
+    actual_specs = {
+        p.relative_to(specs_root).as_posix()
+        for p in specs_root.rglob("*.md")
+        if p.name != "README.md"
+    }
+    for missing in sorted(actual_specs - linked_specs):
+        result.problems.append(
+            f"Spec 파일 `docs/specs/{missing}` 가 docs/specs/README.md 인덱스에 등록되지 않음."
+        )
+
+    rows = SPEC_INDEX_ROW_RE.findall(text)
+    indexed_paths = Counter((specs_root / rel.strip()).resolve() for _, rel in rows)
+    for rel in sorted(actual_specs - {"00-GOVERNANCE.md", "_TEMPLATE.md"}):
+        count = indexed_paths[(specs_root / rel).resolve()]
+        if count != 1:
+            result.problems.append(
+                f"Spec 파일 `docs/specs/{rel}` 의 ID 인덱스 행은 정확히 1개여야 함 "
+                f"(현재 {count}개)."
+            )
+    for spec_id, count in sorted(Counter(spec_id for spec_id, _ in rows).items()):
+        if count > 1:
+            result.problems.append(f"인덱스의 `{spec_id}` 가 {count}개 행에 중복 등록됨.")
+
+    id_checked = 0
+    for spec_id, rel in rows:
+        target = specs_root / rel.strip()
+        if not target.is_file():
+            continue
+        id_checked += 1
+        declared_id = SPEC_DECLARED_ID_RE.search(_read(target))
+        if declared_id is None or declared_id.group(1) != spec_id:
+            result.problems.append(
+                f"인덱스의 `{spec_id}` 가 `docs/specs/{rel.strip()}` 의 ID 메타데이터와 다름 "
+                "(SPEC ID 불일치)."
+            )
+
+    result.details.append(
+        f"Spec 파일 {len(actual_specs)}개 양방향 등재 및 SPEC ID {id_checked}개 일치를 확인했습니다."
+    )
     return result
 
 
@@ -327,13 +379,14 @@ def check_documented_routes_exist() -> CheckResult:
 # 4. 환경변수 문서화
 # --------------------------------------------------------------------------- #
 def _collect_env_names() -> tuple[set[str], set[str]]:
-    """설정을 읽는 런타임 프로세스(`app/` + `worker/`)의 환경변수 이름을 모은다.
+    """설정을 읽는 런타임 프로세스(`app/` + `worker/`)의 프로젝트 환경변수 이름을 모은다.
 
     `worker/` 를 포함해야 하는 이유: 씬 워커는 API 와 별개 프로세스로 기동하면서
     자기 바인드 주소를 직접 `os.environ` 에서 읽는다. `app/` 만 훑던 동안
     `E2E_WORKER_HTTP_HOST`/`_PORT` 가 어느 문서에도 없이 새어나갔다.
     `scripts/` 는 개발 도구라 제외한다 — CI 전용 변수(GITHUB_* 등)까지 설치 문서에
-    올리라고 요구하게 된다.
+    올리라고 요구하게 된다. OS 기본 환경변수(LOCALAPPDATA 등)는 제외하고 프로젝트
+    환경변수(E2E_*/GEMINI_*)만 대상으로 삼는다.
     """
     literals: set[str] = set()
     prefixes: set[str] = set()
@@ -343,25 +396,30 @@ def _collect_env_names() -> tuple[set[str], set[str]]:
         for grp in OS_ENV_RE.findall(text):
             literals.update(name for name in grp if name)
         prefixes.update(DYNAMIC_ENV_PREFIX_RE.findall(text))
-    return literals, prefixes
+    project_literals = {name for name in literals if name.startswith(("E2E_", "GEMINI_"))}
+    return project_literals, prefixes
 
 
 def check_env_vars_documented() -> CheckResult:
-    result = CheckResult("코드가 읽는 환경변수가 docs/INSTALL.md/.env.example 에 문서화")
-    doc_text = _read(INSTALL_DOC) + "\n" + _read(ENV_EXAMPLE)
+    result = CheckResult("코드가 읽는 환경변수가 docs/INSTALL.md 와 .env.example 양쪽에 문서화")
     literals, prefixes = _collect_env_names()
-    for name in sorted(literals):
-        if name not in doc_text:
-            result.problems.append(
-                f"환경변수 `{name}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
-            )
-    for prefix in sorted(prefixes):
-        if prefix not in doc_text:
-            result.problems.append(
-                f"동적 환경변수 prefix `{prefix}{{...}}` 가 docs/INSTALL.md/.env.example 에 문서화되지 않음."
-            )
+    for doc_path in (INSTALL_DOC, ENV_EXAMPLE):
+        doc_label = doc_path.relative_to(REPO_ROOT).as_posix()
+        doc_text = _read(doc_path)
+        for name in sorted(literals):
+            if name not in doc_text:
+                result.problems.append(
+                    f"환경변수 `{name}` 가 `{doc_label}` 에 문서화되지 않음 "
+                    f"(docs/INSTALL.md 와 .env.example 양쪽 모두 갱신 필요)."
+                )
+        for prefix in sorted(prefixes):
+            if prefix not in doc_text:
+                result.problems.append(
+                    f"동적 환경변수 prefix `{prefix}{{...}}` 가 `{doc_label}` 에 문서화되지 않음."
+                )
     result.details.append(
-        f"환경변수 {len(literals)}개 + 동적 prefix {len(prefixes)}개를 문서와 대조했습니다."
+        f"환경변수 {len(literals)}개 + 동적 prefix {len(prefixes)}개를 "
+        f"docs/INSTALL.md 및 .env.example 각각과 대조했습니다."
     )
     return result
 
@@ -449,6 +507,61 @@ def check_folder_tree_paths_exist() -> CheckResult:
     return result
 
 
+def check_key_dirs_documented_in_tree() -> CheckResult:
+    """역방향: 주요 디렉터리의 1단계 항목이 E2E_ARCHITECTURE.md §4 폴더 트리에 등재되어 있는지."""
+    result = CheckResult(
+        "주요 디렉터리(app/api·core·runner·notifications·contexts·templates, worker, docs) §4 트리 등재"
+    )
+    documented_paths = {rel for rel, _ in _extract_folder_tree_entries()}
+    checked = 0
+
+    py_check_dirs = (
+        REPO_ROOT / "app" / "api",
+        REPO_ROOT / "app" / "core",
+        REPO_ROOT / "app" / "runner",
+        REPO_ROOT / "app" / "notifications",
+        REPO_ROOT / "worker",
+    )
+    for py_dir in py_check_dirs:
+        for py_file in sorted(py_dir.glob("*.py")):
+            if py_file.name == "__init__.py":
+                continue
+            checked += 1
+            rel = py_file.relative_to(REPO_ROOT).as_posix()
+            if rel not in documented_paths:
+                result.problems.append(
+                    f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음 "
+                    f"(모듈 추가 시 §4 동시 갱신 필요)."
+                )
+
+    for html_file in sorted((REPO_ROOT / "app" / "web" / "templates").glob("*.html")):
+        checked += 1
+        rel = html_file.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(f"템플릿 `{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음.")
+
+    for ctx_dir in sorted((REPO_ROOT / "app" / "contexts").iterdir()):
+        if not ctx_dir.is_dir() or ctx_dir.name.startswith("__"):
+            continue
+        checked += 1
+        rel = ctx_dir.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(
+                f"바운디드 컨텍스트 `{rel}/` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음."
+            )
+
+    for doc_entry in sorted((REPO_ROOT / "docs").iterdir()):
+        if doc_entry.name.startswith("."):
+            continue
+        checked += 1
+        rel = doc_entry.relative_to(REPO_ROOT).as_posix()
+        if rel not in documented_paths:
+            result.problems.append(f"`{rel}` 가 E2E_ARCHITECTURE.md §4 폴더 트리에 없음.")
+
+    result.details.append(f"주요 디렉터리 항목 {checked}개를 §4 폴더 트리와 대조했습니다.")
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # 5. 기본 Gemini 모델 체인
 # --------------------------------------------------------------------------- #
@@ -474,6 +587,40 @@ def check_model_chain_matches() -> CheckResult:
 
 
 # --------------------------------------------------------------------------- #
+# 6. CI 게이트 및 AG/FG 규칙 ID 문서화
+# --------------------------------------------------------------------------- #
+def check_ci_gates_and_rules_documented() -> CheckResult:
+    """scripts/ci/gates.py 의 게이트 및 AG-*/FG-* 규칙 ID 가 docs/CI.md 에 등장하는지 검사."""
+    from scripts.check_architecture_gates import RULES as AG_RULES
+    from scripts.ci.gates import GATE_COMMANDS
+
+    result = CheckResult("CI 게이트 및 AG/FG 규칙 ID 가 docs/CI.md 에 문서화")
+    ci_text = _read(CI_DOC)
+    fg_src = _read(REPO_ROOT / "scripts" / "check_frontend_gates.py")
+    fg_ids = sorted(set(re.findall(r"\bFG-\d{3}\b", fg_src)))
+    ag_ids = [rule_id for rule_id, _, _ in AG_RULES]
+
+    for gate_name in sorted(GATE_COMMANDS):
+        if f"`{gate_name}`" not in ci_text:
+            result.problems.append(
+                f"CI 게이트 `{gate_name}` 가 docs/CI.md 에 문서화되지 않음 "
+                f"(scripts/ci/gates.py 변경 시 docs/CI.md 동시 갱신 필요)."
+            )
+    for rule_id in ag_ids:
+        if rule_id not in ci_text:
+            result.problems.append(f"아키텍처 게이트 규칙 `{rule_id}` 가 docs/CI.md 에 없음.")
+    for rule_id in fg_ids:
+        if rule_id not in ci_text:
+            result.problems.append(f"프론트엔드 게이트 규칙 `{rule_id}` 가 docs/CI.md 에 없음.")
+
+    result.details.append(
+        f"게이트 {len(GATE_COMMANDS)}개, AG 규칙 {len(ag_ids)}개, FG 규칙 {len(fg_ids)}개를 "
+        f"docs/CI.md 와 대조했습니다."
+    )
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # 실행
 # --------------------------------------------------------------------------- #
 def run_all() -> list[CheckResult]:
@@ -491,6 +638,8 @@ def run_all() -> list[CheckResult]:
         check_documented_routes_exist(),
         check_documented_env_vars_used(),
         check_folder_tree_paths_exist(),
+        check_key_dirs_documented_in_tree(),
+        check_ci_gates_and_rules_documented(),
     ]
 
 

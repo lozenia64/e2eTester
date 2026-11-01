@@ -301,7 +301,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | AC-005 | 단위 | `tests/test_otp_recovery_guard.py::test_reset_to_module_entry_without_entry_url_skips_rewind` | `entry_url=None` 이면 `RunService._recover_session_for_retry` 가 `gateway.recover_session` 자체를 호출하지 않고 되감기를 생략(제자리 재시도로 폴백) |
 | AC-006 | 단위 | `tests/test_auto_rerun_gate.py::test_auto_rerun_queues_and_auto_rerun_of_is_self_referential` | 큐잉 표시(`auto_rerun_pending`)와 `auto_rerun_of` 가 자기 자신(원본) `run_id` 를 가리키는지 애그리거트 수준에서 검증 |
 | AC-007 | 단위 | `tests/test_run_state_machine.py::test_tier_two_budget_exhaustion_downgrades_to_tier_one` | tier 2 예산 소진 시 `RESET_TO_MODULE_ENTRY` 로 강등 |
-| AC-007 | 통합 | `tests/integration/test_tier2_budget_scope.py::test_tier_two_budget_is_shared_across_modules_in_one_run` | 예산 카운터가 **Run 스코프**임을 종단 검증 — 모듈 A 가 예산을 소진하면 모듈 B 의 첫 tier 2 시도가 강등된다(traceability 스캔 대상 밖 — `tests/` 최상위가 아님) |
+| AC-007 | 통합 | `tests/integration/test_tier2_budget_scope.py::test_tier_two_budget_is_shared_across_modules_in_one_run` | 예산 카운터가 **Run 스코프**임을 종단 검증 — 모듈 A 가 예산을 소진하면 모듈 B 의 첫 tier 2 시도가 강등된다 |
 | — | 단위 | `tests/test_run_state_machine.py` | tier 상승 상한(`REPLAY_FROM_LOGIN` 에서 멈춤)·기본 신호 tier 0 하위호환 |
 | — | 단위 | `tests/test_run_aggregate.py` | `record_retry`/`record_recovered`(재시도 이력 누적·`RunModuleRecovered` 발행)·`mark_auto_rerun_pending`·`finalize`+`mark_auto_rerun_pending` 단일 배치·`reannounce_finished`(종료 재발행·되감긴 Run 재봉인) |
 | — | 통합 | `tests/integration/test_auto_rerun_notification_race.py` | R4 경합 — ① `RunFinished` 를 실은 persist 가 이미 `auto_rerun_pending=true` 를 담는지, ② 릴레이가 경합에서 이겨도 조기 운영자 알림이 나가지 않는지, ③ 큐잉 실패 시 보상 발행으로 운영자 알림이 정확히 1건 발송되는지를 실제 SQLite·아웃박스·릴레이·EventBus·알림기로 종단 검증(SMTP 전송만 대체) |
@@ -309,7 +309,7 @@ RunModuleRecovered / RunAutoRerunTriggered  — app/contexts/run/domain/events.p
 | — | 단위 | `tests/test_session_server.py` | tier 1(진입 URL 재이동, `entry_url=None` 시 `SessionServer.recover()` 자체의 no-op 포함)·tier 2(런타임 재구축, 재개설 실패 시 옛 런타임 유지) 워커 동작 |
 | — | 단위 | `tests/test_otp_recovery_guard.py` | R3 — OTP 중계 미설정 시 tier 2 되감기 생략 |
 | — | 단위 | `tests/test_auto_rerun_gate.py` | `ANOMALY`/수동 실행/연쇄/예산 소진 시 `SkipAutoRerun`, 순수 결정(`TriggerAutoRerun`) |
-| 통합 | `tests/integration/test_auto_rerun_wiring.py::test_scheduled_error_run_auto_reruns_in_place_when_enabled` | `RunService` 전체 실행 경로로 자동 재실행·`auto_rerun_of` 를 종단간 검증(traceability 스캔 대상 밖 — `tests/` 최상위가 아님) |
+| AC-006 | 통합 | `tests/integration/test_auto_rerun_wiring.py::test_scheduled_error_run_auto_reruns_in_place_when_enabled` | `RunService` 전체 실행 경로로 자동 재실행·`auto_rerun_of` 를 종단간 검증 |
 | CI 게이트 | `tests/test_spec_traceability.py` | 본 Spec 의 `@pytest.mark.spec` 마커 ↔ AC 섹션 정합 |
 | CI 게이트 | `scripts/check_docs_consistency.py` | env 변수(`E2E_AUTO_RERUN_ENABLED` 등) 문서화 정합 |
 

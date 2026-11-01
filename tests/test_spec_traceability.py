@@ -20,10 +20,12 @@ MARKER_RE = re.compile(
 
 def _collect_spec_markers() -> list[tuple[str, str, str]]:
     found: list[tuple[str, str, str]] = []
-    for path in sorted((REPO_ROOT / "tests").glob("test_*.py")):
+    tests_root = REPO_ROOT / "tests"
+    for path in sorted(tests_root.rglob("test_*.py")):
+        rel = path.relative_to(tests_root).as_posix()
         text = path.read_text(encoding="utf-8")
         for spec_id, ac_id in MARKER_RE.findall(text):
-            found.append((path.name, spec_id, ac_id))
+            found.append((rel, spec_id, ac_id))
     return found
 
 

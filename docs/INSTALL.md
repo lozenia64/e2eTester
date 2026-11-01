@@ -36,10 +36,11 @@ npm run dev     # 개발 중 파일 변경 감시 재빌드 (선택)
 
 ## 실행 구조
 
-API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_local.py` 가 세 프로세스를 기동·종료합니다(`E2E_EXECUTION_MODE=remote`).
+API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `scripts/run_local.py` 가 세 프로세스를 함께 기동·종료하며 자식 프로세스에 `E2E_EXECUTION_MODE=remote` 를 기본 주입합니다(단독 코드 기본값은 `local`).
 
-- Redis: `E2E_REDIS_URL` (기본 로컬). 데이터: `data/`, `redis-data/`
-- 워커: `http://127.0.0.1:8100` (`E2E_WORKER_BASE_URL`)
+- API: 기본 `0.0.0.0:2222` 바인딩(폰 SMS OTP 중계기 접속 허용; 폰 중계를 쓰지 않으면 `--api-host 127.0.0.1` 권장)
+- Redis: `E2E_REDIS_URL` (기본 로컬, 기동 중이면 `--no-start-redis` 가능). 데이터: `data/`, `redis-data/`
+- 워커: `http://127.0.0.1:8100` (`E2E_WORKER_BASE_URL`, `E2E_WORKER_HTTP_HOST`/`_PORT`)
 - Chrome 프로필: HOM·FP·HRP → `E2E_USER_DATA_DIR`; MHM·HWTC·CHBOT → `E2E_PLAYWRIGHT_MCP_PROFILE_DIR`
 
 ## 운영
@@ -49,7 +50,7 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 - 동시 실행: `E2E_RUN_CONCURRENCY_HEAVY`(2), `E2E_RUN_CONCURRENCY_LIGHT`(4), `E2E_RUN_CONCURRENCY_INTERACTIVE`(2)
 - 재기동 시 진행 중 Run 은 `CANCELLED`(체크포인트 있으면 복구 가능)
 - ERROR·CANCELLED Run 자동 삭제: `E2E_RUN_RETENTION_CRON` (기본 `0 3 * * *`, `E2E_SCHEDULE_TZ`)
-- 자동 복구 루프: `E2E_AUTO_RERUN_ENABLED`(기본 `false`) — 예약 Run 이 `ERROR` 로 끝나면 실패 모듈부터 1회 자동 재실행. `E2E_RECOVERY_TIER2_BUDGET`(기본 `2`) — Run 당 세션 재개설(tier 2) 허용 횟수, 넘으면 한 단계 낮춘 등급으로 재시도(현재 tier 2 는 런타임 재구축까지만 하고 로그인 모듈을 다시 주행하지 않는다 — `docs/E2E_ARCHITECTURE.md` 의 'tier 2 현행 한계' 참고). `E2E_RUN_MAX_DURATION_S`(기본 무제한) — Run 총 실행 시간 상한(초), 넘으면 재시도를 중단
+- 자동 복구 루프: `E2E_AUTO_RERUN_ENABLED`(기본 `false`), `E2E_RECOVERY_TIER2_BUDGET`(기본 `2`), `E2E_RUN_MAX_DURATION_S`(기본 무제한). 행동 규칙 및 tier 2 현행 한계는 [`SPEC-RUN-006`](specs/run/06-self-recovery-loop.md)(FR-004) 참고
 
 ## 환경변수 (요약)
 
@@ -60,12 +61,12 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 | `E2E_DB_PATH` / `E2E_SQLITE_BUSY_TIMEOUT_MS` | SQLite |
 | `E2E_SCHEDULE_TZ` | cron·일간 대시보드 TZ |
 | `E2E_RUN_RETENTION_ENABLED` / `E2E_RUN_RETENTION_CRON` | 실패 Run 자동 삭제 |
-| `E2E_WALL_ENABLED` | 상황판 `/wall` 공개 여부(비인증 읽기 전용). 외부 접근 가능한 배포에서는 `false` |
+| `E2E_WALL_ENABLED` | 상황판 `/wall` 공개 여부(비인증 읽기 전용, 기본 `true`). 외부 접근 가능한 배포에서는 `false` |
 | `E2E_PUBLIC_BASE_URL` | 메일에 넣을 공개 주소. 비면 일간 리포트에 상황판 링크 없음(기본) |
 | `E2E_EMAIL_DAILY_REPORT_ENABLED` / `E2E_EMAIL_DAILY_REPORT_CRON` / `E2E_EMAIL_DAILY_REPORT_RECIPIENTS` | 일간 리포트 메일(어제 결과, 전사 단일). 기본 꺼짐 — 켜기 전 수신자를 본인 주소로 두고 하루 관찰 |
 | `E2E_AUTO_RERUN_ENABLED` / `E2E_RUN_MAX_DURATION_S` / `E2E_RECOVERY_TIER2_BUDGET` | 자동 복구 루프(예약 Run 자동 재실행·실행 시간 상한·로그인 재주행 예산) |
 | `E2E_RUN_CONCURRENCY` / `E2E_RUN_CONCURRENCY_HEAVY` / `E2E_RUN_CONCURRENCY_LIGHT` / `E2E_RUN_CONCURRENCY_INTERACTIVE` | 동시 Run |
-| `E2E_EXECUTION_MODE` / `E2E_REDIS_URL` / `E2E_WORKER_BASE_URL` / `E2E_WORKER_CONCURRENCY` / `E2E_SESSION_LEASE_TTL` | 워커·Redis |
+| `E2E_EXECUTION_MODE` / `E2E_REDIS_URL` / `E2E_WORKER_BASE_URL` / `E2E_WORKER_HTTP_HOST` / `E2E_WORKER_HTTP_PORT` / `E2E_WORKER_CONCURRENCY` / `E2E_SESSION_LEASE_TTL` / `E2E_REALTIME_FANOUT` | 워커·Redis·실시간 fan-out |
 | `E2E_LOG_LEVEL` / `E2E_LOG_FORMAT` | structlog |
 | `E2E_USER_DATA_DIR` / `E2E_WORKSPACE_DIR` / `E2E_PLAYWRIGHT_MCP_PROFILE_DIR` | Chrome 프로필 |
 | `E2E_FAILURE_ANALYZER_ENABLED` / `GEMINI_API_KEY` / `GEMINI_MODELS` / `E2E_GEMINI_SSL_VERIFY` | AI 분석 |
@@ -78,7 +79,8 @@ API·워커·Redis 가 함께 떠야 실제 점검이 동작합니다. `run_loca
 ## 선택 기능
 
 - **AI 분석:** `E2E_FAILURE_ANALYZER_ENABLED=true`, `GEMINI_API_KEY`, `GEMINI_MODELS=gemini-3.5-flash|gemini-3.1-flash-lite|gemini-3-flash-preview|gemini-3.1-pro-preview`
-- **종료 메일:** `E2E_EMAIL_ENABLED=true`, Gmail 앱 비밀번호. HTML 은 고정 템플릿, Gemini 는 JSON 콘텐츠만
+- **종료·일간 리포트 메일:** `E2E_EMAIL_ENABLED=true`, Gmail 앱 비밀번호(HTML 은 고정 템플릿, Gemini 는 JSON 콘텐츠만). 전사 어제 결과 요약 메일은 `E2E_EMAIL_DAILY_REPORT_ENABLED=true` 및 `E2E_EMAIL_DAILY_REPORT_RECIPIENTS` 설정(기본 `0 8 * * *`)
+- **상황판 (`/wall`):** 사무실 상시 디스플레이용 비인증 읽기 전용 화면(`E2E_WALL_ENABLED=true` 기본, 외부 노출 배포 시 `false`)
 - **OTP 중계:** `E2E_OTP_RELAY_TOKEN`, `E2E_OTP_RELAY_REGEX` — [otp_relay.md](otp_relay.md)
 - **텔레그램 봇:** `E2E_TELEGRAM_BOT_TOKEN` — [telegram_bot.md](telegram_bot.md)
 - **자가 치유:** 무인 실행 중 셀렉터 복구, `/self-healing` 에서 패치 승인

@@ -6,7 +6,7 @@ docs/CI.md 가 "라이브 Playwright E2E 는 CI 밖" 을 정책으로 두므로 
 
 사용:
     python3 scripts/run_local.py            # 별 터미널에서 앱 기동
-    python3 scripts/check_wall_console.py   # 기본 http://127.0.0.1:8000/wall
+    python3 scripts/check_wall_console.py   # 기본 http://127.0.0.1:2222/wall
     python3 scripts/check_wall_console.py --url http://host:port/wall
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-DEFAULT_URL = "http://127.0.0.1:8000/wall"
+DEFAULT_URL = "http://127.0.0.1:2222/wall"
 
 
 def main(argv: list[str]) -> int:
