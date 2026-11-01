@@ -75,7 +75,7 @@ draft → approved → (구현) → (검증) → deprecated
 | 검증 대상 | 도구 | 비고 |
 | --- | --- | --- |
 | manifest ↔ 시나리오 ↔ 시스템 Spec `module_id` | `scripts/check_docs_consistency.py` | CI tier 0 (`_` 접두사 공유 Spec 제외 1:1) |
-| Spec 인덱스(`docs/specs/README.md`) 링크 파일 실재 | `scripts/check_docs_consistency.py` | CI tier 0 |
+| Spec 인덱스(`docs/specs/README.md`) ↔ Spec 파일 양방향·SPEC ID | `scripts/check_docs_consistency.py` | CI tier 0 |
 | API·env·Gemini 모델 체인·§4 폴더 트리 양방향 | `scripts/check_docs_consistency.py` | CI tier 0 |
 | 프론트엔드 규칙(FG-001~007)·상태 토큰·Vitest | `check_frontend_gates.py`, `gen_frontend_tokens.py`, `npm run test` | CI tier 0 |
 | 아키텍처 경계(AG-001~009)·import 계약·Decider 타입·이벤트/스냅샷 결정성 | `check_architecture_gates.py`, `importlinter`, `pyright`, `rebuild_*.py` | CI tier 1 |

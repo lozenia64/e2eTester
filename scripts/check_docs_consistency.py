@@ -10,7 +10,7 @@
   2. manifest 의 모든 module_id 가 짝이 되는 시나리오 문서에 등장하는지
   3. 시스템 manifest ↔ SDD Spec 1:1 대응 (docs/specs/systems/{code}.md)
   4. manifest 의 모든 module_id 가 짝이 되는 SDD Spec에 등장하는지
-  5. docs/specs/README.md 인덱스의 .md 링크 대상 파일이 실재하는지
+  5. docs/specs/README.md 인덱스 ↔ docs/specs/**/*.md 파일 양방향 1:1 및 SPEC ID 일치
   6. FastAPI 라우트(메서드+경로)가 E2E_ARCHITECTURE.md 에 문서화되어 있는지
      — 스캔 범위는 app/ 전체(app/api 외 app/auth/router.py·app/main.py 포함)이며,
        `include_in_schema=False` 라우트는 문서화 대상에서 제외한다(§5.2 인프라 라우트 규칙)
@@ -61,6 +61,9 @@ SCENARIO_DIR = REPO_ROOT / "docs" / "scenarios"
 SPECS_SYSTEMS_DIR = REPO_ROOT / "docs" / "specs" / "systems"
 SPECS_INDEX_DOC = REPO_ROOT / "docs" / "specs" / "README.md"
 SPEC_INDEX_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+SPEC_INDEX_ROW_RE = re.compile(
+    r"^\|\s*(SPEC-[A-Z0-9-]+)\s*\|\s*\[[^\]]*\]\(([^)#]+\.md)\)", re.MULTILINE
+)
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
 README_DOC = REPO_ROOT / "README.md"
 INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
@@ -216,30 +219,58 @@ def check_spec_lists_modules(manifests: dict[str, dict]) -> CheckResult:
 
 
 def check_spec_index_links_exist() -> CheckResult:
-    """docs/specs/README.md 인덱스에 나열된 Spec 파일이 실제로 존재하는지 검사."""
-    result = CheckResult("docs/specs/README.md 인덱스 링크 파일 실재")
+    """docs/specs/README.md 인덱스 ↔ docs/specs/**/*.md 양방향 정합성 및 SPEC ID 일치 검사."""
+    result = CheckResult("docs/specs/README.md 인덱스 ↔ Spec 파일 양방향 및 SPEC ID 정합")
     if not SPECS_INDEX_DOC.exists():
         result.problems.append("docs/specs/README.md 가 없습니다.")
         return result
     text = _read(SPECS_INDEX_DOC)
     specs_root = SPECS_INDEX_DOC.parent
     checked = 0
-    seen: set[str] = set()
+    linked_specs: set[str] = set()
     for raw in SPEC_INDEX_LINK_RE.findall(text):
         rel = raw.split("#", 1)[0].strip()
         if not rel or rel.startswith("http"):
             continue
-        if rel in seen:
+        target = (specs_root / rel).resolve()
+        try:
+            norm_rel = target.relative_to(specs_root.resolve()).as_posix()
+        except ValueError:
+            continue  # docs/specs/ 외부 문서 링크(../DOCS_GOVERNANCE.md 등)는 인덱스 대상 아님
+        if norm_rel in linked_specs:
             continue
-        seen.add(rel)
+        linked_specs.add(norm_rel)
         checked += 1
-        target = specs_root / rel
         if not target.is_file():
             result.problems.append(
                 f"인덱스 링크 `{rel}` 대상 파일이 없음 "
                 f"(docs/specs/README.md 또는 Spec 파일 경로 갱신 필요)."
             )
-    result.details.append(f"인덱스 .md 링크 {checked}개의 실재를 확인했습니다.")
+
+    actual_specs = {
+        p.relative_to(specs_root).as_posix()
+        for p in specs_root.rglob("*.md")
+        if p.name != "README.md"
+    }
+    for missing in sorted(actual_specs - linked_specs):
+        result.problems.append(
+            f"Spec 파일 `docs/specs/{missing}` 가 docs/specs/README.md 인덱스에 등록되지 않음."
+        )
+
+    id_checked = 0
+    for spec_id, rel in SPEC_INDEX_ROW_RE.findall(text):
+        target = specs_root / rel.strip()
+        if not target.is_file():
+            continue
+        id_checked += 1
+        if f"`{spec_id}`" not in _read(target):
+            result.problems.append(
+                f"인덱스의 `{spec_id}` 가 `docs/specs/{rel.strip()}` 본문에 없음 (SPEC ID 불일치)."
+            )
+
+    result.details.append(
+        f"Spec 파일 {len(actual_specs)}개 양방향 등재 및 SPEC ID {id_checked}개 일치를 확인했습니다."
+    )
     return result
 
 
