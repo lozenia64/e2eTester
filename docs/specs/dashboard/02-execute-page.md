@@ -3,7 +3,7 @@
 | 항목 | 값 |
 | --- | --- |
 | **ID** | `SPEC-UI-002` |
-| **상태** | `approved` (시각·레이아웃은 `2026-08-24-execute-promotion-design.md` §4.3 이 우선) |
+| **상태** | `approved` |
 | **의존** | `SPEC-RUN-001`, `SPEC-SUITE-001`, `SPEC-PRESET-001` |
 
 ## 1. 페이지
