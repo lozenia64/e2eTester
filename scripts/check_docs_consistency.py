@@ -19,7 +19,8 @@
   8. (역방향) E2E_ARCHITECTURE.md 가 문서화한 라우트가 실제 코드에 존재하는지 — 유령 라우트 차단
   9. (역방향) docs/INSTALL.md/.env.example 의 환경변수가 실제로 코드에서 읽히는지 — 죽은 변수 차단
   10. E2E_ARCHITECTURE.md §4 폴더 트리에 나열된 경로가 실제로 존재하는지 — 유령 파일 차단
-  11. (역방향) 주요 디렉터리(app/api, app/contexts, docs)의 항목이 §4 폴더 트리에 누락 없이 등재되어 있는지
+  11. (역방향) 주요 디렉터리(app/api, app/contexts, docs 등)의 항목이 §4 폴더 트리에 누락 없이 등재되어 있는지
+  12. CI 게이트(scripts/ci/gates.py)·아키텍처 규칙(AG-*)·프론트엔드 규칙(FG-*)이 docs/CI.md 에 문서화되어 있는지
 
 사용법:
   python3 scripts/check_docs_consistency.py            # 전체 검사
@@ -65,6 +66,7 @@ SPEC_INDEX_ROW_RE = re.compile(
     r"^\|\s*(SPEC-[A-Z0-9-]+)\s*\|\s*\[[^\]]*\]\(([^)#]+\.md)\)", re.MULTILINE
 )
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "E2E_ARCHITECTURE.md"
+CI_DOC = REPO_ROOT / "docs" / "CI.md"
 README_DOC = REPO_ROOT / "README.md"
 INSTALL_DOC = REPO_ROOT / "docs" / "INSTALL.md"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
@@ -567,6 +569,40 @@ def check_model_chain_matches() -> CheckResult:
 
 
 # --------------------------------------------------------------------------- #
+# 6. CI 게이트 및 AG/FG 규칙 ID 문서화
+# --------------------------------------------------------------------------- #
+def check_ci_gates_and_rules_documented() -> CheckResult:
+    """scripts/ci/gates.py 의 게이트 및 AG-*/FG-* 규칙 ID 가 docs/CI.md 에 등장하는지 검사."""
+    from scripts.check_architecture_gates import RULES as AG_RULES
+    from scripts.ci.gates import GATE_COMMANDS
+
+    result = CheckResult("CI 게이트 및 AG/FG 규칙 ID 가 docs/CI.md 에 문서화")
+    ci_text = _read(CI_DOC)
+    fg_src = _read(REPO_ROOT / "scripts" / "check_frontend_gates.py")
+    fg_ids = sorted(set(re.findall(r"\bFG-\d{3}\b", fg_src)))
+    ag_ids = [rule_id for rule_id, _, _ in AG_RULES]
+
+    for gate_name in sorted(GATE_COMMANDS):
+        if f"`{gate_name}`" not in ci_text:
+            result.problems.append(
+                f"CI 게이트 `{gate_name}` 가 docs/CI.md 에 문서화되지 않음 "
+                f"(scripts/ci/gates.py 변경 시 docs/CI.md 동시 갱신 필요)."
+            )
+    for rule_id in ag_ids:
+        if rule_id not in ci_text:
+            result.problems.append(f"아키텍처 게이트 규칙 `{rule_id}` 가 docs/CI.md 에 없음.")
+    for rule_id in fg_ids:
+        if rule_id not in ci_text:
+            result.problems.append(f"프론트엔드 게이트 규칙 `{rule_id}` 가 docs/CI.md 에 없음.")
+
+    result.details.append(
+        f"게이트 {len(GATE_COMMANDS)}개, AG 규칙 {len(ag_ids)}개, FG 규칙 {len(fg_ids)}개를 "
+        f"docs/CI.md 와 대조했습니다."
+    )
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # 실행
 # --------------------------------------------------------------------------- #
 def run_all() -> list[CheckResult]:
@@ -585,6 +621,7 @@ def run_all() -> list[CheckResult]:
         check_documented_env_vars_used(),
         check_folder_tree_paths_exist(),
         check_key_dirs_documented_in_tree(),
+        check_ci_gates_and_rules_documented(),
     ]
 
 

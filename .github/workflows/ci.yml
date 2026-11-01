@@ -87,7 +87,7 @@ jobs:
 
       # typecheck_web·eslint_web·build_web·vitest_web 는 Node 자체가 필요하다.
       # coverage 는 pytest 가 base.html 을 거치는 모든 페이지를 렌더링하며
-      # asset_styles()/asset_script() 가 실제 Vite manifest 를 요구하므로
+      # asset_css()/asset_js() 가 실제 Vite manifest 를 요구하므로
       # (app/web/asset_manifest.py) 빌드까지 필요하다 — 게이트당 job 이 하나라
       # 다른 job 의 build_web 산출물을 공유받지 못한다.
       - name: Set up Node (프론트 게이트·coverage 용)

@@ -39,6 +39,7 @@ python3 scripts/check_docs_consistency.py
 - API 라우트(`app/` 전체) ↔ `docs/E2E_ARCHITECTURE.md` §5.2 양방향(`include_in_schema=False` 인프라 라우트 제외)
 - 환경변수(`app/` + `worker/`) ↔ `docs/INSTALL.md` · `.env.example` 양방향 및 기본 Gemini 모델 체인(`app/ai/gemini_models.py`) 일치
 - `docs/E2E_ARCHITECTURE.md` §4 폴더 트리 경로 실재 및 주요 디렉터리(`app/api·core·runner·notifications·contexts·templates`, `worker`, `docs`) 역방향 등재
+- CI 게이트(`scripts/ci/gates.py`) 및 아키텍처(`AG-*`)·프론트엔드(`FG-*`) 규칙 ID ↔ `docs/CI.md` 문서화 정합
 
 CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), 전체 게이트(`architecture_gates`, `frontend_gates`, `frontend_tokens`, `ci_config_valid` 포함): [docs/CI.md](CI.md).
 
