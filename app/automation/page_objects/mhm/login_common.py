@@ -390,10 +390,10 @@ def _close_bottom_banner_if_present(page: Page, stage: str) -> None:
     배너는 사이트 캠페인이라 없을 수도, 처리 도중 사라질 수도 있다 — 어느 경우든 예외를
     던지지 않는다. 못 닫으면 경고만 남기고, 실제로 막힌 다음 단계가 실패를 보고한다.
     """
-    log(f"[step] Check {stage} bottom banner popup")
+    log(f"[step] {stage} 하단 배너 팝업 확인")
     dialog_candidates = [
-        page.locator(".dialog.bottom.bottom_bnr.show"),
-        page.locator('[role="dialog"].bottom.bottom_bnr.show'),
+        page.locator(".dialog.bottom.bottom_bnr.show:visible"),
+        page.locator('[role="dialog"].bottom.bottom_bnr.show:visible'),
     ]
     dialog = None
     for candidate in dialog_candidates:
@@ -407,11 +407,11 @@ def _close_bottom_banner_if_present(page: Page, stage: str) -> None:
             continue
 
     if dialog is None:
-        log(f"[step] No {stage} bottom banner popup detected")
+        log(f"[step] {stage} 하단 배너 팝업 없음")
         return
 
-    label = f"{stage.capitalize()} bottom banner popup"
-    log(f"[step] {label} detected")
+    label = f"{stage} 하단 배너 팝업"
+    log(f"[step] {label} 감지")
 
     def dismissed() -> bool:
         try:
@@ -420,29 +420,29 @@ def _close_bottom_banner_if_present(page: Page, stage: str) -> None:
             return True
 
     close_candidates = [
-        dialog.locator("button.btn.s1.c1.ui_dialog_close"),
+        dialog.locator("button.btn.s1.c1.ui_dialog_close:visible"),
         dialog.get_by_role("button", name="닫기", exact=True),
-        dialog.locator('button.btn.ui_dialog_close:has-text("닫기")'),
+        dialog.locator('button.btn.ui_dialog_close:has-text("닫기"):visible'),
     ]
     for candidate in close_candidates:
         try:
             if candidate.first.is_visible(timeout=1500):
-                log(f"[click] Close {stage} bottom banner popup")
+                log(f"[click] {label} 닫기")
                 # 기본 타임아웃(15초)으로 기다리면 배너가 사라졌을 때 그만큼 묶인다.
                 candidate.first.click(timeout=BOTTOM_BANNER_CLICK_TIMEOUT_MS)
-                wait_timeout_with_log(page, 500, "Post bottom-banner-popup close settle")
+                wait_timeout_with_log(page, 500, "하단 배너 팝업 닫기 후 안정화")
         except Exception:
             pass
         if dismissed():
-            log(f"[step] {label} dismissed")
+            log(f"[step] {label} 닫힘")
             return
 
-    log(f"[warn] {label} is still visible after close attempts")
+    log(f"[warn] {label} 닫기 시도 후에도 표시 중")
 
 
 def maybe_close_pre_login_bottom_popup(page: Page) -> None:
     """로그인 버튼 클릭 전 하단 이벤트 배너 팝업을 닫는다."""
-    _close_bottom_banner_if_present(page, "pre-login")
+    _close_bottom_banner_if_present(page, "로그인 전")
 
 
 def resolve_user_data_dir() -> Path:
@@ -898,9 +898,9 @@ def wait_for_main_page(page: Page, expected_fragment: str, timeout_ms: int) -> N
 
 def maybe_close_post_login_popup(page: Page, timeout_ms: int = MAX_TIMEOUT_MS) -> None:
     # 배너가 다른 팝업을 가리거나 폴링 중 늦게 뜰 수 있어 앞뒤로 확인한다.
-    _close_bottom_banner_if_present(page, "post-login")
+    _close_bottom_banner_if_present(page, "로그인 후")
     _dismiss_post_login_modal_popup(page, timeout_ms)
-    _close_bottom_banner_if_present(page, "post-login")
+    _close_bottom_banner_if_present(page, "로그인 후")
 
 
 def _dismiss_post_login_modal_popup(page: Page, timeout_ms: int) -> None:
@@ -1054,6 +1054,7 @@ def _dismiss_post_login_modal_popup(page: Page, timeout_ms: int) -> None:
     strategy_used = ""
 
     if popup_button is not None:
+        _close_bottom_banner_if_present(page, "로그인 후")
         click_with_log(popup_button, "Dismiss post-login popup with '다음에 할게요'")
         strategy_used = "locator"
         if wait_for_popup_to_clear(2500):

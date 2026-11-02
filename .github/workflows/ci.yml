@@ -106,6 +106,14 @@ jobs:
         if: matrix.gate == 'coverage'
         run: npm run build
 
+      - name: 배너 회귀 테스트용 Chromium 설치
+        if: matrix.gate == 'coverage'
+        run: python3 -m playwright install --with-deps chromium
+
+      - name: 하단 배너 브라우저 회귀 검증
+        if: matrix.gate == 'coverage'
+        run: python3 -m pytest tests/automation/test_mhm_bottom_banner.py -v
+
       - name: Run gate — ${{ matrix.gate }}
         run: python3 scripts/ci/run_all_gates.py --gate "${{ matrix.gate }}"
 

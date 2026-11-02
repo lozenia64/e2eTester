@@ -6,6 +6,7 @@ PR 게이트: 순수 단위 테스트 + 문서/아키텍처 정책 + ruff. **라
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
+python3 -m playwright install chromium
 python3 scripts/ci/run_all_gates.py --profile full
 python3 scripts/ci/run_all_gates.py --profile docs_only          # 문서만 변경 시 빠른 검증
 python3 scripts/ci/run_all_gates.py --gate coverage              # 단일 게이트 실행
@@ -82,6 +83,11 @@ SSOT: `scripts/check_frontend_gates.py`. 상태 토큰 생성기: `scripts/gen_f
 않는다. `.github/workflows/ci.yml` 의 `gate` job 은 게이트당 컨테이너가 분리돼
 다른 job 의 `build_web` 산출물을 공유받지 못하므로, `coverage` job 자체에
 Node 설치 + `npm run build` 스텝이 별도로 있다.
+
+`coverage` job은 Chromium과 운영체제 의존성을 설치하고, 외부 사이트에 접속하지 않는
+하단 배너 브라우저 회귀 테스트를 별도 단계에서 실행해 결과를 표시한다.
+이 테스트는 브라우저 설치·실행 실패를 건너뛰지 않고 실패로 처리한다.
+검증 행동과 테스트 연결은 [SPEC-SYS-MHM AC-001](specs/systems/mhm.md)을 참조한다.
 
 ## GitHub Actions
 

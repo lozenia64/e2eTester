@@ -64,6 +64,8 @@ PR 병합 전 자동 검증 게이트로 아키텍처·문서·단위 테스트 
 Given main 브랜치 대비 변경
 When run_all_gates.py --profile full
 Then exit code 0
+And 외부 사이트에 접속하지 않는 브라우저 회귀 검증도 실행한다
+And 필요한 브라우저의 설치·실행 실패를 건너뛰어 성공으로 처리하지 않는다
 ```
 
 ### AC-002: manifest 변경 동기화
