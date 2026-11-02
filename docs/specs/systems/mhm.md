@@ -55,6 +55,21 @@ Then PASSED
 
 `SPEC-SYS-HOM` hom.login AC 동일 (phone OTP pause / kakao no pause).
 
+### AC-001: 로그인 전후 하단 배너 (`.dialog.bottom.bottom_bnr`)
+
+```gherkin
+Given 로그인 전 또는 로그인 후 팝업 점검 단계
+When 하단 배너가 표시되어 있으면
+Then 닫기 버튼으로 닫고 다음 단계를 진행한다
+And 숨김 사본보다 현재 표시 중인 배너를 선택한다
+When 팝업 대기 중 하단 배너와 안내장 모달이 함께 나타나면
+Then 배너를 먼저 닫고 안내장 모달도 닫아 다음 단계의 클릭을 허용한다
+When 배너가 없거나 처리 도중 사라지면
+Then 오류·경고 없이 다음 단계를 진행한다
+When 배너를 닫지 못하면
+Then 경고만 남기고 다음 단계를 진행한다
+```
+
 ### mhm.contract.list / detail
 
 ```gherkin
@@ -90,3 +105,9 @@ main.access → login ─┬→ contract.list → detail
 ## 6. 변경 동기화
 
 `manifest.yaml` ↔ 본 Spec ↔ `docs/scenarios/mhm.md`
+
+## 7. 테스트 요구사항
+
+| AC | 유형 | 위치 | 내용 |
+| --- | --- | --- | --- |
+| AC-001 | 브라우저 회귀·CI | `tests/automation/test_mhm_bottom_banner.py` | 로그인 전후 배너, 지연 표시·모달 동시 표시, 숨김 사본, 처리 중 소멸, 닫기 실패 |
