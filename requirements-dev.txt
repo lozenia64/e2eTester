@@ -7,7 +7,7 @@
 ruff>=0.16.2,<0.17
 
 # 테스트 러너 (tests/ 가 사용하나 그동안 선언이 누락돼 있었음)
-pytest>=9.1.1,<10.0
+pytest>=9.2.0,<10.0
 # async def 테스트 네이티브 지원 (asyncio_mode="auto" — 수동 asyncio.run 래핑 제거)
 pytest-asyncio>=0.24,<2.0
 # 커버리지 래칫 게이트(coverage) — 임계값은 pyproject [tool.coverage.report] fail_under 가 SSOT
