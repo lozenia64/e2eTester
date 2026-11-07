@@ -4,7 +4,7 @@
 
 # 코드 품질: 린터 + 포매터 (black/flake8/isort/pyupgrade 를 단일 바이너리로 대체)
 # 실행: ruff check .   /   ruff format .
-ruff>=0.16.2,<0.17
+ruff>=0.17.3,<0.18
 
 # 테스트 러너 (tests/ 가 사용하나 그동안 선언이 누락돼 있었음)
 pytest>=9.1.1,<10.0
